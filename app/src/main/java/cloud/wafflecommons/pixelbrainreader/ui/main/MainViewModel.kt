@@ -17,7 +17,8 @@ data class UiState(
     val files: List<GithubFileDto> = emptyList(),
     val selectedFileContent: String? = null,
     val isLoading: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    val isFocusMode: Boolean = false
 )
 
 @HiltViewModel
@@ -86,5 +87,9 @@ class MainViewModel @Inject constructor(
     fun logout() {
         tokenManager.clearToken()
         // In a real app, we might expose a separate flow for navigation events
+    }
+
+    fun toggleFocusMode() {
+        _uiState.value = _uiState.value.copy(isFocusMode = !_uiState.value.isFocusMode)
     }
 }
