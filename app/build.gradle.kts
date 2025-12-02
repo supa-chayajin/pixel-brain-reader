@@ -7,12 +7,13 @@ plugins {
 }
 
 android {
-    namespace = "cloud.wafflecommons.pixelbrainreader" // Adapte si nécessaire
-    compileSdk = 36
+    namespace = "cloud.wafflecommons.pixelbrainreader"
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "cloud.wafflecommons.pixelbrainreader"
-        minSdk = 36
+        minSdk = 26
+        targetSdk = 35
         versionCode = 1
         versionName = "1.0"
 
@@ -32,11 +33,11 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
     }
     kotlinOptions {
-        jvmTarget = "17"
+        jvmTarget = "1.8"
     }
     buildFeatures {
         compose = true
@@ -61,8 +62,8 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
-    implementation(libs.androidx.material.icons.core) // Good to have explicitly
-    implementation(libs.androidx.material.icons.extended) // This will fix the issue
+    implementation(libs.androidx.material.icons.core)
+    implementation(libs.androidx.material.icons.extended)
 
     // Fold & Adaptive
     implementation(libs.androidx.material3.adaptive)
@@ -86,16 +87,20 @@ dependencies {
 
     // Utils
     implementation(libs.coil.compose)
-    implementation(libs.markwon.core)
     implementation(libs.androidx.security.crypto)
+
+    // Markdown (Toute la suite Markwon)
+    implementation(libs.markwon.core)
+    implementation(libs.markwon.ext.strikethrough)
+    implementation(libs.markwon.ext.tables)
+    implementation(libs.markwon.ext.tasklist)
+    implementation(libs.markwon.linkify)
 
     // Test
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
-
-    // CORRECTION ICI : Références correctes vers les nouvelles entrées TOML
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)

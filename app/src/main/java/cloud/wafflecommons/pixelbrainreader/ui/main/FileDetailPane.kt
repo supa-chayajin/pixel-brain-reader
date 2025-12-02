@@ -3,17 +3,22 @@ package cloud.wafflecommons.pixelbrainreader.ui.main
 import android.graphics.Typeface
 import android.text.style.BackgroundColorSpan
 import android.text.style.ForegroundColorSpan
+import android.text.style.QuoteSpan
+import android.text.style.RelativeSizeSpan
+import android.text.style.StyleSpan
 import android.text.style.TypefaceSpan
 import android.widget.TextView
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.filled.CloseFullscreen
+import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -29,120 +34,153 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import io.noties.markwon.Markwon
 import io.noties.markwon.MarkwonSpansFactory
 import io.noties.markwon.core.CorePlugin
-import io.noties.markwon.core.MarkwonTheme
+import io.noties.markwon.ext.strikethrough.StrikethroughPlugin
+import io.noties.markwon.ext.tables.TablePlugin
+import io.noties.markwon.ext.tasklist.TaskListPlugin
+import io.noties.markwon.linkify.LinkifyPlugin
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FileDetailPane(
     content: String?,
+    fileName: String? = null,
     isLoading: Boolean,
     isFocusMode: Boolean,
     onToggleFocusMode: () -> Unit,
-    isExpandedScreen: Boolean // To conditionally show the button
+    isExpandedScreen: Boolean
 ) {
-    val textColor = MaterialTheme.colorScheme.onSurface.toArgb()
-    val codeBackgroundColor = MaterialTheme.colorScheme.surfaceVariant.toArgb()
-    val primaryColor = MaterialTheme.colorScheme.primary.toArgb()
-    
-    // Typography colors for headings
-    val headlineColor = MaterialTheme.colorScheme.onSurface.toArgb()
+    val shape = if (isExpandedScreen && !isFocusMode) {
+        RoundedCornerShape(topStart = 32.dp, bottomStart = 32.dp)
+    } else {
+        RoundedCornerShape(0.dp)
+    }
+
+    val padding = if (isExpandedScreen && !isFocusMode) {
+        PaddingValues(start = 12.dp)
+    } else {
+        PaddingValues(all = 0.dp)
+    }
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLowest, // V6: Page background
-        modifier = if (isExpandedScreen) {
-            Modifier.clip(RoundedCornerShape(topStart = 24.dp)) // V6: Clip corner
-        } else {
-            Modifier
-        },
+        modifier = Modifier
+            .padding(padding)
+            .clip(shape),
+        containerColor = MaterialTheme.colorScheme.surfaceContainer,
         topBar = {
-            if (content != null) {
-                TopAppBar(
-                    title = { },
-                    actions = {
-                        if (isExpandedScreen) {
-                            IconButton(onClick = onToggleFocusMode) {
-                                Icon(
-                                    imageVector = if (isFocusMode) Icons.Default.CloseFullscreen else Icons.Default.OpenInFull,
-                                    contentDescription = if (isFocusMode) "Exit Focus Mode" else "Enter Focus Mode",
-                                    tint = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
+            TopAppBar(
+                title = {
+                    // Affiche le vrai nom du fichier
+                    if (content != null) {
+                        Column {
+                            Text(
+                                text = fileName ?: "Document",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "Markdown • Lecture seule",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
                         }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color.Transparent, // V6: Transparent
-                        actionIconContentColor = MaterialTheme.colorScheme.onSurface
-                    )
-                )
-            }
+                    }
+                },
+                actions = {
+                    if (isExpandedScreen) {
+                        IconButton(onClick = onToggleFocusMode) {
+                            Icon(
+                                imageVector = if (isFocusMode) Icons.Default.CloseFullscreen else Icons.Default.OpenInFull,
+                                contentDescription = "Mode Focus",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+            )
         }
     ) { innerPadding ->
         Box(
             modifier = Modifier
-                .fillMaxSize()
                 .padding(innerPadding)
+                .fillMaxSize()
         ) {
             if (isLoading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.align(Alignment.Center),
-                    color = MaterialTheme.colorScheme.primary
-                )
+                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
             } else if (content != null) {
+                val textColor = MaterialTheme.colorScheme.onSurface.toArgb()
+                val primaryColor = MaterialTheme.colorScheme.primary.toArgb()
+                val tertiaryColor = MaterialTheme.colorScheme.tertiary.toArgb()
+                val codeBgColor = MaterialTheme.colorScheme.surfaceContainerHighest.toArgb()
+                val quoteColor = MaterialTheme.colorScheme.secondary.toArgb()
+
+                // Couleurs pour les cases à cocher (TaskList)
+                val checkedColor = MaterialTheme.colorScheme.primary.toArgb()
+                val uncheckedColor = MaterialTheme.colorScheme.onSurfaceVariant.toArgb()
+
                 AndroidView(
                     factory = { context ->
                         TextView(context).apply {
                             setTextColor(textColor)
-                            setPadding(32, 32, 32, 32)
+                            textSize = 16f
+                            setPadding(56, 24, 56, 200)
+                            setLineSpacing(12f, 1.1f)
                         }
                     },
-                    update = { textView ->
-                        textView.setTextColor(textColor)
-                        
-                        val markwon = Markwon.builder(textView.context)
+                    update = { tv ->
+                        val markwon = Markwon.builder(tv.context)
+                            .usePlugin(StrikethroughPlugin.create())
+                            .usePlugin(TablePlugin.create(tv.context))
+                            .usePlugin(LinkifyPlugin.create())
+                            // Plugin pour les cases à cocher [ ] et [x]
+                            .usePlugin(TaskListPlugin.create(checkedColor, uncheckedColor, uncheckedColor))
                             .usePlugin(object : CorePlugin() {
                                 override fun configureSpansFactory(builder: MarkwonSpansFactory.Builder) {
-                                    // Headings
-                                    builder.setFactory(org.commonmark.node.Heading::class.java) { _, node ->
-                                        val level = (node as org.commonmark.node.Heading).level
-                                        val scale = when (level) {
-                                            1 -> 2.0f
-                                            2 -> 1.5f
-                                            else -> 1.25f
-                                        }
+                                    // Titres
+                                    builder.setFactory(org.commonmark.node.Heading::class.java) { _, _ ->
                                         arrayOf(
-                                            android.text.style.RelativeSizeSpan(scale),
-                                            android.text.style.StyleSpan(Typeface.BOLD),
-                                            android.text.style.ForegroundColorSpan(headlineColor)
+                                            RelativeSizeSpan(1.5f),
+                                            StyleSpan(Typeface.BOLD),
+                                            ForegroundColorSpan(primaryColor)
                                         )
                                     }
-                                    // Code Blocks (Fenced)
+                                    // Code Blocks
                                     builder.setFactory(org.commonmark.node.FencedCodeBlock::class.java) { _, _ ->
                                         arrayOf(
-                                            android.text.style.BackgroundColorSpan(codeBackgroundColor),
-                                            android.text.style.TypefaceSpan("monospace")
+                                            BackgroundColorSpan(codeBgColor),
+                                            ForegroundColorSpan(tertiaryColor),
+                                            TypefaceSpan("monospace"),
+                                            RelativeSizeSpan(0.90f)
                                         )
                                     }
-                                    // Code Blocks (Indented)
-                                    builder.setFactory(org.commonmark.node.IndentedCodeBlock::class.java) { _, _ ->
+                                    // Code Inline
+                                    builder.setFactory(org.commonmark.node.Code::class.java) { _, _ ->
                                         arrayOf(
-                                            android.text.style.BackgroundColorSpan(codeBackgroundColor),
-                                            android.text.style.TypefaceSpan("monospace")
+                                            BackgroundColorSpan(codeBgColor),
+                                            ForegroundColorSpan(tertiaryColor),
+                                            TypefaceSpan("monospace"),
+                                            RelativeSizeSpan(0.90f)
                                         )
                                     }
-                                    // Links
-                                    builder.setFactory(org.commonmark.node.Link::class.java) { _, _ ->
-                                        android.text.style.ForegroundColorSpan(primaryColor)
+                                    // Citations
+                                    builder.setFactory(org.commonmark.node.BlockQuote::class.java) { _, _ ->
+                                        arrayOf(
+                                            QuoteSpan(quoteColor),
+                                            StyleSpan(Typeface.ITALIC)
+                                        )
                                     }
                                 }
                             })
                             .build()
-                            
-                        markwon.setMarkdown(textView, content)
+
+                        markwon.setMarkdown(tv, content)
                     },
                     modifier = Modifier
                         .fillMaxSize()
@@ -150,10 +188,9 @@ fun FileDetailPane(
                 )
             } else {
                 Text(
-                    text = "Select a file to view content",
+                    text = "Sélectionnez un document",
                     modifier = Modifier.align(Alignment.Center),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodyLarge
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }

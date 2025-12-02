@@ -17,7 +17,6 @@ markwon = "4.6.2"
 securityCrypto = "1.1.0-alpha06"
 material3Adaptive = "1.0.0"
 navigationCompose = "2.8.0"
-material3AdaptiveVersion = "1.0.0-alpha06"
 roomKtx = "2.8.4"
 
 [libraries]
@@ -32,12 +31,9 @@ androidx-ui = { group = "androidx.compose.ui", name = "ui" }
 androidx-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
 androidx-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
 androidx-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
-
-# Ajout des libs de test UI manquantes
 androidx-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
 androidx-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
-
-androidx-material3 = { group = "androidx.compose.material3", name = "material3", version = "1.4.0" }
+androidx-material3 = { group = "androidx.compose.material3", name = "material3", version = "1.3.1" }
 
 # Fold & Adaptive
 androidx-material3-adaptive = { group = "androidx.compose.material3.adaptive", name = "adaptive", version.ref = "material3Adaptive" }
@@ -61,6 +57,10 @@ okhttp-logging = { group = "com.squareup.okhttp3", name = "logging-interceptor",
 # Images & Markdown
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
 markwon-core = { group = "io.noties.markwon", name = "core", version.ref = "markwon" }
+markwon-ext-strikethrough = { group = "io.noties.markwon", name = "ext-strikethrough", version.ref = "markwon" }
+markwon-ext-tables = { group = "io.noties.markwon", name = "ext-tables", version.ref = "markwon" }
+markwon-ext-tasklist = { group = "io.noties.markwon", name = "ext-tasklist", version.ref = "markwon" }
+markwon-linkify = { group = "io.noties.markwon", name = "linkify", version.ref = "markwon" }
 
 # Icons
 androidx-material-icons-core = { group = "androidx.compose.material", name = "material-icons-core", version = "1.6.8" }
