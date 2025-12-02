@@ -7,11 +7,11 @@ plugins {
 }
 
 android {
-    namespace = "com.attineos.pixelbrain" // Adapte si nécessaire
-    compileSdk = 34
+    namespace = "cloud.wafflecommons.pixelbrainreader" // Adapte si nécessaire
+    compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.attineos.pixelbrain"
+        applicationId = "cloud.wafflecommons.pixelbrainreader"
         minSdk = 26
         targetSdk = 34
         versionCode = 1
