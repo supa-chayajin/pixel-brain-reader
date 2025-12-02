@@ -16,6 +16,7 @@ data class UiState(
     val currentPath: String = "",
     val files: List<GithubFileDto> = emptyList(),
     val selectedFileContent: String? = null,
+    val selectedFileName: String? = null, // Pour afficher le titre
     val isLoading: Boolean = false,
     val error: String? = null,
     val isFocusMode: Boolean = false
@@ -30,7 +31,6 @@ class MainViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(UiState())
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
-    // Hardcoded for now, could be dynamic or user input
     private val owner = "waffle-commons"
     private val repo = "second-brain"
 
@@ -43,11 +43,18 @@ class MainViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             val result = repository.getContents(owner, repo, path)
             result.onSuccess { files ->
+                // FILTRAGE : On retire les fichiers cachés (.) et on ne garde que les dossiers ou les .md
+                val filteredFiles = files.filter { file ->
+                    !file.name.startsWith(".") &&
+                            (file.type == "dir" || file.name.endsWith(".md", ignoreCase = true))
+                }
+
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    files = files.sortedBy { it.type }, // Folders first usually, but simple sort for now
+                    files = filteredFiles.sortedWith(compareBy({ it.type != "dir" }, { it.name })), // Dossiers en premier
                     currentPath = path,
-                    selectedFileContent = null // Clear selection when changing folder
+                    selectedFileContent = null,
+                    selectedFileName = null
                 )
             }.onFailure { e ->
                 _uiState.value = _uiState.value.copy(isLoading = false, error = e.message)
@@ -59,7 +66,13 @@ class MainViewModel @Inject constructor(
         if (file.downloadUrl == null) return
 
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            // On sauvegarde le nom immédiatement pour l'UI
+            _uiState.value = _uiState.value.copy(
+                isLoading = true,
+                error = null,
+                selectedFileName = file.name
+            )
+
             val result = repository.getFileContent(file.downloadUrl)
             result.onSuccess { content ->
                 _uiState.value = _uiState.value.copy(
@@ -86,7 +99,6 @@ class MainViewModel @Inject constructor(
 
     fun logout() {
         tokenManager.clearToken()
-        // In a real app, we might expose a separate flow for navigation events
     }
 
     fun toggleFocusMode() {
