@@ -1,8 +1,10 @@
 package cloud.wafflecommons.pixelbrainreader.ui.login
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cloud.wafflecommons.pixelbrainreader.data.local.TokenManager
+import cloud.wafflecommons.pixelbrainreader.data.repository.GithubRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -12,7 +14,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class LoginViewModel @Inject constructor(
-    private val tokenManager: TokenManager
+    private val tokenManager: TokenManager,
+    private val repository: GithubRepository
 ) : ViewModel() {
 
     private val _token = MutableStateFlow("")
@@ -41,10 +44,26 @@ class LoginViewModel @Inject constructor(
 
         viewModelScope.launch {
             _isLoading.value = true
-            // Simulate network validation or just save for now
             tokenManager.saveToken(_token.value)
+            
+            // Verification: Try to fetch contents
+            testFetchContents()
+
             _isLoading.value = false
             _loginSuccess.value = true
+        }
+    }
+
+    private suspend fun testFetchContents() {
+        // Replace with your own repo for testing or a public one
+        val result = repository.getContents("google", "guava", "")
+        result.onSuccess { files ->
+            Log.d("PixelBrainVerification", "Fetched ${files.size} files from google/guava")
+            files.forEach { file ->
+                Log.d("PixelBrainVerification", "File: ${file.name} (${file.type})")
+            }
+        }.onFailure { e ->
+            Log.e("PixelBrainVerification", "Failed to fetch contents", e)
         }
     }
 }
