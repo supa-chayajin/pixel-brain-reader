@@ -17,4 +17,13 @@ class GithubRepository @Inject constructor(
             Result.failure(e)
         }
     }
+
+    suspend fun getFileContent(url: String): Result<String> {
+        return try {
+            val response = apiService.getFileContent(url)
+            Result.success(response.string())
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }

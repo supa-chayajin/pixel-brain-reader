@@ -60,6 +60,10 @@ okhttp-logging = { group = "com.squareup.okhttp3", name = "logging-interceptor",
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
 markwon-core = { group = "io.noties.markwon", name = "core", version.ref = "markwon" }
 
+# Icons
+androidx-material-icons-core = { group = "androidx.compose.material", name = "material-icons-core", version = "1.6.8" }
+androidx-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended", version = "1.6.8" }
+
 # Security
 androidx-security-crypto = { group = "androidx.security", name = "security-crypto", version.ref = "securityCrypto" }
 

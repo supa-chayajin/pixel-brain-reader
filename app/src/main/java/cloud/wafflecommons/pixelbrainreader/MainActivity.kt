@@ -34,12 +34,11 @@ class MainActivity : ComponentActivity() {
                 var isLoggedIn by remember { mutableStateOf(tokenManager.getToken() != null) }
 
                 if (isLoggedIn) {
-                    Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                        Greeting(
-                            name = "Android",
-                            modifier = Modifier.padding(innerPadding)
-                        )
-                    }
+                    cloud.wafflecommons.pixelbrainreader.ui.main.MainScreen(
+                        onLogout = {
+                            isLoggedIn = false
+                        }
+                    )
                 } else {
                     LoginScreen(onLoginSuccess = {
                         isLoggedIn = true
@@ -48,12 +47,4 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-}
-
-@Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(
-        text = "Hello $name! You are logged in.",
-        modifier = modifier
-    )
 }
