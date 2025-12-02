@@ -30,8 +30,8 @@ class MainViewModel @Inject constructor(
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
     // Hardcoded for now, could be dynamic or user input
-    private val owner = "google"
-    private val repo = "guava"
+    private val owner = "waffle-commons"
+    private val repo = "second-brain"
 
     init {
         loadFolder("")
