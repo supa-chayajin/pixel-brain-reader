@@ -8,6 +8,7 @@ import android.text.style.RelativeSizeSpan
 import android.text.style.StyleSpan
 import android.text.style.TypefaceSpan
 import android.widget.TextView
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -21,6 +22,7 @@ import androidx.compose.material.icons.filled.CloseFullscreen
 import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -55,64 +57,83 @@ fun FileDetailPane(
     onToggleFocusMode: () -> Unit,
     isExpandedScreen: Boolean
 ) {
-    val shape = if (isExpandedScreen && !isFocusMode) {
-        RoundedCornerShape(topStart = 32.dp, bottomStart = 32.dp)
+    // --- LOGIQUE DESIGN FENÊTRE ---
+
+    // Forme : Si grand écran, on arrondit TOUS les coins pour faire une carte flottante
+    val shape = if (isExpandedScreen) {
+        RoundedCornerShape(24.dp)
     } else {
         RoundedCornerShape(0.dp)
     }
 
-    val padding = if (isExpandedScreen && !isFocusMode) {
-        PaddingValues(start = 12.dp)
+    // Marges :
+    // - Sur Mobile : 0dp (Plein écran)
+    // - Sur Tablette/Fold : On détache la vue des bords (Haut/Bas/Droite) et on laisse le Gutter à gauche
+    val padding = if (isExpandedScreen) {
+        if (isFocusMode) {
+            // Mode Focus : On garde une marge "Zen" tout autour pour que ça reste une fenêtre centrée
+            PaddingValues(16.dp)
+        } else {
+            // Mode Split : On détache du bord droit et du haut/bas,
+            // la marge gauche est gérée par le Spacer du Scaffold principal ou ajoutée ici pour plus d'air
+            PaddingValues(start = 8.dp, top = 12.dp, bottom = 12.dp, end = 12.dp)
+        }
     } else {
-        PaddingValues(all = 0.dp)
+        PaddingValues(0.dp)
     }
 
-    // Couleurs du thème
-    val surfaceContainer = MaterialTheme.colorScheme.surfaceContainer
-    val onSurface = MaterialTheme.colorScheme.onSurface
-    val primary = MaterialTheme.colorScheme.primary
-    val tertiary = MaterialTheme.colorScheme.tertiary
-    val secondary = MaterialTheme.colorScheme.secondary
-    val surfaceVariant = MaterialTheme.colorScheme.surfaceContainerHighest
-    val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
+    // Couleurs Material Expressive
+    // Header : Un ton légèrement coloré ou gris surface (Container High)
+    val headerContainerColor = MaterialTheme.colorScheme.surfaceContainer
+    // Body : Le fond de lecture (Surface ou SurfaceLowest pour un max de contraste)
+    val contentContainerColor = MaterialTheme.colorScheme.surface
 
     Scaffold(
         modifier = Modifier
-            .padding(padding)
-            .clip(shape),
-        containerColor = surfaceContainer,
+            .padding(padding) // Applique les marges externes
+            .clip(shape)      // Coupe la vue selon la forme arrondie
+            // AJOUT : Bordure subtile pour délimiter la carte du fond noir
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f), shape),
+        containerColor = contentContainerColor,
         topBar = {
-            TopAppBar(
-                title = {
-                    if (content != null) {
-                        Column {
-                            Text(
-                                text = fileName ?: "Document",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = onSurface
-                            )
-                            Text(
-                                text = "Markdown • Lecture seule",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = primary
-                            )
+            Column {
+                TopAppBar(
+                    title = {
+                        if (content != null) {
+                            Column {
+                                Text(
+                                    text = fileName ?: "Document",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "Markdown • Lecture seule",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
                         }
-                    }
-                },
-                actions = {
-                    if (isExpandedScreen) {
-                        IconButton(onClick = onToggleFocusMode) {
-                            Icon(
-                                imageVector = if (isFocusMode) Icons.Default.CloseFullscreen else Icons.Default.OpenInFull,
-                                contentDescription = "Mode Focus",
-                                tint = onSurfaceVariant
-                            )
+                    },
+                    actions = {
+                        if (isExpandedScreen) {
+                            IconButton(onClick = onToggleFocusMode) {
+                                Icon(
+                                    imageVector = if (isFocusMode) Icons.Default.CloseFullscreen else Icons.Default.OpenInFull,
+                                    contentDescription = "Mode Focus",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
-            )
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = headerContainerColor,
+                        scrolledContainerColor = headerContainerColor
+                    )
+                )
+                // Séparation explicite : Une ligne fine (Divider)
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            }
         }
     ) { innerPadding ->
         Box(
@@ -123,19 +144,24 @@ fun FileDetailPane(
             if (isLoading) {
                 CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
             } else if (content != null) {
-                val textColor = onSurface.toArgb()
-                val primaryColorInt = primary.toArgb()
-                val tertiaryColorInt = tertiary.toArgb()
-                val codeBgColor = surfaceVariant.toArgb()
-                val quoteColor = secondary.toArgb()
-                val checkedColor = primary.toArgb()
-                val uncheckedColor = onSurfaceVariant.toArgb()
+                // Couleurs pour le contenu Markdown
+                val textColor = MaterialTheme.colorScheme.onSurface.toArgb()
+                val primaryColorInt = MaterialTheme.colorScheme.primary.toArgb()
+                val tertiaryColorInt = MaterialTheme.colorScheme.tertiary.toArgb()
+
+                // Fond des blocs de code : Surface Container High pour contraster avec le fond Surface
+                val codeBgColor = MaterialTheme.colorScheme.surfaceContainerHigh.toArgb()
+
+                val quoteColor = MaterialTheme.colorScheme.secondary.toArgb()
+                val checkedColor = MaterialTheme.colorScheme.primary.toArgb()
+                val uncheckedColor = MaterialTheme.colorScheme.onSurfaceVariant.toArgb()
 
                 AndroidView(
                     factory = { context ->
                         TextView(context).apply {
                             setTextColor(textColor)
                             textSize = 16f
+                            // Marges internes du texte (dans la fenêtre)
                             setPadding(56, 24, 56, 200)
                             setLineSpacing(12f, 1.1f)
                         }
@@ -145,11 +171,10 @@ fun FileDetailPane(
                             .usePlugin(StrikethroughPlugin.create())
                             .usePlugin(TablePlugin.create(tv.context))
                             .usePlugin(LinkifyPlugin.create())
-                            // Configuration des cases à cocher (Couleur active / inactive)
                             .usePlugin(TaskListPlugin.create(checkedColor, uncheckedColor, uncheckedColor))
                             .usePlugin(object : CorePlugin() {
                                 override fun configureSpansFactory(builder: MarkwonSpansFactory.Builder) {
-                                    // Titres H1-H6
+                                    // Titres
                                     builder.setFactory(org.commonmark.node.Heading::class.java) { _, _ ->
                                         arrayOf(
                                             RelativeSizeSpan(1.5f),
@@ -158,7 +183,7 @@ fun FileDetailPane(
                                         )
                                     }
 
-                                    // Code Blocks (Sans Prism, mais stylisé proprement)
+                                    // Code Blocks
                                     builder.setFactory(org.commonmark.node.FencedCodeBlock::class.java) { _, _ ->
                                         arrayOf(
                                             BackgroundColorSpan(codeBgColor),
@@ -199,7 +224,7 @@ fun FileDetailPane(
                 Text(
                     text = "Sélectionnez un fichier",
                     modifier = Modifier.align(Alignment.Center),
-                    color = onSurfaceVariant,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyLarge
                 )
             }
