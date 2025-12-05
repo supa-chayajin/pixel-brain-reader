@@ -62,7 +62,10 @@ configurations.all {
 
 dependencies {
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.fragment.ktx)
+    implementation(libs.androidx.appcompat)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.process)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)
@@ -96,6 +99,7 @@ dependencies {
     // Utils
     implementation(libs.coil.compose)
     implementation(libs.androidx.security.crypto)
+    implementation(libs.androidx.biometric)
 
     // Markdown
     implementation(libs.markwon.core)
