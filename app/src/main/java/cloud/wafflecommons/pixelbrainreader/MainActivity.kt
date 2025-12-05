@@ -4,17 +4,11 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
-import cloud.wafflecommons.pixelbrainreader.data.local.TokenManager
+import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
 import cloud.wafflecommons.pixelbrainreader.ui.login.LoginScreen
 import cloud.wafflecommons.pixelbrainreader.ui.theme.PixelBrainReaderTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -24,14 +18,15 @@ import javax.inject.Inject
 class MainActivity : ComponentActivity() {
 
     @Inject
-    lateinit var tokenManager: TokenManager
+    lateinit var secretManager: SecretManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
             PixelBrainReaderTheme {
-                var isLoggedIn by remember { mutableStateOf(tokenManager.getToken() != null) }
+                // FIXED: Check the Vault (SecretManager) instead of legacy TokenManager
+                var isLoggedIn by remember { mutableStateOf(secretManager.getToken() != null) }
 
                 if (isLoggedIn) {
                     cloud.wafflecommons.pixelbrainreader.ui.main.MainScreen(
