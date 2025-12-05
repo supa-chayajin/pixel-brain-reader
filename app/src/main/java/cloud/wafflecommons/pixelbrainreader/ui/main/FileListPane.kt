@@ -27,11 +27,12 @@ import cloud.wafflecommons.pixelbrainreader.data.remote.model.GithubFileDto
 fun FileListPane(
     files: List<GithubFileDto>,
     isLoading: Boolean,
+    error: String?, // NOUVEAU PARAMETRE
     currentPath: String,
     showMenuIcon: Boolean,
     onFileClick: (GithubFileDto) -> Unit,
     onFolderClick: (String) -> Unit,
-    onNavigateUp: () -> Unit, // NOUVEAU CALLBACK
+    onNavigateUp: () -> Unit,
     onMenuClick: () -> Unit
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -84,6 +85,36 @@ fun FileListPane(
         Box(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
             if (isLoading) {
                 CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+            } else if (error != null) {
+                // Affichage de l'erreur
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Folder, // Ou une icône d'erreur si dispo
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(48.dp)
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = error,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyLarge,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                }
+            } else if (files.isEmpty()) {
+                // Affichage liste vide
+                Text(
+                    text = "Aucun fichier trouvé",
+                    modifier = Modifier.align(Alignment.Center),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             } else {
                 LazyColumn(
                     contentPadding = PaddingValues(horizontal = 0.dp, vertical = 12.dp),

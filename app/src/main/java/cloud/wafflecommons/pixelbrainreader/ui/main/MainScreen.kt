@@ -133,6 +133,7 @@ fun MainScreen(
                         FileListPane(
                             files = uiState.files,
                             isLoading = uiState.isLoading,
+                            error = uiState.error,
                             currentPath = uiState.currentPath,
                             showMenuIcon = false,
                             onFileClick = { file ->
@@ -187,6 +188,7 @@ fun MainScreen(
                     FileListPane(
                         files = uiState.files,
                         isLoading = uiState.isLoading,
+                        error = uiState.error,
                         currentPath = uiState.currentPath,
                         showMenuIcon = true,
                         onFileClick = { file ->

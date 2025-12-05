@@ -14,6 +14,8 @@ retrofit = "2.11.0"
 okhttp = "4.12.0"
 coil = "2.7.0"
 markwon = "4.6.2"
+# Version spécifique pour Prism4j utilisé par Markwon
+prism4j = "2.0.0"
 securityCrypto = "1.1.0-alpha06"
 material3Adaptive = "1.0.0"
 navigationCompose = "2.8.0"
@@ -61,6 +63,9 @@ markwon-ext-strikethrough = { group = "io.noties.markwon", name = "ext-strikethr
 markwon-ext-tables = { group = "io.noties.markwon", name = "ext-tables", version.ref = "markwon" }
 markwon-ext-tasklist = { group = "io.noties.markwon", name = "ext-tasklist", version.ref = "markwon" }
 markwon-linkify = { group = "io.noties.markwon", name = "linkify", version.ref = "markwon" }
+# Nouveautés pour la coloration syntaxique
+markwon-syntax-highlight = { group = "io.noties.markwon", name = "syntax-highlight", version.ref = "markwon" }
+prism4j = { group = "io.noties", name = "prism4j", version.ref = "prism4j" }
 
 # Icons
 androidx-material-icons-core = { group = "androidx.compose.material", name = "material-icons-core", version = "1.6.8" }

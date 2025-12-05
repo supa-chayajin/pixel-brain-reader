@@ -53,6 +53,13 @@ android {
     }
 }
 
+// CORRECTION DU CRASH "Duplicate Class"
+configurations.all {
+    resolutionStrategy {
+        exclude(group = "org.jetbrains", module = "annotations-java5")
+    }
+}
+
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
@@ -89,12 +96,15 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.androidx.security.crypto)
 
-    // Markdown (Toute la suite Markwon)
+    // Markdown
     implementation(libs.markwon.core)
     implementation(libs.markwon.ext.strikethrough)
     implementation(libs.markwon.ext.tables)
     implementation(libs.markwon.ext.tasklist)
     implementation(libs.markwon.linkify)
+    // On retire syntax-highlight et prism4j ici pour éviter les erreurs de compilation
+    // implementation(libs.markwon.syntax.highlight)
+    // implementation(libs.prism4j)
 
     // Test
     testImplementation(libs.junit)

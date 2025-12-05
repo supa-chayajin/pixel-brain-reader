@@ -16,6 +16,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.outlined.VpnKey
+import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -46,6 +47,7 @@ fun LoginScreen(
     viewModel: LoginViewModel = hiltViewModel()
 ) {
     val token by viewModel.token.collectAsState()
+    val repoUrl by viewModel.repoUrl.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val isTokenValid by viewModel.isTokenValid.collectAsState()
     val loginSuccess by viewModel.loginSuccess.collectAsState()
@@ -101,7 +103,7 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(48.dp))
 
-            // Champ de saisie stylisé
+            // Champ de saisie Token
             OutlinedTextField(
                 value = token,
                 onValueChange = viewModel::onTokenChanged,
@@ -110,6 +112,27 @@ fun LoginScreen(
                 singleLine = true,
                 visualTransformation = PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isLoading,
+                shape = RoundedCornerShape(16.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    unfocusedBorderColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = Color.Transparent
+                )
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Champ de saisie Repository URL
+            OutlinedTextField(
+                value = repoUrl,
+                onValueChange = viewModel::onRepoUrlChanged,
+                label = { Text("URL du Repository (ex: https://github.com/user/repo)") },
+                leadingIcon = { Icon(Icons.Outlined.Link, null) },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !isLoading,
                 shape = RoundedCornerShape(16.dp),

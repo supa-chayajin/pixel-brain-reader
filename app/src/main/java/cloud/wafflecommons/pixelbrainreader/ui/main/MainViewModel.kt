@@ -31,22 +31,24 @@ class MainViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(UiState())
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
-    private val owner = "waffle-commons"
-    private val repo = "second-brain"
-
     init {
         loadFolder("")
     }
 
     fun loadFolder(path: String) {
+        val (owner, repo) = tokenManager.getRepoInfo()
+        if (owner == null || repo == null) {
+            _uiState.value = _uiState.value.copy(error = "Repository information not found. Please login again.")
+            return
+        }
+
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             val result = repository.getContents(owner, repo, path)
             result.onSuccess { files ->
-                // FILTRAGE : On retire les fichiers cachés (.) et on ne garde que les dossiers ou les .md
+                // FILTRAGE : On retire les fichiers cachés (.)
                 val filteredFiles = files.filter { file ->
-                    !file.name.startsWith(".") &&
-                            (file.type == "dir" || file.name.endsWith(".md", ignoreCase = true))
+                    !file.name.startsWith(".")
                 }
 
                 _uiState.value = _uiState.value.copy(

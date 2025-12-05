@@ -67,27 +67,35 @@ fun FileDetailPane(
         PaddingValues(all = 0.dp)
     }
 
+    // Couleurs du thème
+    val surfaceContainer = MaterialTheme.colorScheme.surfaceContainer
+    val onSurface = MaterialTheme.colorScheme.onSurface
+    val primary = MaterialTheme.colorScheme.primary
+    val tertiary = MaterialTheme.colorScheme.tertiary
+    val secondary = MaterialTheme.colorScheme.secondary
+    val surfaceVariant = MaterialTheme.colorScheme.surfaceContainerHighest
+    val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
+
     Scaffold(
         modifier = Modifier
             .padding(padding)
             .clip(shape),
-        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+        containerColor = surfaceContainer,
         topBar = {
             TopAppBar(
                 title = {
-                    // Affiche le vrai nom du fichier
                     if (content != null) {
                         Column {
                             Text(
                                 text = fileName ?: "Document",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
+                                color = onSurface
                             )
                             Text(
                                 text = "Markdown • Lecture seule",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary
+                                color = primary
                             )
                         }
                     }
@@ -98,7 +106,7 @@ fun FileDetailPane(
                             Icon(
                                 imageVector = if (isFocusMode) Icons.Default.CloseFullscreen else Icons.Default.OpenInFull,
                                 contentDescription = "Mode Focus",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                tint = onSurfaceVariant
                             )
                         }
                     }
@@ -115,15 +123,13 @@ fun FileDetailPane(
             if (isLoading) {
                 CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
             } else if (content != null) {
-                val textColor = MaterialTheme.colorScheme.onSurface.toArgb()
-                val primaryColor = MaterialTheme.colorScheme.primary.toArgb()
-                val tertiaryColor = MaterialTheme.colorScheme.tertiary.toArgb()
-                val codeBgColor = MaterialTheme.colorScheme.surfaceContainerHighest.toArgb()
-                val quoteColor = MaterialTheme.colorScheme.secondary.toArgb()
-
-                // Couleurs pour les cases à cocher (TaskList)
-                val checkedColor = MaterialTheme.colorScheme.primary.toArgb()
-                val uncheckedColor = MaterialTheme.colorScheme.onSurfaceVariant.toArgb()
+                val textColor = onSurface.toArgb()
+                val primaryColorInt = primary.toArgb()
+                val tertiaryColorInt = tertiary.toArgb()
+                val codeBgColor = surfaceVariant.toArgb()
+                val quoteColor = secondary.toArgb()
+                val checkedColor = primary.toArgb()
+                val uncheckedColor = onSurfaceVariant.toArgb()
 
                 AndroidView(
                     factory = { context ->
@@ -139,36 +145,39 @@ fun FileDetailPane(
                             .usePlugin(StrikethroughPlugin.create())
                             .usePlugin(TablePlugin.create(tv.context))
                             .usePlugin(LinkifyPlugin.create())
-                            // Plugin pour les cases à cocher [ ] et [x]
+                            // Configuration des cases à cocher (Couleur active / inactive)
                             .usePlugin(TaskListPlugin.create(checkedColor, uncheckedColor, uncheckedColor))
                             .usePlugin(object : CorePlugin() {
                                 override fun configureSpansFactory(builder: MarkwonSpansFactory.Builder) {
-                                    // Titres
+                                    // Titres H1-H6
                                     builder.setFactory(org.commonmark.node.Heading::class.java) { _, _ ->
                                         arrayOf(
                                             RelativeSizeSpan(1.5f),
                                             StyleSpan(Typeface.BOLD),
-                                            ForegroundColorSpan(primaryColor)
+                                            ForegroundColorSpan(primaryColorInt)
                                         )
                                     }
-                                    // Code Blocks
+
+                                    // Code Blocks (Sans Prism, mais stylisé proprement)
                                     builder.setFactory(org.commonmark.node.FencedCodeBlock::class.java) { _, _ ->
                                         arrayOf(
                                             BackgroundColorSpan(codeBgColor),
-                                            ForegroundColorSpan(tertiaryColor),
+                                            ForegroundColorSpan(tertiaryColorInt),
                                             TypefaceSpan("monospace"),
                                             RelativeSizeSpan(0.90f)
                                         )
                                     }
+
                                     // Code Inline
                                     builder.setFactory(org.commonmark.node.Code::class.java) { _, _ ->
                                         arrayOf(
                                             BackgroundColorSpan(codeBgColor),
-                                            ForegroundColorSpan(tertiaryColor),
+                                            ForegroundColorSpan(tertiaryColorInt),
                                             TypefaceSpan("monospace"),
                                             RelativeSizeSpan(0.90f)
                                         )
                                     }
+
                                     // Citations
                                     builder.setFactory(org.commonmark.node.BlockQuote::class.java) { _, _ ->
                                         arrayOf(
@@ -188,9 +197,10 @@ fun FileDetailPane(
                 )
             } else {
                 Text(
-                    text = "Sélectionnez un document",
+                    text = "Sélectionnez un fichier",
                     modifier = Modifier.align(Alignment.Center),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyLarge
                 )
             }
         }

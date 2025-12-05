@@ -14,6 +14,8 @@ class TokenManager @Inject constructor(
     companion object {
         private const val PREFS_NAME = "secure_prefs"
         private const val KEY_TOKEN = "github_token"
+        private const val KEY_REPO_OWNER = "repo_owner"
+        private const val KEY_REPO_NAME = "repo_name"
     }
 
     private val masterKey = MasterKey.Builder(context)
@@ -36,7 +38,24 @@ class TokenManager @Inject constructor(
         return sharedPreferences.getString(KEY_TOKEN, null)
     }
 
+    fun saveRepoInfo(owner: String, repo: String) {
+        sharedPreferences.edit()
+            .putString(KEY_REPO_OWNER, owner)
+            .putString(KEY_REPO_NAME, repo)
+            .apply()
+    }
+
+    fun getRepoInfo(): Pair<String?, String?> {
+        val owner = sharedPreferences.getString(KEY_REPO_OWNER, null)
+        val repo = sharedPreferences.getString(KEY_REPO_NAME, null)
+        return Pair(owner, repo)
+    }
+
     fun clearToken() {
-        sharedPreferences.edit().remove(KEY_TOKEN).apply()
+        sharedPreferences.edit()
+            .remove(KEY_TOKEN)
+            .remove(KEY_REPO_OWNER)
+            .remove(KEY_REPO_NAME)
+            .apply()
     }
 }
