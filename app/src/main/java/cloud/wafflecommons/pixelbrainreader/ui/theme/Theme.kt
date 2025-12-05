@@ -16,12 +16,12 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
 // --- PALETTE PIXEL SAGE (High Contrast) ---
-// Fond Noir Absolu pour faire ressortir les cartes
+// Ces couleurs serviront de repli (fallback) pour les versions d'Android < 12
+// ou si l'utilisateur désactive les thèmes dynamiques.
 private val AbsoluteBlack = Color(0xFF000000)
-private val DarkSurfaceCard = Color(0xFF1E1E1E) // Gris anthracite pour les cartes
-private val DarkDetailBackground = Color(0xFF121212) // Un peu plus sombre pour le lecteur
+private val DarkSurfaceCard = Color(0xFF1E1E1E)
+private val DarkDetailBackground = Color(0xFF121212)
 
-// Accent Sage (Vert Pixel)
 private val SagePrimary = Color(0xFFC5E0A3)
 private val SageContainer = Color(0xFF3E4F30)
 
@@ -31,16 +31,11 @@ private val DarkColorScheme = darkColorScheme(
     secondary = Color(0xFFE2E4D3),
     onSecondary = Color.Black,
     tertiary = Color(0xFFA5D0D2),
-
-    // Le secret du design : Noir Pur en fond
     background = AbsoluteBlack,
     surface = AbsoluteBlack,
-
-    // Les conteneurs pour les cartes flottantes
     surfaceContainer = AbsoluteBlack,
     surfaceContainerLow = DarkSurfaceCard,
     surfaceContainerHigh = DarkDetailBackground,
-
     onSurface = Color(0xFFEFEFEF),
     onSurfaceVariant = Color(0xFFC4C8BB)
 )
@@ -57,15 +52,18 @@ private val LightColorScheme = lightColorScheme(
 @Composable
 fun PixelBrainReaderTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
+    // ACTIVATION DES COULEURS DYNAMIQUES (Material You)
+    // true = L'app utilise les couleurs du fond d'écran sur Android 12+
     dynamicColor: Boolean = true,
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
-        // Optionnel : Désactiver le dynamicColor si tu veux forcer ton thème Sage partout
+        // Si dynamicColor est activé et qu'on est sur Android 12+ (S), on utilise les couleurs système
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             val context = LocalContext.current
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
+        // Sinon, on utilise votre palette personnalisée "Pixel Sage"
         darkTheme -> DarkColorScheme
         else -> LightColorScheme
     }
@@ -74,7 +72,7 @@ fun PixelBrainReaderTheme(
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            // Barre d'état transparente
+            // La barre d'état s'adapte à la luminosité du thème
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
         }
     }

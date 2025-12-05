@@ -8,6 +8,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -25,6 +26,7 @@ import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.NavigationRailItemDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
 import androidx.compose.material3.adaptive.WindowAdaptiveInfo
@@ -70,7 +72,8 @@ fun MainScreen(
         )
     } else {
         baseDirective.copy(
-            horizontalPartitionSpacerSize = 24.dp
+            horizontalPartitionSpacerSize = 24.dp,
+            defaultPanePreferredWidth = 280.dp
         )
     }
 
@@ -86,131 +89,138 @@ fun MainScreen(
         navigator.navigateBack()
     }
 
-    if (isLargeScreen) {
-        Row(
-            modifier = Modifier.padding(start = if (uiState.isFocusMode) 0.dp else 12.dp)
-        ) {
-            AnimatedVisibility(
-                visible = !uiState.isFocusMode,
-                enter = slideInHorizontally() + expandHorizontally(),
-                exit = slideOutHorizontally() + shrinkHorizontally()
+    // AJOUT : Surface globale pour appliquer la couleur de fond du thème (Dynamic ou Sage)
+    // Cela corrige le bug du fond blanc derrière la liste transparente
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background
+    ) {
+        if (isLargeScreen) {
+            Row(
+                modifier = Modifier.padding(start = if (uiState.isFocusMode) 0.dp else 12.dp)
             ) {
-                NavigationRail(
-                    containerColor = Color.Transparent,
-                    contentColor = MaterialTheme.colorScheme.onSurface,
-                    header = { Spacer(Modifier.padding(top = 24.dp)) }
+                AnimatedVisibility(
+                    visible = !uiState.isFocusMode,
+                    enter = slideInHorizontally() + expandHorizontally(),
+                    exit = slideOutHorizontally() + shrinkHorizontally()
                 ) {
-                    NavigationRailItem(
-                        selected = true, onClick = { },
-                        icon = { Icon(Icons.Filled.Dashboard, null) },
-                        label = { Text("Docs") },
-                        colors = NavigationRailItemDefaults.colors(
-                            indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
-                            selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer
+                    NavigationRail(
+                        containerColor = Color.Transparent,
+                        contentColor = MaterialTheme.colorScheme.onSurface,
+                        header = { Spacer(Modifier.padding(top = 24.dp)) }
+                    ) {
+                        NavigationRailItem(
+                            selected = true, onClick = { },
+                            icon = { Icon(Icons.Filled.Dashboard, null) },
+                            label = { Text("Docs") },
+                            colors = NavigationRailItemDefaults.colors(
+                                indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
+                                selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
                         )
-                    )
-                    NavigationRailItem(
-                        selected = false, onClick = { },
-                        icon = { Icon(Icons.Outlined.Settings, null) },
-                        label = { Text("Config") }
-                    )
-                    Spacer(Modifier.weight(1f))
-                    NavigationRailItem(
-                        selected = false, onClick = { viewModel.logout(); onLogout() },
-                        icon = { Icon(Icons.AutoMirrored.Outlined.Logout, null) },
-                        label = { Text("Sortir") }
-                    )
-                    Spacer(Modifier.padding(bottom = 24.dp))
+                        NavigationRailItem(
+                            selected = false, onClick = { },
+                            icon = { Icon(Icons.Outlined.Settings, null) },
+                            label = { Text("Config") }
+                        )
+                        Spacer(Modifier.weight(1f))
+                        NavigationRailItem(
+                            selected = false, onClick = { viewModel.logout(); onLogout() },
+                            icon = { Icon(Icons.AutoMirrored.Outlined.Logout, null) },
+                            label = { Text("Sortir") }
+                        )
+                        Spacer(Modifier.padding(bottom = 24.dp))
+                    }
                 }
-            }
 
-            ListDetailPaneScaffold(
-                modifier = Modifier.weight(1f),
-                directive = finalDirective,
-                value = navigator.scaffoldValue,
-                listPane = {
-                    if (!uiState.isFocusMode || !isLargeScreen) {
+                ListDetailPaneScaffold(
+                    modifier = Modifier.weight(1f),
+                    directive = finalDirective,
+                    value = navigator.scaffoldValue,
+                    listPane = {
+                        if (!uiState.isFocusMode || !isLargeScreen) {
+                            FileListPane(
+                                files = uiState.files,
+                                isLoading = uiState.isLoading,
+                                error = uiState.error,
+                                currentPath = uiState.currentPath,
+                                showMenuIcon = false,
+                                onFileClick = { file ->
+                                    viewModel.loadFile(file)
+                                    scope.launch { navigator.navigateTo(ListDetailPaneScaffoldRole.Detail) }
+                                },
+                                onFolderClick = { path -> viewModel.loadFolder(path) },
+                                onNavigateUp = { viewModel.navigateUp() },
+                                onMenuClick = { }
+                            )
+                        }
+                    },
+                    detailPane = {
+                        FileDetailPane(
+                            content = uiState.selectedFileContent,
+                            fileName = uiState.selectedFileName,
+                            isLoading = uiState.isLoading,
+                            isFocusMode = uiState.isFocusMode,
+                            onToggleFocusMode = { viewModel.toggleFocusMode() },
+                            isExpandedScreen = isLargeScreen
+                        )
+                    }
+                )
+            }
+        } else {
+            ModalNavigationDrawer(
+                drawerState = drawerState,
+                drawerContent = {
+                    ModalDrawerSheet(
+                        drawerContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                        drawerContentColor = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(end = 56.dp)
+                    ) {
+                        Text("Pixel Brain", modifier = Modifier.padding(28.dp), style = MaterialTheme.typography.headlineMedium)
+                        NavigationDrawerItem(
+                            label = { Text("Dashboard") }, selected = true, onClick = { scope.launch { drawerState.close() } },
+                            icon = { Icon(Icons.Outlined.Dashboard, null) },
+                            modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding), shape = RoundedCornerShape(50)
+                        )
+                        NavigationDrawerItem(
+                            label = { Text("Déconnexion") }, selected = false, onClick = { viewModel.logout(); onLogout() },
+                            icon = { Icon(Icons.AutoMirrored.Outlined.Logout, null) },
+                            modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding), shape = RoundedCornerShape(50)
+                        )
+                    }
+                }
+            ) {
+                ListDetailPaneScaffold(
+                    directive = finalDirective,
+                    value = navigator.scaffoldValue,
+                    listPane = {
                         FileListPane(
                             files = uiState.files,
                             isLoading = uiState.isLoading,
                             error = uiState.error,
                             currentPath = uiState.currentPath,
-                            showMenuIcon = false,
+                            showMenuIcon = true,
                             onFileClick = { file ->
                                 viewModel.loadFile(file)
                                 scope.launch { navigator.navigateTo(ListDetailPaneScaffoldRole.Detail) }
                             },
                             onFolderClick = { path -> viewModel.loadFolder(path) },
-                            onNavigateUp = { viewModel.navigateUp() }, // CONNEXION DU RETOUR
-                            onMenuClick = { }
+                            onNavigateUp = { viewModel.navigateUp() },
+                            onMenuClick = { scope.launch { drawerState.open() } }
+                        )
+                    },
+                    detailPane = {
+                        FileDetailPane(
+                            content = uiState.selectedFileContent,
+                            fileName = uiState.selectedFileName,
+                            isLoading = uiState.isLoading,
+                            isFocusMode = uiState.isFocusMode,
+                            onToggleFocusMode = { viewModel.toggleFocusMode() },
+                            isExpandedScreen = false
                         )
                     }
-                },
-                detailPane = {
-                    FileDetailPane(
-                        content = uiState.selectedFileContent,
-                        fileName = uiState.selectedFileName,
-                        isLoading = uiState.isLoading,
-                        isFocusMode = uiState.isFocusMode,
-                        onToggleFocusMode = { viewModel.toggleFocusMode() },
-                        isExpandedScreen = isLargeScreen
-                    )
-                }
-            )
-        }
-    } else {
-        ModalNavigationDrawer(
-            drawerState = drawerState,
-            drawerContent = {
-                ModalDrawerSheet(
-                    drawerContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                    drawerContentColor = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(end = 56.dp)
-                ) {
-                    Text("Pixel Brain", modifier = Modifier.padding(28.dp), style = MaterialTheme.typography.headlineMedium)
-                    NavigationDrawerItem(
-                        label = { Text("Dashboard") }, selected = true, onClick = { scope.launch { drawerState.close() } },
-                        icon = { Icon(Icons.Outlined.Dashboard, null) },
-                        modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding), shape = RoundedCornerShape(50)
-                    )
-                    NavigationDrawerItem(
-                        label = { Text("Déconnexion") }, selected = false, onClick = { viewModel.logout(); onLogout() },
-                        icon = { Icon(Icons.AutoMirrored.Outlined.Logout, null) },
-                        modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding), shape = RoundedCornerShape(50)
-                    )
-                }
+                )
             }
-        ) {
-            ListDetailPaneScaffold(
-                directive = finalDirective,
-                value = navigator.scaffoldValue,
-                listPane = {
-                    FileListPane(
-                        files = uiState.files,
-                        isLoading = uiState.isLoading,
-                        error = uiState.error,
-                        currentPath = uiState.currentPath,
-                        showMenuIcon = true,
-                        onFileClick = { file ->
-                            viewModel.loadFile(file)
-                            scope.launch { navigator.navigateTo(ListDetailPaneScaffoldRole.Detail) }
-                        },
-                        onFolderClick = { path -> viewModel.loadFolder(path) },
-                        onNavigateUp = { viewModel.navigateUp() }, // CONNEXION DU RETOUR
-                        onMenuClick = { scope.launch { drawerState.open() } }
-                    )
-                },
-                detailPane = {
-                    FileDetailPane(
-                        content = uiState.selectedFileContent,
-                        fileName = uiState.selectedFileName,
-                        isLoading = uiState.isLoading,
-                        isFocusMode = uiState.isFocusMode,
-                        onToggleFocusMode = { viewModel.toggleFocusMode() },
-                        isExpandedScreen = false
-                    )
-                }
-            )
         }
     }
 }
