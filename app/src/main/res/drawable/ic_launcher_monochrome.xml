@@ -1,0 +1,39 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!--
+       CORRECTION MONOCHROME :
+       1. Scale 0.75 pour éviter le tronquage.
+       2. Simplification : Une seule couche de fond (40%) + Détails (100%).
+          Fini l'effet "oignon/cible", l'icône sera nette et lisible.
+    -->
+    <group
+        android:scaleX="0.75"
+        android:scaleY="0.75"
+        android:pivotX="12"
+        android:pivotY="12">
+
+        <!-- LOBES (Fond) -> Opacité 40% (#66) -->
+        <!-- Forme globale unifiée pour chaque hémisphère -->
+        <path
+            android:fillColor="#66000000"
+            android:pathData="M11.5,4 C9,3.8 6.5,4.5 5,7 C3.5,9.5 3.5,14 4.5,17 C5.5,20 8.5,21.5 11.5,20 L11.5,17 C11.5,17 10.5,17 10.5,17 C9,17 8,15 8,12 C8,9 9.5,7 11.5,7 Z" />
+
+        <path
+            android:fillColor="#66000000"
+            android:pathData="M12.5,4 C15,3.8 17.5,4.5 19,7 C20.5,9.5 20.5,14 19.5,17 C18.5,20 15.5,21.5 12.5,20 L12.5,17 C12.5,17 13.5,17 13.5,17 C15,17 16,15 16,12 C16,9 14.5,7 12.5,7 Z" />
+
+        <!-- DÉTAILS (Premier plan) -> Opacité 100% (#FF) -->
+        <!-- Ressortent fortement par dessus le fond semi-transparent -->
+        <path
+            android:fillColor="#FF000000"
+            android:pathData="M8.5,8 C7.5,9 7.5,11 8,13 C8.5,15 10,16 11,16 L11,14 C10.5,14 9.5,13 9.5,12 C9.5,10.5 10,9.5 11,9 L11,7.5 C10,7.5 9,7.5 8.5,8 Z" />
+
+        <path
+            android:fillColor="#FF000000"
+            android:pathData="M15.5,8 C16.5,9 16.5,11 16,13 C15.5,15 14,16 13,16 L13,14 C13.5,14 14.5,13 14.5,12 C14.5,10.5 14,9.5 13,9 L13,7.5 C14,7.5 15,7.5 15.5,8 Z" />
+    </group>
+</vector>
