@@ -12,8 +12,14 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -34,7 +40,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -53,50 +58,48 @@ fun FileDetailPane(
     content: String?,
     fileName: String? = null,
     isLoading: Boolean,
+    isRefreshing: Boolean,
+    onRefresh: () -> Unit,
     isFocusMode: Boolean,
     onToggleFocusMode: () -> Unit,
     isExpandedScreen: Boolean
 ) {
-    // --- LOGIQUE DESIGN FENÊTRE ---
-
-    // Forme : Si grand écran, on arrondit TOUS les coins pour faire une carte flottante
+    // --- LOGIC WINDOWS ---
     val shape = if (isExpandedScreen) {
         RoundedCornerShape(24.dp)
     } else {
         RoundedCornerShape(0.dp)
     }
 
-    // Marges :
-    // - Sur Mobile : 0dp (Plein écran)
-    // - Sur Tablette/Fold : On détache la vue des bords (Haut/Bas/Droite) et on laisse le Gutter à gauche
     val padding = if (isExpandedScreen) {
         if (isFocusMode) {
-            // Mode Focus : On garde une marge "Zen" tout autour pour que ça reste une fenêtre centrée
             PaddingValues(16.dp)
         } else {
-            // Mode Split : On détache du bord droit et du haut/bas,
-            // la marge gauche est gérée par le Spacer du Scaffold principal ou ajoutée ici pour plus d'air
             PaddingValues(start = 8.dp, top = 12.dp, bottom = 12.dp, end = 12.dp)
         }
     } else {
         PaddingValues(0.dp)
     }
 
-    // Couleurs Material Expressive
-    // Header : Un ton légèrement coloré ou gris surface (Container High)
-    val headerContainerColor = MaterialTheme.colorScheme.surfaceContainer
-    // Body : Le fond de lecture (Surface ou SurfaceLowest pour un max de contraste)
-    val contentContainerColor = MaterialTheme.colorScheme.surface
+    // Inset Logic:
+    // If NOT expanded (Mobile), we want the Scaffold content to be pushed down by status bars.
+    // If expanded (Tablet), the padding above handles some of it, but we need to ensure we don't clip.
+    // The card itself should be pushed down.
+    
+    val modifier = Modifier
+        .padding(padding)
+        // Apply status bar padding ONLY if we are in mobile mode acting as a full screen window, 
+        // OR if needed in tablet mode to push the floating card down.
+        // Actually, if we apply it here, it pushes the whole card down.
+        .statusBarsPadding() 
+        .clip(shape)
+        .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f), shape)
 
     Scaffold(
-        modifier = Modifier
-            .padding(padding) // Applique les marges externes
-            .clip(shape)      // Coupe la vue selon la forme arrondie
-            // AJOUT : Bordure subtile pour délimiter la carte du fond noir
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f), shape),
-        containerColor = contentContainerColor,
+        modifier = modifier,
+        containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
-            Column {
+             Column {
                 TopAppBar(
                     title = {
                         if (content != null) {
@@ -127,31 +130,27 @@ fun FileDetailPane(
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = headerContainerColor,
-                        scrolledContainerColor = headerContainerColor
+                        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                        scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer
                     )
                 )
-                // Séparation explicite : Une ligne fine (Divider)
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
             }
         }
     ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .padding(innerPadding)
-                .fillMaxSize()
+        cloud.wafflecommons.pixelbrainreader.ui.components.PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = onRefresh,
+            modifier = Modifier.padding(innerPadding).fillMaxSize()
         ) {
-            if (isLoading) {
+            if (isLoading && content == null) {
                 CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
             } else if (content != null) {
-                // Couleurs pour le contenu Markdown
+                // Colors
                 val textColor = MaterialTheme.colorScheme.onSurface.toArgb()
                 val primaryColorInt = MaterialTheme.colorScheme.primary.toArgb()
                 val tertiaryColorInt = MaterialTheme.colorScheme.tertiary.toArgb()
-
-                // Fond des blocs de code : Surface Container High pour contraster avec le fond Surface
                 val codeBgColor = MaterialTheme.colorScheme.surfaceContainerHigh.toArgb()
-
                 val quoteColor = MaterialTheme.colorScheme.secondary.toArgb()
                 val checkedColor = MaterialTheme.colorScheme.primary.toArgb()
                 val uncheckedColor = MaterialTheme.colorScheme.onSurfaceVariant.toArgb()
@@ -161,7 +160,6 @@ fun FileDetailPane(
                         TextView(context).apply {
                             setTextColor(textColor)
                             textSize = 16f
-                            // Marges internes du texte (dans la fenêtre)
                             setPadding(56, 24, 56, 200)
                             setLineSpacing(12f, 1.1f)
                         }
@@ -174,59 +172,29 @@ fun FileDetailPane(
                             .usePlugin(TaskListPlugin.create(checkedColor, uncheckedColor, uncheckedColor))
                             .usePlugin(object : CorePlugin() {
                                 override fun configureSpansFactory(builder: MarkwonSpansFactory.Builder) {
-                                    // Titres
                                     builder.setFactory(org.commonmark.node.Heading::class.java) { _, _ ->
-                                        arrayOf(
-                                            RelativeSizeSpan(1.5f),
-                                            StyleSpan(Typeface.BOLD),
-                                            ForegroundColorSpan(primaryColorInt)
-                                        )
+                                        arrayOf(RelativeSizeSpan(1.5f), StyleSpan(Typeface.BOLD), ForegroundColorSpan(primaryColorInt))
                                     }
-
-                                    // Code Blocks
                                     builder.setFactory(org.commonmark.node.FencedCodeBlock::class.java) { _, _ ->
-                                        arrayOf(
-                                            BackgroundColorSpan(codeBgColor),
-                                            ForegroundColorSpan(tertiaryColorInt),
-                                            TypefaceSpan("monospace"),
-                                            RelativeSizeSpan(0.90f)
-                                        )
+                                        arrayOf(BackgroundColorSpan(codeBgColor), ForegroundColorSpan(tertiaryColorInt), TypefaceSpan("monospace"), RelativeSizeSpan(0.90f))
                                     }
-
-                                    // Code Inline
                                     builder.setFactory(org.commonmark.node.Code::class.java) { _, _ ->
-                                        arrayOf(
-                                            BackgroundColorSpan(codeBgColor),
-                                            ForegroundColorSpan(tertiaryColorInt),
-                                            TypefaceSpan("monospace"),
-                                            RelativeSizeSpan(0.90f)
-                                        )
+                                        arrayOf(BackgroundColorSpan(codeBgColor), ForegroundColorSpan(tertiaryColorInt), TypefaceSpan("monospace"), RelativeSizeSpan(0.90f))
                                     }
-
-                                    // Citations
                                     builder.setFactory(org.commonmark.node.BlockQuote::class.java) { _, _ ->
-                                        arrayOf(
-                                            QuoteSpan(quoteColor),
-                                            StyleSpan(Typeface.ITALIC)
-                                        )
+                                        arrayOf(QuoteSpan(quoteColor), StyleSpan(Typeface.ITALIC))
                                     }
                                 }
                             })
                             .build()
-
                         markwon.setMarkdown(tv, content)
                     },
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
+                    modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
                 )
             } else {
-                Text(
-                    text = "Sélectionnez un fichier",
-                    modifier = Modifier.align(Alignment.Center),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodyLarge
-                )
+                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("Sélectionnez un fichier", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge)
+                 }
             }
         }
     }

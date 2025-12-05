@@ -19,15 +19,8 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-data class UiState(
-    val currentPath: String = "",
-    val files: List<GithubFileDto> = emptyList(),
-    val selectedFileContent: String? = null,
-    val selectedFileName: String? = null,
-    val isLoading: Boolean = false,
-    val error: String? = null,
-    val isFocusMode: Boolean = false
-)
+// UiState moved inside MainViewModel or defined here if needed.
+// Cleaning up previous definition to avoid duplicates.
 
 @HiltViewModel
 class MainViewModel @Inject constructor(
@@ -38,73 +31,79 @@ class MainViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(UiState())
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
     
+    // Add isRefreshing state
+    data class UiState(
+        val currentPath: String = "",
+        val files: List<GithubFileDto> = emptyList(),
+        val selectedFileContent: String? = null,
+        val selectedFileName: String? = null,
+        val isLoading: Boolean = false, // Full screen loader (Init only)
+        val isRefreshing: Boolean = false, // Pull-to-refresh
+        val error: String? = null,
+        val isFocusMode: Boolean = false
+    )
+
     private var filesObservationJob: Job? = null
+    private var contentObservationJob: Job? = null
 
     init {
+        // Initial silent sync
         loadFolder("")
     }
 
+    /**
+     * Navigation Logic (Offline-First).
+     * 1. Updates Path.
+     * 2. Observes DB immediately (Instant UI).
+     * 3. Triggers Silent Sync (Background).
+     */
     fun loadFolder(path: String) {
-        val (owner, repo) = secretManager.getRepoInfo()
-        if (owner == null || repo == null) {
-            _uiState.value = _uiState.value.copy(error = "Repository info missing.")
-            return
-        }
-
-        // 1. Update Path & Reset Error
         _uiState.value = _uiState.value.copy(currentPath = path, error = null)
-
-        // 2. Observe Database -> UI
+        
+        // Instant DB Access
         observeDatabase(path)
+        
+        // Silent Sync
+        syncFolder(path, isUserAction = false)
+    }
 
-        // 3. Trigger Network Sync
+    /**
+     * User Action: Pull-to-Refresh.
+     */
+    fun refresh() {
+        val path = _uiState.value.currentPath
+        syncFolder(path, isUserAction = true)
+    }
+
+    private fun syncFolder(path: String, isUserAction: Boolean) {
+        val (owner, repo) = secretManager.getRepoInfo()
+        if (owner == null || repo == null) return
+
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true)
+            if (isUserAction) {
+                _uiState.value = _uiState.value.copy(isRefreshing = true)
+            }
+            // Note: We do NOT set isLoading = true here. Data is visible from DB.
+
             val result = repository.refreshFiles(owner, repo, path)
             
+            _uiState.value = _uiState.value.copy(isRefreshing = false)
+            
             if (result.isFailure) {
-                // Offline Mode or Network Failure
                 val errorMsg = result.exceptionOrNull()?.localizedMessage ?: "Unknown error"
-                Log.e("MainViewModel", "Sync failed: $errorMsg")
-                
-                // Only show error if we have no files (Critical Failure) OR show as toast/snackbar (Transient)
-                // For this V2 Reader, we show error in UI state but preserve files if present.
-                if (_uiState.value.files.isEmpty()) {
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = "Offline Mode (Empty Cache): $errorMsg"
-                    )
-                } else {
-                     _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = "Sync Failed: $errorMsg" // UI should handle transient error display
-                    )
+                Log.w("MainViewModel", "Sync failed: $errorMsg")
+                // Only show error toast/snackbar if user explicitly refreshed, or just update state 
+                if (isUserAction) {
+                     _uiState.value = _uiState.value.copy(error = "Sync Failed: $errorMsg")
                 }
-            } else {
-                _uiState.value = _uiState.value.copy(isLoading = false)
-            }
-        }
-        
-        // Safety Check: Database Timeout Monitor
-        viewModelScope.launch {
-            delay(5000)
-            if (_uiState.value.isLoading && _uiState.value.files.isEmpty()) {
-                Log.w("MainViewModel", "Loading timeout. DB or Network might be stuck.")
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    error = "Loading Timeout. Check logs."
-                )
             }
         }
     }
 
     private fun observeDatabase(path: String) {
-        Log.d("MainViewModel", "Observing files for path: '$path'")
         filesObservationJob?.cancel()
         filesObservationJob = repository.getFiles(path)
             .onEach { entities ->
-                Log.d("MainViewModel", "Database emitted ${entities.size} files for path '$path'")
-                
                 val dtos = entities
                     .map { it.toDto() }
                     .filter { !it.name.startsWith(".") }
@@ -113,25 +112,51 @@ class MainViewModel @Inject constructor(
                 _uiState.value = _uiState.value.copy(files = dtos)
             }
             .catch { e ->
-                Log.e("MainViewModel", "Database observation error", e)
-                _uiState.value = _uiState.value.copy(error = "Database Error: ${e.message}")
+                _uiState.value = _uiState.value.copy(error = "DB Error: ${e.message}")
             }
             .launchIn(viewModelScope)
     }
 
     fun loadFile(file: GithubFileDto) {
-        if (file.downloadUrl == null) return
+        // Reset View
+        _uiState.value = _uiState.value.copy(
+            selectedFileName = file.name, 
+            selectedFileContent = null,
+            error = null
+        )
 
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, error = null, selectedFileName = file.name)
-            
-            val result = repository.getFileContent(file.downloadUrl)
-            result.onSuccess { content ->
-                _uiState.value = _uiState.value.copy(isLoading = false, selectedFileContent = content)
-            }.onFailure { e ->
-                _uiState.value = _uiState.value.copy(isLoading = false, error = e.message)
-            }
+        // Observe Content Flow
+        val fileId = file.path // Or use API path. Assuming file.path is the repo path.
+        observeFileContent(fileId)
+
+        // Trigger Sync
+        if (file.downloadUrl != null) {
+            syncFile(fileId, file.downloadUrl, isUserAction = false)
         }
+    }
+    
+    fun refreshFile(file: GithubFileDto) {
+        if (file.downloadUrl == null) return
+        syncFile(file.path, file.downloadUrl, isUserAction = true)
+    }
+
+    private fun observeFileContent(path: String) {
+        contentObservationJob?.cancel()
+        contentObservationJob = repository.getFileContentFlow(path)
+            .onEach { content ->
+                 _uiState.value = _uiState.value.copy(selectedFileContent = content)
+            }
+            .launchIn(viewModelScope)
+    }
+
+    private fun syncFile(path: String, url: String, isUserAction: Boolean) {
+         viewModelScope.launch {
+            if (isUserAction) _uiState.value = _uiState.value.copy(isRefreshing = true)
+            
+            repository.refreshFileContent(path, url)
+            
+            if (isUserAction) _uiState.value = _uiState.value.copy(isRefreshing = false)
+         }
     }
 
     fun navigateUp() {
@@ -139,6 +164,8 @@ class MainViewModel @Inject constructor(
         if (currentPath.isNotEmpty()) {
             val parentPath = if(currentPath.contains("/")) currentPath.substringBeforeLast("/") else ""
             loadFolder(parentPath)
+        } else {
+             // Already at root.
         }
     }
 

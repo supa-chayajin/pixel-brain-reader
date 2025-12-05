@@ -33,4 +33,16 @@ object DatabaseModule {
     fun provideFileDao(database: AppDatabase): FileDao {
         return database.fileDao()
     }
+
+    @Provides
+    @Singleton
+    fun provideMetadataDao(database: AppDatabase): cloud.wafflecommons.pixelbrainreader.data.local.dao.SyncMetadataDao {
+        return database.metadataDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideFileContentDao(database: AppDatabase): cloud.wafflecommons.pixelbrainreader.data.local.dao.FileContentDao {
+        return database.fileContentDao()
+    }
 }

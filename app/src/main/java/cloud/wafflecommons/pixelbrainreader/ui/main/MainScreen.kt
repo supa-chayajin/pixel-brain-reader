@@ -142,6 +142,7 @@ fun MainScreen(
                             FileListPane(
                                 files = uiState.files,
                                 isLoading = uiState.isLoading,
+                                isRefreshing = uiState.isRefreshing,
                                 error = uiState.error,
                                 currentPath = uiState.currentPath,
                                 showMenuIcon = false,
@@ -151,7 +152,8 @@ fun MainScreen(
                                 },
                                 onFolderClick = { path -> viewModel.loadFolder(path) },
                                 onNavigateUp = { viewModel.navigateUp() },
-                                onMenuClick = { }
+                                onMenuClick = { },
+                                onRefresh = { viewModel.refresh() }
                             )
                         }
                     },
@@ -160,6 +162,11 @@ fun MainScreen(
                             content = uiState.selectedFileContent,
                             fileName = uiState.selectedFileName,
                             isLoading = uiState.isLoading,
+                            isRefreshing = uiState.isRefreshing,
+                            onRefresh = { 
+                                val file = uiState.files.find { it.name == uiState.selectedFileName }
+                                if (file != null) viewModel.refreshFile(file)
+                            },
                             isFocusMode = uiState.isFocusMode,
                             onToggleFocusMode = { viewModel.toggleFocusMode() },
                             isExpandedScreen = isLargeScreen
@@ -197,16 +204,24 @@ fun MainScreen(
                         FileListPane(
                             files = uiState.files,
                             isLoading = uiState.isLoading,
+                            isRefreshing = uiState.isRefreshing, // Bind State
                             error = uiState.error,
                             currentPath = uiState.currentPath,
                             showMenuIcon = true,
                             onFileClick = { file ->
                                 viewModel.loadFile(file)
-                                scope.launch { navigator.navigateTo(ListDetailPaneScaffoldRole.Detail) }
+                                navigator.navigateTo(ListDetailPaneScaffoldRole.Detail)
                             },
-                            onFolderClick = { path -> viewModel.loadFolder(path) },
-                            onNavigateUp = { viewModel.navigateUp() },
-                            onMenuClick = { scope.launch { drawerState.open() } }
+                            onFolderClick = { path ->
+                                viewModel.loadFolder(path)
+                            },
+                            onNavigateUp = {
+                                viewModel.navigateUp()
+                            },
+                            onMenuClick = {
+                                scope.launch { drawerState.open() }
+                            },
+                            onRefresh = { viewModel.refresh() } // Bind Action
                         )
                     },
                     detailPane = {
@@ -214,6 +229,11 @@ fun MainScreen(
                             content = uiState.selectedFileContent,
                             fileName = uiState.selectedFileName,
                             isLoading = uiState.isLoading,
+                            isRefreshing = uiState.isRefreshing, // Bind State (Shared for now, can be split)
+                            onRefresh = {
+                                val file = uiState.files.find { it.name == uiState.selectedFileName }
+                                if (file != null) viewModel.refreshFile(file)
+                            },
                             isFocusMode = uiState.isFocusMode,
                             onToggleFocusMode = { viewModel.toggleFocusMode() },
                             isExpandedScreen = false
@@ -224,3 +244,4 @@ fun MainScreen(
         }
     }
 }
+

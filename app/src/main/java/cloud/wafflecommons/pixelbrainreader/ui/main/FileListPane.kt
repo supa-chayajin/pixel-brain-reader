@@ -27,13 +27,15 @@ import cloud.wafflecommons.pixelbrainreader.data.remote.model.GithubFileDto
 fun FileListPane(
     files: List<GithubFileDto>,
     isLoading: Boolean,
-    error: String?, // NOUVEAU PARAMETRE
+    isRefreshing: Boolean, // New State
+    error: String?,
     currentPath: String,
     showMenuIcon: Boolean,
     onFileClick: (GithubFileDto) -> Unit,
     onFolderClick: (String) -> Unit,
     onNavigateUp: () -> Unit,
-    onMenuClick: () -> Unit
+    onMenuClick: () -> Unit,
+    onRefresh: () -> Unit // New Action
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
@@ -44,32 +46,19 @@ fun FileListPane(
             LargeTopAppBar(
                 title = {
                     Text(
-                        // Titre contextuel : Bibliothèque ou nom du dossier courant
                         if (currentPath.isEmpty()) "Bibliothèque" else currentPath.substringAfterLast('/'),
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                 },
                 navigationIcon = {
-                    // LOGIQUE INTELLIGENTE :
-                    // Si on n'est pas à la racine (currentPath non vide) -> Flèche Retour
                     if (currentPath.isNotEmpty()) {
                         IconButton(onClick = onNavigateUp) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Retour",
-                                tint = MaterialTheme.colorScheme.onSurface
-                            )
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Retour", tint = MaterialTheme.colorScheme.onSurface)
                         }
-                    }
-                    // Sinon, si on est sur mobile (showMenuIcon) -> Menu Burger
-                    else if (showMenuIcon) {
+                    } else if (showMenuIcon) {
                         IconButton(onClick = onMenuClick) {
-                            Icon(
-                                Icons.Default.Menu,
-                                contentDescription = "Menu",
-                                tint = MaterialTheme.colorScheme.onSurface
-                            )
+                            Icon(Icons.Default.Menu, "Menu", tint = MaterialTheme.colorScheme.onSurface)
                         }
                     }
                 },
@@ -82,23 +71,24 @@ fun FileListPane(
             )
         }
     ) { innerPadding ->
-        Box(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
-            if (isLoading) {
-                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-            } else if (error != null) {
-                // Affichage de l'erreur
-                Column(
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .padding(16.dp),
+        cloud.wafflecommons.pixelbrainreader.ui.components.PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = onRefresh,
+            modifier = Modifier.padding(innerPadding).fillMaxSize()
+        ) {
+            // Content
+            if (isLoading && files.isEmpty()) {
+                // Only show full loader if we have NO files.
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                     CircularProgressIndicator()
+                }
+            } else if (error != null && files.isEmpty()) {
+                // Show Error only if empty (otherwise show toast/snackbar - handled by parent usually, but fallback here)
+                 Column(
+                    modifier = Modifier.align(Alignment.Center).padding(16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Folder, // Ou une icône d'erreur si dispo
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(48.dp)
-                    )
+                    Icon(Icons.Default.Folder, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(48.dp))
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
                         text = error,
@@ -108,17 +98,14 @@ fun FileListPane(
                     )
                 }
             } else if (files.isEmpty()) {
-                // Affichage liste vide
-                Text(
-                    text = "Aucun fichier trouvé",
-                    modifier = Modifier.align(Alignment.Center),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("Aucun fichier trouvé (ou non synchronisé)", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                 }
             } else {
                 LazyColumn(
                     contentPadding = PaddingValues(horizontal = 0.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxSize()
                 ) {
                     items(files) { file ->
                         FileItemCard(file = file, onClick = {

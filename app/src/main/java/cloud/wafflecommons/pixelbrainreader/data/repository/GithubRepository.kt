@@ -12,7 +12,11 @@ class GithubRepository @Inject constructor(
     suspend fun getContents(owner: String, repo: String, path: String = ""): Result<List<GithubFileDto>> {
         return try {
             val response = apiService.getContents(owner, repo, path)
-            Result.success(response)
+            if (response.isSuccessful) {
+                Result.success(response.body() ?: emptyList())
+            } else {
+                Result.failure(Exception("API Error ${response.code()}: ${response.message()}"))
+            }
         } catch (e: Exception) {
             Result.failure(e)
         }
