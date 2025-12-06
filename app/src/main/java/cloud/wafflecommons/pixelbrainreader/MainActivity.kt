@@ -25,6 +25,9 @@ import cloud.wafflecommons.pixelbrainreader.ui.login.LoginScreen
 import cloud.wafflecommons.pixelbrainreader.ui.theme.PixelBrainReaderTheme
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
+import androidx.activity.viewModels
+import android.content.Intent
+import cloud.wafflecommons.pixelbrainreader.ui.main.MainViewModel
 
 @AndroidEntryPoint
 class MainActivity : FragmentActivity() {
@@ -35,6 +38,10 @@ class MainActivity : FragmentActivity() {
 
     @Inject
     lateinit var biometricAuthenticator: BiometricAuthenticator
+
+    private val viewModel: MainViewModel by viewModels()
+
+    // State for UI
 
     // State for UI
     private var isAppLocked by mutableStateOf(false)
@@ -84,6 +91,7 @@ class MainActivity : FragmentActivity() {
                     }
                 } else if (isUserLoggedIn) {
                     cloud.wafflecommons.pixelbrainreader.ui.main.MainScreen(
+                        viewModel = viewModel,
                         onLogout = {
                             isUserLoggedIn = false
                             secretManager.clear()
@@ -97,6 +105,15 @@ class MainActivity : FragmentActivity() {
                 }
             }
         }
+
+        
+        // Handle Share Intent
+        viewModel.handleShareIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        viewModel.handleShareIntent(intent)
     }
 
     private fun lockApp() {

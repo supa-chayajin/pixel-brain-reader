@@ -44,8 +44,12 @@ class MainViewModel @Inject constructor(
         val isFocusMode: Boolean = false,
         val isEditing: Boolean = false, // Edit Mode
         val isSyncing: Boolean = false,
-        val hasUnsavedChanges: Boolean = false
+
+        val hasUnsavedChanges: Boolean = false,
+        val importState: ImportState? = null
     )
+
+    data class ImportState(val title: String, val content: String)
 
     private var filesObservationJob: Job? = null
     private var contentObservationJob: Job? = null
@@ -296,4 +300,43 @@ class MainViewModel @Inject constructor(
     }
 
     private fun FileEntity.toDto() = GithubFileDto(name, path, type, downloadUrl)
+
+    fun handleShareIntent(intent: android.content.Intent) {
+        if (intent.action == android.content.Intent.ACTION_SEND) {
+            val text = intent.getStringExtra(android.content.Intent.EXTRA_TEXT) 
+                ?: intent.getStringExtra(android.content.Intent.EXTRA_HTML_TEXT)
+            
+            if (text != null) {
+                _uiState.value = _uiState.value.copy(isLoading = true)
+                viewModelScope.launch {
+                    val result = cloud.wafflecommons.pixelbrainreader.data.utils.ContentSanitizer.processSharedContent(text)
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        importState = ImportState(result.title, result.markdownContent)
+                    )
+                }
+            }
+        }
+    }
+
+    fun confirmImport(filename: String, folder: String, content: String) {
+        val fullPath = if (folder.isNotBlank()) "$folder/$filename" else filename
+        viewModelScope.launch {
+             // Save locally
+             repository.saveFileLocally(fullPath, content)
+             
+             // Trigger Sync
+             val (owner, repo) = secretManager.getRepoInfo()
+             if (owner != null && repo != null) {
+                 repository.pushDirtyFiles(owner, repo)
+             }
+             
+             dismissImport()
+             loadFolder(folder) 
+        }
+    }
+
+    fun dismissImport() {
+        _uiState.value = _uiState.value.copy(importState = null)
+    }
 }

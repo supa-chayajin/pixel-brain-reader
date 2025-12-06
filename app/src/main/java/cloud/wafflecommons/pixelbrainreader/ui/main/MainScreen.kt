@@ -253,6 +253,15 @@ fun MainScreen(
                 )
             }
         }
+
+        if (uiState.importState != null) {
+             cloud.wafflecommons.pixelbrainreader.ui.components.ImportDialog(
+                 initialTitle = uiState.importState!!.title,
+                 initialContent = uiState.importState!!.content,
+                 onDismiss = { viewModel.dismissImport() },
+                 onSave = { name, folder, content -> viewModel.confirmImport(name, folder, content) }
+             )
+        }
     }
 }
 

@@ -22,6 +22,12 @@ interface FileDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(files: List<FileEntity>)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertFile(file: FileEntity)
+
+    @Query("SELECT * FROM files WHERE path = :path")
+    suspend fun getFile(path: String): FileEntity?
+
     @Query("UPDATE files SET isDirty = :isDirty WHERE path = :path")
     suspend fun markFileAsDirty(path: String, isDirty: Boolean)
 
