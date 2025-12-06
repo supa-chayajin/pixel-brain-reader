@@ -36,19 +36,29 @@ class MainViewModel @Inject constructor(
         val currentPath: String = "",
         val files: List<GithubFileDto> = emptyList(),
         val selectedFileContent: String? = null,
+        val unsavedContent: String? = null, // The Draft
         val selectedFileName: String? = null,
         val isLoading: Boolean = false, // Full screen loader (Init only)
         val isRefreshing: Boolean = false, // Pull-to-refresh
         val error: String? = null,
-        val isFocusMode: Boolean = false
+        val isFocusMode: Boolean = false,
+        val isEditing: Boolean = false, // Edit Mode
+        val isSyncing: Boolean = false,
+        val hasUnsavedChanges: Boolean = false
     )
 
     private var filesObservationJob: Job? = null
     private var contentObservationJob: Job? = null
 
     init {
-        // Initial silent sync
+        // Initial silent sync & Prime the DB (Authoritative Root Sync)
         loadFolder("")
+        viewModelScope.launch {
+            val (owner, repo) = secretManager.getRepoInfo()
+            if (owner != null && repo != null) {
+                repository.syncFolder(owner, repo, "")
+            }
+        }
     }
 
     /**
@@ -63,16 +73,35 @@ class MainViewModel @Inject constructor(
         // Instant DB Access
         observeDatabase(path)
         
-        // Silent Sync
+        // Silent Sync (Authoritative)
         syncFolder(path, isUserAction = false)
+    }
+
+    fun refreshCurrentFolder() {
+        val path = _uiState.value.currentPath
+        val (owner, repo) = secretManager.getRepoInfo()
+        if (owner == null || repo == null) return
+
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true, isRefreshing = true)
+            
+            // Hard Refresh / Authoritative Sync
+            val result = repository.syncFolder(owner, repo, path)
+            
+            _uiState.value = _uiState.value.copy(isLoading = false, isRefreshing = false)
+            
+            if (result.isFailure) {
+                val errorMsg = result.exceptionOrNull()?.localizedMessage ?: "Unknown error"
+                 _uiState.value = _uiState.value.copy(error = "Sync Failed: $errorMsg")
+            }
+        }
     }
 
     /**
      * User Action: Pull-to-Refresh.
      */
     fun refresh() {
-        val path = _uiState.value.currentPath
-        syncFolder(path, isUserAction = true)
+       refreshCurrentFolder()
     }
 
     private fun syncFolder(path: String, isUserAction: Boolean) {
@@ -85,7 +114,7 @@ class MainViewModel @Inject constructor(
             }
             // Note: We do NOT set isLoading = true here. Data is visible from DB.
 
-            val result = repository.refreshFiles(owner, repo, path)
+            val result = repository.syncFolder(owner, repo, path)
             
             _uiState.value = _uiState.value.copy(isRefreshing = false)
             
@@ -118,15 +147,18 @@ class MainViewModel @Inject constructor(
     }
 
     fun loadFile(file: GithubFileDto) {
-        // Reset View
+        // Reset View & Draft
         _uiState.value = _uiState.value.copy(
             selectedFileName = file.name, 
             selectedFileContent = null,
-            error = null
+            unsavedContent = null,
+            hasUnsavedChanges = false,
+            error = null,
+            isEditing = false
         )
 
         // Observe Content Flow
-        val fileId = file.path // Or use API path. Assuming file.path is the repo path.
+        val fileId = file.path 
         observeFileContent(fileId)
 
         // Trigger Sync
@@ -148,6 +180,17 @@ class MainViewModel @Inject constructor(
             }
             .launchIn(viewModelScope)
     }
+    
+    fun closeFile() {
+        contentObservationJob?.cancel()
+        _uiState.value = _uiState.value.copy(
+            selectedFileName = null,
+            selectedFileContent = null,
+            unsavedContent = null,
+            hasUnsavedChanges = false,
+            isEditing = false
+        )
+    }
 
     private fun syncFile(path: String, url: String, isUserAction: Boolean) {
          viewModelScope.launch {
@@ -157,6 +200,81 @@ class MainViewModel @Inject constructor(
             
             if (isUserAction) _uiState.value = _uiState.value.copy(isRefreshing = false)
          }
+    }
+
+    fun toggleEditMode() {
+        val isEditing = !_uiState.value.isEditing
+        // If entering edit mode, ensure unsavedContent is initialized if null
+        if (isEditing && _uiState.value.unsavedContent == null) {
+             _uiState.value = _uiState.value.copy(
+                 unsavedContent = _uiState.value.selectedFileContent ?: "",
+                 hasUnsavedChanges = false // It matches DB currently
+             )
+        }
+        _uiState.value = _uiState.value.copy(isEditing = isEditing)
+    }
+
+    fun updateUnsavedContent(newContent: String) {
+        _uiState.value = _uiState.value.copy(
+            unsavedContent = newContent,
+            hasUnsavedChanges = true
+        )
+    }
+
+    fun refreshCurrentFile() {
+        val fileName = _uiState.value.selectedFileName ?: return
+        val file = _uiState.value.files.find { it.name == fileName } ?: return
+        if (file.downloadUrl == null) return
+
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isRefreshing = true)
+            repository.refreshFileContent(file.path, file.downloadUrl)
+            _uiState.value = _uiState.value.copy(isRefreshing = false)
+        }
+    }
+
+    fun saveContent(newContent: String) {
+        val currentFileName = _uiState.value.selectedFileName ?: return
+        val file = _uiState.value.files.find { it.name == currentFileName } ?: return
+        
+        viewModelScope.launch {
+            // 1. Save Local
+            repository.saveFileLocally(file.path, newContent)
+            
+            // 2. Clear Draft & Exit Edit Mode
+            _uiState.value = _uiState.value.copy(
+                isEditing = false,
+                unsavedContent = null,
+                hasUnsavedChanges = false
+            )
+            
+            // 3. Trigger Push Immediately (Blocking)
+            val (owner, repo) = secretManager.getRepoInfo()
+            if (owner != null && repo != null) {
+                _uiState.value = _uiState.value.copy(isSyncing = true)
+                val result = repository.pushDirtyFiles(owner, repo)
+                 if (result.isFailure) {
+                    val msg = result.exceptionOrNull()?.message ?: "Unknown"
+                    _uiState.value = _uiState.value.copy(error = "Commit Failed: $msg")
+                }
+                _uiState.value = _uiState.value.copy(isSyncing = false)
+            }
+        }
+    }
+    
+    private fun syncDirtyFiles() {
+        // Redundant with the new saveContent logic but helper kept if needed.
+        val (owner, repo) = secretManager.getRepoInfo()
+        if (owner == null || repo == null) return
+
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isSyncing = true)
+            val result = repository.pushDirtyFiles(owner, repo)
+            if (result.isFailure) {
+                _uiState.value = _uiState.value.copy(error = "Push Failed: ${result.exceptionOrNull()?.message}")
+            }
+            _uiState.value = _uiState.value.copy(isSyncing = false)
+        }
     }
 
     fun navigateUp() {

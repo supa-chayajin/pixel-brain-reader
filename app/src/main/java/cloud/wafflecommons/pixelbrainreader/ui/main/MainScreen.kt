@@ -159,17 +159,20 @@ fun MainScreen(
                     },
                     detailPane = {
                         FileDetailPane(
-                            content = uiState.selectedFileContent,
+                            content = uiState.unsavedContent ?: uiState.selectedFileContent,
+                            onContentChange = { viewModel.updateUnsavedContent(it) },
                             fileName = uiState.selectedFileName,
                             isLoading = uiState.isLoading,
                             isRefreshing = uiState.isRefreshing,
-                            onRefresh = { 
-                                val file = uiState.files.find { it.name == uiState.selectedFileName }
-                                if (file != null) viewModel.refreshFile(file)
-                            },
+                            onRefresh = { viewModel.refreshCurrentFile() },
                             isFocusMode = uiState.isFocusMode,
                             onToggleFocusMode = { viewModel.toggleFocusMode() },
-                            isExpandedScreen = isLargeScreen
+                            isExpandedScreen = isLargeScreen,
+                            isEditing = uiState.isEditing,
+                            onToggleEditMode = { viewModel.toggleEditMode() },
+                            onSaveContent = { content -> viewModel.saveContent(content) },
+                            hasUnsavedChanges = uiState.hasUnsavedChanges,
+                            onClose = { viewModel.closeFile() }
                         )
                     }
                 )
@@ -226,17 +229,25 @@ fun MainScreen(
                     },
                     detailPane = {
                         FileDetailPane(
-                            content = uiState.selectedFileContent,
+                            content = uiState.unsavedContent ?: uiState.selectedFileContent,
+                            onContentChange = { viewModel.updateUnsavedContent(it) },
                             fileName = uiState.selectedFileName,
                             isLoading = uiState.isLoading,
                             isRefreshing = uiState.isRefreshing, // Bind State (Shared for now, can be split)
-                            onRefresh = {
-                                val file = uiState.files.find { it.name == uiState.selectedFileName }
-                                if (file != null) viewModel.refreshFile(file)
-                            },
+                            onRefresh = { viewModel.refreshCurrentFile() },
                             isFocusMode = uiState.isFocusMode,
                             onToggleFocusMode = { viewModel.toggleFocusMode() },
-                            isExpandedScreen = false
+                            isExpandedScreen = false,
+                            isEditing = uiState.isEditing,
+                            onToggleEditMode = { viewModel.toggleEditMode() },
+                            onSaveContent = { content -> viewModel.saveContent(content) },
+                            hasUnsavedChanges = uiState.hasUnsavedChanges,
+                            onClose = {
+                                viewModel.closeFile()
+                                if (navigator.canNavigateBack()) {
+                                    navigator.navigateBack()
+                                }
+                            }
                         )
                     }
                 )

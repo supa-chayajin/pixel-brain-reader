@@ -17,6 +17,22 @@ interface GithubApiService {
         @Header("If-None-Match") ifNoneMatch: String? = null
     ): Response<List<GithubFileDto>>
 
+    @GET("repos/{owner}/{repo}/contents/{path}")
+    suspend fun getFileMetadata(
+        @Path("owner") owner: String,
+        @Path("repo") repo: String,
+        @Path("path") path: String,
+        @Header("If-None-Match") ifNoneMatch: String? = null
+    ): Response<GithubFileDto>
+
     @GET
     suspend fun getFileContent(@Url url: String): okhttp3.ResponseBody
+
+    @retrofit2.http.PUT("repos/{owner}/{repo}/contents/{path}")
+    suspend fun putContents(
+        @Path("owner") owner: String,
+        @Path("repo") repo: String,
+        @Path("path") path: String,
+        @retrofit2.http.Body body: Map<String, String>
+    ): Response<Unit>
 }

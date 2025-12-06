@@ -10,7 +10,9 @@ data class FileEntity(
     val name: String,
     val type: String, // "file" or "dir"
     val downloadUrl: String?,
-    val lastSyncedAt: Long = System.currentTimeMillis()
+    val lastSyncedAt: Long = System.currentTimeMillis(),
+    val isDirty: Boolean = false,
+    val localModifiedTimestamp: Long? = null
 )
 
 fun GithubFileDto.toEntity() = FileEntity(

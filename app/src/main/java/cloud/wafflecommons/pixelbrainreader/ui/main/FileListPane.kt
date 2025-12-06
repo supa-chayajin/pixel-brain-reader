@@ -107,7 +107,8 @@ fun FileListPane(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    items(files) { file ->
+                    val filteredFiles = files.filter { it.name != "." && it.path != currentPath }
+                    items(filteredFiles) { file ->
                         FileItemCard(file = file, onClick = {
                             if (file.type == "dir") onFolderClick(file.path) else onFileClick(file)
                         })

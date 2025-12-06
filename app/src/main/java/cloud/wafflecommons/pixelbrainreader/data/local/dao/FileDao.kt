@@ -22,6 +22,15 @@ interface FileDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(files: List<FileEntity>)
 
+    @Query("UPDATE files SET isDirty = :isDirty WHERE path = :path")
+    suspend fun markFileAsDirty(path: String, isDirty: Boolean)
+
+    @Query("SELECT * FROM files WHERE isDirty = 1")
+    suspend fun getDirtyFiles(): List<FileEntity>
+
+    @Query("DELETE FROM files WHERE (:parentPath = '' AND path NOT LIKE '%/%') OR (:parentPath != '' AND path LIKE :parentPath || '/%' AND path NOT LIKE :parentPath || '/%/%')")
+    suspend fun deleteFilesByParent(parentPath: String)
+
     @Query("DELETE FROM files")
     suspend fun clearAll()
 }
