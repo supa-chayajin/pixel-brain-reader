@@ -22,8 +22,15 @@
             android:theme="@style/Theme.PixelBrainReader">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- Phase B: Universal Collector (Share Targets) -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+                <data android:mimeType="text/html" />
             </intent-filter>
         </activity>
     </application>

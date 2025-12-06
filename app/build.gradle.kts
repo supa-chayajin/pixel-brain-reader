@@ -111,6 +111,10 @@ dependencies {
     // implementation(libs.markwon.syntax.highlight)
     // implementation(libs.prism4j)
 
+    // HTML Parsing & Conversion (Phase B: Universal Collector)
+    implementation("org.jsoup:jsoup:1.17.2")
+    implementation("com.vladsch.flexmark:flexmark-html2md-converter:0.64.8")
+
     // Test
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

@@ -104,8 +104,21 @@ class FileRepository @Inject constructor(
         // 1. Update Content
         fileContentDao.saveContent(FileContentEntity(path = path, content = content))
         
-        // 2. Mark as Dirty
-        fileDao.markFileAsDirty(path, true)
+        // 2. Insert or Update File Entity
+        val existing = fileDao.getFile(path)
+        if (existing == null) {
+            val newEntity = FileEntity(
+                path = path,
+                name = path.substringAfterLast("/"),
+                type = "file",
+                downloadUrl = null,
+                isDirty = true,
+                localModifiedTimestamp = System.currentTimeMillis()
+            )
+            fileDao.insertFile(newEntity)
+        } else {
+            fileDao.markFileAsDirty(path, true)
+        }
     }
 
     /**
@@ -125,31 +138,35 @@ class FileRepository @Inject constructor(
                 // Use getFileMetadata (Expects Single Object)
                 val shaResponse = apiService.getFileMetadata(owner, repo, file.path)
                 
-                if (!shaResponse.isSuccessful) {
+                var sha: String? = null
+                if (shaResponse.isSuccessful) {
+                    val remoteDto = shaResponse.body()
+                    sha = remoteDto?.sha
+                    if (sha == null) {
+                         throw Exception("SHA missing in successful response")
+                    }
+                    Log.d("PixelBrain", "SHA found: $sha")
+                } else if (shaResponse.code() == 404) {
+                    // New File - No SHA
+                    Log.d("PixelBrain", "File not found on remote. Treating as New File.")
+                    sha = null
+                } else {
                     Log.e("PixelBrain", "Failed to fetch metadata for ${file.path}: ${shaResponse.code()}")
                     throw Exception("Failed to get SHA for ${file.path}: ${shaResponse.message()}")
                 }
-                
-                val remoteDto = shaResponse.body()
-                val sha = remoteDto?.sha
-                
-                if (sha == null) {
-                    Log.e("PixelBrain", "SHA missing in response for ${file.path}")
-                    throw Exception("SHA missing for ${file.path}")
-                }
-                
-                Log.d("PixelBrain", "SHA found: $sha")
 
                 // B. Get Local Content
                 val content = fileContentDao.getContent(file.path) ?: ""
                 val contentBase64 = android.util.Base64.encodeToString(content.toByteArray(), android.util.Base64.NO_WRAP)
                 
                 // C. PUT
-                val body = mapOf(
+                val body = mutableMapOf(
                     "message" to "Update ${file.name} via Pixel Brain",
-                    "content" to contentBase64,
-                    "sha" to sha
+                    "content" to contentBase64
                 )
+                if (sha != null) {
+                    body["sha"] = sha
+                }
                 
                 Log.d("PixelBrain", "Pushing content to ${file.path}...")
                 val putResponse = apiService.putContents(owner, repo, file.path, body)
