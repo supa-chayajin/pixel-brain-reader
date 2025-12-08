@@ -3,6 +3,8 @@ package cloud.wafflecommons.pixelbrainreader.data.utils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jsoup.Jsoup
+import org.jsoup.nodes.Document
+import org.jsoup.nodes.Element
 import com.vladsch.flexmark.html2md.converter.FlexmarkHtmlConverter
 import android.text.Html
 import android.text.Spanned
@@ -11,98 +13,174 @@ import android.os.Build
 data class ImportResult(val title: String, val markdownContent: String)
 
 object ContentSanitizer {
-    // Simple URL regex, can be improved
+    // Simple URL regex
     private val URL_REGEX = "^(https?://.+)$".toRegex(RegexOption.IGNORE_CASE)
 
     suspend fun processSharedContent(text: CharSequence): ImportResult = withContext(Dispatchers.IO) {
-        val convertedText = if (text is Spanned) {
-             // Convert Rich Text to HTML
-             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                 Html.toHtml(text, Html.TO_HTML_PARAGRAPH_LINES_CONSECUTIVE)
-             } else {
-                 @Suppress("DEPRECATION")
-                 Html.toHtml(text)
-             }
-        } else {
-             text.toString()
-        }
-
-        val trimmedText = convertedText.trim()
-
-        if (URL_REGEX.matches(trimmedText)) {
-            try {
-                // Fetch URL content
-                val doc = Jsoup.connect(trimmedText)
-                    .userAgent("Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36")
-                    .timeout(10000)
-                    .get()
-
-                val title = doc.title().ifBlank { "Untitled Link" }
-
-                // Deep Cleaning for URL Content too
-                val cleanHtml = deepCleanHtml(doc.body().html())
-
-                // Convert to Markdown
-                val converter = FlexmarkHtmlConverter.builder().build()
-                val markdown = converter.convert(cleanHtml)
-
-                // Add Source link at the bottom
-                val finalContent = "$markdown\n\n---\nSource: [$trimmedText]($trimmedText)"
-
-                ImportResult(title, finalContent)
-            } catch (e: Exception) {
-                // Fallback if offline or fail
-                ImportResult("Bookmark", "[$trimmedText]($trimmedText)\n\n> Error fetching content: ${e.message}")
-            }
-        } else {
-            // Check if input is likely HTML (Rich Text)
-            // If it starts with <, we treat it as HTML. 
-            // Also if it came from EXTRA_HTML_TEXT it's definitely HTML but we only have string here.
-            // Requirement: "If input is Rich Text, convert to HTML first." 
-            // (Assuming 'text' is the HTML representation or we treat it as such if it looks like it)
-            if (trimmedText.startsWith("<") && trimmedText.contains(">")) {
-                try {
-                    val cleanHtml = deepCleanHtml(trimmedText)
-                    val converter = FlexmarkHtmlConverter.builder().build()
-                    val markdown = converter.convert(cleanHtml)
-                    ImportResult("Imported Snippet", markdown)
-                } catch (e: Exception) {
-                    ImportResult("Imported Text", trimmedText)
+        var finalTitle = "Imported Content"
+        
+        // 1. FETCH & PARSE / NORMALIZE
+        val document: Document = when {
+            text is Spanned -> {
+                // Convert Rich Text to HTML
+                val htmlString = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    Html.toHtml(text, Html.TO_HTML_PARAGRAPH_LINES_INDIVIDUAL)
+                } else {
+                    @Suppress("DEPRECATION")
+                    Html.toHtml(text)
                 }
-            } else {
-                // Plain Text
-                val lines = trimmedText.lineSequence().take(1).toList()
-                val potentialTitle = if (lines.isNotEmpty()) lines[0].take(50) else "Imported Note"
-                ImportResult(potentialTitle, trimmedText)
+                Jsoup.parseBodyFragment(htmlString)
+            }
+            URL_REGEX.matches(text.trim()) -> {
+                // If text is a URL, fetch the HTML content
+                try {
+                    val conn = Jsoup.connect(text.toString().trim())
+                        .userAgent("Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36")
+                        .timeout(10000)
+                    val fetchedDoc = conn.get()
+                    finalTitle = fetchedDoc.title().ifBlank { finalTitle }
+                    fetchedDoc
+                } catch (e: Exception) {
+                    // Fallback: treat the URL as text content
+                    Jsoup.parseBodyFragment("<p>${text}</p>")
+                }
+            }
+            else -> {
+                // Treat input string as potential Raw HTML
+                Jsoup.parse(text.toString())
             }
         }
+
+        // 2. LOCATE MAIN CONTENT
+        val mainContent = findMainContent(document)
+
+        // 3. DEEP CLEANING (Recursive on the main content)
+        val cleanHtml = deepCleanElement(mainContent)
+
+        // 4. MARKDOWN CONVERSION
+        val converter = FlexmarkHtmlConverter.builder().build()
+        val markdown = converter.convert(cleanHtml)
+
+        ImportResult(finalTitle, markdown)
     }
 
-    private fun deepCleanHtml(rawHtml: String): String {
-        // Parse the body fragment
-        val doc = Jsoup.parseBodyFragment(rawHtml)
-        
-        // 1. Strip classes and styles (attributes)
-        val allElements = doc.select("*")
-        for (element in allElements) {
-            element.removeAttr("class")
-            element.removeAttr("style")
-            element.removeAttr("id") // Also often used for styling
+    private fun findMainContent(doc: Document): Element {
+        val body = doc.body() ?: return doc // Fallback if no body
+
+        // Strategy 1: Schema.org Article / BlogPosting
+        val runSchemaCheck = {
+            val schemaCandidates = listOf(
+                "http://schema.org/Article", "https://schema.org/Article",
+                "http://schema.org/BlogPosting", "https://schema.org/BlogPosting"
+            )
+            // Jsoup support for attribute values is case-sensitive usually, but let's try direct matches
+            var found: Element? = null
+            for (type in schemaCandidates) {
+                found = body.selectFirst("[itemtype=$type]")
+                if (found != null) break
+            }
+            found
         }
+        val schemaElement = runSchemaCheck()
+        if (schemaElement != null) return schemaElement
+
+        // Strategy 2: Look for <article>
+        val article = body.selectFirst("article")
+        if (article != null) return article
+
+        // Strategy 3: Look for specific IDs or Classes
+        // Common semantic IDs/Classes for main content
+        val candidates = listOf(
+            "main", "content", "main-content", "article-body", 
+            "post-content", "entry-content", "page-content"
+        )
         
-        // 2. Unwrap non-semantic tags (div, span) but keep their content
-        doc.select("div, span, article, section, nav, aside, main, header, footer").forEach { 
-            it.unwrap() // Removes the tag but keeps children/text
+        for (id in candidates) {
+            val element = body.getElementById(id)
+            if (element != null) return element
         }
 
-        // 3. Keep only semantic tags: p, h1-h6, ul, li, b, i, code, strong, em, pre, br
-        // Removing script/style tags completely
-        doc.select("script, style").remove()
+        for (cls in candidates) {
+            val element = body.selectFirst("div.$cls") // prioritizing divs
+            if (element != null) return element
+        }
+
+        // Strategy 4: Fallback to body
+        return body
+    }
+
+    private fun deepCleanElement(root: Element): String {
+        // 1. REMOVE NOISE ELEMENTS (Tags)
+        root.select("script, style, noscript, iframe, svg, canvas, nav, footer, header, aside, form, button, input, object, embed").remove()
+
+        // 2. REMOVE NOISE BY CLASS/ID (Heuristic)
+        val noisePatterns = listOf(
+            "sidebar", "widget", "ad-", "ads", "advertisement", 
+            "comment", "share", "related", "cookie", "newsletter", "popup", "modal"
+        )
         
-        // At this point, we have unwrapped containers. 
-        // We rely on Jsoup to maintain the structure of remaining tags.
-        // Flexmark will handle the rest.
+        // Select all elements and check their attributes for noise
+        val allElements = root.select("*")
+        val iter = allElements.iterator()
+        while (iter.hasNext()) {
+            val el = iter.next()
+            val id = el.id().lowercase()
+            val cls = el.className().lowercase()
+            
+            val isNoise = noisePatterns.any { pattern -> 
+                id.contains(pattern) || cls.contains(pattern) 
+            }
+            
+            if (isNoise) {
+                el.remove()
+            }
+        }
+
+        // 3. ATTRIBUTE STRIPPING & UNWRAPPING
+        // We re-select elements because the DOM has changed (removals)
+        val remainingElements = root.select("*")
         
-        return doc.body().html()
+        for (element in remainingElements) {
+            // Check if element was removed by parent removal in previous loop? Jsoup handles this safely usually, 
+            // but just in case check if it still has a parent (unless it's root)
+            if (element != root && !element.hasParent()) continue
+
+            val tagName = element.tagName().lowercase()
+
+            // Unwrap logic: div, span, article, section, main, header, footer
+            // Note: we removed header/footer tags in step 1, but if they were kept for some reason or nested inside article...
+            // "main" and "article" might be the root itself, so be careful not to unwrap the root if we return its HTML.
+            // But here we are cleaning inside 'root'.
+            // Actually, if 'element' IS 'root', we shouldn't unwrap it here, or we lose the container reference 
+            // (though Jsoup unwrap replaces with children). 
+            // We return `root.html()`, so unwrapping children is fine.
+            
+            if (tagName in listOf("div", "span", "article", "section", "main", "header", "footer")) {
+                if (element != root) {
+                    element.unwrap()
+                    // Continue to next element, as this one is gone (children remain)
+                    continue 
+                }
+            }
+
+            // Attribute Whitelist
+            val attributes = element.attributes().asList().map { it.key }
+            for (attr in attributes) {
+                val attrLower = attr.lowercase()
+                
+                var keep = false
+                when (tagName) {
+                    "a" -> if (attrLower == "href") keep = true
+                    "img" -> if (attrLower == "src" || attrLower == "alt" || attrLower == "title") keep = true
+                    "td", "th" -> if (attrLower == "colspan" || attrLower == "rowspan") keep = true
+                }
+                
+                if (!keep) {
+                    element.removeAttr(attr)
+                }
+            }
+        }
+
+        return root.html()
     }
 }
