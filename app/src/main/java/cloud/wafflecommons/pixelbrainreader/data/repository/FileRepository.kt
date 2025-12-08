@@ -30,26 +30,18 @@ class FileRepository @Inject constructor(
     /**
      * Get files from Local DB (Offline First).
      */
-    /**
-     * Get files from Local DB (Offline First).
-     */
     fun getFilesFlow(path: String): Flow<List<FileEntity>> {
         return fileDao.getFiles(path)
     }
 
-    // Keep getFiles for compatibility if needed, or deprecate
+    // Keep getFiles for compatibility
     fun getFiles(path: String): Flow<List<FileEntity>> = getFilesFlow(path)
 
     /**
      * Sync File List.
      * Fetches from API -> Updates DB.
-     * Uses ETag for bandwidth saving.
+     * CRITICAL: Uses replaceFolderContent to purge ghosts (Authoritative Sync).
      */
-    /**
-     * Authoritative Sync for a Folder.
-     * "The Great Fix": Purge old state to ensure consistency.
-     */
-
     suspend fun refreshFolder(owner: String, repo: String, path: String): Result<Unit> {
         return try {
             // 1. Fetch Remote Content (Fresh - No ETag)
@@ -63,10 +55,11 @@ class FileRepository @Inject constructor(
             val body = response.body() ?: emptyList()
             val entities = body.map { it.toEntity() }
 
-            // 2. Transactional Replace via DAO
+            // 2. Transactional Replace via DAO (Authoritative Sync)
+            // This deletes old files in the folder before inserting new ones.
             fileDao.replaceFolderContent(path, entities)
 
-            // Update Metadata (New ETag) - although we didn't use it, we save it for potential future optimization
+            // Update Metadata (New ETag)
             val newEtag = response.headers()["ETag"]
             if (newEtag != null) {
                 metadataDao.saveMetadata(SyncMetadataEntity(path, newEtag, System.currentTimeMillis()))

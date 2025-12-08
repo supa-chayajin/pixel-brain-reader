@@ -51,7 +51,7 @@ object ContentSanitizer {
             }
         }
 
-        // 2. LOCATE MAIN CONTENT
+        // 2. LOCATE MAIN CONTENT (Prioritized)
         val mainContent = findMainContent(document)
 
         // 3. DEEP CLEANING (Recursive on the main content)
@@ -67,13 +67,12 @@ object ContentSanitizer {
     private fun findMainContent(doc: Document): Element {
         val body = doc.body() ?: return doc // Fallback if no body
 
-        // Strategy 1: Schema.org Article / BlogPosting
+        // Priority 1: Schema.org Article / BlogPosting
         val runSchemaCheck = {
             val schemaCandidates = listOf(
                 "http://schema.org/Article", "https://schema.org/Article",
                 "http://schema.org/BlogPosting", "https://schema.org/BlogPosting"
             )
-            // Jsoup support for attribute values is case-sensitive usually, but let's try direct matches
             var found: Element? = null
             for (type in schemaCandidates) {
                 found = body.selectFirst("[itemtype=$type]")
@@ -84,12 +83,11 @@ object ContentSanitizer {
         val schemaElement = runSchemaCheck()
         if (schemaElement != null) return schemaElement
 
-        // Strategy 2: Look for <article>
+        // Priority 2: Semantic <article> Tag
         val article = body.selectFirst("article")
         if (article != null) return article
 
-        // Strategy 3: Look for specific IDs or Classes
-        // Common semantic IDs/Classes for main content
+        // Priority 3: Common IDs or Classes
         val candidates = listOf(
             "main", "content", "main-content", "article-body", 
             "post-content", "entry-content", "page-content"
@@ -101,11 +99,11 @@ object ContentSanitizer {
         }
 
         for (cls in candidates) {
-            val element = body.selectFirst("div.$cls") // prioritizing divs
+            val element = body.selectFirst("div.$cls")
             if (element != null) return element
         }
 
-        // Strategy 4: Fallback to body
+        // Fallback: body
         return body
     }
 
@@ -119,7 +117,6 @@ object ContentSanitizer {
             "comment", "share", "related", "cookie", "newsletter", "popup", "modal"
         )
         
-        // Select all elements and check their attributes for noise
         val allElements = root.select("*")
         val iter = allElements.iterator()
         while (iter.hasNext()) {
@@ -141,29 +138,19 @@ object ContentSanitizer {
         val remainingElements = root.select("*")
         
         for (element in remainingElements) {
-            // Check if element was removed by parent removal in previous loop? Jsoup handles this safely usually, 
-            // but just in case check if it still has a parent (unless it's root)
             if (element != root && !element.hasParent()) continue
 
             val tagName = element.tagName().lowercase()
 
             // Unwrap logic: div, span, article, section, main, header, footer
-            // Note: we removed header/footer tags in step 1, but if they were kept for some reason or nested inside article...
-            // "main" and "article" might be the root itself, so be careful not to unwrap the root if we return its HTML.
-            // But here we are cleaning inside 'root'.
-            // Actually, if 'element' IS 'root', we shouldn't unwrap it here, or we lose the container reference 
-            // (though Jsoup unwrap replaces with children). 
-            // We return `root.html()`, so unwrapping children is fine.
-            
             if (tagName in listOf("div", "span", "article", "section", "main", "header", "footer")) {
                 if (element != root) {
                     element.unwrap()
-                    // Continue to next element, as this one is gone (children remain)
                     continue 
                 }
             }
 
-            // Attribute Whitelist
+            // Clean Attributes (Strict Whitelist)
             val attributes = element.attributes().asList().map { it.key }
             for (attr in attributes) {
                 val attrLower = attr.lowercase()
