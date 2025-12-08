@@ -51,6 +51,11 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+
+    // AI Models (TFLite) must not be compressed
+    aaptOptions {
+        noCompress("tflite")
+    }
 }
 
 // CORRECTION DU CRASH "Duplicate Class"
@@ -75,6 +80,7 @@ dependencies {
     implementation(libs.androidx.material.icons.core)
     implementation(libs.androidx.material.icons.extended)
 
+
     // Fold & Adaptive
     implementation(libs.androidx.material3.adaptive)
     implementation(libs.androidx.material3.adaptive.layout)
@@ -89,6 +95,11 @@ dependencies {
     ksp(libs.androidx.room.compiler)
     ksp(libs.hilt.compiler)
     implementation(libs.androidx.hilt.navigation.compose)
+    
+    // WorkManager & Hilt Work
+    implementation("androidx.work:work-runtime-ktx:2.9.0")
+    implementation("androidx.hilt:hilt-work:1.2.0")
+    ksp("androidx.hilt:hilt-compiler:1.2.0")
 
     // Network
     implementation(libs.retrofit)
@@ -114,6 +125,11 @@ dependencies {
     // HTML Parsing & Conversion (Phase B: Universal Collector)
     implementation("org.jsoup:jsoup:1.17.2")
     implementation("com.vladsch.flexmark:flexmark-html2md-converter:0.64.8")
+
+    // AI Core & MediaPipe (V4.0: Neural Vault)
+    // Note: Ensuring usage of public artifacts or beta versions as available.
+    // implementation("com.google.ai.edge.aicore:aicore:1.0.0-beta01") // TODO: Check access/repo 
+    implementation("com.google.mediapipe:tasks-text:0.10.14")
 
     // Test
     testImplementation(libs.junit)

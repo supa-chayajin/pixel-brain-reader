@@ -22,7 +22,7 @@ object ContentSanitizer {
         // 1. FETCH & PARSE / NORMALIZE
         val document: Document = when {
             text is Spanned -> {
-                // Convert Rich Text to HTML
+                // RTF Handling: Convert Android Rich Text (Spanned) to HTML
                 val htmlString = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                     Html.toHtml(text, Html.TO_HTML_PARAGRAPH_LINES_INDIVIDUAL)
                 } else {
@@ -45,6 +45,11 @@ object ContentSanitizer {
                     Jsoup.parseBodyFragment("<p>${text}</p>")
                 }
             }
+            isRtf(text) -> {
+                // Raw RTF String detected (e.g. starting with {\rtf)
+                // Since we lack a raw RTF parser, we treat this as a code block to preserve data
+                Jsoup.parseBodyFragment("<pre>${text}</pre>")
+            }
             else -> {
                 // Treat input string as potential Raw HTML
                 Jsoup.parse(text.toString())
@@ -59,9 +64,19 @@ object ContentSanitizer {
 
         // 4. MARKDOWN CONVERSION
         val converter = FlexmarkHtmlConverter.builder().build()
-        val markdown = converter.convert(cleanHtml)
+        val rawMarkdown = converter.convert(cleanHtml)
 
-        ImportResult(finalTitle, markdown)
+        // 5. MARKDOWN POLISH
+        // Strip excessive blank lines (3 or more newlines -> 2 newlines)
+        val polishedMarkdown = rawMarkdown.replace(Regex("\\n{3,}"), "\n\n").trim()
+
+        ImportResult(finalTitle, polishedMarkdown)
+    }
+
+    private fun isRtf(text: CharSequence): Boolean {
+        // Basic heuristic for Raw RTF
+        val s = text.toString().trim()
+        return s.startsWith("{\\rtf") || s.startsWith("{ \\rtf")
     }
 
     private fun findMainContent(doc: Document): Element {
@@ -109,12 +124,13 @@ object ContentSanitizer {
 
     private fun deepCleanElement(root: Element): String {
         // 1. REMOVE NOISE ELEMENTS (Tags)
-        root.select("script, style, noscript, iframe, svg, canvas, nav, footer, header, aside, form, button, input, object, embed").remove()
+        // Aggressive list including link, meta, object, embed
+        root.select("script, style, noscript, iframe, svg, canvas, nav, footer, header, aside, form, button, input, object, embed, link, meta").remove()
 
         // 2. REMOVE NOISE BY CLASS/ID (Heuristic)
         val noisePatterns = listOf(
             "sidebar", "widget", "ad-", "ads", "advertisement", 
-            "comment", "share", "related", "cookie", "newsletter", "popup", "modal"
+            "comment", "share", "related", "cookie", "newsletter", "popup", "modal", "banner", "social"
         )
         
         val allElements = root.select("*")

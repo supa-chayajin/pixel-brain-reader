@@ -46,6 +46,7 @@ class MainViewModel @Inject constructor(
         val isSyncing: Boolean = false,
 
         val hasUnsavedChanges: Boolean = false,
+        val isChatOpen: Boolean = false, // V4.0
         val importState: ImportState? = null
     )
 
@@ -315,6 +316,10 @@ class MainViewModel @Inject constructor(
 
     fun toggleFocusMode() {
         _uiState.value = _uiState.value.copy(isFocusMode = !_uiState.value.isFocusMode)
+    }
+
+    fun toggleChat() {
+        _uiState.value = _uiState.value.copy(isChatOpen = !_uiState.value.isChatOpen)
     }
 
     private fun FileEntity.toDto() = GithubFileDto(name, path, type, downloadUrl)

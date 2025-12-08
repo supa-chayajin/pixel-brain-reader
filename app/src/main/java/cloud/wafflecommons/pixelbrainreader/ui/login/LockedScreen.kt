@@ -29,7 +29,7 @@ fun LockedScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black), // Absolute Black Background
+            .background(MaterialTheme.colorScheme.background), // Matches app theme (e.g. Sage Dark)
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -49,7 +49,7 @@ fun LockedScreen(
             Text(
                 text = "Pixel Brain is locked",
                 style = MaterialTheme.typography.titleLarge,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onBackground,
                 fontWeight = FontWeight.SemiBold
             )
             

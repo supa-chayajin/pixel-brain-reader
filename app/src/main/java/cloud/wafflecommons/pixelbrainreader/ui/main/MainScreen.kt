@@ -6,6 +6,7 @@ import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,9 +14,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Logout
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Dashboard
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -48,7 +55,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.window.core.layout.WindowWidthSizeClass
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3AdaptiveApi::class)
+import androidx.compose.material3.ExperimentalMaterial3Api
+
+@OptIn(ExperimentalMaterial3AdaptiveApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
     onLogout: () -> Unit,
@@ -125,16 +134,17 @@ fun MainScreen(
                                 selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer
                             )
                         )
+
+                        // V4.0 AI Toggle
                         NavigationRailItem(
-                            selected = false, onClick = { },
-                            icon = { Icon(Icons.Outlined.Settings, null) },
-                            label = { Text("Config") }
-                        )
-                        Spacer(Modifier.weight(1f))
-                        NavigationRailItem(
-                            selected = false, onClick = { viewModel.logout(); onLogout() },
-                            icon = { Icon(Icons.AutoMirrored.Outlined.Logout, null) },
-                            label = { Text("Sortir") }
+                            selected = uiState.isChatOpen, 
+                            onClick = { viewModel.toggleChat() },
+                            icon = { Icon(Icons.Outlined.Psychology, contentDescription = "Brain") },
+                            label = { Text("Brain") },
+                            colors = NavigationRailItemDefaults.colors(
+                                indicatorColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                selectedIconColor = MaterialTheme.colorScheme.onTertiaryContainer
+                            )
                         )
                         Spacer(Modifier.padding(bottom = 24.dp))
                     }
@@ -186,7 +196,7 @@ fun MainScreen(
             }
         } else {
             ModalNavigationDrawer(
-                drawerState = drawerState,
+                drawerState = drawerState, // ... existing drawer config
                 drawerContent = {
                     ModalDrawerSheet(
                         drawerContainerColor = MaterialTheme.colorScheme.surfaceContainer,
@@ -196,66 +206,98 @@ fun MainScreen(
                         Text("Pixel Brain", modifier = Modifier.padding(28.dp), style = MaterialTheme.typography.headlineMedium)
                         NavigationDrawerItem(
                             label = { Text("Dashboard") }, selected = true, onClick = { scope.launch { drawerState.close() } },
-                            icon = { Icon(Icons.Outlined.Dashboard, null) },
+                            icon = { Icon(Icons.Filled.Dashboard, null) },
                             modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding), shape = RoundedCornerShape(50)
                         )
                         NavigationDrawerItem(
-                            label = { Text("Déconnexion") }, selected = false, onClick = { viewModel.logout(); onLogout() },
-                            icon = { Icon(Icons.AutoMirrored.Outlined.Logout, null) },
+                            label = { Text("Brain") }, selected = uiState.isChatOpen, 
+                            onClick = { 
+                                scope.launch { drawerState.close() }
+                                viewModel.toggleChat() 
+                            },
+                            icon = { Icon(Icons.Outlined.Psychology, contentDescription = "Brain") },
                             modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding), shape = RoundedCornerShape(50)
                         )
                     }
                 }
             ) {
-                ListDetailPaneScaffold(
-                    directive = finalDirective,
-                    value = navigator.scaffoldValue,
-                    listPane = {
-                        FileListPane(
-                            files = uiState.files,
-                            isLoading = uiState.isLoading,
-                            isRefreshing = uiState.isRefreshing, // Bind State
-                            error = uiState.error,
-                            currentPath = uiState.currentPath,
-                            showMenuIcon = true,
-                            onFileClick = { file ->
-                                viewModel.loadFile(file)
-                                navigator.navigateTo(ListDetailPaneScaffoldRole.Detail)
-                            },
-                            onFolderClick = { path ->
-                                viewModel.loadFolder(path)
-                            },
-                            onNavigateUp = {
-                                viewModel.navigateUp()
-                            },
-                            onMenuClick = {
-                                scope.launch { drawerState.open() }
-                            },
-                            onRefresh = { viewModel.refresh() } // Bind Action
-                        )
-                    },
-                    detailPane = {
-                        FileDetailPane(
-                            content = uiState.unsavedContent ?: uiState.selectedFileContent,
-                            onContentChange = { viewModel.onContentChanged(it) },
-                            fileName = uiState.selectedFileName,
-                            isLoading = uiState.isLoading,
-                            isRefreshing = uiState.isRefreshing, // Bind State (Shared for now, can be split)
-                            onRefresh = { viewModel.refreshCurrentFile() },
-                            isFocusMode = uiState.isFocusMode,
-                            onToggleFocusMode = { viewModel.toggleFocusMode() },
-                            isExpandedScreen = false,
-                            isEditing = uiState.isEditing,
-                            onToggleEditMode = { viewModel.toggleEditMode() },
-                            onSaveContent = { _ -> viewModel.saveFile() },
-                            hasUnsavedChanges = uiState.hasUnsavedChanges,
-                            onClose = {
-                                viewModel.closeFile()
-                                if (navigator.canNavigateBack()) {
-                                    navigator.navigateBack()
-                                }
+                // MOBILE CONTENT with FAB
+                androidx.compose.material3.Scaffold(
+                    floatingActionButton = {
+                         androidx.compose.material3.FloatingActionButton(
+                             onClick = { viewModel.toggleChat() },
+                             containerColor = MaterialTheme.colorScheme.primaryContainer,
+                             contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                         ) {
+                             Icon(Icons.Outlined.Psychology, contentDescription = "Brain") 
+                         }
+                    }
+                ) { paddingValues ->
+                    // MAIN CONTENT (List + Detail)
+                    ListDetailPaneScaffold(
+                        modifier = Modifier.padding(paddingValues),
+                        directive = finalDirective,
+                        value = navigator.scaffoldValue,
+                        listPane = {
+                            if (!uiState.isFocusMode || !isLargeScreen) {
+                                FileListPane(
+                                    files = uiState.files,
+                                    isLoading = uiState.isLoading,
+                                    isRefreshing = uiState.isRefreshing,
+                                    error = uiState.error,
+                                    currentPath = uiState.currentPath,
+                                    showMenuIcon = true,
+                                    onFileClick = { file ->
+                                        viewModel.loadFile(file)
+                                        scope.launch { navigator.navigateTo(ListDetailPaneScaffoldRole.Detail) }
+                                    },
+                                    onFolderClick = { path -> viewModel.loadFolder(path) },
+                                    onNavigateUp = { viewModel.navigateUp() },
+                                    onMenuClick = { scope.launch { drawerState.open() } },
+                                    onRefresh = { viewModel.refresh() }
+                                )
                             }
-                        )
+                        },
+                        detailPane = {
+                             FileDetailPane(
+                                 content = uiState.unsavedContent ?: uiState.selectedFileContent,
+                                 onContentChange = { viewModel.onContentChanged(it) },
+                                 fileName = uiState.selectedFileName,
+                                 isLoading = uiState.isLoading,
+                                 isRefreshing = uiState.isRefreshing,
+                                 onRefresh = { viewModel.refreshCurrentFile() },
+                                 isFocusMode = uiState.isFocusMode,
+                                 onToggleFocusMode = { viewModel.toggleFocusMode() },
+                                 isExpandedScreen = false,
+                                 isEditing = uiState.isEditing,
+                                 onToggleEditMode = { viewModel.toggleEditMode() },
+                                 onSaveContent = { _ -> viewModel.saveFile() },
+                                 hasUnsavedChanges = uiState.hasUnsavedChanges,
+                                 onClose = {
+                                     viewModel.closeFile()
+                                     if (navigator.canNavigateBack()) {
+                                         navigator.navigateBack()
+                                     }
+                                 }
+                             )
+                        }
+                    )
+                }
+            }
+        }
+
+
+        // GLOBAL CHAT BOTTOM SHEET (Consistency for Mobile & Large Screen)
+        if (uiState.isChatOpen) {
+            androidx.compose.material3.ModalBottomSheet(
+                onDismissRequest = { viewModel.toggleChat() },
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+            ) {
+                 cloud.wafflecommons.pixelbrainreader.ui.ai.ChatPanel(
+                    modifier = Modifier.fillMaxSize().padding(bottom = 24.dp),
+                    onInsertContent = { text -> 
+                        viewModel.onContentChanged((uiState.unsavedContent ?: "") + "\n\n" + text)
+                        viewModel.toggleChat() 
                     }
                 )
             }
@@ -271,4 +313,5 @@ fun MainScreen(
         }
     }
 }
+
 
