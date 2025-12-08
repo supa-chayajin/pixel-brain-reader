@@ -60,7 +60,7 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             val (owner, repo) = secretManager.getRepoInfo()
             if (owner != null && repo != null) {
-                repository.syncFolder(owner, repo, "")
+                repository.refreshFolder(owner, repo, "")
             }
         }
     }
@@ -90,7 +90,7 @@ class MainViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(isLoading = true, isRefreshing = true)
             
             // Hard Refresh / Authoritative Sync
-            val result = repository.syncFolder(owner, repo, path)
+            val result = repository.refreshFolder(owner, repo, path)
             
             _uiState.value = _uiState.value.copy(isLoading = false, isRefreshing = false)
             
@@ -118,7 +118,7 @@ class MainViewModel @Inject constructor(
             }
             // Note: We do NOT set isLoading = true here. Data is visible from DB.
 
-            val result = repository.syncFolder(owner, repo, path)
+            val result = repository.refreshFolder(owner, repo, path)
             
             _uiState.value = _uiState.value.copy(isRefreshing = false)
             
@@ -218,7 +218,7 @@ class MainViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(isEditing = isEditing)
     }
 
-    fun updateUnsavedContent(newContent: String) {
+    fun onContentChanged(newContent: String) {
         _uiState.value = _uiState.value.copy(
             unsavedContent = newContent,
             hasUnsavedChanges = true
@@ -237,19 +237,21 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    fun saveContent(newContent: String) {
+    fun saveFile() {
         val currentFileName = _uiState.value.selectedFileName ?: return
         val file = _uiState.value.files.find { it.name == currentFileName } ?: return
-        
+        val contentToSave = _uiState.value.unsavedContent ?: _uiState.value.selectedFileContent ?: return
+
         viewModelScope.launch {
             // 1. Save Local
-            repository.saveFileLocally(file.path, newContent)
+            repository.saveFileLocally(file.path, contentToSave)
             
             // 2. Clear Draft & Exit Edit Mode
             _uiState.value = _uiState.value.copy(
                 isEditing = false,
                 unsavedContent = null,
-                hasUnsavedChanges = false
+                hasUnsavedChanges = false,
+                selectedFileContent = contentToSave // Update view immediately
             )
             
             // 3. Trigger Push Immediately (Blocking)
@@ -282,13 +284,29 @@ class MainViewModel @Inject constructor(
     }
 
     fun navigateUp() {
+        navigateBack()
+    }
+
+    fun navigateBack(): Boolean {
         val currentPath = _uiState.value.currentPath
         if (currentPath.isNotEmpty()) {
             val parentPath = if(currentPath.contains("/")) currentPath.substringBeforeLast("/") else ""
             loadFolder(parentPath)
-        } else {
-             // Already at root.
+            return true
         }
+        return false
+    }
+
+    /**
+     * Handles Back Press logic for Folders.
+     * Returns true if handled (navigated up), false if app should exit.
+     */
+    fun mapsBack(): Boolean {
+        if (_uiState.value.currentPath.isNotEmpty()) {
+            navigateUp()
+            return true
+        }
+        return false
     }
 
     fun logout() {
@@ -303,7 +321,7 @@ class MainViewModel @Inject constructor(
 
     fun handleShareIntent(intent: android.content.Intent) {
         if (intent.action == android.content.Intent.ACTION_SEND) {
-            val text = intent.getStringExtra(android.content.Intent.EXTRA_TEXT) 
+            val text: CharSequence? = intent.getCharSequenceExtra(android.content.Intent.EXTRA_TEXT)
                 ?: intent.getStringExtra(android.content.Intent.EXTRA_HTML_TEXT)
             
             if (text != null) {

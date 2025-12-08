@@ -14,22 +14,31 @@ import cloud.wafflecommons.pixelbrainreader.data.local.entity.SyncMetadataEntity
 
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.FileContentDao
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.FileContentEntity
+import cloud.wafflecommons.pixelbrainreader.data.local.AppDatabase
+import androidx.room.withTransaction
 
 @Singleton
 class FileRepository @Inject constructor(
     private val apiService: GithubApiService,
     private val fileDao: FileDao,
     private val metadataDao: SyncMetadataDao,
-    private val fileContentDao: FileContentDao
+    private val fileContentDao: FileContentDao,
+    private val database: AppDatabase
 ) {
     // ... companion object
 
     /**
      * Get files from Local DB (Offline First).
      */
-    fun getFiles(path: String): Flow<List<FileEntity>> {
+    /**
+     * Get files from Local DB (Offline First).
+     */
+    fun getFilesFlow(path: String): Flow<List<FileEntity>> {
         return fileDao.getFiles(path)
     }
+
+    // Keep getFiles for compatibility if needed, or deprecate
+    fun getFiles(path: String): Flow<List<FileEntity>> = getFilesFlow(path)
 
     /**
      * Sync File List.
@@ -40,7 +49,8 @@ class FileRepository @Inject constructor(
      * Authoritative Sync for a Folder.
      * "The Great Fix": Purge old state to ensure consistency.
      */
-    suspend fun syncFolder(owner: String, repo: String, path: String): Result<Unit> {
+
+    suspend fun refreshFolder(owner: String, repo: String, path: String): Result<Unit> {
         return try {
             // 1. Fetch Remote Content (Fresh - No ETag)
             // We consciously avoid ETag here to ensure we get the full list for the authoritative reset.
@@ -53,12 +63,8 @@ class FileRepository @Inject constructor(
             val body = response.body() ?: emptyList()
             val entities = body.map { it.toEntity() }
 
-            // 2. CRITICAL: Delete ALL local files in this folder (Purge old state)
-            // This removes "ghost files" and duplicates.
-            fileDao.deleteFilesByParent(path)
-
-            // 3. Insert fresh remote files
-            fileDao.insertAll(entities)
+            // 2. Transactional Replace via DAO
+            fileDao.replaceFolderContent(path, entities)
 
             // Update Metadata (New ETag) - although we didn't use it, we save it for potential future optimization
             val newEtag = response.headers()["ETag"]

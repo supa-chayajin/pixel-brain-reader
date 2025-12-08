@@ -75,7 +75,7 @@ class LoginViewModel @Inject constructor(
             
             // 2. Verification & Priming
             // We force a refresh of the root folder to verify credentials/network
-            val result = repository.syncFolder(repoInfo.first, repoInfo.second, "")
+            val result = repository.refreshFolder(repoInfo.first, repoInfo.second, "")
             
             if (result.isSuccess) {
                _loginSuccess.value = true

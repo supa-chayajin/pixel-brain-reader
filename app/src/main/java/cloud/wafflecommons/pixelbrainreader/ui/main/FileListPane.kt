@@ -10,7 +10,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -18,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.foundation.clickable
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import cloud.wafflecommons.pixelbrainreader.data.remote.model.GithubFileDto
@@ -37,34 +40,20 @@ fun FileListPane(
     onMenuClick: () -> Unit,
     onRefresh: () -> Unit // New Action
 ) {
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-
+    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
+    
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = Color.Transparent,
         topBar = {
-            LargeTopAppBar(
+            TopAppBar(
                 title = {
-                    Text(
-                        if (currentPath.isEmpty()) "Bibliothèque" else currentPath.substringAfterLast('/'),
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+                    BreadcrumbRow(currentPath = currentPath, onPathClick = onFolderClick)
                 },
-                navigationIcon = {
-                    if (currentPath.isNotEmpty()) {
-                        IconButton(onClick = onNavigateUp) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Retour", tint = MaterialTheme.colorScheme.onSurface)
-                        }
-                    } else if (showMenuIcon) {
-                        IconButton(onClick = onMenuClick) {
-                            Icon(Icons.Default.Menu, "Menu", tint = MaterialTheme.colorScheme.onSurface)
-                        }
-                    }
-                },
-                colors = TopAppBarDefaults.largeTopAppBarColors(
+                navigationIcon = {},
+                colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color.Transparent,
-                    scrolledContainerColor = Color.Transparent,
+                    scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer, // Slight contrast on scroll
                     titleContentColor = MaterialTheme.colorScheme.onSurface
                 ),
                 scrollBehavior = scrollBehavior
@@ -78,12 +67,10 @@ fun FileListPane(
         ) {
             // Content
             if (isLoading && files.isEmpty()) {
-                // Only show full loader if we have NO files.
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                      CircularProgressIndicator()
                 }
             } else if (error != null && files.isEmpty()) {
-                // Show Error only if empty (otherwise show toast/snackbar - handled by parent usually, but fallback here)
                  Column(
                     modifier = Modifier.align(Alignment.Center).padding(16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
@@ -98,8 +85,22 @@ fun FileListPane(
                     )
                 }
             } else if (files.isEmpty()) {
-                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Aucun fichier trouvé (ou non synchronisé)", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                 // Even if empty, show the header title so user knows where they are
+                 LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp)) {
+                     item {
+                         Text(
+                            text = if (currentPath.isEmpty()) "Bibliothèque" else currentPath.substringAfterLast('/'),
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(bottom = 24.dp)
+                        )
+                     }
+                     item {
+                         Box(modifier = Modifier.fillMaxWidth().padding(top = 32.dp), contentAlignment = Alignment.Center) {
+                            Text("Aucun fichier trouvé", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                         }
+                     }
                  }
             } else {
                 LazyColumn(
@@ -107,6 +108,17 @@ fun FileListPane(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
+                    // Header Item: Big Title
+                    item {
+                        Text(
+                            text = if (currentPath.isEmpty()) "Bibliothèque" else currentPath.substringAfterLast('/'),
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                        )
+                    }
+
                     val filteredFiles = files.filter { it.name != "." && it.path != currentPath }
                     items(filteredFiles) { file ->
                         FileItemCard(file = file, onClick = {
@@ -155,6 +167,159 @@ fun FileItemCard(file: GithubFileDto, onClick: () -> Unit) {
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
+            }
+        }
+    }
+}
+
+@Composable
+fun BreadcrumbRow(currentPath: String, onPathClick: (String) -> Unit) {
+    val segments = if (currentPath.isBlank()) emptyList() else currentPath.split("/")
+    val accumulatedPaths = segments.runningFold("") { acc, seg ->
+        if (acc.isEmpty()) seg else "$acc/$seg"
+    }.filter { it.isNotEmpty() }
+
+    androidx.compose.foundation.lazy.LazyRow(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        // Home Icon Chip
+        item {
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                contentColor = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { onPathClick("") }
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Home,
+                    contentDescription = "Home",
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp).size(16.dp)
+                )
+            }
+            if (segments.isNotEmpty()) {
+                Spacer(Modifier.width(4.dp))
+                Icon(
+                    imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+
+        if (segments.size > 2) {
+            // Truncated Mode: ... (Dropdown) > Last 2
+            item {
+                val showDropdown = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+                
+                Box {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        contentColor = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { showDropdown.value = true }
+                    ) {
+                        Text(
+                            "...",
+                            style = MaterialTheme.typography.labelMedium,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                    
+                    DropdownMenu(
+                        expanded = showDropdown.value,
+                        onDismissRequest = { showDropdown.value = false }
+                    ) {
+                        // Show hidden segments (Everything before the last 2)
+                        // segments.size > 3. visible is last 2. hidden is everything up to size-2.
+                        val hiddenCount = segments.size - 1
+                        for (i in 0 until hiddenCount) {
+                            val segment = segments[i]
+                            val path = accumulatedPaths[i]
+                            DropdownMenuItem(
+                                text = { Text(segment) },
+                                onClick = {
+                                    onPathClick(path)
+                                    showDropdown.value = false
+                                }
+                            )
+                        }
+                    }
+                }
+                
+                Spacer(Modifier.width(4.dp))
+                Icon(
+                    imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+
+            val startIndex = segments.size - 1
+            val visibleSegments = segments.takeLast(1)
+
+            items(visibleSegments.size) { i ->
+                val realIndex = startIndex + i
+                val segment = segments[realIndex]
+                val path = accumulatedPaths[realIndex]
+                val isLast = i == visibleSegments.size - 1
+
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(enabled = !isLast) { onPathClick(path) }
+                ) {
+                    Text(
+                        segment,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = if (isLast) FontWeight.Bold else FontWeight.Medium,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+
+                if (!isLast) {
+                    Spacer(Modifier.width(4.dp))
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+        } else {
+            // Full Mode
+            items(segments.size) { index ->
+                val segment = segments[index]
+                val path = accumulatedPaths[index]
+                val isLast = index == segments.size - 1
+
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(enabled = !isLast) { onPathClick(path) }
+                ) {
+                    Text(
+                        segment,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = if (isLast) FontWeight.Bold else FontWeight.Medium,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+
+                if (!isLast) {
+                    Spacer(Modifier.width(4.dp))
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
             }
         }
     }

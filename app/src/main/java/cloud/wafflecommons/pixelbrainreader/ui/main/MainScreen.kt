@@ -85,8 +85,15 @@ fun MainScreen(
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
 
-    BackHandler(enabled = navigator.canNavigateBack()) {
-        navigator.navigateBack()
+    val canNavigateBack = navigator.canNavigateBack()
+    val isSubFolder = uiState.currentPath.isNotEmpty()
+
+    BackHandler(enabled = canNavigateBack || isSubFolder) {
+        if (canNavigateBack) {
+            navigator.navigateBack()
+        } else {
+            viewModel.navigateBack()
+        }
     }
 
     // AJOUT : Surface globale pour appliquer la couleur de fond du thème (Dynamic ou Sage)
@@ -160,7 +167,7 @@ fun MainScreen(
                     detailPane = {
                         FileDetailPane(
                             content = uiState.unsavedContent ?: uiState.selectedFileContent,
-                            onContentChange = { viewModel.updateUnsavedContent(it) },
+                            onContentChange = { viewModel.onContentChanged(it) },
                             fileName = uiState.selectedFileName,
                             isLoading = uiState.isLoading,
                             isRefreshing = uiState.isRefreshing,
@@ -170,7 +177,7 @@ fun MainScreen(
                             isExpandedScreen = isLargeScreen,
                             isEditing = uiState.isEditing,
                             onToggleEditMode = { viewModel.toggleEditMode() },
-                            onSaveContent = { content -> viewModel.saveContent(content) },
+                            onSaveContent = { _ -> viewModel.saveFile() },
                             hasUnsavedChanges = uiState.hasUnsavedChanges,
                             onClose = { viewModel.closeFile() }
                         )
@@ -230,7 +237,7 @@ fun MainScreen(
                     detailPane = {
                         FileDetailPane(
                             content = uiState.unsavedContent ?: uiState.selectedFileContent,
-                            onContentChange = { viewModel.updateUnsavedContent(it) },
+                            onContentChange = { viewModel.onContentChanged(it) },
                             fileName = uiState.selectedFileName,
                             isLoading = uiState.isLoading,
                             isRefreshing = uiState.isRefreshing, // Bind State (Shared for now, can be split)
@@ -240,7 +247,7 @@ fun MainScreen(
                             isExpandedScreen = false,
                             isEditing = uiState.isEditing,
                             onToggleEditMode = { viewModel.toggleEditMode() },
-                            onSaveContent = { content -> viewModel.saveContent(content) },
+                            onSaveContent = { _ -> viewModel.saveFile() },
                             hasUnsavedChanges = uiState.hasUnsavedChanges,
                             onClose = {
                                 viewModel.closeFile()

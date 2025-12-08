@@ -1,6 +1,5 @@
 package cloud.wafflecommons.pixelbrainreader.di
 
-import cloud.wafflecommons.pixelbrainreader.data.local.TokenManager
 import cloud.wafflecommons.pixelbrainreader.data.remote.AuthInterceptor
 import dagger.Module
 import dagger.Provides

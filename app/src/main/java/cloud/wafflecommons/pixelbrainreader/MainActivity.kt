@@ -42,14 +42,16 @@ class MainActivity : FragmentActivity() {
     private val viewModel: MainViewModel by viewModels()
 
     // State for UI
-
-    // State for UI
-    private var isAppLocked by mutableStateOf(false)
+    private var isAuthenticated by mutableStateOf(false)
     private var isUserLoggedIn by mutableStateOf(false)
 
     // Background Timer
     private var lastBackgroundTimeStamp: Long = 0L
     private val LOCK_TIMEOUT_MS = 60 * 1000L // 1 Minute
+
+    // Concurrency Guards
+    private var isAuthInProgress = false
+    private var hasAutoPromptedSession = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -58,49 +60,52 @@ class MainActivity : FragmentActivity() {
         // Initial Login Check
         isUserLoggedIn = secretManager.getToken() != null
         
+        // If logged in, we start as NOT authenticated (Locked)
+        isAuthenticated = !isUserLoggedIn 
+
         // Setup Lifecycle Observer for background detection
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onStop(owner: LifecycleOwner) {
                 lastBackgroundTimeStamp = System.currentTimeMillis()
+                
+                // Reset Auto Prompt flag when going to background
+                // So when user comes back, we try once again.
+                hasAutoPromptedSession = false
             }
 
             override fun onStart(owner: LifecycleOwner) {
                 if (isUserLoggedIn && lastBackgroundTimeStamp > 0) {
                     val timeInBackground = System.currentTimeMillis() - lastBackgroundTimeStamp
                     if (timeInBackground > LOCK_TIMEOUT_MS) {
-                        lockApp()
+                        isAuthenticated = false // Lock App
                     }
                 }
             }
         })
 
-        // Initial Lock Check (Optional: Lock on cold start if desired, but user didn't explicitly ask for cold start lock, only 1 min background?)
-        // Requirement: "The application must effectively be 'locked' by default until the user proves their identity"
-        // Interpretation: Cold start ALSO requires auth if logged in.
-        if (isUserLoggedIn) {
-            lockApp()
-        }
-
         setContent {
             PixelBrainReaderTheme {
-                if (isAppLocked) {
-                    LockScreen()
-                    // Trigger Biometrics when the lock screen appears
-                    LaunchedEffect(Unit) {
-                        triggerBiometrics()
-                    }
-                } else if (isUserLoggedIn) {
+                if (isUserLoggedIn && !isAuthenticated) {
+                    cloud.wafflecommons.pixelbrainreader.ui.login.LockedScreen(
+                        // Manual Click always triggers (resets auto prompt to allow retry)
+                        onUnlockClick = { 
+                            hasAutoPromptedSession = false 
+                            triggerBiometrics() 
+                        }
+                    )
+                } else if (isUserLoggedIn && isAuthenticated) {
                     cloud.wafflecommons.pixelbrainreader.ui.main.MainScreen(
                         viewModel = viewModel,
                         onLogout = {
                             isUserLoggedIn = false
+                            isAuthenticated = false
                             secretManager.clear()
                         }
                     )
                 } else {
                     LoginScreen(onLoginSuccess = {
                         isUserLoggedIn = true
-                        // New login, no need to lock immediately
+                        isAuthenticated = true // Fresh login is authenticated
                     })
                 }
             }
@@ -111,54 +116,45 @@ class MainActivity : FragmentActivity() {
         viewModel.handleShareIntent(intent)
     }
 
+    override fun onResume() {
+        super.onResume()
+        // Auto-trigger prompt if locked, but ONLY ONCE per session to avoid loops
+        if (isUserLoggedIn && !isAuthenticated && !hasAutoPromptedSession) {
+            hasAutoPromptedSession = true
+            triggerBiometrics()
+        }
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         viewModel.handleShareIntent(intent)
     }
 
-    private fun lockApp() {
-        isAppLocked = true
-    }
-
-    private fun unlockApp() {
-        isAppLocked = false
-    }
-
     private fun triggerBiometrics() {
-        if (biometricAuthenticator.canAuthenticate() != androidx.biometric.BiometricManager.BIOMETRIC_SUCCESS && 
-            biometricAuthenticator.canAuthenticate() != androidx.biometric.BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED) {
-             // Fallback if no hardware or not enrolled (Just unlock or show error? Requirement says "Identify correct library... fallback allowed")
-             // Here we assume if they can't authenticate, we might just unlock if it's strict, or block.
-             // For V2 MVP, if no biometrics, we might be stuck. 
-             // Best effort: If success or none enrolled (maybe PIN?), proceed.
-             // Actually Authenticator.BIOMETRIC_STRONG or DEVICE_CREDENTIAL handles PIN fallback automatically.
-             // So we just call prompt.
-        }
+        if (isAuthInProgress) return // Prevent parallel calls (Fix Binder Crash)
+        
+        isAuthInProgress = true
         
         biometricAuthenticator.prompt(
             activity = this,
-            onSuccess = { unlockApp() },
+            onSuccess = { 
+                isAuthenticated = true 
+                isAuthInProgress = false
+            },
             onError = { _ -> 
-                // If user cancels, we stay locked.
-                // Optionally show a button to retry on the LockScreen
+                // User cancelled or error. Stay on LockedScreen.
+                isAuthInProgress = false
             },
             onFailure = { 
-                // Transient failure, do nothing, prompt stays up
+                // Transient failure. Stay on LockedScreen.
+                // Prompt is still active? Usually yes for onFailure (wrong finger).
+                // Wait, if prompt is still active, we are technically still in progress.
+                // But onFailure callback in Authenticator typically means "Try again", the prompt stays up.
+                // So we do NOT reset isAuthInProgress here.
+                // However, my BiometricAuthenticator implementation calls onFailure() for transient errors.
+                // If the prompt DISMISED, it would call onError.
+                // So keeping isAuthInProgress = true is correct here.
             }
         )
-    }
-}
-
-@Composable
-fun LockScreen() {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black), // Design System: Absolute Black
-        contentAlignment = Alignment.Center
-    ) {
-        // Simple Lock UI
-        Text(text = "LOCKED", color = Color.Gray)
-        // In a real app, add a "Unlock" button to re-trigger biometrics if cancelled
     }
 }
