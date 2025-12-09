@@ -29,6 +29,7 @@ class SecretManager @Inject constructor(
         private const val KEY_TOKEN = "github_token"
         private const val KEY_REPO_OWNER = "repo_owner"
         private const val KEY_REPO_NAME = "repo_name"
+        const val KEY_PROVIDER = "provider_type"
     }
 
     private val masterKey = MasterKey.Builder(context)
@@ -99,10 +100,18 @@ class SecretManager @Inject constructor(
             .apply()
     }
 
+    fun saveProvider(type: String) {
+        encryptedPrefs.edit().putString(KEY_PROVIDER, type).apply()
+    }
+
     fun getRepoInfo(): Pair<String?, String?> {
         val owner = encryptedPrefs.getString(KEY_REPO_OWNER, null)
         val repo = encryptedPrefs.getString(KEY_REPO_NAME, null)
         return Pair(owner, repo)
+    }
+
+    fun getProvider(): String {
+        return encryptedPrefs.getString(KEY_PROVIDER, "github") ?: "github"
     }
 
     fun clear() {

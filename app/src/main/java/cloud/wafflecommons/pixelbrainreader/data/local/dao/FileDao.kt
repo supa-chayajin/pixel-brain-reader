@@ -37,6 +37,9 @@ abstract class FileDao {
     @Query("DELETE FROM files WHERE (:parentPath = '' AND path NOT LIKE '%/%') OR (:parentPath != '' AND path LIKE :parentPath || '/%' AND path NOT LIKE :parentPath || '/%/%')")
     abstract suspend fun deleteFilesByParent(parentPath: String)
 
+    @Query("DELETE FROM files WHERE path = :path")
+    abstract suspend fun deleteFile(path: String)
+
     @Query("DELETE FROM files")
     abstract suspend fun clearAll()
 

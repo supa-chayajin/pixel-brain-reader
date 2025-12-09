@@ -8,12 +8,13 @@ plugins {
 
 android {
     namespace = "cloud.wafflecommons.pixelbrainreader"
-    compileSdk = 35
+    compileSdkPreview = "Baklava"
 
     defaultConfig {
         applicationId = "cloud.wafflecommons.pixelbrainreader"
-        minSdk = 26
-        targetSdk = 35
+        minSdk = 36
+        // minSdkPreview = "Baklava" // Deprecated
+        targetSdkPreview = "36"
         versionCode = 1
         versionName = "1.0"
 
@@ -22,6 +23,8 @@ android {
             useSupportLibrary = true
         }
     }
+
+    // ... buildTypes ...
 
     buildTypes {
         release {
@@ -53,8 +56,8 @@ android {
     }
 
     // AI Models (TFLite) must not be compressed
-    aaptOptions {
-        noCompress("tflite")
+    androidResources {
+        noCompress += "tflite"
     }
 }
 
@@ -85,6 +88,7 @@ dependencies {
     implementation(libs.androidx.material3.adaptive)
     implementation(libs.androidx.material3.adaptive.layout)
     implementation(libs.androidx.material3.adaptive.navigation)
+    implementation(libs.androidx.material3.adaptive.navigation.suite)
 
     // Navigation
     implementation(libs.androidx.navigation.compose)
@@ -111,16 +115,18 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.androidx.security.crypto)
     implementation(libs.androidx.biometric)
+    implementation(libs.androidx.datastore.preferences)
 
-    // Markdown
+    // Images & Markdown
+    implementation(libs.coil.compose)
     implementation(libs.markwon.core)
     implementation(libs.markwon.ext.strikethrough)
     implementation(libs.markwon.ext.tables)
     implementation(libs.markwon.ext.tasklist)
     implementation(libs.markwon.linkify)
-    // On retire syntax-highlight et prism4j ici pour éviter les erreurs de compilation
-    // implementation(libs.markwon.syntax.highlight)
-    // implementation(libs.prism4j)
+    // Syntax Highlighting
+    implementation(libs.markwon.syntax.highlight)
+    implementation(libs.prism4j)
 
     // HTML Parsing & Conversion (Phase B: Universal Collector)
     implementation("org.jsoup:jsoup:1.17.2")

@@ -7,7 +7,9 @@ import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.FileEntity
 import cloud.wafflecommons.pixelbrainreader.data.remote.model.GithubFileDto
 import cloud.wafflecommons.pixelbrainreader.data.repository.FileRepository
+import cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,15 +19,12 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
-import javax.inject.Inject
-
-// UiState moved inside MainViewModel or defined here if needed.
-// Cleaning up previous definition to avoid duplicates.
 
 @HiltViewModel
 class MainViewModel @Inject constructor(
     private val repository: FileRepository,
-    private val secretManager: SecretManager
+    private val secretManager: SecretManager,
+    private val userPrefs: UserPreferencesRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(UiState())
@@ -46,8 +45,9 @@ class MainViewModel @Inject constructor(
         val isSyncing: Boolean = false,
 
         val hasUnsavedChanges: Boolean = false,
-        val isChatOpen: Boolean = false, // V4.0
-        val importState: ImportState? = null
+        val importState: ImportState? = null,
+        
+        val listPaneWidth: Float = 360f // Default width
     )
 
     data class ImportState(val title: String, val content: String)
@@ -64,6 +64,21 @@ class MainViewModel @Inject constructor(
                 repository.refreshFolder(owner, repo, "")
             }
         }
+        
+        // Observe Preferences
+        userPrefs.listPaneWidth
+            .onEach { width ->
+                _uiState.value = _uiState.value.copy(listPaneWidth = width)
+            }
+            .launchIn(viewModelScope)
+    }
+
+    fun updateListPaneWidth(width: Float) {
+        // Immediate UI update for responsiveness
+       _uiState.value = _uiState.value.copy(listPaneWidth = width)
+       viewModelScope.launch {
+           userPrefs.setListPaneWidth(width)
+       }
     }
 
     /**
@@ -318,9 +333,7 @@ class MainViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(isFocusMode = !_uiState.value.isFocusMode)
     }
 
-    fun toggleChat() {
-        _uiState.value = _uiState.value.copy(isChatOpen = !_uiState.value.isChatOpen)
-    }
+
 
     private fun FileEntity.toDto() = GithubFileDto(name, path, type, downloadUrl)
 
@@ -361,5 +374,39 @@ class MainViewModel @Inject constructor(
 
     fun dismissImport() {
         _uiState.value = _uiState.value.copy(importState = null)
+    }
+
+    fun renameFile(newName: String) {
+        val oldFile = _uiState.value.selectedFileName ?: return
+        val path = _uiState.value.files.find { it.name == oldFile }?.path ?: return
+        
+        // Construct new path. 
+        val parentPath = if(path.contains("/")) path.substringBeforeLast("/") else ""
+        val newPath = if(parentPath.isNotEmpty()) "$parentPath/$newName" else newName
+        
+        // Basic extension check
+        val finalNewPath = if (!newPath.contains(".")) "$newPath.md" else newPath
+        val finalNewName = if (!newName.contains(".")) "$newName.md" else newName
+        
+        if (finalNewPath == path) return
+
+        viewModelScope.launch {
+            repository.renameFile(path, finalNewPath)
+            _uiState.value = _uiState.value.copy(selectedFileName = finalNewName)
+        }
+    }
+
+    fun createNewFile() {
+        val parentPath = _uiState.value.currentPath
+        val name = "Untitled_${System.currentTimeMillis()}.md"
+        val fullPath = if (parentPath.isNotEmpty()) "$parentPath/$name" else name
+        
+        viewModelScope.launch {
+            repository.saveFileLocally(fullPath, "")
+            delay(100)
+            val newDto = GithubFileDto(name, fullPath, "file", null)
+            loadFile(newDto)
+            toggleEditMode()
+        }
     }
 }

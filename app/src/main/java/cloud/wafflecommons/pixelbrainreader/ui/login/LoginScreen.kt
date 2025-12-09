@@ -107,7 +107,7 @@ fun LoginScreen(
             OutlinedTextField(
                 value = token,
                 onValueChange = viewModel::onTokenChanged,
-                label = { Text("Token d'accès GitHub (Classic)") },
+                label = { Text("Personal Access Token") },
                 leadingIcon = { Icon(Icons.Outlined.VpnKey, null) },
                 singleLine = true,
                 visualTransformation = PasswordVisualTransformation(),
@@ -129,7 +129,7 @@ fun LoginScreen(
             OutlinedTextField(
                 value = repoUrl,
                 onValueChange = viewModel::onRepoUrlChanged,
-                label = { Text("URL du Repository (ex: https://github.com/user/repo)") },
+                label = { Text("Repo URL (GitHub / GitLab)") },
                 leadingIcon = { Icon(Icons.Outlined.Link, null) },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),

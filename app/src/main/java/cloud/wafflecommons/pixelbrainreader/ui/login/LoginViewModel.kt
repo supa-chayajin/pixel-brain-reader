@@ -54,28 +54,44 @@ class LoginViewModel @Inject constructor(
         return token.isNotEmpty()
     }
 
-    private fun validateRepoUrl(url: String): Pair<String, String>? {
-        val regex = Regex("github\\.com/([^/]+)/([^/.]+)")
-        val match = regex.find(url) ?: return null
-        val (owner, repo) = match.destructured
-        return Pair(owner, repo)
+    private fun validateRepoUrl(url: String): Triple<String, String, String>? {
+        val githubRegex = Regex("github\\.com/([^/]+)/([^/.]+)")
+        val gitlabRegex = Regex("gitlab\\.com/(.+)/([^/.]+)")
+
+        // Check GitHub
+        githubRegex.find(url)?.let { match ->
+            val (owner, repo) = match.destructured
+            return Triple(owner, repo, "github")
+        }
+
+        // Check GitLab
+        gitlabRegex.find(url)?.let { match ->
+            val (group, project) = match.destructured
+            // GitLab "Owner" concept is Group/User path. "Repo" is project slug.
+            // But API needs Project ID or URL Encoded path.
+            // For now, let's treat group as owner and project as repo name.
+            return Triple(group, project, "gitlab")
+        }
+
+        return null
     }
 
     fun onConnectClick() {
         if (!_isTokenValid.value) return
 
-        val repoInfo = validateRepoUrl(_repoUrl.value) ?: return
+        val (owner, repo, provider) = validateRepoUrl(_repoUrl.value) ?: return
 
         viewModelScope.launch {
             _isLoading.value = true
             
             // 1. Secure Storage (Vault)
-            secretManager.saveToken(_token.value)
-            secretManager.saveRepoInfo(repoInfo.first, repoInfo.second)
+            secretManager.saveToken(_token.value.replace("\n", "").replace("\r", "").trim())
+            secretManager.saveProvider(provider)
+            secretManager.saveRepoInfo(owner, repo)
             
             // 2. Verification & Priming
             // We force a refresh of the root folder to verify credentials/network
-            val result = repository.refreshFolder(repoInfo.first, repoInfo.second, "")
+            val result = repository.refreshFolder(owner, repo, "")
             
             if (result.isSuccess) {
                _loginSuccess.value = true

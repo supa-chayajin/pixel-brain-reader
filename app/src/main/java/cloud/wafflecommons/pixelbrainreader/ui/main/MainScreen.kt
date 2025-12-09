@@ -2,24 +2,41 @@ package cloud.wafflecommons.pixelbrainreader.ui.main
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandHorizontally
-import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.union
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Logout
+import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CloseFullscreen
 import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.OpenInFull
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.outlined.Dashboard
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Psychology
@@ -34,7 +51,11 @@ import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
 import androidx.compose.material3.adaptive.WindowAdaptiveInfo
 import androidx.compose.material3.adaptive.currentWindowAdaptiveInfo
@@ -66,13 +87,15 @@ fun MainScreen(
     val uiState by viewModel.uiState.collectAsState()
     val navigator = rememberListDetailPaneScaffoldNavigator<Any>()
     val scope = rememberCoroutineScope()
+    val navController = androidx.navigation.compose.rememberNavController()
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
 
     val windowAdaptiveInfo: WindowAdaptiveInfo = currentWindowAdaptiveInfo()
     val windowSizeClass = windowAdaptiveInfo.windowSizeClass
     val isLargeScreen = windowSizeClass.windowWidthSizeClass != WindowWidthSizeClass.COMPACT
 
     val baseDirective = calculatePaneScaffoldDirective(windowAdaptiveInfo)
-
     val finalDirective = if (uiState.isFocusMode && isLargeScreen) {
         baseDirective.copy(
             maxHorizontalPartitions = 1,
@@ -82,8 +105,37 @@ fun MainScreen(
     } else {
         baseDirective.copy(
             horizontalPartitionSpacerSize = 24.dp,
-            defaultPanePreferredWidth = 280.dp
+            defaultPanePreferredWidth = uiState.listPaneWidth.dp // DYNAMIC WIDTH
         )
+    }
+
+    // -- NAVIGATION LOGIC --
+    // Mobile (Compact): Default to List. Navigate to Detail only if file selected.
+    // Tablet (Expanded): Default to List+Detail.
+    
+    LaunchedEffect(isLargeScreen, uiState.selectedFileName) {
+        if (!isLargeScreen) {
+            // Mobile Mode
+            if (uiState.selectedFileName != null) {
+                navigator.navigateTo(ListDetailPaneScaffoldRole.Detail)
+            } else {
+                navigator.navigateTo(ListDetailPaneScaffoldRole.List)
+            }
+        } else {
+            // Tablet/Expanded Mode
+            if (uiState.isFocusMode) {
+                 navigator.navigateTo(ListDetailPaneScaffoldRole.Detail)
+            } else {
+                 // Even if nothing selected, we show List+Detail (Detail is Welcome Screen)
+                 // Ensure navigator understands we want to show both if space allows (Directive handles this),
+                 // but we need to ensure we aren't stuck in "List Only" mode if the framework thinks so.
+                 // Actually, ListDetailPaneScaffold handles the dual view automatically based on directive.
+                 // We only need to force Detail if Focus Mode.
+                 if (navigator.currentDestination?.pane == ListDetailPaneScaffoldRole.List && uiState.selectedFileName != null) {
+                      navigator.navigateTo(ListDetailPaneScaffoldRole.Detail)
+                 }
+            }
+        }
     }
 
     LaunchedEffect(uiState.isFocusMode) {
@@ -91,225 +143,249 @@ fun MainScreen(
             navigator.navigateTo(ListDetailPaneScaffoldRole.Detail)
         }
     }
-
-    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
-
-    val canNavigateBack = navigator.canNavigateBack()
-    val isSubFolder = uiState.currentPath.isNotEmpty()
-
-    BackHandler(enabled = canNavigateBack || isSubFolder) {
-        if (canNavigateBack) {
-            navigator.navigateBack()
-        } else {
-            viewModel.navigateBack()
+    
+    // Auto-navigate to Import if state present
+    LaunchedEffect(uiState.importState) {
+        if (uiState.importState != null) {
+            navController.navigate("import")
         }
     }
 
-    // AJOUT : Surface globale pour appliquer la couleur de fond du thème (Dynamic ou Sage)
-    // Cela corrige le bug du fond blanc derrière la liste transparente
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background
-    ) {
-        if (isLargeScreen) {
-            Row(
-                modifier = Modifier.padding(start = if (uiState.isFocusMode) 0.dp else 12.dp)
-            ) {
-                AnimatedVisibility(
-                    visible = !uiState.isFocusMode,
-                    enter = slideInHorizontally() + expandHorizontally(),
-                    exit = slideOutHorizontally() + shrinkHorizontally()
-                ) {
-                    NavigationRail(
-                        containerColor = Color.Transparent,
-                        contentColor = MaterialTheme.colorScheme.onSurface,
-                        header = { Spacer(Modifier.padding(top = 24.dp)) }
-                    ) {
-                        NavigationRailItem(
-                            selected = true, onClick = { },
-                            icon = { Icon(Icons.Filled.Dashboard, null) },
-                            label = { Text("Docs") },
-                            colors = NavigationRailItemDefaults.colors(
-                                indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
-                                selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer
-                            )
-                        )
-
-                        // V4.0 AI Toggle
-                        NavigationRailItem(
-                            selected = uiState.isChatOpen, 
-                            onClick = { viewModel.toggleChat() },
-                            icon = { Icon(Icons.Outlined.Psychology, contentDescription = "Brain") },
-                            label = { Text("Brain") },
-                            colors = NavigationRailItemDefaults.colors(
-                                indicatorColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                selectedIconColor = MaterialTheme.colorScheme.onTertiaryContainer
-                            )
-                        )
-                        Spacer(Modifier.padding(bottom = 24.dp))
-                    }
-                }
-
-                ListDetailPaneScaffold(
-                    modifier = Modifier.weight(1f),
-                    directive = finalDirective,
-                    value = navigator.scaffoldValue,
-                    listPane = {
-                        if (!uiState.isFocusMode || !isLargeScreen) {
-                            FileListPane(
-                                files = uiState.files,
-                                isLoading = uiState.isLoading,
-                                isRefreshing = uiState.isRefreshing,
-                                error = uiState.error,
-                                currentPath = uiState.currentPath,
-                                showMenuIcon = false,
-                                onFileClick = { file ->
-                                    viewModel.loadFile(file)
-                                    scope.launch { navigator.navigateTo(ListDetailPaneScaffoldRole.Detail) }
-                                },
-                                onFolderClick = { path -> viewModel.loadFolder(path) },
-                                onNavigateUp = { viewModel.navigateUp() },
-                                onMenuClick = { },
-                                onRefresh = { viewModel.refresh() }
-                            )
+    androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold(
+        navigationSuiteItems = {
+            item(
+                selected = currentRoute == "home",
+                onClick = { 
+                    navController.navigate("home") {
+                        popUpTo(navController.graph.findStartDestination().id) {
+                            saveState = true
                         }
-                    },
-                    detailPane = {
-                        FileDetailPane(
-                            content = uiState.unsavedContent ?: uiState.selectedFileContent,
-                            onContentChange = { viewModel.onContentChanged(it) },
-                            fileName = uiState.selectedFileName,
-                            isLoading = uiState.isLoading,
-                            isRefreshing = uiState.isRefreshing,
-                            onRefresh = { viewModel.refreshCurrentFile() },
-                            isFocusMode = uiState.isFocusMode,
-                            onToggleFocusMode = { viewModel.toggleFocusMode() },
-                            isExpandedScreen = isLargeScreen,
-                            isEditing = uiState.isEditing,
-                            onToggleEditMode = { viewModel.toggleEditMode() },
-                            onSaveContent = { _ -> viewModel.saveFile() },
-                            hasUnsavedChanges = uiState.hasUnsavedChanges,
-                            onClose = { viewModel.closeFile() }
-                        )
+                        launchSingleTop = true
+                        restoreState = true
                     }
-                )
-            }
-        } else {
-            ModalNavigationDrawer(
-                drawerState = drawerState, // ... existing drawer config
-                drawerContent = {
-                    ModalDrawerSheet(
-                        drawerContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                        drawerContentColor = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.padding(end = 56.dp)
-                    ) {
-                        Text("Pixel Brain", modifier = Modifier.padding(28.dp), style = MaterialTheme.typography.headlineMedium)
-                        NavigationDrawerItem(
-                            label = { Text("Dashboard") }, selected = true, onClick = { scope.launch { drawerState.close() } },
-                            icon = { Icon(Icons.Filled.Dashboard, null) },
-                            modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding), shape = RoundedCornerShape(50)
-                        )
-                        NavigationDrawerItem(
-                            label = { Text("Brain") }, selected = uiState.isChatOpen, 
-                            onClick = { 
-                                scope.launch { drawerState.close() }
-                                viewModel.toggleChat() 
-                            },
-                            icon = { Icon(Icons.Outlined.Psychology, contentDescription = "Brain") },
-                            modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding), shape = RoundedCornerShape(50)
-                        )
+                },
+                icon = { Icon(Icons.Default.Dashboard, contentDescription = "Home") },
+                label = { Text("Docs") }
+            )
+            item(
+                selected = currentRoute == "chat",
+                onClick = { 
+                    navController.navigate("chat") {
+                        popUpTo(navController.graph.findStartDestination().id) {
+                            saveState = true
+                        }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
+                icon = { Icon(Icons.Outlined.Psychology, contentDescription = "Brain") },
+                label = { Text("Brain") }
+            )
+        }
+    ) {
+        androidx.navigation.compose.NavHost(
+            navController = navController,
+            startDestination = "home",
+            modifier = Modifier.fillMaxSize()
+        ) {
+            composable("home") {
+                // Home with ListDetailPaneScaffold, Breadcrumbs, and Global TopBar
+                
+                val canNavigateBack = navigator.canNavigateBack()
+                val isSubFolder = uiState.currentPath.isNotEmpty()
+
+                // Back Handler for Home Logic
+                BackHandler(enabled = canNavigateBack || isSubFolder || uiState.isFocusMode) {
+                    when {
+                        uiState.isFocusMode -> viewModel.toggleFocusMode()
+                        canNavigateBack -> navigator.navigateBack()
+                        isSubFolder -> viewModel.navigateUp()
+                        else -> { /* Let System Handle or Pop */ }
                     }
                 }
-            ) {
-                // MOBILE CONTENT with FAB
-                androidx.compose.material3.Scaffold(
-                    floatingActionButton = {
-                         androidx.compose.material3.FloatingActionButton(
-                             onClick = { viewModel.toggleChat() },
-                             containerColor = MaterialTheme.colorScheme.primaryContainer,
-                             contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                         ) {
-                             Icon(Icons.Outlined.Psychology, contentDescription = "Brain") 
-                         }
-                    }
-                ) { paddingValues ->
-                    // MAIN CONTENT (List + Detail)
-                    ListDetailPaneScaffold(
-                        modifier = Modifier.padding(paddingValues),
-                        directive = finalDirective,
-                        value = navigator.scaffoldValue,
-                        listPane = {
-                            if (!uiState.isFocusMode || !isLargeScreen) {
-                                FileListPane(
-                                    files = uiState.files,
+
+                Scaffold(
+                    modifier = Modifier.fillMaxSize(),
+                    topBar = {
+                        TopAppBar(
+                            title = { 
+                                cloud.wafflecommons.pixelbrainreader.ui.components.BreadcrumbBar(
+                                    currentPath = uiState.currentPath,
+                                    onPathClick = { path -> viewModel.loadFolder(path) },
+                                    onHomeClick = { viewModel.loadFolder("") },
+                                    isLargeScreen = isLargeScreen
+                                )
+                            },
+                            actions = {
+                                if (uiState.selectedFileName != null) {
+                                    // -- Editor Actions --
+                                    
+                                    // Save
+                                    IconButton(
+                                        onClick = { viewModel.saveFile() },
+                                        enabled = uiState.hasUnsavedChanges
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Save,
+                                            contentDescription = "Save",
+                                            tint = if (uiState.hasUnsavedChanges) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+                                        )
+                                    }
+                                    
+                                    // Edit/View Toggle
+                                    IconButton(onClick = { viewModel.toggleEditMode() }) {
+                                        Icon(
+                                            imageVector = if (uiState.isEditing) Icons.Filled.Visibility else Icons.Filled.Edit,
+                                            contentDescription = if (uiState.isEditing) "View" else "Edit"
+                                        )
+                                    }
+
+                                    // Focus Mode (Large Screen Only)
+                                    if (isLargeScreen) {
+                                        IconButton(onClick = { viewModel.toggleFocusMode() }) {
+                                            Icon(
+                                                imageVector = if (uiState.isFocusMode) Icons.Filled.CloseFullscreen else Icons.Filled.OpenInFull,
+                                                contentDescription = "Focus Mode"
+                                            )
+                                        }
+                                    }
+
+                                    // Close File
+                                    IconButton(onClick = {
+                                        viewModel.closeFile()
+                                        if (navigator.canNavigateBack()) {
+                                            navigator.navigateBack()
+                                        }
+                                    }) {
+                                        Icon(Icons.Filled.Close, "Close")
+                                    }
+
+                                } else {
+                                    // -- Browser Actions --
+                                    IconButton(onClick = { viewModel.createNewFile() }) {
+                                        Icon(Icons.Default.Add, "New File")
+                                    }
+                                }
+                            }
+                        )
+                    },
+                    bottomBar = { Spacer(Modifier.height(80.dp).padding(WindowInsets.ime.asPaddingValues())) }
+                ) { padding ->
+                    Column(modifier = Modifier.padding(padding).fillMaxSize()) {
+                        
+                        // Breadcrumb removed from here (moved to TopBar)
+
+                        ListDetailPaneScaffold(
+                            directive = finalDirective,
+                            value = navigator.scaffoldValue,
+                            listPane = {
+                                AnimatedVisibility(
+                                    visible = !uiState.isFocusMode || !isLargeScreen,
+                                    enter = slideInHorizontally(),
+                                    exit = slideOutHorizontally()
+                                ) {
+                                    Row(modifier = Modifier.fillMaxSize()) {
+                                        Box(modifier = Modifier.weight(1f)) {
+                                            FileListPane(
+                                                files = uiState.files,
+                                                isLoading = uiState.isLoading,
+                                                isRefreshing = uiState.isRefreshing,
+                                                error = uiState.error,
+                                                currentPath = uiState.currentPath,
+                                                showMenuIcon = false,
+                                                onFileClick = { file ->
+                                                    viewModel.loadFile(file)
+                                                    scope.launch { navigator.navigateTo(ListDetailPaneScaffoldRole.Detail) }
+                                                },
+                                                onFolderClick = { path -> viewModel.loadFolder(path) },
+                                                onNavigateUp = { viewModel.navigateUp() },
+                                                onMenuClick = { },
+                                                onRefresh = { viewModel.refresh() },
+                                                onCreateFile = { viewModel.createNewFile() }
+                                            )
+                                        }
+                                        
+                                        // Resizable Handle (Only Large Screen)
+                                        if (isLargeScreen && !uiState.isFocusMode) {
+                                            cloud.wafflecommons.pixelbrainreader.ui.components.SplitPaneHandle(
+                                                onDrag = { delta ->
+                                                    val newWidth = uiState.listPaneWidth + delta
+                                                    viewModel.updateListPaneWidth(newWidth.coerceIn(200f, 600f))
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            },
+                            detailPane = {
+                                FileDetailPane(
+                                    content = uiState.unsavedContent ?: uiState.selectedFileContent,
+                                    onContentChange = { viewModel.onContentChanged(it) },
+                                    fileName = uiState.selectedFileName,
                                     isLoading = uiState.isLoading,
                                     isRefreshing = uiState.isRefreshing,
-                                    error = uiState.error,
-                                    currentPath = uiState.currentPath,
-                                    showMenuIcon = true,
-                                    onFileClick = { file ->
-                                        viewModel.loadFile(file)
-                                        scope.launch { navigator.navigateTo(ListDetailPaneScaffoldRole.Detail) }
+                                    onRefresh = { viewModel.refreshCurrentFile() },
+                                    isFocusMode = uiState.isFocusMode,
+                                    onToggleFocusMode = { viewModel.toggleFocusMode() },
+                                    isExpandedScreen = isLargeScreen,
+                                    isEditing = uiState.isEditing,
+                                    onToggleEditMode = { viewModel.toggleEditMode() },
+                                    onSaveContent = { _ -> viewModel.saveFile() },
+                                    hasUnsavedChanges = uiState.hasUnsavedChanges,
+                                    onClose = {
+                                        viewModel.closeFile()
+                                        if (navigator.canNavigateBack()) {
+                                            navigator.navigateBack()
+                                        }
                                     },
-                                    onFolderClick = { path -> viewModel.loadFolder(path) },
-                                    onNavigateUp = { viewModel.navigateUp() },
-                                    onMenuClick = { scope.launch { drawerState.open() } },
-                                    onRefresh = { viewModel.refresh() }
+                                    onRename = { newName -> viewModel.renameFile(newName) },
+                                    onCreateNew = { viewModel.createNewFile() }
                                 )
                             }
-                        },
-                        detailPane = {
-                             FileDetailPane(
-                                 content = uiState.unsavedContent ?: uiState.selectedFileContent,
-                                 onContentChange = { viewModel.onContentChanged(it) },
-                                 fileName = uiState.selectedFileName,
-                                 isLoading = uiState.isLoading,
-                                 isRefreshing = uiState.isRefreshing,
-                                 onRefresh = { viewModel.refreshCurrentFile() },
-                                 isFocusMode = uiState.isFocusMode,
-                                 onToggleFocusMode = { viewModel.toggleFocusMode() },
-                                 isExpandedScreen = false,
-                                 isEditing = uiState.isEditing,
-                                 onToggleEditMode = { viewModel.toggleEditMode() },
-                                 onSaveContent = { _ -> viewModel.saveFile() },
-                                 hasUnsavedChanges = uiState.hasUnsavedChanges,
-                                 onClose = {
-                                     viewModel.closeFile()
-                                     if (navigator.canNavigateBack()) {
-                                         navigator.navigateBack()
-                                     }
-                                 }
-                             )
-                        }
-                    )
+                        )
+                    }
                 }
             }
-        }
 
-
-        // GLOBAL CHAT BOTTOM SHEET (Consistency for Mobile & Large Screen)
-        if (uiState.isChatOpen) {
-            androidx.compose.material3.ModalBottomSheet(
-                onDismissRequest = { viewModel.toggleChat() },
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-            ) {
+            composable("chat") {
                  cloud.wafflecommons.pixelbrainreader.ui.ai.ChatPanel(
-                    modifier = Modifier.fillMaxSize().padding(bottom = 24.dp),
-                    onInsertContent = { text -> 
-                        viewModel.onContentChanged((uiState.unsavedContent ?: "") + "\n\n" + text)
-                        viewModel.toggleChat() 
+                    onInsertContent = { text ->
+                        // Handle insert: Navigate to Home and insert?
+                        // Or just copy to clipboard?
+                        // For now, let's append to currently open file if any in ViewModel
+                        // This logic might need refinement since we are on a different screen.
+                        // Assuming ViewModel holds state of "Open File" globally.
+                         viewModel.onContentChanged((uiState.unsavedContent ?: "") + "\n\n" + text)
+                         navController.navigate("home")
                     }
                 )
             }
-        }
 
-        if (uiState.importState != null) {
-             cloud.wafflecommons.pixelbrainreader.ui.components.ImportDialog(
-                 initialTitle = uiState.importState!!.title,
-                 initialContent = uiState.importState!!.content,
-                 onDismiss = { viewModel.dismissImport() },
-                 onSave = { name, folder, content -> viewModel.confirmImport(name, folder, content) }
-             )
+            composable("import") {
+                // Intercept System Back to clear state
+                BackHandler {
+                    viewModel.dismissImport()
+                    navController.popBackStack()
+                }
+
+                if (uiState.importState != null) {
+                    cloud.wafflecommons.pixelbrainreader.ui.components.ImportScreen(
+                        initialTitle = uiState.importState!!.title,
+                        initialContent = uiState.importState!!.content,
+                        onDismiss = { 
+                            viewModel.dismissImport()
+                            navController.popBackStack()
+                        },
+                        onSave = { name, folder, content -> 
+                            viewModel.confirmImport(name, folder, content)
+                            navController.popBackStack()
+                        }
+                    )
+                } else {
+                    // Fallback if state lost
+                    LaunchedEffect(Unit) { navController.popBackStack() }
+                }
+            }
         }
     }
 }

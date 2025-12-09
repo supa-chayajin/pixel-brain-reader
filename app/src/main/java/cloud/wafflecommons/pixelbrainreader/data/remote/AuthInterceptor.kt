@@ -13,7 +13,7 @@ class AuthInterceptor @Inject constructor(
 
     override fun intercept(chain: Interceptor.Chain): Response {
         val originalRequest = chain.request()
-        val token = secretManager.getToken()
+        val token = secretManager.getToken()?.replace("\n", "")?.replace("\r", "")?.trim()
 
         // SecOps Check: Inject "Bearer" token from the Vault.
         val newRequest = if (!token.isNullOrEmpty()) {
