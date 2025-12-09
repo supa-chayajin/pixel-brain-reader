@@ -88,16 +88,19 @@ fun ChatPanel(
     Scaffold(
         modifier = modifier.nestedScroll(nestedScrollConnection),
         containerColor = Color.Transparent, 
+        contentWindowInsets = ScaffoldDefaults.contentWindowInsets.exclude(WindowInsets.ime), // Prevent Scaffold from consuming IME
         // No TopBar in Scaffold, we manage it manually
     ) { innerPadding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding) // Keeps system bars padding if any
+                .padding(innerPadding)
+                .imePadding() // Manually padding content to move Input Bar up
         ) {
             
             // --- Content Area (LazyColumn) ---
             val density = LocalDensity.current
+            // ...
             val headerHeightDp = with(density) { headerHeightPx.toDp() }
             
             Column(modifier = Modifier.fillMaxSize()) {
