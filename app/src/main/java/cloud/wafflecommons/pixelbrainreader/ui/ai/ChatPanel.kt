@@ -1,5 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.ui.ai
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
@@ -13,6 +14,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.outlined.Psychology
@@ -22,19 +25,30 @@ import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.EventNote
+import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
 import cloud.wafflecommons.pixelbrainreader.data.ai.ScribePersona
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -46,117 +60,153 @@ fun ChatPanel(
     var textState by remember { mutableStateOf(TextFieldValue("")) }
     val listState = rememberLazyListState()
 
-    // Auto-scroll logic
-    LaunchedEffect(viewModel.messages.size, viewModel.messages.lastOrNull()?.content) {
+    // --- Collapsible Header Logic ---
+    // We need to know the header height to offset the list and to clamp the scroll.
+    // Since content is dynamic (chips appear/disappear), we measure it globally.
+    var headerHeightPx by remember { mutableFloatStateOf(0f) }
+    var headerOffsetHeightPx by remember { mutableFloatStateOf(0f) }
+
+    val nestedScrollConnection = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                val delta = available.y
+                val newOffset = headerOffsetHeightPx + delta
+                // Clamp offset between -headerHeight and 0
+                headerOffsetHeightPx = newOffset.coerceIn(-headerHeightPx, 0f)
+                return Offset.Zero // Let the list scroll too
+            }
+        }
+    }
+    
+    // Auto-scroll logic (Optimized)
+    LaunchedEffect(viewModel.messages.size) {
         if (viewModel.messages.isNotEmpty()) {
             listState.animateScrollToItem(viewModel.messages.lastIndex)
         }
     }
 
     Scaffold(
-        modifier = modifier,
-        containerColor = Color.Transparent, // Transparent pour le blend avec MainScreen
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = {
-                    Text(
-                        "Neural Vault",
-                        style = MaterialTheme.typography.titleLarge
-                    )
-                },
-                actions = {
-                    IconButton(onClick = { viewModel.resetChat() }) {
-                        Icon(Icons.Rounded.Delete, "Clear Chat", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = Color.Transparent,
-                    scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer
-                )
-            )
-        }
+        modifier = modifier.nestedScroll(nestedScrollConnection),
+        containerColor = Color.Transparent, 
+        // No TopBar in Scaffold, we manage it manually
     ) { innerPadding ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
+                .padding(innerPadding) // Keeps system bars padding if any
         ) {
-
-            // --- 1. Expressive Toggle (Vault / Scribe) ---
-            Spacer(modifier = Modifier.height(8.dp))
-            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                ExpressiveToggle(
-                    currentMode = viewModel.currentMode,
-                    onModeSelected = { viewModel.switchMode(it) }
+            
+            // --- Content Area (LazyColumn) ---
+            val density = LocalDensity.current
+            val headerHeightDp = with(density) { headerHeightPx.toDp() }
+            
+            Column(modifier = Modifier.fillMaxSize()) {
+                Box(modifier = Modifier.weight(1f)) {
+                    if (viewModel.messages.isEmpty()) {
+                        EmptyStatePlaceholder()
+                    } else {
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier.fillMaxSize()
+                                .padding(horizontal = 16.dp),
+                            // Top padding pushes content down by header height initially
+                            // We add extra spcaing for aesthetics
+                            contentPadding = PaddingValues(top = headerHeightDp + 16.dp, bottom = 24.dp), 
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            items(viewModel.messages) { msg ->
+                                ChatBubble(
+                                    message = msg,
+                                    onInsert = if (viewModel.currentMode == ChatMode.SCRIBE && !msg.isUser) onInsertContent else null
+                                )
+                            }
+                        }
+                    }
+                }
+                
+                // --- Input Bar (Fixed at bottom) ---
+                StealthInputBar(
+                    textState = textState,
+                    onTextChange = { textState = it },
+                    onSend = {
+                        if (textState.text.isNotBlank()) {
+                            viewModel.sendMessage(textState.text)
+                            textState = TextFieldValue("")
+                        }
+                    },
+                    isLoading = viewModel.isLoading,
+                    hint = if (viewModel.currentMode == ChatMode.RAG) "Ask your documents..." else "Describe what to write..."
                 )
             }
 
-            // --- 2. Expressive Chips (Scribe Personas) ---
-            // CORRECTION: Rendu plus moderne avec icônes et taille adaptée
-            AnimatedVisibility(visible = viewModel.currentMode == ChatMode.SCRIBE) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 16.dp, start = 16.dp, end = 16.dp), // Plus d'espace
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    ScribePersona.entries.forEach { persona ->
-                        // Mapping simple d'icônes selon le persona
-                        val icon = when(persona) {
-                            ScribePersona.TECH_WRITER -> Icons.Rounded.Description
-                            ScribePersona.CODER -> Icons.Rounded.Code
-                            ScribePersona.PLANNER -> Icons.Rounded.EventNote
-                        }
-
-                        ExpressiveChip(
-                            label = persona.name.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() }, // Format "Tech writer"
-                            icon = icon,
-                            isSelected = viewModel.currentPersona == persona,
-                            onClick = { viewModel.switchPersona(persona) }
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                    }
-                }
-            }
-
-            // --- 3. Content Area ---
-            Box(
+            // --- Collapsible Header ---
+            // This sits on top of the list
+            Surface(
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f), // Slight transparency for cool effect
                 modifier = Modifier
-                    .weight(1f)
                     .fillMaxWidth()
+                    .onGloballyPositioned { coordinates ->
+                        headerHeightPx = coordinates.size.height.toFloat()
+                    }
+                    .offset { IntOffset(x = 0, y = headerOffsetHeightPx.roundToInt()) }
+                    .zIndex(1f) // Ensure it's above the list
             ) {
-                if (viewModel.messages.isEmpty()) {
-                    EmptyStatePlaceholder()
-                } else {
-                    LazyColumn(
-                        state = listState,
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // 1. Top Bar Elements (Title + Delete)
+                    Box(
                         modifier = Modifier
-                            .fillMaxSize()
+                            .fillMaxWidth()
+                            .height(64.dp)
                             .padding(horizontal = 16.dp),
-                        contentPadding = PaddingValues(top = 24.dp, bottom = 24.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        items(viewModel.messages) { msg ->
-                            ChatBubble(
-                                message = msg,
-                                onInsert = if (viewModel.currentMode == ChatMode.SCRIBE && !msg.isUser) onInsertContent else null
-                            )
+                        Text(
+                            "Neural Vault",
+                            style = MaterialTheme.typography.titleLarge,
+                            modifier = Modifier.align(Alignment.Center)
+                        )
+                        IconButton(
+                            onClick = { viewModel.resetChat() },
+                            modifier = Modifier.align(Alignment.CenterEnd)
+                        ) {
+                            Icon(Icons.Rounded.Delete, "Clear Chat", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+
+                    // 2. Toggle
+                    ExpressiveToggle(
+                        currentMode = viewModel.currentMode,
+                        onModeSelected = { viewModel.switchMode(it) }
+                    )
+
+                    // 3. Chips (Scribe only)
+                    AnimatedVisibility(visible = viewModel.currentMode == ChatMode.SCRIBE) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 16.dp, start = 16.dp, end = 16.dp),
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            ScribePersona.entries.forEach { persona ->
+                                val icon = when(persona) {
+                                    ScribePersona.TECH_WRITER -> Icons.Rounded.Description
+                                    ScribePersona.CODER -> Icons.Rounded.Code
+                                    ScribePersona.PLANNER -> Icons.Rounded.EventNote
+                                }
+                                ExpressiveChip(
+                                    label = persona.name.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() },
+                                    icon = icon,
+                                    isSelected = viewModel.currentPersona == persona,
+                                    onClick = { viewModel.switchPersona(persona) }
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                            }
                         }
                     }
                 }
             }
-
-            // --- 4. Stealth Input Bar ---
-            StealthInputBar(
-                textState = textState,
-                onTextChange = { textState = it },
-                onSend = {
-                    viewModel.sendMessage(textState.text)
-                    textState = TextFieldValue("")
-                },
-                isLoading = viewModel.isLoading,
-                hint = if (viewModel.currentMode == ChatMode.RAG) "Ask your documents..." else "Describe what to write..."
-            )
         }
     }
 }
@@ -295,6 +345,8 @@ fun StealthInputBar(
     isLoading: Boolean,
     hint: String
 ) {
+    val isEnabled = textState.text.isNotBlank() && !isLoading
+    
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -326,21 +378,38 @@ fun StealthInputBar(
                         textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
                         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                         maxLines = 4,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                        keyboardActions = KeyboardActions(
+                            onSend = {
+                                if (isEnabled) {
+                                    onSend()
+                                }
+                            }
+                        )
                     )
                 }
 
                 Spacer(modifier = Modifier.width(12.dp))
 
-                val isEnabled = textState.text.isNotBlank() && !isLoading
                 val btnColor by animateColorAsState(
-                    if (isEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+                    if (isEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest,
                     label = "btnColor"
                 )
+                
+                // UX Requirement: Mic when empty, Send when typing
+                val showMic = textState.text.isBlank()
 
                 IconButton(
-                    onClick = onSend,
-                    enabled = isEnabled,
+                    onClick = {
+                        if (showMic) {
+                             // Placeholder for Voice Feature
+                             println("Voice feature not implemented yet")
+                        } else {
+                            onSend()
+                        }
+                    },
+                    enabled = true, // Always clickable for the Mic feedback
                     modifier = Modifier
                         .size(44.dp)
                         .background(btnColor, CircleShape)
@@ -352,11 +421,21 @@ fun StealthInputBar(
                             strokeWidth = 2.dp
                         )
                     } else {
-                        Icon(
-                            Icons.AutoMirrored.Rounded.Send,
-                            contentDescription = "Send",
-                            tint = if (isEnabled) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                        )
+                        AnimatedContent(targetState = showMic, label = "iconSwitch") { isMic ->
+                            if (isMic) {
+                                Icon(
+                                    Icons.Rounded.Mic,
+                                    contentDescription = "Voice Input",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                ) 
+                            } else {
+                                Icon(
+                                    Icons.AutoMirrored.Rounded.Send,
+                                    contentDescription = "Send",
+                                    tint = MaterialTheme.colorScheme.onPrimary
+                                )
+                            }
+                        }
                     }
                 }
             }

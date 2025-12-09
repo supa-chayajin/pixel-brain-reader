@@ -1,9 +1,17 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.jetbrains.kotlin.android)
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.hilt.android)
     alias(libs.plugins.ksp)
+}
+
+val localProperties = Properties()
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localProperties.load(localPropertiesFile.inputStream())
 }
 
 android {
@@ -22,6 +30,8 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+        val key = localProperties.getProperty("geminiApiKey") ?: ""
+        buildConfigField("String", "geminiApiKey", "\"$key\"")
     }
 
     // ... buildTypes ...
@@ -133,9 +143,8 @@ dependencies {
     implementation("com.vladsch.flexmark:flexmark-html2md-converter:0.64.8")
 
     // AI Core & MediaPipe (V4.0: Neural Vault)
-    // Note: Ensuring usage of public artifacts or beta versions as available.
-    // implementation("com.google.ai.edge.aicore:aicore:1.0.0-beta01") // TODO: Check access/repo 
-    implementation("com.google.mediapipe:tasks-text:0.10.14")
+    implementation("com.google.ai.client.generativeai:generativeai:0.9.0")
+    implementation("com.google.mediapipe:tasks-text:0.20230731")
 
     // Test
     testImplementation(libs.junit)

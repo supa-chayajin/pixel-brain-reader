@@ -65,7 +65,7 @@ class ChatViewModel @Inject constructor(
                 val flow = if (currentMode == ChatMode.RAG) {
                     ragManager.askQuestion(query)
                 } else {
-                    scribeManager.generateText(query, currentPersona)
+                    scribeManager.generateScribeContent(query, currentPersona)
                 }
 
                 val sb = StringBuilder()
