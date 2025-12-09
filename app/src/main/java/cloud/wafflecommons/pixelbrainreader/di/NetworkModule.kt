@@ -43,4 +43,10 @@ object NetworkModule {
     fun provideGithubApiService(retrofit: Retrofit): GithubApiService {
         return retrofit.create(GithubApiService::class.java)
     }
+
+    @Provides
+    @Singleton
+    fun provideGitProvider(impl: cloud.wafflecommons.pixelbrainreader.data.remote.DelegatingGitProvider): cloud.wafflecommons.pixelbrainreader.data.remote.GitProvider {
+        return impl
+    }
 }

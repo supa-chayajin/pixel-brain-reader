@@ -57,6 +57,15 @@ class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
+        // Privacy Curtain (SecOps)
+        // Prevents screenshots and recents preview (Release only)
+        if (!BuildConfig.DEBUG) {
+            window.setFlags(
+                android.view.WindowManager.LayoutParams.FLAG_SECURE,
+                android.view.WindowManager.LayoutParams.FLAG_SECURE
+            )
+        }
+
         // Initial Login Check
         isUserLoggedIn = secretManager.getToken() != null
         

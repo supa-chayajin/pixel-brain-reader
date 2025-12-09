@@ -21,3 +21,10 @@ fun GithubFileDto.toEntity() = FileEntity(
     type = type,
     downloadUrl = downloadUrl
 )
+
+fun cloud.wafflecommons.pixelbrainreader.data.remote.model.RemoteFile.toEntity() = FileEntity(
+    path = path,
+    name = name,
+    type = type,
+    downloadUrl = downloadUrl
+)

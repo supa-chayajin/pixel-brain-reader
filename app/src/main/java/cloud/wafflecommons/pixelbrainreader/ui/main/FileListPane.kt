@@ -23,6 +23,8 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import cloud.wafflecommons.pixelbrainreader.data.remote.model.GithubFileDto
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -30,98 +32,78 @@ import cloud.wafflecommons.pixelbrainreader.data.remote.model.GithubFileDto
 fun FileListPane(
     files: List<GithubFileDto>,
     isLoading: Boolean,
-    isRefreshing: Boolean, // New State
+    isRefreshing: Boolean,
     error: String?,
     currentPath: String,
-    showMenuIcon: Boolean,
+    showMenuIcon: Boolean, // Deprecated? Kept for sig compat
     onFileClick: (GithubFileDto) -> Unit,
     onFolderClick: (String) -> Unit,
     onNavigateUp: () -> Unit,
     onMenuClick: () -> Unit,
-    onRefresh: () -> Unit // New Action
+    onRefresh: () -> Unit,
+    onCreateFile: () -> Unit
 ) {
-    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
-    
-    Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        containerColor = Color.Transparent,
-        topBar = {
-            TopAppBar(
-                title = {
-                    BreadcrumbRow(currentPath = currentPath, onPathClick = onFolderClick)
-                },
-                navigationIcon = {},
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent,
-                    scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer, // Slight contrast on scroll
-                    titleContentColor = MaterialTheme.colorScheme.onSurface
-                ),
-                scrollBehavior = scrollBehavior
-            )
-        }
-    ) { innerPadding ->
-        cloud.wafflecommons.pixelbrainreader.ui.components.PullToRefreshBox(
-            isRefreshing = isRefreshing,
-            onRefresh = onRefresh,
-            modifier = Modifier.padding(innerPadding).fillMaxSize()
-        ) {
-            // Content
-            if (isLoading && files.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                     CircularProgressIndicator()
+    // Haptics
+    val haptic = LocalHapticFeedback.current
+
+    if (error != null && !isRefreshing && files.isNotEmpty()) {
+         // Side-effect: Vibrate on error if just happened?
+         // Hard to track "just happened". Skipping for now to avoid loops.
+    }
+
+    Box(
+        modifier = Modifier.fillMaxSize()
+    ) {
+        // Content
+        if ((isLoading || isRefreshing) && files.isEmpty()) {
+             // Skeleton State
+             cloud.wafflecommons.pixelbrainreader.ui.components.SkeletonFileList()
+        } else if (error != null && files.isEmpty()) {
+             Column(
+                modifier = Modifier.align(Alignment.Center).padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Icon(Icons.Default.Folder, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(48.dp))
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "Error: $error", // Assuming error is a String, not an object with a 'message' property
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyLarge,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Button(onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onRefresh()
+                }) {
+                    Text("Retry")
                 }
-            } else if (error != null && files.isEmpty()) {
-                 Column(
-                    modifier = Modifier.align(Alignment.Center).padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Icon(Icons.Default.Folder, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(48.dp))
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = error,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodyLarge,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                    )
-                }
-            } else if (files.isEmpty()) {
-                 // Even if empty, show the header title so user knows where they are
-                 LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp)) {
-                     item {
-                         Text(
-                            text = if (currentPath.isEmpty()) "Bibliothèque" else currentPath.substringAfterLast('/'),
-                            style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.padding(bottom = 24.dp)
-                        )
-                     }
-                     item {
-                         Box(modifier = Modifier.fillMaxWidth().padding(top = 32.dp), contentAlignment = Alignment.Center) {
-                            Text("Aucun fichier trouvé", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                         }
-                     }
+            }
+        } else if (files.isEmpty()) {
+             cloud.wafflecommons.pixelbrainreader.ui.components.EmptyState(
+                 onActionClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onCreateFile()
                  }
-            } else {
+             )
+        } else {
+            cloud.wafflecommons.pixelbrainreader.ui.components.PullToRefreshBox(
+                isRefreshing = isRefreshing,
+                onRefresh = {
+                    haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                    onRefresh()
+                },
+                modifier = Modifier.fillMaxSize()
+            ) {
                 LazyColumn(
-                    contentPadding = PaddingValues(horizontal = 0.dp, vertical = 12.dp),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    // Header Item: Big Title
-                    item {
-                        Text(
-                            text = if (currentPath.isEmpty()) "Bibliothèque" else currentPath.substringAfterLast('/'),
-                            style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
-                        )
-                    }
-
                     val filteredFiles = files.filter { it.name != "." && it.path != currentPath }
                     items(filteredFiles) { file ->
                         FileItemCard(file = file, onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) // Selection
                             if (file.type == "dir") onFolderClick(file.path) else onFileClick(file)
                         })
                     }
@@ -172,155 +154,4 @@ fun FileItemCard(file: GithubFileDto, onClick: () -> Unit) {
     }
 }
 
-@Composable
-fun BreadcrumbRow(currentPath: String, onPathClick: (String) -> Unit) {
-    val segments = if (currentPath.isBlank()) emptyList() else currentPath.split("/")
-    val accumulatedPaths = segments.runningFold("") { acc, seg ->
-        if (acc.isEmpty()) seg else "$acc/$seg"
-    }.filter { it.isNotEmpty() }
 
-    androidx.compose.foundation.lazy.LazyRow(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        // Home Icon Chip
-        item {
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                contentColor = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { onPathClick("") }
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Home,
-                    contentDescription = "Home",
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp).size(16.dp)
-                )
-            }
-            if (segments.isNotEmpty()) {
-                Spacer(Modifier.width(4.dp))
-                Icon(
-                    imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(16.dp)
-                )
-            }
-        }
-
-        if (segments.size > 2) {
-            // Truncated Mode: ... (Dropdown) > Last 2
-            item {
-                val showDropdown = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
-                
-                Box {
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        contentColor = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { showDropdown.value = true }
-                    ) {
-                        Text(
-                            "...",
-                            style = MaterialTheme.typography.labelMedium,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                        )
-                    }
-                    
-                    DropdownMenu(
-                        expanded = showDropdown.value,
-                        onDismissRequest = { showDropdown.value = false }
-                    ) {
-                        // Show hidden segments (Everything before the last 2)
-                        // segments.size > 3. visible is last 2. hidden is everything up to size-2.
-                        val hiddenCount = segments.size - 1
-                        for (i in 0 until hiddenCount) {
-                            val segment = segments[i]
-                            val path = accumulatedPaths[i]
-                            DropdownMenuItem(
-                                text = { Text(segment) },
-                                onClick = {
-                                    onPathClick(path)
-                                    showDropdown.value = false
-                                }
-                            )
-                        }
-                    }
-                }
-                
-                Spacer(Modifier.width(4.dp))
-                Icon(
-                    imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(16.dp)
-                )
-            }
-
-            val startIndex = segments.size - 1
-            val visibleSegments = segments.takeLast(1)
-
-            items(visibleSegments.size) { i ->
-                val realIndex = startIndex + i
-                val segment = segments[realIndex]
-                val path = accumulatedPaths[realIndex]
-                val isLast = i == visibleSegments.size - 1
-
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    contentColor = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(enabled = !isLast) { onPathClick(path) }
-                ) {
-                    Text(
-                        segment,
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = if (isLast) FontWeight.Bold else FontWeight.Medium,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
-                }
-
-                if (!isLast) {
-                    Spacer(Modifier.width(4.dp))
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-            }
-        } else {
-            // Full Mode
-            items(segments.size) { index ->
-                val segment = segments[index]
-                val path = accumulatedPaths[index]
-                val isLast = index == segments.size - 1
-
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    contentColor = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(enabled = !isLast) { onPathClick(path) }
-                ) {
-                    Text(
-                        segment,
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = if (isLast) FontWeight.Bold else FontWeight.Medium,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
-                }
-
-                if (!isLast) {
-                    Spacer(Modifier.width(4.dp))
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-            }
-        }
-    }
-}
