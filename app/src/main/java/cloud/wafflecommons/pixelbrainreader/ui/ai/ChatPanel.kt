@@ -21,7 +21,7 @@ import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.Description
-import androidx.compose.material.icons.rounded.EventNote
+import androidx.compose.material.icons.automirrored.rounded.EventNote
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -86,7 +86,7 @@ fun ChatPanel(
                         val icon = when(persona) {
                             ScribePersona.TECH_WRITER -> Icons.Rounded.Description
                             ScribePersona.CODER -> Icons.Rounded.Code
-                            ScribePersona.PLANNER -> Icons.Rounded.EventNote
+                            ScribePersona.PLANNER -> Icons.AutoMirrored.Rounded.EventNote
                         }
                         ExpressiveChip(
                             label = persona.name.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() },
