@@ -51,7 +51,7 @@ class MainActivity : FragmentActivity() {
 
     // Concurrency Guards
     private var isAuthInProgress = false
-    private var hasAutoPromptedSession = false
+    // private var hasAutoPromptedSession = false // Removed as we only prompt on creation or manual request
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -76,10 +76,6 @@ class MainActivity : FragmentActivity() {
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onStop(owner: LifecycleOwner) {
                 lastBackgroundTimeStamp = System.currentTimeMillis()
-                
-                // Reset Auto Prompt flag when going to background
-                // So when user comes back, we try once again.
-                hasAutoPromptedSession = false
             }
 
             override fun onStart(owner: LifecycleOwner) {
@@ -96,9 +92,8 @@ class MainActivity : FragmentActivity() {
             PixelBrainReaderTheme {
                 if (isUserLoggedIn && !isAuthenticated) {
                     cloud.wafflecommons.pixelbrainreader.ui.login.LockedScreen(
-                        // Manual Click always triggers (resets auto prompt to allow retry)
+                        // Manual Click always triggers
                         onUnlockClick = { 
-                            hasAutoPromptedSession = false 
                             triggerBiometrics() 
                         }
                     )
@@ -109,6 +104,9 @@ class MainActivity : FragmentActivity() {
                             isUserLoggedIn = false
                             isAuthenticated = false
                             secretManager.clear()
+                        },
+                        onExitApp = {
+                            finishAffinity() // Closes App & Task
                         }
                     )
                 } else {
@@ -123,15 +121,24 @@ class MainActivity : FragmentActivity() {
         
         // Handle Share Intent
         viewModel.handleShareIntent(intent)
+
+        // Trigger Biometrics ONCE at creation if locked
+        if (isUserLoggedIn && !isAuthenticated) {
+            triggerBiometrics()
+        }
+
+        // COLD START SYNC:
+        // Only trigger initial sync if this is a fresh start (savedInstanceState == null)
+        // and user is logged in. 
+        if (savedInstanceState == null && isUserLoggedIn) {
+            viewModel.performInitialSync()
+        }
     }
 
     override fun onResume() {
         super.onResume()
-        // Auto-trigger prompt if locked, but ONLY ONCE per session to avoid loops
-        if (isUserLoggedIn && !isAuthenticated && !hasAutoPromptedSession) {
-            hasAutoPromptedSession = true
-            triggerBiometrics()
-        }
+        // Removed aggressive auto-trigger loop. 
+        // Authentication is now triggered in onCreate or via manual 'Unlock' button.
     }
 
     override fun onNewIntent(intent: Intent) {

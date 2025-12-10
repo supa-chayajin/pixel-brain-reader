@@ -35,4 +35,12 @@ class DelegatingGitProvider @Inject constructor(
     override suspend fun pushFile(owner: String, repo: String, path: String, content: String, sha: String?, message: String): Result<Unit> {
         return getProvider().pushFile(owner, repo, path, content, sha, message)
     }
+
+    override suspend fun deleteFile(owner: String, repo: String, path: String, sha: String, message: String): Result<Unit> {
+        return getProvider().deleteFile(owner, repo, path, sha, message)
+    }
+
+    override suspend fun getGitTree(owner: String, repo: String, sha: String): Result<GitTreeResponse> {
+        return getProvider().getGitTree(owner, repo, sha)
+    }
 }

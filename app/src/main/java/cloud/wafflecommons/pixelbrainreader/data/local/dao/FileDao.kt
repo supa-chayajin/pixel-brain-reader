@@ -44,6 +44,16 @@ abstract class FileDao {
     abstract suspend fun clearAll()
 
     /**
+     * Get all descendants for recursive operations.
+     * Matches path like 'folder/%'
+     */
+    @Query("SELECT * FROM files WHERE path LIKE :parentPath || '/%'")
+    abstract suspend fun getDescendants(parentPath: String): List<FileEntity>
+
+    @Query("SELECT path FROM files WHERE type = 'dir'")
+    abstract suspend fun getAllFolderPaths(): List<String>
+
+    /**
      * Authoritative Sync (Purge & Replace)
      * Executed as a single transaction.
      */
@@ -52,4 +62,10 @@ abstract class FileDao {
         deleteFilesByParent(path)
         insertAll(newFiles)
     }
+
+    @Query("SELECT path FROM files")
+    abstract suspend fun getAllPaths(): List<String>
+
+    @Query("DELETE FROM files WHERE path IN (:paths)")
+    abstract suspend fun deleteFiles(paths: List<String>)
 }

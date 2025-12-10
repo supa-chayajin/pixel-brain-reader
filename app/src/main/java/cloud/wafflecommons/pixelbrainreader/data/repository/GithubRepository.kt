@@ -4,6 +4,7 @@ import cloud.wafflecommons.pixelbrainreader.data.remote.GithubApiService
 import cloud.wafflecommons.pixelbrainreader.data.remote.model.GithubFileDto
 import cloud.wafflecommons.pixelbrainreader.data.remote.GitProvider
 import cloud.wafflecommons.pixelbrainreader.data.remote.model.RemoteFile
+import cloud.wafflecommons.pixelbrainreader.data.remote.GitTreeResponse
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -82,6 +83,37 @@ class GithubRepository @Inject constructor(
             }
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+
+    override suspend fun deleteFile(owner: String, repo: String, path: String, sha: String, message: String): Result<Unit> {
+        return try {
+            val body = mapOf(
+                "message" to message,
+                "sha" to sha
+            )
+            val response = apiService.deleteFile(owner, repo, path, body)
+            if (response.isSuccessful) {
+                Result.success(Unit)
+            } else {
+                Result.failure(Exception("Delete Failed: ${response.code()} ${response.message()}"))
+            }
+        } catch (e: Exception) {
+             Result.failure(e)
+        }
+    }
+
+    override suspend fun getGitTree(owner: String, repo: String, sha: String): Result<GitTreeResponse> {
+        return try {
+            val response = apiService.getGitTree(owner, repo, sha)
+            if (response.isSuccessful) {
+                val body = response.body() ?: return Result.failure(Exception("Empty Tree Body"))
+                Result.success(body)
+            } else {
+                Result.failure(Exception("Tree Fetch Failed: ${response.code()} ${response.message()}"))
+            }
+        } catch (e: Throwable) {
+            Result.failure<GitTreeResponse>(e)
         }
     }
 }

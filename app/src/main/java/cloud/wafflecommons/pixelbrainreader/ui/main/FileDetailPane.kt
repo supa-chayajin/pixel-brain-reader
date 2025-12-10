@@ -9,21 +9,27 @@ import android.text.style.StyleSpan
 import android.text.style.TypefaceSpan
 import android.widget.TextView
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -102,11 +108,55 @@ fun FileDetailPane(
             .then(if (isExpandedScreen) Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f), shape) else Modifier),
         color = MaterialTheme.colorScheme.surface,
     ) {
-        cloud.wafflecommons.pixelbrainreader.ui.components.PullToRefreshBox(
-            isRefreshing = isRefreshing,
-            onRefresh = onRefresh,
-            modifier = Modifier.fillMaxSize()
-        ) {
+        Column(Modifier.fillMaxSize()) {
+            // --- CONTEXTUAL HEADER ---
+            if (fileName != null) {
+                Surface(
+                    color = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 2.dp,
+                    shadowElevation = 1.dp
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp)
+                            .padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Icon (Optional, maybe specific to file type) or Empty
+                        
+                        // Filename & Dirty Indicator
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = fileName,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            
+                            if (hasUnsavedChanges) {
+                                Spacer(Modifier.width(8.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.error)
+                                )
+                            }
+                        }
+
+                        // We can add more actions here later (Save button, etc.)
+                        Spacer(Modifier.weight(1f))
+                    }
+                }
+            }
+            
+            // --- CONTENT AREA ---
+            cloud.wafflecommons.pixelbrainreader.ui.components.PullToRefreshBox(
+                isRefreshing = isRefreshing,
+                onRefresh = onRefresh,
+                modifier = Modifier.weight(1f)
+            ) {
             when {
                 isLoading && content == null -> {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -126,7 +176,7 @@ fun FileDetailPane(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .padding(16.dp)
-                                .padding(bottom = with(density) { imeBottom.toDp() }), // Push content up by IME height
+                                .imePadding(), // Properly handle IME
                             textStyle = TextStyle(
                                 color = MaterialTheme.colorScheme.onSurface,
                                 fontSize = 16.sp,
@@ -154,7 +204,7 @@ fun FileDetailPane(
                                     TextView(context).apply {
                                         setTextColor(textColor)
                                         textSize = 16f
-                                        setPadding(56, 24, 56, 200 + imeBottom) // Plus IME height
+                                        setPadding(56, 24, 56, 200) // Standard bottom padding
                                         setLineSpacing(12f, 1.1f)
                                         setTextIsSelectable(true)
                                         movementMethod = android.text.method.LinkMovementMethod.getInstance()
@@ -174,10 +224,11 @@ fun FileDetailPane(
                                         .build()
                                     markwon.setMarkdown(tv, content)
                                     // Update padding on update as well just in case
-                                    tv.setPadding(56, 24, 56, 200 + imeBottom)
+                                    tv.setPadding(56, 24, 56, 200)
                                 },
                                 modifier = Modifier
                                     .fillMaxSize()
+                                    .imePadding() // Compose handles the shrinking
                                     .verticalScroll(rememberScrollState())
                             )
                         }
@@ -190,6 +241,7 @@ fun FileDetailPane(
             }
         }
     }
+}
 }
 
 @Composable

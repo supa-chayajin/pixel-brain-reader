@@ -348,6 +348,7 @@ fun StealthInputBar(
     isLoading: Boolean,
     hint: String
 ) {
+    var lastClickTime by remember { mutableLongStateOf(0L) }
     val isEnabled = textState.text.isNotBlank() && !isLoading
     
     Box(
@@ -385,7 +386,9 @@ fun StealthInputBar(
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                         keyboardActions = KeyboardActions(
                             onSend = {
-                                if (isEnabled) {
+                                val currentTime = System.currentTimeMillis()
+                                if (isEnabled && (currentTime - lastClickTime > 1000L)) {
+                                    lastClickTime = currentTime
                                     onSend()
                                 }
                             }
@@ -409,7 +412,11 @@ fun StealthInputBar(
                              // Placeholder for Voice Feature
                              println("Voice feature not implemented yet")
                         } else {
-                            onSend()
+                            val currentTime = System.currentTimeMillis()
+                            if (currentTime - lastClickTime > 1000L) {
+                                lastClickTime = currentTime
+                                onSend()
+                            }
                         }
                     },
                     enabled = true, // Always clickable for the Mic feedback

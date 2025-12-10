@@ -35,4 +35,36 @@ interface GithubApiService {
         @Path("path") path: String,
         @retrofit2.http.Body body: Map<String, String>
     ): Response<Unit>
+
+    @retrofit2.http.HTTP(method = "DELETE", path = "repos/{owner}/{repo}/contents/{path}", hasBody = true)
+    suspend fun deleteFile(
+        @Path("owner") owner: String,
+        @Path("repo") repo: String,
+        @Path("path") path: String,
+        @retrofit2.http.Body body: Map<String, String>
+    ): Response<Unit>
+
+    @GET("repos/{owner}/{repo}/git/trees/{sha}")
+    suspend fun getGitTree(
+        @Path("owner") owner: String,
+        @Path("repo") repo: String,
+        @Path("sha") sha: String,
+        @retrofit2.http.Query("recursive") recursive: String = "1"
+    ): Response<GitTreeResponse>
 }
+
+data class GitTreeResponse(
+    val sha: String,
+    val url: String,
+    val tree: List<GitTreeItem>,
+    val truncated: Boolean
+)
+
+data class GitTreeItem(
+    val path: String,
+    val mode: String,
+    val type: String, // "blob" (file) or "tree" (dir)
+    val sha: String,
+    val size: Int?,
+    val url: String?
+)

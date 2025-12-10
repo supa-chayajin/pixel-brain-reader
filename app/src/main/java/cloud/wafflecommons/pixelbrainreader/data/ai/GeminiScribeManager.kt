@@ -26,7 +26,7 @@ class GeminiScribeManager @Inject constructor() {
         }
 
         val generativeModel = GenerativeModel(
-            modelName = "gemini-2.5-flash",
+            modelName = "gemini-2.5-pro",
             apiKey = apiKey,
             systemInstruction = content { text(systemInstruction) }
         )

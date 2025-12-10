@@ -1,6 +1,9 @@
 package cloud.wafflecommons.pixelbrainreader.ui.main
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -8,19 +11,21 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Article
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.foundation.clickable
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -31,24 +36,130 @@ import cloud.wafflecommons.pixelbrainreader.data.remote.model.GithubFileDto
 @Composable
 fun FileListPane(
     files: List<GithubFileDto>,
+    availableMoveDestinations: List<String>, // Passed from VM (Smart Filtered)
+    moveDialogCurrentPath: String, // Added state
     isLoading: Boolean,
     isRefreshing: Boolean,
     error: String?,
     currentPath: String,
-    showMenuIcon: Boolean, // Deprecated? Kept for sig compat
+    showMenuIcon: Boolean,
     onFileClick: (GithubFileDto) -> Unit,
     onFolderClick: (String) -> Unit,
     onNavigateUp: () -> Unit,
     onMenuClick: () -> Unit,
     onRefresh: () -> Unit,
-    onCreateFile: () -> Unit
+    onCreateFile: () -> Unit,
+    onRenameFile: (String, GithubFileDto) -> Unit,
+    onMoveFile: (GithubFileDto, String) -> Unit,
+    onPrepareMove: (GithubFileDto) -> Unit,
+    onMoveNavigateTo: (String) -> Unit,
+    onMoveNavigateUp: () -> Unit
 ) {
-    // Haptics
     val haptic = LocalHapticFeedback.current
+    
+    // Dialog States
+    var showRenameDialog by remember { mutableStateOf<GithubFileDto?>(null) }
+    var showMoveDialog by remember { mutableStateOf<GithubFileDto?>(null) }
 
-    if (error != null && !isRefreshing && files.isNotEmpty()) {
-         // Side-effect: Vibrate on error if just happened?
-         // Hard to track "just happened". Skipping for now to avoid loops.
+    // Rename Dialog
+    if (showRenameDialog != null) {
+        val file = showRenameDialog!!
+        var newName by remember { mutableStateOf(file.name.removeSuffix(".md")) }
+        AlertDialog(
+            onDismissRequest = { showRenameDialog = null },
+            title = { Text("Rename File") },
+            text = {
+                OutlinedTextField(
+                    value = newName,
+                    onValueChange = { newName = it },
+                    singleLine = true
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (newName.isNotBlank()) {
+                        onRenameFile(newName, file)
+                        showRenameDialog = null
+                    }
+                }) { Text("Rename") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRenameDialog = null }) { Text("Cancel") }
+            }
+        )
+    }
+
+    // Move Dialog
+    if (showMoveDialog != null) {
+        val file = showMoveDialog!!
+        AlertDialog(
+            onDismissRequest = { showMoveDialog = null },
+            title = { 
+                Column {
+                    Text("Move to...")
+                    if (moveDialogCurrentPath.isNotEmpty()) {
+                        Text(
+                            text = "📂 $moveDialogCurrentPath",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                         Text(
+                            text = "📂 (Root)",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            },
+            text = {
+                LazyColumn(
+                    modifier = Modifier.heightIn(max = 300.dp).fillMaxWidth()
+                ) {
+                    // Back Button Logic in List if not root
+                    if (moveDialogCurrentPath.isNotEmpty()) {
+                        item {
+                            ListItem(
+                                headlineContent = { Text(".. (Up)") },
+                                leadingContent = { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) },
+                                modifier = Modifier.clickable { onMoveNavigateUp() }
+                            )
+                        }
+                    }
+
+                    items(availableMoveDestinations) { folderPath ->
+                        val folderName = folderPath.substringAfterLast("/")
+                         ListItem(
+                            headlineContent = { Text("📂 $folderName") },
+                            trailingContent = { Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null) },
+                            modifier = Modifier.clickable { 
+                                onMoveNavigateTo(folderPath) // Drill Down
+                            }
+                        )
+                    }
+                    if (availableMoveDestinations.isEmpty()) {
+                         item {
+                             Text(
+                                 if (moveDialogCurrentPath.isEmpty()) "No folders found." else "No subfolders.", 
+                                 modifier = Modifier.padding(16.dp),
+                                 style = MaterialTheme.typography.bodyMedium
+                             )
+                         }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    onMoveFile(file, moveDialogCurrentPath)
+                    showMoveDialog = null
+                }) {
+                    Text("Move Here")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showMoveDialog = null }) { Text("Cancel") }
+            }
+        )
     }
 
     Box(
@@ -66,7 +177,7 @@ fun FileListPane(
                 Icon(Icons.Default.Folder, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(48.dp))
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    text = "Error: $error", // Assuming error is a String, not an object with a 'message' property
+                    text = "Error: $error",
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodyLarge,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -80,12 +191,41 @@ fun FileListPane(
                 }
             }
         } else if (files.isEmpty()) {
-             cloud.wafflecommons.pixelbrainreader.ui.components.EmptyState(
-                 onActionClick = {
+             // "Ready to Work" Empty State
+             Column(
+                modifier = Modifier.fillMaxSize().padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Description, 
+                    contentDescription = null, 
+                    modifier = Modifier.size(80.dp),
+                    tint = MaterialTheme.colorScheme.primaryContainer
+                )
+                Spacer(Modifier.height(24.dp))
+                Text(
+                    "Ready to work",
+                    style = MaterialTheme.typography.displaySmall,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Select a file from the list or create a new one to get started.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+                Spacer(Modifier.height(32.dp))
+                Button(onClick = {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     onCreateFile()
-                 }
-             )
+                }) {
+                    Icon(Icons.Default.Add, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Create new file")
+                }
+            }
         } else {
             cloud.wafflecommons.pixelbrainreader.ui.components.PullToRefreshBox(
                 isRefreshing = isRefreshing,
@@ -101,11 +241,68 @@ fun FileListPane(
                     modifier = Modifier.fillMaxSize()
                 ) {
                     val filteredFiles = files.filter { it.name != "." && it.path != currentPath }
-                    items(filteredFiles) { file ->
-                        FileItemCard(file = file, onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) // Selection
-                            if (file.type == "dir") onFolderClick(file.path) else onFileClick(file)
-                        })
+                    items(filteredFiles, key = { it.path }) { file ->
+                        val dismissState = rememberSwipeToDismissBoxState(
+                            confirmValueChange = { dismissValue ->
+                                when (dismissValue) {
+                                    SwipeToDismissBoxValue.StartToEnd -> {
+                                        // Rename
+                                        showRenameDialog = file
+                                        false 
+                                    }
+                                    SwipeToDismissBoxValue.EndToStart -> {
+                                        // Move
+                                        showMoveDialog = file
+                                        onPrepareMove(file) 
+                                        false
+                                    }
+                                    else -> false
+                                }
+                            }
+                        )
+
+                        SwipeToDismissBox(
+                            state = dismissState,
+                            backgroundContent = {
+                                val direction = dismissState.dismissDirection
+                                val color by animateColorAsState(
+                                    when (dismissState.targetValue) {
+                                        SwipeToDismissBoxValue.StartToEnd -> MaterialTheme.colorScheme.primaryContainer 
+                                        SwipeToDismissBoxValue.EndToStart -> MaterialTheme.colorScheme.tertiaryContainer 
+                                        else -> MaterialTheme.colorScheme.surfaceContainerLow
+                                    }
+                                )
+                                val icon = when (dismissState.targetValue) {
+                                    SwipeToDismissBoxValue.StartToEnd -> Icons.Default.Edit
+                                    SwipeToDismissBoxValue.EndToStart -> Icons.Default.FolderOpen
+                                    else -> Icons.Default.Edit
+                                }
+                                val alignment = when (direction) {
+                                    SwipeToDismissBoxValue.StartToEnd -> Alignment.CenterStart
+                                    SwipeToDismissBoxValue.EndToStart -> Alignment.CenterEnd
+                                    else -> Alignment.CenterStart
+                                }
+                                Box(
+                                    Modifier
+                                        .fillMaxSize()
+                                        .clip(RoundedCornerShape(24.dp))
+                                        .background(color)
+                                        .padding(horizontal = 24.dp),
+                                    contentAlignment = alignment
+                                ) {
+                                    Icon(
+                                        icon,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                }
+                            }
+                        ) {
+                            FileItemCard(file = file, onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) 
+                                if (file.type == "dir") onFolderClick(file.path) else onFileClick(file)
+                            })
+                        }
                     }
                 }
             }
@@ -128,19 +325,12 @@ fun FileItemCard(file: GithubFileDto, onClick: () -> Unit) {
             modifier = Modifier.padding(16.dp).fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.secondaryContainer),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = if (file.type == "dir") Icons.Default.Folder else Icons.AutoMirrored.Filled.Article,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSecondaryContainer
-                )
-            }
+            Icon(
+                imageVector = if (file.type == "dir") Icons.Default.Folder else Icons.Default.Description,
+                contentDescription = null,
+                modifier = Modifier.size(32.dp),
+                tint = if (file.type == "dir") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+            )
             Spacer(modifier = Modifier.width(16.dp))
             Column {
                 Text(

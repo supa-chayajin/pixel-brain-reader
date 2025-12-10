@@ -90,8 +90,8 @@ class LoginViewModel @Inject constructor(
             secretManager.saveRepoInfo(owner, repo)
             
             // 2. Verification & Priming
-            // We force a refresh of the root folder to verify credentials/network
-            val result = repository.refreshFolder(owner, repo, "")
+            // We force a Full Mirror Sync to verify credentials and populate DB
+            val result = repository.syncRepository(owner, repo)
             
             if (result.isSuccess) {
                _loginSuccess.value = true
