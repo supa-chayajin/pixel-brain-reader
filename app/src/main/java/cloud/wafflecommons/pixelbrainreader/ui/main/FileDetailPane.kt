@@ -34,7 +34,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Article
+import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -252,7 +252,7 @@ fun WelcomeState(onCreateNew: () -> Unit) {
         verticalArrangement = Arrangement.Center
     ) {
         Icon(
-            imageVector = Icons.Default.Article, 
+            imageVector = Icons.AutoMirrored.Filled.Article, 
             contentDescription = null, 
             modifier = Modifier.size(80.dp),
             tint = MaterialTheme.colorScheme.primaryContainer
