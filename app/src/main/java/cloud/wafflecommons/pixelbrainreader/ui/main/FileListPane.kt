@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -53,13 +54,27 @@ fun FileListPane(
     onMoveFile: (GithubFileDto, String) -> Unit,
     onPrepareMove: (GithubFileDto) -> Unit,
     onMoveNavigateTo: (String) -> Unit,
-    onMoveNavigateUp: () -> Unit
+    onMoveNavigateUp: () -> Unit,
+    onAnalyzeFolder: () -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
     
     // Dialog States
     var showRenameDialog by remember { mutableStateOf<GithubFileDto?>(null) }
     var showMoveDialog by remember { mutableStateOf<GithubFileDto?>(null) }
+    
+    // ... (Dialogs Code kept via context matching or skipped if outside chunk) ... Note: I should be careful not to overwrite the dialogs if I don't select them.
+    // Actually the logic is split. I will target the Signature and List Content separately.
+
+    // ... To avoid replacing the whole file, I will split this into chunks using multi_replace is better, but I can't use multi_replace for adding parameter AND modifying body if they are far apart. 
+    // I'll do two replaces.
+
+    // 1. Signature Update is handled here if I include the function start.
+    // 2. Button Addition is inside LazyColumn.
+
+    // Let's assume I can't easily see the middle lines for Dialogs.
+    // I will use `replace_file_content` for the signature first.
+
 
     // Rename Dialog
     if (showRenameDialog != null) {
@@ -240,6 +255,25 @@ fun FileListPane(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
+                    // Header: Analyze Folder
+                    item(key = "analyze_btn") {
+                        FilledTonalButton(
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onAnalyzeFolder()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.filledTonalButtonColors(
+                                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                            )
+                        ) {
+                             Icon(Icons.Rounded.AutoAwesome, null, modifier = Modifier.size(18.dp))
+                             Spacer(Modifier.width(8.dp))
+                             Text("Analyze Folder")
+                        }
+                    }
+
                     val filteredFiles = files.filter { it.name != "." && it.path != currentPath }
                     items(filteredFiles, key = { it.path }) { file ->
                         val dismissState = rememberSwipeToDismissBoxState(
@@ -339,6 +373,17 @@ fun FileItemCard(file: GithubFileDto, onClick: () -> Unit) {
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
+                if (file.lastModified != null) {
+                    val dateFormatted = remember(file.lastModified) {
+                        java.text.SimpleDateFormat("MMM dd, yyyy", java.util.Locale.getDefault())
+                            .format(java.util.Date(file.lastModified))
+                    }
+                    Text(
+                        text = dateFormatted,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
     }

@@ -7,5 +7,6 @@ data class GithubFileDto(
     @SerializedName("path") val path: String,
     @SerializedName("type") val type: String,
     @SerializedName("download_url") val downloadUrl: String?,
-    @SerializedName("sha") val sha: String? = null
+    @SerializedName("sha") val sha: String? = null,
+    val lastModified: Long? = null // UI Metadata
 )

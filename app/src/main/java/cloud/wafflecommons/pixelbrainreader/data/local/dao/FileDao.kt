@@ -68,4 +68,12 @@ abstract class FileDao {
 
     @Query("DELETE FROM files WHERE path IN (:paths)")
     abstract suspend fun deleteFiles(paths: List<String>)
+
+    @Query("SELECT path, sha FROM files")
+    abstract suspend fun getAllFileShas(): List<FileShaTuple>
 }
+
+data class FileShaTuple(
+    @androidx.room.ColumnInfo(name = "path") val path: String,
+    @androidx.room.ColumnInfo(name = "sha") val sha: String?
+)

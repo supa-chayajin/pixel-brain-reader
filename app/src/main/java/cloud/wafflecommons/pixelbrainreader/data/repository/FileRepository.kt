@@ -13,6 +13,7 @@ import javax.inject.Singleton
 
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.SyncMetadataDao
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.SyncMetadataEntity
+import cloud.wafflecommons.pixelbrainreader.data.local.dao.FileShaTuple
 
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.FileContentDao
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.FileContentEntity
@@ -469,12 +470,9 @@ class FileRepository @Inject constructor(
      */
     suspend fun syncRepository(owner: String, repo: String, branch: String = "main"): Result<Unit> {
         return try {
-            Log.d("PixelBrain", "Starting Full Mirror Sync for $owner/$repo/$branch")
+            Log.d("PixelBrain", "Starting Smart Incremental Sync for $owner/$repo/$branch")
             
-            // 1. Fetch Tree
-            // Note: We need a SHA or Branch name. API uses SHA param but accepts branch names too usually.
-            // If not, we need to get branch SHA first. Assuming branch name works for now (GitHub API often supports ref).
-            // If it fails, we might need `getRef` then `getTree`.
+            // 1. Fetch Remote Tree
             val treeResult = gitProvider.getGitTree(owner, repo, branch)
             if (treeResult.isFailure) {
                 return Result.failure(treeResult.exceptionOrNull() ?: Exception("Failed to fetch remote tree"))
@@ -483,14 +481,15 @@ class FileRepository @Inject constructor(
             val treeResponse = treeResult.getOrNull() ?: throw Exception("Empty Tree Response")
             val remoteItems = treeResponse.tree
             
-            // 2. Diff Strategy
+            // 2. Local State (Path -> SHA) - Optimize DB Query
+            val localFileMap = fileDao.getAllFileShas().associate { it.path to it.sha }
+            val localPaths = localFileMap.keys
             val remotePaths = remoteItems.map { it.path }.toSet()
-            val localPaths = fileDao.getAllPaths().toSet()
             
-            // A. Prune (Local files NOT in Remote)
+            // 3. Prune Strategy (Delete Local NOT in Remote)
             val toDelete = localPaths.minus(remotePaths).toList()
             
-            // 3. Execution (Transactional)
+            // 4. Execution (Transactional)
             database.withTransaction {
                 // A. Prune
                 if (toDelete.isNotEmpty()) {
@@ -498,56 +497,53 @@ class FileRepository @Inject constructor(
                     fileDao.deleteFiles(toDelete)
                 }
                 
-                // B. Upsert
+                // B. Sync (Insert/Update & Download if changed)
+                var downloadCount = 0
+                var skipCount = 0
+                
                 for (item in remoteItems) {
                     if (item.type == "tree") {
-                        // Ensure Folder Exists
-                        createFolderEntity(item.path)
+                        // Ensure Folder Entity Exists
+                         if (!localPaths.contains(item.path)) {
+                             createFolderEntity(item.path)
+                         }
                     } else if (item.type == "blob") {
-                         // File Handling
-                         // For now, we "Overwrite" based on policy.
-                         // Optimization: Check if we really need to download.
-                         // If we had local SHA, we could compare: if (localSha == item.sha) continue
-                         // Since we don't, we might skip if file exists?
-                         // "Upsert: ...check if it exists locally... or just overwrite content."
-                         // "Download content for *every* .md file found."
-                         // We will implement a check: If it exists, we skip downloading CONTENT unless it's a .md file we want to ensure is fresh.
-                         
                          val isMarkdown = item.path.endsWith(".md", ignoreCase = true)
+                         val localSha = localFileMap[item.path]
                          
-                         // 1. Create/Update Entity (Always update metadata like size/url if we had it)
+                         // INCREMENTAL CHECK
+                         // Download if: New File (localSha null) OR Content Changed (SHA mismatch)
+                         val shouldDownload = (localSha == null) || (localSha != item.sha)
+
+                         // 1. Update Entity Metadata (Always, to ensure SHA is synced)
                          val entity = FileEntity(
                              path = item.path,
                              name = item.path.substringAfterLast("/"),
                              type = "file",
-                             downloadUrl = item.url, // GitTreeItem stores blob url
-                             isDirty = false, // Synced
+                             downloadUrl = item.url, // GitTreeItem Blob URL
+                             sha = item.sha,         // Store Remote SHA
+                             isDirty = false,        // Synced
                              lastSyncedAt = System.currentTimeMillis()
                          )
-                         fileDao.insertFile(entity) // Insert or Replace
+                         fileDao.insertFile(entity) // Upsert
                          
                          // 2. Content Sync
-                         // We only download content if it's Markdown (for the Reader app).
+                         // Only download content for Markdowns that CHANGED or are NEW.
                          if (isMarkdown) {
-                             // Construct raw URL for downloading content
-                             // This is a heuristic. For private repos we rely on the generic 'getFileContent' which might not use this raw URL if authenticated differently?
-                             // Wait, 'getFileContent(url)' uses annotations, so authentication headers are injected.
-                             // But 'raw.githubusercontent.com' might require token differently (token in header works).
-                             // Ideally we use a safer route.
-                             // 'GitTreeItem.url' -> https://api.github.com/repos/:owner/:repo/git/blobs/:sha
-                             // Fetching THAT returns JSON content {"content": "base64..."}.
-                             // Adapting 'refreshFileContent' to handle this would be best but requires parsing.
-                             
-                             // Allow "simple" approach using Raw URL for now. 
-                             // If this fails for private repos, we will need to implement blob API parsing.
-                             val rawUrl = "https://raw.githubusercontent.com/$owner/$repo/$branch/${item.path}"
-                             refreshFileContent(item.path, rawUrl)
+                             if (shouldDownload) {
+                                  // Construct raw URL (See previous implementation notes)
+                                  val rawUrl = "https://raw.githubusercontent.com/$owner/$repo/$branch/${item.path}"
+                                  refreshFileContent(item.path, rawUrl)
+                                  downloadCount++
+                             } else {
+                                  skipCount++
+                             }
                          }
                     }
                 }
+                 Log.d("PixelBrain", "Sync Report: Downloaded $downloadCount, Skipped $skipCount (Up-to-date)")
             }
             
-            Log.d("PixelBrain", "Full Mirror Sync Complete")
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e("PixelBrain", "Sync Failed", e)

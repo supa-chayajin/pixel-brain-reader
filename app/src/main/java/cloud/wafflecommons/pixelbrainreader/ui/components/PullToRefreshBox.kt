@@ -15,6 +15,8 @@ import androidx.compose.ui.unit.IntOffset
 import kotlin.math.roundToInt
 
 import androidx.compose.ui.zIndex
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.Icons
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -43,27 +45,35 @@ fun PullToRefreshBox(
         modifier = modifier,
         state = state,
         indicator = {
-             // Indicator at Z = -1 (Behind Content)
-             Box(
-                 modifier = Modifier
-                     .align(Alignment.TopCenter)
-                     .zIndex(-1f)
-                     .padding(top = 16.dp)
+             // Indicator: "Pull to Sync" Message (Behind Content)
+             // Visible only during drag, hidden when Sync starts (Top Bar takes over)
+             androidx.compose.animation.AnimatedVisibility(
+                visible = state.distanceFraction > 0f && !isRefreshing,
+                enter = androidx.compose.animation.fadeIn(),
+                exit = androidx.compose.animation.fadeOut(),
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .zIndex(-1f) // Behind content
+                    .padding(top = 32.dp) // Push down a bit
              ) {
-                 if (isRefreshing) {
-                     androidx.compose.material3.CircularProgressIndicator(
-                         modifier = Modifier.size(24.dp),
-                         strokeWidth = 2.dp,
-                         color = androidx.compose.material3.MaterialTheme.colorScheme.primary
-                     )
-                 } else {
-                      androidx.compose.material3.CircularProgressIndicator(
-                         progress = { state.distanceFraction.coerceIn(0f, 1f) },
-                         modifier = Modifier.size(24.dp),
-                         strokeWidth = 2.dp,
-                         color = androidx.compose.material3.MaterialTheme.colorScheme.primary,
-                     )
-                 }
+                androidx.compose.foundation.layout.Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
+                    modifier = Modifier.padding(8.dp)
+                ) {
+                    androidx.compose.material3.Icon(
+                        imageVector = androidx.compose.material.icons.Icons.Filled.Refresh,
+                        contentDescription = null,
+                        tint = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    androidx.compose.foundation.layout.Spacer(modifier = Modifier.padding(4.dp))
+                    androidx.compose.material3.Text(
+                        text = if (state.distanceFraction >= 1f) "Release to Sync" else "Syncing Repository...",
+                        style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
              }
         },
         content = {

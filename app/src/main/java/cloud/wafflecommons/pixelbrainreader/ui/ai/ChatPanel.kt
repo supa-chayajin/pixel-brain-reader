@@ -19,14 +19,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.outlined.Psychology
-import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Code
-import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Description
-import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.EventNote
 import androidx.compose.material.icons.rounded.Mic
-import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -36,14 +32,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
-import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -60,24 +51,9 @@ fun ChatPanel(
     var textState by remember { mutableStateOf(TextFieldValue("")) }
     val listState = rememberLazyListState()
 
-    // --- Collapsible Header Logic ---
-    // We need to know the header height to offset the list and to clamp the scroll.
-    // Since content is dynamic (chips appear/disappear), we measure it globally.
-    var headerHeightPx by remember { mutableFloatStateOf(0f) }
-    var headerOffsetHeightPx by remember { mutableFloatStateOf(0f) }
+    // --- Collapsible Header Logic REMOVED for Stability ---
+    // We use a simple Column layout to keep the header sticky at the top without complex offset calculations.
 
-    val nestedScrollConnection = remember {
-        object : NestedScrollConnection {
-            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                val delta = available.y
-                val newOffset = headerOffsetHeightPx + delta
-                // Clamp offset between -headerHeight and 0
-                headerOffsetHeightPx = newOffset.coerceIn(-headerHeightPx, 0f)
-                return Offset.Zero // Let the list scroll too
-            }
-        }
-    }
-    
     // Auto-scroll logic (Optimized)
     LaunchedEffect(viewModel.messages.size) {
         if (viewModel.messages.isNotEmpty()) {
@@ -86,128 +62,79 @@ fun ChatPanel(
     }
 
     Scaffold(
-        modifier = modifier.nestedScroll(nestedScrollConnection),
         containerColor = Color.Transparent, 
-        contentWindowInsets = ScaffoldDefaults.contentWindowInsets.exclude(WindowInsets.ime), // Prevent Scaffold from consuming IME
-        // No TopBar in Scaffold, we manage it manually
+        contentWindowInsets = ScaffoldDefaults.contentWindowInsets.exclude(WindowInsets.ime),
     ) { innerPadding ->
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .imePadding() // Manually padding content to move Input Bar up
+                .imePadding()
         ) {
-            
-            // --- Content Area (LazyColumn) ---
-            val density = LocalDensity.current
-            // ...
-            val headerHeightDp = with(density) { headerHeightPx.toDp() }
-            
-            Column(modifier = Modifier.fillMaxSize()) {
-                Box(modifier = Modifier.weight(1f)) {
-                    if (viewModel.messages.isEmpty()) {
-                        EmptyStatePlaceholder()
-                    } else {
-                        LazyColumn(
-                            state = listState,
-                            modifier = Modifier.fillMaxSize()
-                                .padding(horizontal = 16.dp),
-                            // Top padding pushes content down by header height initially
-                            // We add extra spcaing for aesthetics
-                            contentPadding = PaddingValues(top = headerHeightDp + 16.dp, bottom = 24.dp), 
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            items(viewModel.messages) { msg ->
-                                ChatBubble(
-                                    message = msg,
-                                    onInsert = if (viewModel.currentMode == ChatMode.SCRIBE && !msg.isUser) onInsertContent else null
-                                )
-                            }
+            // 1. Header (Chips) - Fixed at Top
+            Surface(
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+                modifier = Modifier.fillMaxWidth().zIndex(1f)
+            ) {
+                 Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 12.dp, horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    ScribePersona.entries.forEach { persona ->
+                        val icon = when(persona) {
+                            ScribePersona.TECH_WRITER -> Icons.Rounded.Description
+                            ScribePersona.CODER -> Icons.Rounded.Code
+                            ScribePersona.PLANNER -> Icons.Rounded.EventNote
                         }
+                        ExpressiveChip(
+                            label = persona.name.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() },
+                            icon = icon,
+                            isSelected = viewModel.currentPersona == persona,
+                            onClick = { viewModel.switchPersona(persona) }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
                     }
                 }
-                
-                // --- Input Bar (Fixed at bottom) ---
-                StealthInputBar(
-                    textState = textState,
-                    onTextChange = { textState = it },
-                    onSend = {
-                        if (textState.text.isNotBlank()) {
-                            viewModel.sendMessage(textState.text)
-                            textState = TextFieldValue("")
-                        }
-                    },
-                    isLoading = viewModel.isLoading,
-                    hint = if (viewModel.currentMode == ChatMode.RAG) "Ask your documents..." else "Describe what to write..."
-                )
             }
 
-            // --- Collapsible Header ---
-            // This sits on top of the list
-            Surface(
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f), // Slight transparency for cool effect
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .onGloballyPositioned { coordinates ->
-                        headerHeightPx = coordinates.size.height.toFloat()
-                    }
-                    .offset { IntOffset(x = 0, y = headerOffsetHeightPx.roundToInt()) }
-                    .zIndex(1f) // Ensure it's above the list
-            ) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    // 1. Top Bar Elements (Title + Delete)
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(64.dp)
-                            .padding(horizontal = 16.dp),
-                    ) {
-                        Text(
-                            "Neural Vault",
-                            style = MaterialTheme.typography.titleLarge,
-                            modifier = Modifier.align(Alignment.Center)
-                        )
-                        IconButton(
-                            onClick = { viewModel.resetChat() },
-                            modifier = Modifier.align(Alignment.CenterEnd)
-                        ) {
-                            Icon(Icons.Rounded.Delete, "Clear Chat", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-
-                    // 2. Toggle
-                    ExpressiveToggle(
-                        currentMode = viewModel.currentMode,
-                        onModeSelected = { viewModel.switchMode(it) }
-                    )
-
-                    // 3. Chips (Scribe only)
-                    AnimatedVisibility(visible = viewModel.currentMode == ChatMode.SCRIBE) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 16.dp, start = 16.dp, end = 16.dp),
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            ScribePersona.entries.forEach { persona ->
-                                val icon = when(persona) {
-                                    ScribePersona.TECH_WRITER -> Icons.Rounded.Description
-                                    ScribePersona.CODER -> Icons.Rounded.Code
-                                    ScribePersona.PLANNER -> Icons.Rounded.EventNote
+            // 2. Chat Content & Input
+            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    Box(modifier = Modifier.weight(1f)) {
+                         if (viewModel.messages.isEmpty()) {
+                            EmptyStatePlaceholder()
+                        } else {
+                            LazyColumn(
+                                state = listState,
+                                modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+                                contentPadding = PaddingValues(top = 16.dp, bottom = 24.dp), 
+                                verticalArrangement = Arrangement.spacedBy(24.dp)
+                            ) {
+                                items(viewModel.messages) { msg ->
+                                    ChatBubble(
+                                        message = msg,
+                                        onInsert = if (!msg.isUser) onInsertContent else null
+                                    )
                                 }
-                                ExpressiveChip(
-                                    label = persona.name.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() },
-                                    icon = icon,
-                                    isSelected = viewModel.currentPersona == persona,
-                                    onClick = { viewModel.switchPersona(persona) }
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
                             }
                         }
                     }
+                    
+                    // Input Bar
+                     StealthInputBar(
+                        textState = textState,
+                        onTextChange = { textState = it },
+                        onSend = {
+                            if (textState.text.isNotBlank()) {
+                                viewModel.sendMessage(textState.text)
+                                textState = TextFieldValue("")
+                            }
+                        },
+                        isLoading = viewModel.isLoading,
+                        hint = "Describe what to write..."
+                    )
                 }
             }
         }
@@ -216,86 +143,7 @@ fun ChatPanel(
 
 // --- COMPONENTS CUSTOM ---
 
-@Composable
-fun ExpressiveToggle(
-    currentMode: ChatMode,
-    onModeSelected: (ChatMode) -> Unit
-) {
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = CircleShape,
-        modifier = Modifier
-            .height(56.dp) // Légèrement plus grand pour l'impact
-            .width(280.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxSize(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            ToggleOption(
-                text = "Vault",
-                icon = Icons.Rounded.Search,
-                isSelected = currentMode == ChatMode.RAG,
-                modifier = Modifier.weight(1f),
-                onClick = { onModeSelected(ChatMode.RAG) }
-            )
-            ToggleOption(
-                text = "Scribe",
-                icon = Icons.Rounded.Edit,
-                isSelected = currentMode == ChatMode.SCRIBE,
-                modifier = Modifier.weight(1f),
-                onClick = { onModeSelected(ChatMode.SCRIBE) }
-            )
-        }
-    }
-}
 
-@Composable
-fun ToggleOption(
-    text: String,
-    icon: ImageVector,
-    isSelected: Boolean,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    val backgroundColor by animateColorAsState(
-        targetValue = if (isSelected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
-        animationSpec = tween(300),
-        label = "bg"
-    )
-    val contentColor by animateColorAsState(
-        targetValue = if (isSelected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-        label = "content"
-    )
-
-    Box(
-        modifier = modifier
-            .fillMaxHeight()
-            .padding(4.dp)
-            .clip(CircleShape)
-            .background(backgroundColor)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null
-            ) { onClick() },
-        contentAlignment = Alignment.Center
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = contentColor,
-                modifier = Modifier.size(20.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = text,
-                style = MaterialTheme.typography.titleSmall, // Plus gras
-                color = contentColor
-            )
-        }
-    }
-}
 
 @Composable
 fun ExpressiveChip(
@@ -503,12 +351,8 @@ fun ChatBubble(message: ChatMessage, onInsert: ((String) -> Unit)?) {
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 if (!isUser) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Rounded.AutoAwesome, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.tertiary)
-                        Spacer(Modifier.width(6.dp))
-                        Text("Brain", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary)
-                    }
-                    Spacer(Modifier.height(8.dp))
+                     // Spacer only for spacing
+                     Spacer(Modifier.height(8.dp))
                 }
 
                 Text(

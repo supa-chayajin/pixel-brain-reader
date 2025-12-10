@@ -19,14 +19,16 @@ class GeminiScribeManager @Inject constructor() {
      * Returns a Flow that emits the text chunks as they are generated.
      */
     fun generateScribeContent(prompt: String, persona: ScribePersona): Flow<String> {
+        val userLanguage = java.util.Locale.getDefault().displayLanguage
+        
         val systemInstruction = when (persona) {
-            ScribePersona.TECH_WRITER -> "You are an expert Technical Writer. Produce clear, concise, and structured documentation. Use markdown headers and bullet points."
-            ScribePersona.CODER -> "You are a Senior Software Engineer. Generate clean, efficient, and well-commented code. Explain the logic briefly."
-            ScribePersona.PLANNER -> "You are a Product Manager. Create structured plans, user stories, and roadmaps. Focus on business value and timelines."
+            ScribePersona.TECH_WRITER -> "You are an expert Technical Writer. Produce clear, concise, and structured documentation. Use markdown headers and bullet points. ALWAYS answer in $userLanguage language."
+            ScribePersona.CODER -> "You are a Senior Software Engineer. Generate clean, efficient, and well-commented code. Explain the logic briefly. ALWAYS answer in $userLanguage language."
+            ScribePersona.PLANNER -> "You are a Product Manager. Create structured plans, user stories, and roadmaps. Focus on business value and timelines. ALWAYS answer in $userLanguage language."
         }
 
         val generativeModel = GenerativeModel(
-            modelName = "gemini-2.5-pro",
+            modelName = "gemini-2.5-flash-lite",
             apiKey = apiKey,
             systemInstruction = content { text(systemInstruction) }
         )

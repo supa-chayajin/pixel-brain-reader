@@ -43,7 +43,29 @@ class GithubRepository @Inject constructor(
     override suspend fun getFileContent(url: String): Result<String> {
         return try {
             val response = apiService.getFileContent(url)
-            Result.success(response.string())
+            val rawString = response.string()
+            
+            // Check for GitHub API Blob JSON (starts with { "sha": ..., "content": ..., "encoding": "base64" })
+            if (rawString.trim().startsWith("{") && rawString.contains("\"encoding\": \"base64\"")) {
+                try {
+                    val json = org.json.JSONObject(rawString)
+                    if (json.has("content")) {
+                        val base64Content = json.getString("content")
+                        // GitHub Blob content often has newlines; Base64.DEFAULT handles them or we might need to strip.
+                        // Ideally use Base64.DEFAULT which ignores non-alphabet characters (newlines)
+                        val decodedBytes = android.util.Base64.decode(base64Content, android.util.Base64.DEFAULT)
+                        Result.success(String(decodedBytes, Charsets.UTF_8))
+                    } else {
+                        // JSON but no content field? Return raw.
+                        Result.success(rawString)
+                    }
+                } catch (e: Exception) {
+                    // JSON parse failed, fallback to raw
+                    Result.success(rawString)
+                }
+            } else {
+                 Result.success(rawString)
+            }
         } catch (e: Exception) {
             Result.failure(e)
         }

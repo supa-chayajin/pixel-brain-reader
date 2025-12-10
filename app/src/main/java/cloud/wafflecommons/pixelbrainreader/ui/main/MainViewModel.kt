@@ -25,7 +25,8 @@ import kotlinx.coroutines.launch
 class MainViewModel @Inject constructor(
     private val repository: FileRepository,
     private val secretManager: SecretManager,
-    private val userPrefs: UserPreferencesRepository
+    private val userPrefs: UserPreferencesRepository,
+    private val geminiRagManager: cloud.wafflecommons.pixelbrainreader.data.ai.GeminiRagManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(UiState())
@@ -125,12 +126,17 @@ class MainViewModel @Inject constructor(
         if (owner == null || repo == null) return
 
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, isRefreshing = true)
+            // Trigger Top Bar AND Pull-Physics
+            _uiState.value = _uiState.value.copy(isRefreshing = true, isSyncing = true)
             
             // Hard Refresh / Authoritative Sync (Full Repo)
             val result = repository.syncRepository(owner, repo)
             
-            _uiState.value = _uiState.value.copy(isLoading = false, isRefreshing = false)
+            _uiState.value = _uiState.value.copy(
+                isLoading = false, // clear loading if it was set
+                isRefreshing = false, 
+                isSyncing = false
+            )
             
             if (result.isFailure) {
                 val errorMsg = result.exceptionOrNull()?.localizedMessage ?: "Unknown error"
@@ -200,6 +206,39 @@ class MainViewModel @Inject constructor(
         contentObservationJob?.cancel()
         contentObservationJob = repository.getFileContentFlow(path)
             .onEach { content ->
+                 // Self-Healing: Check for Corrupted JSON Data
+                 // RELAXED CHECK: If it looks like a JSON Object, try to parse it.
+                 // The previous check failed because of whitespace differences in "encoding":"base64".
+                 if (content != null && content.trim().startsWith("{")) {
+                     try {
+                         // Corrupted Data Detected! Repairs...
+                         val json = org.json.JSONObject(content)
+                         // Check for GitHub API signature fields
+                         if (json.has("content") && json.has("sha") && json.has("encoding")) {
+                             val encoding = json.getString("encoding")
+                             if (encoding.equals("base64", ignoreCase = true)) {
+                                 val base64Content = json.optString("content", "")
+                                 // Handle potential newlines in Base64 string from GitHub
+                                 val cleanBase64 = base64Content.replace("\n", "")
+                                 val decodedBytes = android.util.Base64.decode(cleanBase64, android.util.Base64.DEFAULT)
+                                 val cleanContent = String(decodedBytes, Charsets.UTF_8)
+                                 
+                                 // 1. Show Clean Content Immediately
+                                 _uiState.value = _uiState.value.copy(selectedFileContent = cleanContent)
+                                 
+                                 // 2. Persist Repair (Async)
+                                 viewModelScope.launch {
+                                     repository.saveFileLocally(path, cleanContent)
+                                     Log.d("PixelBrain", "Self-Healed corrupted file (Aggressive): $path")
+                                 }
+                                 return@onEach
+                             }
+                         }
+                     } catch (e: Exception) {
+                         // Not JSON or Not GitHub Blob JSON -> Treat as normal text
+                     }
+                 }
+                 
                  _uiState.value = _uiState.value.copy(selectedFileContent = content)
             }
             .launchIn(viewModelScope)
@@ -218,11 +257,11 @@ class MainViewModel @Inject constructor(
 
     private fun syncFile(path: String, url: String, isUserAction: Boolean) {
          viewModelScope.launch {
-            if (isUserAction) _uiState.value = _uiState.value.copy(isRefreshing = true)
+            if (isUserAction) _uiState.value = _uiState.value.copy(isRefreshing = true, isSyncing = true)
             
             repository.refreshFileContent(path, url)
             
-            if (isUserAction) _uiState.value = _uiState.value.copy(isRefreshing = false)
+            if (isUserAction) _uiState.value = _uiState.value.copy(isRefreshing = false, isSyncing = false)
          }
     }
 
@@ -251,20 +290,26 @@ class MainViewModel @Inject constructor(
         if (file.downloadUrl == null) return
 
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isRefreshing = true)
+            _uiState.value = _uiState.value.copy(isRefreshing = true, isSyncing = true)
             repository.refreshFileContent(file.path, file.downloadUrl)
-            _uiState.value = _uiState.value.copy(isRefreshing = false)
+            _uiState.value = _uiState.value.copy(isRefreshing = false, isSyncing = false)
         }
     }
 
     fun saveFile() {
         val currentFileName = _uiState.value.selectedFileName ?: return
-        val file = _uiState.value.files.find { it.name == currentFileName } ?: return
         val contentToSave = _uiState.value.unsavedContent ?: _uiState.value.selectedFileContent ?: return
+
+        // Resolve Path: Use Repo File or Construct Virtual Path
+        val file = _uiState.value.files.find { it.name == currentFileName }
+        val path = file?.path ?: run {
+            val parent = _uiState.value.currentPath
+            if (parent.isNotEmpty()) "$parent/$currentFileName" else currentFileName
+        }
 
         viewModelScope.launch {
             // 1. Save Local
-            repository.saveFileLocally(file.path, contentToSave)
+            repository.saveFileLocally(path, contentToSave)
             
             // 2. Clear Draft & Exit Edit Mode
             _uiState.value = _uiState.value.copy(
@@ -339,7 +384,14 @@ class MainViewModel @Inject constructor(
 
 
 
-    private fun FileEntity.toDto() = GithubFileDto(name, path, type, downloadUrl)
+    private fun FileEntity.toDto() = GithubFileDto(
+        name = name,
+        path = path, 
+        type = type, 
+        downloadUrl = downloadUrl,
+        sha = sha,
+        lastModified = localModifiedTimestamp ?: lastSyncedAt
+    )
 
     fun handleShareIntent(intent: android.content.Intent) {
         if (intent.action == android.content.Intent.ACTION_SEND) {
@@ -540,6 +592,56 @@ class MainViewModel @Inject constructor(
             val newDto = GithubFileDto(name, fullPath, "file", null)
             loadFile(newDto)
             toggleEditMode()
+        }
+    }
+
+    /**
+     * Folder Insight / RAG Pivot
+     * Analyzes current folder contents and generates an index.
+     */
+    fun analyzeCurrentFolder() {
+        val files = _uiState.value.files.filter { it.type == "file" }.take(10) // Limit to 10 files
+        if (files.isEmpty()) {
+            _uiState.value = _uiState.value.copy(userMessage = "No files to analyze here.")
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true, userMessage = "AI analyzing folder...")
+            
+            // 1. Fetch Content
+            val fileContexts = files.mapNotNull { file ->
+                // Try to get content from DB directly if available (optimized) needed?
+                // For now, we rely on repository flow logic or just fetching standard.
+                // We'll use a simple approach: if content is null, skip or fetch? 
+                // Repository doesn't have a simple synchronous 'getOne'. 
+                // We'll rely on the fact that 'files' are DTOs. 
+                // We need to fetch actual content.
+                // Assuming we can get it from DB.
+                val content = repository.getFileContentFlow(file.path).firstOrNull() 
+                if (content != null) file.name to content else null
+            }
+            
+            // 2. Call Gemini
+            val rawSummary = geminiRagManager.analyzeFolder(fileContexts)
+            
+            // Sanitize Output: Remove potential Markdown code fences
+            val summary = rawSummary
+                .replace(Regex("^```markdown\\s*", RegexOption.IGNORE_CASE), "")
+                .replace(Regex("^```\\s*", RegexOption.IGNORE_CASE), "")
+                .replace(Regex("\\s*```$"), "")
+                .trim()
+            
+            // 3. Show Result as Virtual File (Detail Pane)
+            _uiState.value = _uiState.value.copy(
+                isLoading = false,
+                importState = null,
+                selectedFileName = "Folder_Insight.md",
+                selectedFileContent = "", // Disk state is empty
+                unsavedContent = summary, // Current state is the summary (Draft)
+                hasUnsavedChanges = true,
+                isEditing = false // View Mode
+            )
         }
     }
 }

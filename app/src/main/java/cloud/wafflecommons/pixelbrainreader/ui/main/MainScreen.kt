@@ -171,7 +171,7 @@ fun MainScreen(
                     }
                 },
                 icon = { Icon(Icons.Default.Dashboard, contentDescription = "Home") },
-                label = { Text("Docs") }
+                label = { Text("Repo") }
             )
             item(
                 selected = currentRoute == "chat",
@@ -185,7 +185,7 @@ fun MainScreen(
                     }
                 },
                 icon = { Icon(Icons.Outlined.Psychology, contentDescription = "Brain") },
-                label = { Text("Brain") }
+                label = { Text("Chat") }
             )
         }
     ) {
@@ -312,7 +312,7 @@ fun MainScreen(
                         )
                     },
 
-                    contentWindowInsets = WindowInsets(0, 0, 0, 0) // We handle insets in content (List/Detail)
+                    contentWindowInsets = WindowInsets(0, 0, 0, 32) // We handle insets in content (List/Detail)
                 ) { padding ->
                     Box(
                         modifier = Modifier
@@ -355,7 +355,8 @@ fun MainScreen(
                                                     onMoveFile = { file, folder -> viewModel.moveFile(file, folder) },
                                                     onPrepareMove = { file -> viewModel.prepareMove(file) },
                                                     onMoveNavigateTo = { path -> viewModel.navigateToMoveFolder(path) },
-                                                    onMoveNavigateUp = { viewModel.navigateUpMoveFolder() }
+                                                    onMoveNavigateUp = { viewModel.navigateUpMoveFolder() },
+                                                    onAnalyzeFolder = { viewModel.analyzeCurrentFolder() }
                                                 )
                                             }
                                             

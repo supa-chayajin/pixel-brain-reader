@@ -19,7 +19,7 @@ import cloud.wafflecommons.pixelbrainreader.data.local.dao.EmbeddingDao
         FileContentEntity::class,
         EmbeddingEntity::class // V4.0 Neural Vault
     ], 
-    version = 5, 
+    version = 6, 
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
