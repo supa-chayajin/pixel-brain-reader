@@ -44,6 +44,10 @@ class FileRepository @Inject constructor(
         return fileDao.getAllFolderPaths()
     }
 
+    fun searchFiles(query: String): Flow<List<FileEntity>> {
+        return fileDao.searchFiles(query)
+    }
+
     /**
      * Sync File List.
      * Fetches from API -> Updates DB.

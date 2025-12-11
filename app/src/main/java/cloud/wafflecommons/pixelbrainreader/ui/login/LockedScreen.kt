@@ -26,46 +26,48 @@ import cloud.wafflecommons.pixelbrainreader.R
 fun LockedScreen(
     onUnlockClick: () -> Unit
 ) {
-    androidx.compose.material3.Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background // Explicitly use background color
-    ) {
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier.fillMaxSize()
+    cloud.wafflecommons.pixelbrainreader.ui.theme.PixelBrainReaderTheme {
+        androidx.compose.material3.Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.surface
         ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.padding(32.dp)
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.fillMaxSize()
             ) {
-                // App Logo
-                Image(
-                    painter = painterResource(id = R.drawable.ic_launcher_foreground),
-                    contentDescription = "App Logo",
-                    modifier = Modifier.size(120.dp)
-                )
-                
-                Spacer(modifier = Modifier.height(32.dp))
-                
-                // Status Text
-                Text(
-                    text = "Pixel Brain is locked",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    fontWeight = FontWeight.SemiBold
-                )
-                
-                Spacer(modifier = Modifier.height(48.dp))
-                
-                // Unlock Button
-                Button(
-                    onClick = onUnlockClick,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary
-                    )
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(32.dp)
                 ) {
-                    Text(text = "Unlock")
+                    // App Logo
+                    Image(
+                        painter = painterResource(id = R.drawable.ic_launcher_foreground),
+                        contentDescription = "App Logo",
+                        modifier = Modifier.size(120.dp)
+                    )
+                    
+                    Spacer(modifier = Modifier.height(32.dp))
+                    
+                    // Status Text
+                    Text(
+                        text = "Pixel Brain is locked",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    
+                    Spacer(modifier = Modifier.height(48.dp))
+                    
+                    // Unlock Button
+                    Button(
+                        onClick = onUnlockClick,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        )
+                    ) {
+                        Text(text = "Unlock")
+                    }
                 }
             }
         }

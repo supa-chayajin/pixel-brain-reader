@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material3.*
@@ -41,6 +42,7 @@ fun FileListPane(
     moveDialogCurrentPath: String, // Added state
     isLoading: Boolean,
     isRefreshing: Boolean,
+    searchQuery: String = "", // Added for Search Feedback
     error: String?,
     currentPath: String,
     showMenuIcon: Boolean,
@@ -62,20 +64,6 @@ fun FileListPane(
     // Dialog States
     var showRenameDialog by remember { mutableStateOf<GithubFileDto?>(null) }
     var showMoveDialog by remember { mutableStateOf<GithubFileDto?>(null) }
-    
-    // ... (Dialogs Code kept via context matching or skipped if outside chunk) ... Note: I should be careful not to overwrite the dialogs if I don't select them.
-    // Actually the logic is split. I will target the Signature and List Content separately.
-
-    // ... To avoid replacing the whole file, I will split this into chunks using multi_replace is better, but I can't use multi_replace for adding parameter AND modifying body if they are far apart. 
-    // I'll do two replaces.
-
-    // 1. Signature Update is handled here if I include the function start.
-    // 2. Button Addition is inside LazyColumn.
-
-    // Let's assume I can't easily see the middle lines for Dialogs.
-    // I will use `replace_file_content` for the signature first.
-
-
     // Rename Dialog
     if (showRenameDialog != null) {
         val file = showRenameDialog!!
@@ -206,41 +194,70 @@ fun FileListPane(
                 }
             }
         } else if (files.isEmpty()) {
-             // "Ready to Work" Empty State
-             Column(
-                modifier = Modifier.fillMaxSize().padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Description, 
-                    contentDescription = null, 
-                    modifier = Modifier.size(80.dp),
-                    tint = MaterialTheme.colorScheme.primaryContainer
-                )
-                Spacer(Modifier.height(24.dp))
-                Text(
-                    "Ready to work",
-                    style = MaterialTheme.typography.displaySmall,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "Select a file from the list or create a new one to get started.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                )
-                Spacer(Modifier.height(32.dp))
-                Button(onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onCreateFile()
-                }) {
-                    Icon(Icons.Default.Add, null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Create new file")
+             if (searchQuery.isNotEmpty()) {
+                 // NO RESULTS STATE
+                 Column(
+                    modifier = Modifier.fillMaxSize().padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Search, // Using Search as generic, SearchOff might miss import
+                        contentDescription = null, 
+                        modifier = Modifier.size(64.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    Text(
+                        "No results found",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "No files match \"$searchQuery\".\nTry a different keyword.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
                 }
-            }
+             } else {
+                 // "Ready to Work" Empty State (Default)
+                 Column(
+                    modifier = Modifier.fillMaxSize().padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Description, 
+                        contentDescription = null, 
+                        modifier = Modifier.size(80.dp),
+                        tint = MaterialTheme.colorScheme.primaryContainer
+                    )
+                    Spacer(Modifier.height(24.dp))
+                    Text(
+                        "Ready to work",
+                        style = MaterialTheme.typography.displaySmall,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Select a file from the list or create a new one to get started.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                    Spacer(Modifier.height(32.dp))
+                    Button(onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onCreateFile()
+                    }) {
+                        Icon(Icons.Default.Add, null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Create new file")
+                    }
+                }
+             }
         } else {
             cloud.wafflecommons.pixelbrainreader.ui.components.PullToRefreshBox(
                 isRefreshing = isRefreshing,

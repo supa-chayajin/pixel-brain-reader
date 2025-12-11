@@ -16,10 +16,16 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.flatMapLatest
 
 @HiltViewModel
 class MainViewModel @Inject constructor(
@@ -28,12 +34,21 @@ class MainViewModel @Inject constructor(
     private val userPrefs: UserPreferencesRepository,
     private val geminiRagManager: cloud.wafflecommons.pixelbrainreader.data.ai.GeminiRagManager
 ) : ViewModel() {
-
-    private val _uiState = MutableStateFlow(UiState())
+    // Expose Theme Preference
+    val themeMode: StateFlow<String> = userPrefs.themeMode
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = "SYSTEM" // Safe default
+        )
+    
+    // UI State
+    private val _uiState = MutableStateFlow(UiState(isLoading = true))
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
     
     // Add isRefreshing state
     data class UiState(
+        val searchQuery: String = "", // Search/Filter Query
         val currentPath: String = "",
         val files: List<GithubFileDto> = emptyList(),
         val selectedFileContent: String? = null,
@@ -153,10 +168,25 @@ class MainViewModel @Inject constructor(
        refreshCurrentFolder()
     }
 
+    fun onSearchQueryChanged(query: String) {
+        _uiState.value = _uiState.value.copy(searchQuery = query)
+    }
+
     private fun observeDatabase(path: String) {
         filesObservationJob?.cancel()
-        filesObservationJob = repository.getFiles(path)
-            .onEach { entities ->
+        
+        // Use flatMapLatest to SWITCH streams based on query
+        val searchFlow = _uiState.map { it.searchQuery }.distinctUntilChanged()
+        
+        filesObservationJob = searchFlow.flatMapLatest { query ->
+            if (query.isBlank()) {
+                // CASE 1: Normal View (Scoped to currentPath)
+                repository.getFiles(path)
+            } else {
+                // CASE 2: Global Deep Search (Repo content-aware filter)
+                repository.searchFiles(query)
+            }
+        }.onEach { entities ->
                 val dtos = entities
                     .map { it.toDto() }
                     .filter { !it.name.startsWith(".") }
@@ -528,14 +558,25 @@ class MainViewModel @Inject constructor(
         val currentPath = file.path
         val newPath = if (targetFolder.isEmpty()) file.name else "$targetFolder/${file.name}" // Name stays same
         
-        if (currentPath == newPath) return
+        // 1. Check for valid move (destination != source)
+        if (currentPath == newPath) {
+             _uiState.value = _uiState.value.copy(userMessage = "Item is already in this folder")
+             return
+        }
+
+        // 2. Check if moving to same parent (Redundant but safe)
+        val currentParent = if(file.path.contains("/")) file.path.substringBeforeLast("/") else ""
+        if (currentParent == targetFolder) {
+             _uiState.value = _uiState.value.copy(userMessage = "Item is already in this folder")
+             return
+        }
         
         val (owner, repo) = secretManager.getRepoInfo()
 
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
              _uiState.value = _uiState.value.copy(
                 isSyncing = true,
-                userMessage = "Moving to $targetFolder..."
+                userMessage = "Moving to ${if(targetFolder.isEmpty()) "Root" else targetFolder}..."
             )
 
             val result = repository.renameAndSync(currentPath, newPath, owner, repo)
@@ -568,19 +609,21 @@ class MainViewModel @Inject constructor(
             
             // Filter global list once
             cachedValidMoveDestinations = allFolders.filter { folderPath ->
-                // 1. Cannot move to self (if it's a folder)
-                if (folderPath == targetFile.path) return@filter false
+                // Rule 1: Exclude hidden folders (start with .)
+                if (folderPath.split("/").any { it.startsWith(".") }) return@filter false
+
+                // Rule 2: Cannot move folder into itself or its descendants
+                if (targetFile.type == "dir") {
+                    if (folderPath == targetFile.path) return@filter false
+                    if (folderPath.startsWith("${targetFile.path}/")) return@filter false
+                }
                 
-                // 2. Cannot move into own descendant (if target is folder)
-                if (targetFile.type == "dir" && folderPath.startsWith("${targetFile.path}/")) return@filter false
-                
-                // 3. Cannot move to current location (Parent)
-                if (folderPath == currentParent) return@filter false
+                // Rule 3: Allow current parent (Context) - REMOVED the check that excluded currentParent
                 
                 true
             }.sorted()
 
-            // Initialize Dialog at Root
+            // Initialize Dialog at Root (or start at current parent for better UX? No, start at root is safer navigation)
             updateMoveDialogContent("")
         }
     }

@@ -5,6 +5,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.fragment.app.FragmentActivity
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.collectAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Text
@@ -28,6 +30,8 @@ import javax.inject.Inject
 import androidx.activity.viewModels
 import android.content.Intent
 import cloud.wafflecommons.pixelbrainreader.ui.main.MainViewModel
+import kotlinx.coroutines.launch
+import androidx.lifecycle.lifecycleScope
 
 @AndroidEntryPoint
 class MainActivity : FragmentActivity() {
@@ -38,6 +42,9 @@ class MainActivity : FragmentActivity() {
 
     @Inject
     lateinit var biometricAuthenticator: BiometricAuthenticator
+
+    @Inject
+    lateinit var userPrefs: cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
 
     private val viewModel: MainViewModel by viewModels()
 
@@ -66,6 +73,8 @@ class MainActivity : FragmentActivity() {
             )
         }
 
+
+
         // Initial Login Check
         isUserLoggedIn = secretManager.getToken() != null
         
@@ -89,7 +98,15 @@ class MainActivity : FragmentActivity() {
         })
 
         setContent {
-            PixelBrainReaderTheme {
+            val themeMode by viewModel.themeMode.collectAsState(initial = "SYSTEM")
+            
+            val isDarkTheme = when (themeMode) {
+                "DARK" -> true
+                "LIGHT" -> false
+                else -> isSystemInDarkTheme()
+            }
+            
+            PixelBrainReaderTheme(darkTheme = isDarkTheme) {
                 if (isUserLoggedIn && !isAuthenticated) {
                     cloud.wafflecommons.pixelbrainreader.ui.login.LockedScreen(
                         // Manual Click always triggers

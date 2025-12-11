@@ -39,9 +39,16 @@ import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.outlined.Dashboard
+import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Psychology
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
+import cloud.wafflecommons.pixelbrainreader.ui.components.PullToRefreshBox
+import cloud.wafflecommons.pixelbrainreader.ui.settings.SettingsScreen
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
@@ -71,6 +78,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -195,6 +203,20 @@ fun MainScreen(
                 icon = { Icon(Icons.Outlined.Psychology, contentDescription = "Brain") },
                 label = { Text("Chat") }
             )
+            item(
+                selected = currentRoute == "settings",
+                onClick = { 
+                    navController.navigate("settings") {
+                        popUpTo(navController.graph.findStartDestination().id) {
+                            saveState = true
+                        }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
+                icon = { Icon(Icons.Outlined.Settings, contentDescription = "Settings") },
+                label = { Text("Settings") }
+            )
         }
     ) {
         androidx.navigation.compose.NavHost(
@@ -257,63 +279,108 @@ fun MainScreen(
                     modifier = Modifier.fillMaxSize(),
                     snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
                     topBar = {
+                        // Local state to manage Search Bar visibility (toggles UI mode)
+                        var isSearching by remember { mutableStateOf(false) }
+
                         TopAppBar(
                             title = { 
-                                cloud.wafflecommons.pixelbrainreader.ui.components.BreadcrumbBar(
-                                    currentPath = uiState.currentPath,
-                                    onPathClick = { path -> viewModel.loadFolder(path) },
-                                    onHomeClick = { viewModel.loadFolder("") },
-                                    isLargeScreen = isLargeScreen
-                                )
+                                if (isSearching) {
+                                    // SEARCH MODE: Input Field
+                                    androidx.compose.material3.TextField(
+                                        value = uiState.searchQuery,
+                                        onValueChange = { viewModel.onSearchQueryChanged(it) },
+                                        placeholder = { Text("Search directories, files, content...") },
+                                        singleLine = true,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = androidx.compose.material3.TextFieldDefaults.colors(
+                                            focusedContainerColor = Color.Transparent,
+                                            unfocusedContainerColor = Color.Transparent,
+                                            focusedIndicatorColor = Color.Transparent,
+                                            unfocusedIndicatorColor = Color.Transparent
+                                        ),
+                                        // Clear/Close Icon inside the text field
+                                        trailingIcon = {
+                                             if (uiState.searchQuery.isNotEmpty()) {
+                                                 IconButton(onClick = { viewModel.onSearchQueryChanged("") }) {
+                                                     Icon(Icons.Default.SearchOff, "Clear")
+                                                 }
+                                             }
+                                        }
+                                    )
+                                } else {
+                                    // VIEW MODE: Breadcrumbs
+                                    cloud.wafflecommons.pixelbrainreader.ui.components.BreadcrumbBar(
+                                        currentPath = uiState.currentPath,
+                                        onPathClick = { path -> viewModel.loadFolder(path) },
+                                        onHomeClick = { viewModel.loadFolder("") },
+                                        isLargeScreen = isLargeScreen
+                                    )
+                                }
                             },
                             actions = {
-                                if (uiState.selectedFileName != null) {
-                                    // -- Editor Actions --
-                                    
-                                    // Save
-                                    IconButton(
-                                        onClick = { viewModel.saveFile() },
-                                        enabled = uiState.hasUnsavedChanges
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Filled.Save,
-                                            contentDescription = "Save",
-                                            tint = if (uiState.hasUnsavedChanges) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
-                                        )
+                                if (isSearching) {
+                                    // SEARCH MODE ACTION: Exit Search
+                                    IconButton(onClick = { 
+                                        isSearching = false
+                                        viewModel.onSearchQueryChanged("") 
+                                    }) { 
+                                        Icon(Icons.Default.SearchOff, "Close Search Mode")
                                     }
+                                } else {
+                                    // VIEW MODE ACTIONS
                                     
-                                    // Edit/View Toggle
-                                    IconButton(onClick = { viewModel.toggleEditMode() }) {
-                                        Icon(
-                                            imageVector = if (uiState.isEditing) Icons.Filled.Visibility else Icons.Filled.Edit,
-                                            contentDescription = if (uiState.isEditing) "View" else "Edit"
-                                        )
+                                    // 1. Search Trigger
+                                    IconButton(onClick = { isSearching = true }) {
+                                         Icon(Icons.Default.Search, "Search")
                                     }
 
-                                    // Focus Mode (Large Screen Only)
-                                    if (isLargeScreen) {
-                                        IconButton(onClick = { viewModel.toggleFocusMode() }) {
+                                    // 2. Existing Actions
+                                    if (uiState.selectedFileName != null) {
+                                        // Save
+                                        IconButton(
+                                            onClick = { viewModel.saveFile() },
+                                            enabled = uiState.hasUnsavedChanges
+                                        ) {
                                             Icon(
-                                                imageVector = if (uiState.isFocusMode) Icons.Filled.CloseFullscreen else Icons.Filled.OpenInFull,
-                                                contentDescription = "Focus Mode"
+                                                imageVector = Icons.Filled.Save,
+                                                contentDescription = "Save",
+                                                tint = if (uiState.hasUnsavedChanges) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
                                             )
                                         }
-                                    }
-
-                                    // Close File
-                                    IconButton(onClick = {
-                                        viewModel.closeFile()
-                                        if (navigator.canNavigateBack()) {
-                                            navigator.navigateBack()
+                                        
+                                        // Edit/View Toggle
+                                        IconButton(onClick = { viewModel.toggleEditMode() }) {
+                                            Icon(
+                                                imageVector = if (uiState.isEditing) Icons.Filled.Visibility else Icons.Filled.Edit,
+                                                contentDescription = if (uiState.isEditing) "View" else "Edit"
+                                            )
                                         }
-                                    }) {
-                                        Icon(Icons.Filled.Close, "Close")
-                                    }
 
-                                } else {
-                                    // -- Browser Actions --
-                                    IconButton(onClick = { viewModel.createNewFile() }) {
-                                        Icon(Icons.Default.Add, "New File")
+                                        // Focus Mode (Large Screen Only)
+                                        if (isLargeScreen) {
+                                            IconButton(onClick = { viewModel.toggleFocusMode() }) {
+                                                Icon(
+                                                    imageVector = if (uiState.isFocusMode) Icons.Filled.CloseFullscreen else Icons.Filled.OpenInFull,
+                                                    contentDescription = "Focus Mode"
+                                                )
+                                            }
+                                        }
+
+                                        // Close File
+                                        IconButton(onClick = {
+                                            viewModel.closeFile()
+                                            if (navigator.canNavigateBack()) {
+                                                navigator.navigateBack()
+                                            }
+                                        }) {
+                                            Icon(Icons.Filled.Close, "Close")
+                                        }
+
+                                    } else {
+                                        // Browser Actions
+                                        IconButton(onClick = { viewModel.createNewFile() }) {
+                                            Icon(Icons.Default.Add, "New File")
+                                        }
                                     }
                                 }
                             }
@@ -347,6 +414,7 @@ fun MainScreen(
                                                     isRefreshing = uiState.isRefreshing,
                                                     error = uiState.error,
                                                     currentPath = uiState.currentPath,
+                                                    searchQuery = uiState.searchQuery, // PASS QUERY
                                                     showMenuIcon = false,
                                                     availableMoveDestinations = uiState.availableMoveDestinations,
                                                     moveDialogCurrentPath = uiState.moveDialogCurrentPath,
@@ -381,29 +449,34 @@ fun MainScreen(
                                     }
                                 },
                                 detailPane = {
-                                    FileDetailPane(
-                                        content = uiState.unsavedContent ?: uiState.selectedFileContent,
-                                        onContentChange = { viewModel.onContentChanged(it) },
-                                        fileName = uiState.selectedFileName,
-                                        isLoading = uiState.isLoading,
-                                        isRefreshing = uiState.isRefreshing,
-                                        onRefresh = { viewModel.refreshCurrentFile() },
-                                        isFocusMode = uiState.isFocusMode,
-                                        onToggleFocusMode = { viewModel.toggleFocusMode() },
-                                        isExpandedScreen = isLargeScreen,
-                                        isEditing = uiState.isEditing,
-                                        onToggleEditMode = { viewModel.toggleEditMode() },
-                                        onSaveContent = { _ -> viewModel.saveFile() },
-                                        hasUnsavedChanges = uiState.hasUnsavedChanges,
-                                        onClose = {
-                                            viewModel.closeFile()
-                                            if (navigator.canNavigateBack()) {
-                                                navigator.navigateBack()
-                                            }
-                                        },
-                                        onRename = { newName -> viewModel.renameFile(newName) },
-                                        onCreateNew = { viewModel.createNewFile() }
-                                    )
+                                    if (uiState.selectedFileName != null) {
+                                        FileDetailPane(
+                                            content = uiState.unsavedContent
+                                                ?: uiState.selectedFileContent,
+                                            onContentChange = { viewModel.onContentChanged(it) },
+                                            fileName = uiState.selectedFileName,
+                                            isLoading = uiState.isLoading,
+                                            isRefreshing = uiState.isRefreshing,
+                                            onRefresh = { viewModel.refreshCurrentFile() },
+                                            isFocusMode = uiState.isFocusMode,
+                                            onToggleFocusMode = { viewModel.toggleFocusMode() },
+                                            isExpandedScreen = isLargeScreen,
+                                            isEditing = uiState.isEditing,
+                                            onToggleEditMode = { viewModel.toggleEditMode() },
+                                            onSaveContent = { _ -> viewModel.saveFile() },
+                                            hasUnsavedChanges = uiState.hasUnsavedChanges,
+                                            onClose = {
+                                                viewModel.closeFile()
+                                                if (navigator.canNavigateBack()) {
+                                                    navigator.navigateBack()
+                                                }
+                                            },
+                                            onRename = { newName -> viewModel.renameFile(newName) },
+                                            onCreateNew = { viewModel.createNewFile() }
+                                        )
+                                    } else {
+                                        cloud.wafflecommons.pixelbrainreader.ui.components.WelcomeScreen()
+                                    }
                                 }
                             )
                         }
@@ -450,6 +523,10 @@ fun MainScreen(
                         )
                     }
                 }
+            }
+
+            composable("settings") {
+                SettingsScreen()
             }
 
             composable("import") {
