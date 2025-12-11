@@ -20,7 +20,7 @@ android {
 
     defaultConfig {
         applicationId = "cloud.wafflecommons.pixelbrainreader"
-        minSdk = 36
+        minSdk = 35
         // minSdkPreview = "Baklava" // Deprecated
         targetSdkPreview = "36"
         versionCode = 1

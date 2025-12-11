@@ -18,7 +18,9 @@ class BiometricAuthenticator @Inject constructor(
     fun canAuthenticate(): Int {
         val biometricManager = BiometricManager.from(context)
         return biometricManager.canAuthenticate(
-            BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL
+            BiometricManager.Authenticators.BIOMETRIC_STRONG or 
+            BiometricManager.Authenticators.BIOMETRIC_WEAK or 
+            BiometricManager.Authenticators.DEVICE_CREDENTIAL
         )
     }
 
@@ -56,7 +58,9 @@ class BiometricAuthenticator @Inject constructor(
             .setTitle("Pixel Brain Reader")
             .setSubtitle("Identity Verification Required")
             .setAllowedAuthenticators(
-                BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL
+                BiometricManager.Authenticators.BIOMETRIC_STRONG or 
+                BiometricManager.Authenticators.BIOMETRIC_WEAK or 
+                BiometricManager.Authenticators.DEVICE_CREDENTIAL
             )
             .build()
 

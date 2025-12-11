@@ -1,5 +1,12 @@
 package cloud.wafflecommons.pixelbrainreader.ui.ai
 
+import android.app.Activity
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.speech.RecognizerIntent
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
@@ -12,6 +19,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextRange
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -196,8 +205,27 @@ fun StealthInputBar(
     isLoading: Boolean,
     hint: String
 ) {
+    val context = LocalContext.current
     var lastClickTime by remember { mutableLongStateOf(0L) }
     val isEnabled = textState.text.isNotBlank() && !isLoading
+    
+    val speechLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val spokenText: String? =
+                result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
+            if (!spokenText.isNullOrBlank()) {
+                val newText = if (textState.text.isBlank()) spokenText else "${textState.text} $spokenText"
+                onTextChange(
+                    TextFieldValue(
+                        text = newText,
+                        selection = TextRange(newText.length)
+                    )
+                )
+            }
+        }
+    }
     
     Box(
         modifier = Modifier
@@ -257,8 +285,15 @@ fun StealthInputBar(
                 IconButton(
                     onClick = {
                         if (showMic) {
-                             // Placeholder for Voice Feature
-                             println("Voice feature not implemented yet")
+                             val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                                 putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak now...")
+                             }
+                             try {
+                                 speechLauncher.launch(intent)
+                             } catch (e: ActivityNotFoundException) {
+                                 Toast.makeText(context, "Speech recognition not available", Toast.LENGTH_SHORT).show()
+                             }
                         } else {
                             val currentTime = System.currentTimeMillis()
                             if (currentTime - lastClickTime > 1000L) {
@@ -362,17 +397,17 @@ fun ChatBubble(message: ChatMessage, onInsert: ((String) -> Unit)?) {
                 )
             }
         }
-    }
 
-    if (onInsert != null && !message.isStreaming && message.content.isNotBlank()) {
-        Spacer(Modifier.height(12.dp))
-        FilledTonalButton(
-            onClick = { onInsert(message.content) },
-            modifier = Modifier.height(48.dp),
-            enabled = true,
-            contentPadding = PaddingValues(horizontal = 24.dp)
-        ) {
-            Text("Save into Inbox", style = MaterialTheme.typography.labelMedium)
+        if (onInsert != null && !message.isStreaming && message.content.isNotBlank()) {
+            Spacer(Modifier.height(12.dp))
+            FilledTonalButton(
+                onClick = { onInsert(message.content) },
+                modifier = Modifier.height(48.dp),
+                enabled = true,
+                contentPadding = PaddingValues(horizontal = 24.dp)
+            ) {
+                Text("Save into Inbox", style = MaterialTheme.typography.labelMedium)
+            }
         }
     }
 }

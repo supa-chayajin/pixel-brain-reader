@@ -19,6 +19,15 @@ abstract class FileDao {
     @Query("SELECT * FROM files")
     abstract fun getAllFiles(): Flow<List<FileEntity>>
 
+    @Query("""
+        SELECT files.* FROM files 
+        LEFT JOIN file_contents ON files.path = file_contents.path 
+        WHERE files.name LIKE '%' || :query || '%' 
+           OR files.path LIKE '%' || :query || '%' 
+           OR file_contents.content LIKE '%' || :query || '%'
+    """)
+    abstract fun searchFiles(query: String): Flow<List<FileEntity>>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     abstract suspend fun insertAll(files: List<FileEntity>)
 

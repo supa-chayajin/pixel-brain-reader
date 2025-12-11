@@ -5,11 +5,16 @@ import com.google.ai.client.generativeai.GenerativeModel
 import com.google.ai.client.generativeai.type.content
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class GeminiScribeManager @Inject constructor() {
+class GeminiScribeManager @Inject constructor(
+    private val userPrefs: cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
+) {
 
     // Using the API Key from BuildConfig as requested
     private val apiKey = BuildConfig.geminiApiKey
@@ -18,7 +23,7 @@ class GeminiScribeManager @Inject constructor() {
      * Generates text content based on the user's prompt and the selected persona.
      * Returns a Flow that emits the text chunks as they are generated.
      */
-    fun generateScribeContent(prompt: String, persona: ScribePersona): Flow<String> {
+    fun generateScribeContent(prompt: String, persona: ScribePersona): Flow<String> = kotlinx.coroutines.flow.flow {
         val userLanguage = java.util.Locale.getDefault().displayLanguage
         
         val systemInstruction = when (persona) {
@@ -26,15 +31,20 @@ class GeminiScribeManager @Inject constructor() {
             ScribePersona.CODER -> "You are a Senior Software Engineer. Generate clean, efficient, and well-commented code. Explain the logic briefly. ALWAYS answer in $userLanguage language."
             ScribePersona.PLANNER -> "You are a Product Manager. Create structured plans, user stories, and roadmaps. Focus on business value and timelines. ALWAYS answer in $userLanguage language."
         }
+        
+        // Dynamic Model Selection
+        val modelName = userPrefs.aiModel.first()
 
         val generativeModel = GenerativeModel(
-            modelName = "gemini-2.5-flash-lite",
+            modelName = modelName,
             apiKey = apiKey,
             systemInstruction = content { text(systemInstruction) }
         )
 
-        return generativeModel.generateContentStream(prompt).map { chunk ->
+        val stream = generativeModel.generateContentStream(prompt).map { chunk ->
             chunk.text ?: ""
         }
+        
+        emitAll(stream)
     }
 }

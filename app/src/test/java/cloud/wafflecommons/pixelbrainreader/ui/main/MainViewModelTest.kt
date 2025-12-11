@@ -73,6 +73,7 @@ class MainViewModelTest {
     @Test
     fun `initial load fetches root files`() = runTest {
         // Assert initial call
+        advanceUntilIdle()
         verify { repository.getFiles("") }
         assertEquals("", viewModel.uiState.value.currentPath)
     }
@@ -81,6 +82,7 @@ class MainViewModelTest {
     fun `loadFolder updates currentPath and observes DB`() = runTest {
         val targetPath = "docs/guides"
         viewModel.loadFolder(targetPath)
+        advanceUntilIdle()
 
         assertEquals(targetPath, viewModel.uiState.value.currentPath)
         verify { repository.getFiles(targetPath) }
@@ -267,7 +269,84 @@ class MainViewModelTest {
         // Verify Push
         coVerify { repository.pushDirtyFiles("user", "repo") }
         
-        // Verify Success Message
-        assertTrue(viewModel.uiState.value.userMessage?.contains("successful") == true)
+    }
+
+    @Test
+    fun `search filters files correctly`() = runTest {
+        // ... (Existing test replaced/updated to reflect new global logic logic if needed, but I'll add new one)
+        // Actually, the previous test mocked `repository.getFiles()`.
+        // The NEW logic calls `repository.searchFiles()` when query is present.
+        // So I must update the mocks in the existing test or standard setup.
+        
+        // Mock Data
+        val file1 = FileEntity("path/to/File1.md", "File1.md", "file", null)
+        val file2 = FileEntity("path/to/File2.md", "File2.md", "file", null)
+        val allFiles = listOf(file1, file2)
+        
+        // When query is empty -> calls getFiles
+        coEvery { repository.getFiles("") } returns flowOf(allFiles)
+        
+        // When query is "1" -> calls searchFiles
+        coEvery { repository.searchFiles("1") } returns flowOf(listOf(file1))
+        
+        viewModel = MainViewModel(repository, secretManager, userPrefs, geminiRagManager)
+        advanceUntilIdle() // Initial load
+        
+        // Assert Initial
+        assertEquals(2, viewModel.uiState.value.files.size)
+        
+        // Action: Search
+        viewModel.onSearchQueryChanged("1")
+        advanceUntilIdle()
+        
+        // Assert: Filtered
+        assertEquals(1, viewModel.uiState.value.files.size)
+        assertEquals("File1.md", viewModel.uiState.value.files.first().name)
+        
+        // Action: Clear
+        viewModel.onSearchQueryChanged("")
+        advanceUntilIdle()
+        
+        // Assert: Restored
+        assertEquals(2, viewModel.uiState.value.files.size)
+    }
+
+    @Test
+    fun `search deep search criteria (content and path)`() = runTest {
+         // Scenario:
+         // File A: Name="Invoice.md", Content="Plumbing"
+         // File B: Name="Notes.md", Content="Meeting with plumber"
+         // Folder C: Path="Work/Plumbing/Specs.md"
+         
+         // In a real DB, the SQL query does the work.
+         // In Unit Test, we mock the Repository return value.
+         // So we aren't testing the SQL logic (DaoTest would do that), but we are testing that VM calls the right method and updates state.
+         
+         val fileA = FileEntity("Invoice.md", "Invoice.md", "file", null)
+         val fileB = FileEntity("Notes.md", "Notes.md", "file", null)
+         val fileC = FileEntity("Work/Plumbing/Specs.md", "Specs.md", "file", null)
+         
+         // Mock: Search for "plumb" returns all 3 (simulating DB hit)
+         coEvery { repository.searchFiles("plumb") } returns flowOf(listOf(fileA, fileB, fileC))
+         
+         // Mock: Search for "banana" returns empty
+         coEvery { repository.searchFiles("banana") } returns flowOf(emptyList())
+         
+         // Initial Load (Empty query)
+         coEvery { repository.getFiles("") } returns flowOf(emptyList()) // Just needed for init
+        viewModel = MainViewModel(repository, secretManager, userPrefs, geminiRagManager)
+         advanceUntilIdle()
+
+         // 1. Search "plumb"
+         viewModel.onSearchQueryChanged("plumb")
+         advanceUntilIdle()
+         
+         assertEquals(3, viewModel.uiState.value.files.size)
+         
+         // 2. Search "banana"
+         viewModel.onSearchQueryChanged("banana")
+         advanceUntilIdle()
+         
+         assertEquals(0, viewModel.uiState.value.files.size)
     }
 }

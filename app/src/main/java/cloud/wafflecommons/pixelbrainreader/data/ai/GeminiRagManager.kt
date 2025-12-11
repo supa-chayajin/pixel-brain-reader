@@ -2,6 +2,7 @@ package cloud.wafflecommons.pixelbrainreader.data.ai
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
 import com.google.ai.client.generativeai.GenerativeModel
@@ -10,12 +11,14 @@ import cloud.wafflecommons.pixelbrainreader.BuildConfig
 
 @Singleton
 class GeminiRagManager @Inject constructor(
-    private val vectorSearchEngine: VectorSearchEngine
+    private val vectorSearchEngine: VectorSearchEngine,
+    private val userPrefs: cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
 ) {
-    // Real Gemini Model with requested config
-    private val model by lazy {
-        GenerativeModel(
-            modelName = "gemini-2.5-flash-lite",
+    
+    private suspend fun getModel(): GenerativeModel {
+        val modelName = userPrefs.aiModel.first()
+        return GenerativeModel(
+            modelName = modelName,
             apiKey = BuildConfig.geminiApiKey
         )
     }
@@ -49,7 +52,7 @@ class GeminiRagManager @Inject constructor(
         """.trimIndent()
 
         return try {
-            val response = model.generateContent(prompt)
+            val response = getModel().generateContent(prompt)
             response.text ?: "AI returned no content."
         } catch (e: Exception) {
             "Analysis Failed: ${e.localizedMessage}. Please check API Key or Model Name."
@@ -62,9 +65,11 @@ class GeminiRagManager @Inject constructor(
         val relevantContexts = vectorSearchEngine.findRelevantContext(query)
         val contextBlock = relevantContexts.joinToString("\n\n")
         val finalPrompt = "Context:\n$contextBlock\n\nQuestion:\n$query\nAnswer based on context."
-        return model.generateContentStream(finalPrompt).map { 
+        
+        val stream = getModel().generateContentStream(finalPrompt).map { 
             it.text ?: ""
         }
+        return stream
     }
 }
 
