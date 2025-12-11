@@ -55,7 +55,8 @@ class MainViewModel @Inject constructor(
         // Derived property for Move Dialog
         val folders: List<String> = emptyList(), // Legacy - to be replaced by availableMoveDestinations
         val availableMoveDestinations: List<String> = emptyList(), // Filtered list for Move Dialog
-        val moveDialogCurrentPath: String = "" // Current path in Move Dialog
+        val moveDialogCurrentPath: String = "", // Current path in Move Dialog
+        val isExitPending: Boolean = false // Signal to close the activity
     )
 
     data class ImportState(val title: String, val content: String)
@@ -311,7 +312,7 @@ class MainViewModel @Inject constructor(
             // 1. Save Local
             repository.saveFileLocally(path, contentToSave)
             
-            // 2. Clear Draft & Exit Edit Mode
+            // 2. Atomic UI Reset (Clear Dirty State)
             _uiState.value = _uiState.value.copy(
                 isEditing = false,
                 unsavedContent = null,
@@ -319,13 +320,15 @@ class MainViewModel @Inject constructor(
                 selectedFileContent = contentToSave // Update view immediately
             )
             
-            // 3. Trigger Push Immediately (Blocking)
+            // 3. Trigger Push Immediately (Blocking/Background)
             val (owner, repo) = secretManager.getRepoInfo()
             if (owner != null && repo != null) {
                 _uiState.value = _uiState.value.copy(isSyncing = true)
                 val result = repository.pushDirtyFiles(owner, repo)
                  if (result.isFailure) {
                     val msg = result.exceptionOrNull()?.message ?: "Unknown"
+                    // Don't show error if it's just network offline, maybe? 
+                    // For now, consistent with existing logic
                     _uiState.value = _uiState.value.copy(error = "Commit Failed: $msg")
                 }
                 _uiState.value = _uiState.value.copy(isSyncing = false)
@@ -393,12 +396,16 @@ class MainViewModel @Inject constructor(
         lastModified = localModifiedTimestamp ?: lastSyncedAt
     )
 
+    // Flag to track if the current import session came from an external Intent
+    private var isExternalShare = false
+
     fun handleShareIntent(intent: android.content.Intent) {
         if (intent.action == android.content.Intent.ACTION_SEND) {
             val text: CharSequence? = intent.getCharSequenceExtra(android.content.Intent.EXTRA_TEXT)
                 ?: intent.getStringExtra(android.content.Intent.EXTRA_HTML_TEXT)
             
             if (text != null) {
+                isExternalShare = true // Mark as external
                 _uiState.value = _uiState.value.copy(isLoading = true)
                 viewModelScope.launch {
                     val result = cloud.wafflecommons.pixelbrainreader.data.utils.ContentSanitizer.processSharedContent(text)
@@ -414,22 +421,54 @@ class MainViewModel @Inject constructor(
     fun confirmImport(filename: String, folder: String, content: String) {
         val fullPath = if (folder.isNotBlank()) "$folder/$filename" else filename
         viewModelScope.launch {
-             // Save locally
+             // 1. Save locally (Synchronous)
              repository.saveFileLocally(fullPath, content)
              
-             // Trigger Sync
-             val (owner, repo) = secretManager.getRepoInfo()
-             if (owner != null && repo != null) {
-                  repository.pushDirtyFiles(owner, repo)
+             // 2. Handle Finish or Open
+             if (isExternalShare) {
+                 // EXTERNAL FLOW: Save & Exit
+                 dismissImport()
+                 _uiState.value = _uiState.value.copy(
+                     userMessage = "Imported & Saved",
+                     isExitPending = true // Signal View to finish activity
+                 )
+             } else {
+                 // INTERNAL FLOW: Save & Open
+                 val newDto = GithubFileDto(
+                    name = filename,
+                    path = fullPath,
+                    type = "file", 
+                    downloadUrl = null,
+                    // isDirty removed
+                    lastModified = System.currentTimeMillis()
+                )
+                 
+                 // Close Import Overlay first to reveal underlying UI
+                 dismissImport()
+                 
+                 // Open the file
+                 loadFile(newDto)
+                 
+                 // Show Success
+                 _uiState.value = _uiState.value.copy(userMessage = "Imported successfully")
              }
              
-             dismissImport()
-             loadFolder(folder)
+             // 3. Trigger Push (Background)
+             val (owner, repo) = secretManager.getRepoInfo()
+             if (owner != null && repo != null) {
+                  _uiState.value = _uiState.value.copy(isSyncing = true)
+                  repository.pushDirtyFiles(owner, repo)
+                  _uiState.value = _uiState.value.copy(isSyncing = false)
+             }
+             
+             // Reset flag
+             isExternalShare = false
         }
     }
 
     fun dismissImport() {
         _uiState.value = _uiState.value.copy(importState = null)
+        isExternalShare = false // Reset on cancel too
     }
 
     fun userMessageShown() {
@@ -587,11 +626,28 @@ class MainViewModel @Inject constructor(
         val fullPath = if (parentPath.isNotEmpty()) "$parentPath/$name" else name
         
         viewModelScope.launch {
+            // 1. Synchronous Creation (Disk/DB)
             repository.saveFileLocally(fullPath, "")
-            delay(100)
-            val newDto = GithubFileDto(name, fullPath, "file", null)
+            
+            // 2. Immediate UI Update (Don't wait for DB Observer)
+            val newDto = GithubFileDto(
+                name = name, 
+                path = fullPath, 
+                type = "file", 
+                downloadUrl = null,
+                // isDirty not in DTO, handled by UI state hasUnsavedChanges
+                lastModified = System.currentTimeMillis()
+            )
+            
+            // 3. Open immediately
             loadFile(newDto)
-            toggleEditMode()
+            
+            // 4. Set Edit Mode & Ready State
+            _uiState.value = _uiState.value.copy(
+                isEditing = true,
+                unsavedContent = "", // Ready for typing
+                hasUnsavedChanges = true // It is a new file
+            )
         }
     }
 
@@ -611,13 +667,6 @@ class MainViewModel @Inject constructor(
             
             // 1. Fetch Content
             val fileContexts = files.mapNotNull { file ->
-                // Try to get content from DB directly if available (optimized) needed?
-                // For now, we rely on repository flow logic or just fetching standard.
-                // We'll use a simple approach: if content is null, skip or fetch? 
-                // Repository doesn't have a simple synchronous 'getOne'. 
-                // We'll rely on the fact that 'files' are DTOs. 
-                // We need to fetch actual content.
-                // Assuming we can get it from DB.
                 val content = repository.getFileContentFlow(file.path).firstOrNull() 
                 if (content != null) file.name to content else null
             }
@@ -642,6 +691,49 @@ class MainViewModel @Inject constructor(
                 hasUnsavedChanges = true,
                 isEditing = false // View Mode
             )
+        }
+    }
+
+    fun appendContent(text: String) {
+        val currentContent = _uiState.value.unsavedContent ?: _uiState.value.selectedFileContent ?: ""
+        val newContent = if (currentContent.isBlank()) text else "$currentContent\n\n$text"
+        
+        onContentChanged(newContent)
+        
+        // Ensure we are in Edit Mode to see the changes and Save button
+        if (!_uiState.value.isEditing) {
+            _uiState.value = _uiState.value.copy(isEditing = true)
+        }
+    }
+
+    /**
+     * Saves chat content to a new file in 00_Inbox.
+     * Non-blocking UI (Background save).
+     */
+    fun saveChatToInbox(content: String) {
+        android.util.Log.d("PixelBrain", "saveChatToInbox called with length: ${content.length}")
+        viewModelScope.launch {
+            val folderName = "00_Inbox"
+            
+            // Ensure folder exists in DB (so it shows up in UI immediately)
+            repository.createLocalFolder(folderName)
+            
+            // Format: AI_Note_YYYYMMDD_HHmmss.md
+            val timestamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.getDefault()).format(java.util.Date())
+            val filename = "AI_Note_$timestamp.md"
+            val fullPath = "$folderName/$filename"
+            
+            // 1. Save Local
+            repository.saveFileLocally(fullPath, content)
+            
+            // 2. Feedback
+            _uiState.value = _uiState.value.copy(userMessage = "Saved to $folderName")
+            
+            // 3. Sync
+             val (owner, repo) = secretManager.getRepoInfo()
+             if (owner != null && repo != null) {
+                  repository.pushDirtyFiles(owner, repo)
+             }
         }
     }
 }

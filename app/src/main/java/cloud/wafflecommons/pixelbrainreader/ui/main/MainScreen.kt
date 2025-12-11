@@ -156,6 +156,14 @@ fun MainScreen(
             navController.navigate("import")
         }
     }
+    
+    // Auto-Close logic for External Imports
+    val context = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(uiState.isExitPending) {
+        if (uiState.isExitPending) {
+            (context as? android.app.Activity)?.finish()
+        }
+    }
 
     androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold(
         navigationSuiteItems = {
@@ -420,17 +428,28 @@ fun MainScreen(
             }
 
             composable("chat") {
-                 cloud.wafflecommons.pixelbrainreader.ui.ai.ChatPanel(
-                    onInsertContent = { text ->
-                        // Handle insert: Navigate to Home and insert?
-                        // Or just copy to clipboard?
-                        // For now, let's append to currently open file if any in ViewModel
-                        // This logic might need refinement since we are on a different screen.
-                        // Assuming ViewModel holds state of "Open File" globally.
-                         viewModel.onContentChanged((uiState.unsavedContent ?: "") + "\n\n" + text)
-                         navController.navigate("home")
+                val snackbarHostState = remember { SnackbarHostState() }
+                
+                LaunchedEffect(uiState.userMessage) {
+                    uiState.userMessage?.let { message ->
+                        snackbarHostState.showSnackbar(message)
+                        viewModel.userMessageShown()
                     }
-                )
+                }
+                
+                Scaffold(
+                    snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+                    contentWindowInsets = WindowInsets(0,0,0,0) // ChatPanel handles its own insets
+                ) { padding ->
+                    Box(modifier = Modifier.padding(padding)) {
+                         cloud.wafflecommons.pixelbrainreader.ui.ai.ChatPanel(
+                            onInsertContent = { text ->
+                                android.util.Log.d("PixelBrain", "ChatPanel onInsertContent triggered. Saving to Inbox.")
+                                viewModel.saveChatToInbox(text)
+                            }
+                        )
+                    }
+                }
             }
 
             composable("import") {

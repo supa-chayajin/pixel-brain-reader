@@ -360,18 +360,19 @@ fun ChatBubble(message: ChatMessage, onInsert: ((String) -> Unit)?) {
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurface
                 )
-
-                if (onInsert != null && !message.isStreaming && message.content.isNotBlank()) {
-                    Spacer(Modifier.height(12.dp))
-                    FilledTonalButton(
-                        onClick = { onInsert(message.content) },
-                        modifier = Modifier.height(32.dp),
-                        contentPadding = PaddingValues(horizontal = 12.dp)
-                    ) {
-                        Text("Add to Doc", style = MaterialTheme.typography.labelMedium)
-                    }
-                }
             }
+        }
+    }
+
+    if (onInsert != null && !message.isStreaming && message.content.isNotBlank()) {
+        Spacer(Modifier.height(12.dp))
+        FilledTonalButton(
+            onClick = { onInsert(message.content) },
+            modifier = Modifier.height(48.dp),
+            enabled = true,
+            contentPadding = PaddingValues(horizontal = 24.dp)
+        ) {
+            Text("Save into Inbox", style = MaterialTheme.typography.labelMedium)
         }
     }
 }
