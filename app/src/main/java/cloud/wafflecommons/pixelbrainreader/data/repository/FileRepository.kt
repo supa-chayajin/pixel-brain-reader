@@ -127,7 +127,12 @@ class FileRepository @Inject constructor(
             )
             fileDao.insertFile(newEntity)
         } else {
-            fileDao.markFileAsDirty(path, true)
+            // FIX: Ensure timestamp is updated along with dirty flag
+            val updatedEntity = existing.copy(
+                isDirty = true,
+                localModifiedTimestamp = System.currentTimeMillis()
+            )
+            fileDao.insertFile(updatedEntity)
         }
     }
 
@@ -142,7 +147,7 @@ class FileRepository @Inject constructor(
      */
     suspend fun pushDirtyFiles(owner: String, repo: String, message: String? = null): Result<Unit> {
         return try {
-            val dirtyFiles = fileDao.getDirtyFiles()
+            val dirtyFiles = fileDao.getDirtyFiles().filter { it.type == "file" }
             Log.d("PixelBrain", "Starting Push. Dirty files count: ${dirtyFiles.size}")
             
             for (file in dirtyFiles) {
@@ -329,6 +334,10 @@ class FileRepository @Inject constructor(
             localModifiedTimestamp = System.currentTimeMillis()
         )
         fileDao.insertFile(entity)
+    }
+
+    suspend fun createLocalFolder(path: String) {
+        createFolderEntity(path)
     }
 
     /**
