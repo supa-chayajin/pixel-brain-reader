@@ -5,6 +5,7 @@ import kotlinx.coroutines.withContext
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
+import org.jsoup.parser.Parser
 import com.vladsch.flexmark.html2md.converter.FlexmarkHtmlConverter
 import android.text.Html
 import android.text.Spanned
@@ -14,9 +15,14 @@ data class ImportResult(val title: String, val markdownContent: String)
 
 object ContentSanitizer {
     // Simple URL regex
-    private val URL_REGEX = "^(https?://.+)$".toRegex(RegexOption.IGNORE_CASE)
+    val URL_REGEX = "^(https?://.+)$".toRegex(RegexOption.IGNORE_CASE)
 
-    suspend fun processSharedContent(text: CharSequence): ImportResult = withContext(Dispatchers.IO) {
+    suspend fun processSharedContent(text: CharSequence, isPreConvertedMarkdown: Boolean = false): ImportResult = withContext(Dispatchers.IO) {
+        if (isPreConvertedMarkdown) {
+            val polishedMarkdown = text.toString().replace(Regex("\\n{3,}"), "\n\n").trim()
+            return@withContext ImportResult("Imported Content", polishedMarkdown)
+        }
+        
         var finalTitle = "Imported Content"
         
         // 1. FETCH & PARSE / NORMALIZE
@@ -185,5 +191,50 @@ object ContentSanitizer {
         }
 
         return root.html()
+    }
+
+    fun htmlToMarkdown(html: String): String {
+        var text = html
+        // 1. Tags to Newlines
+        text = text.replace(Regex("<br\\s*/?>", RegexOption.IGNORE_CASE), "\n")
+        text = text.replace(Regex("</p>", RegexOption.IGNORE_CASE), "\n")
+        text = text.replace(Regex("</div>", RegexOption.IGNORE_CASE), "\n")
+        
+        // 2. Bold
+        text = text.replace(Regex("<b>|<strong>", RegexOption.IGNORE_CASE), "**")
+        text = text.replace(Regex("</b>|</strong>", RegexOption.IGNORE_CASE), "**")
+        
+        // 3. Italic
+        text = text.replace(Regex("<i>|<em>", RegexOption.IGNORE_CASE), "*")
+        text = text.replace(Regex("</i>|</em>", RegexOption.IGNORE_CASE), "*")
+        
+        // 4. Headers
+        text = text.replace(Regex("<h([1-6])>", RegexOption.IGNORE_CASE)) { match ->
+            val level = match.groupValues[1].toInt()
+            "\n" + "#".repeat(level) + " "
+        }
+        text = text.replace(Regex("</h[1-6]>", RegexOption.IGNORE_CASE), "\n")
+        
+        // 5. Lists
+        text = text.replace(Regex("<li>", RegexOption.IGNORE_CASE), "\n- ")
+        text = text.replace(Regex("</li>", RegexOption.IGNORE_CASE), "")
+        text = text.replace(Regex("<ul>|<ol>|</ul>|</ol>", RegexOption.IGNORE_CASE), "\n")
+        
+        // 6. Links: <a href="...">text</a>
+        text = text.replace(Regex("<a\\s+(?:[^>]*?\\s+)?href=\"([^\"]*)\"[^>]*>(.*?)</a>", RegexOption.IGNORE_CASE)) { match ->
+            "[${match.groupValues[2]}](${match.groupValues[1]})"
+        }
+        
+        // 7. Code
+        text = text.replace(Regex("<code>", RegexOption.IGNORE_CASE), "`")
+        text = text.replace(Regex("</code>", RegexOption.IGNORE_CASE), "`")
+        
+        // 8. Strip remaining tags
+        text = text.replace(Regex("<[^>]*>"), "")
+        
+        // 9. Decode entities
+        text = org.jsoup.parser.Parser.unescapeEntities(text, false)
+        
+        return text.trim()
     }
 }

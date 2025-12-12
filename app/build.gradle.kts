@@ -16,12 +16,11 @@ if (localPropertiesFile.exists()) {
 
 android {
     namespace = "cloud.wafflecommons.pixelbrainreader"
-    compileSdkPreview = "Baklava"
 
     defaultConfig {
         applicationId = "cloud.wafflecommons.pixelbrainreader"
         minSdk = 35
-        // minSdkPreview = "Baklava" // Deprecated
+        compileSdk = 35
         targetSdkPreview = "36"
         versionCode = 1
         versionName = "1.0"

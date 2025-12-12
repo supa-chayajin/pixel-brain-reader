@@ -472,6 +472,7 @@ fun MainScreen(
                                                 }
                                             },
                                             onRename = { newName -> viewModel.renameFile(newName) },
+                                            onWikiLinkClick = { target -> viewModel.onWikiLinkClick(target) },
                                             onCreateNew = { viewModel.createNewFile() }
                                         )
                                     } else {

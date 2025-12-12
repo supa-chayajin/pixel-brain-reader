@@ -431,14 +431,32 @@ class MainViewModel @Inject constructor(
 
     fun handleShareIntent(intent: android.content.Intent) {
         if (intent.action == android.content.Intent.ACTION_SEND) {
-            val text: CharSequence? = intent.getCharSequenceExtra(android.content.Intent.EXTRA_TEXT)
-                ?: intent.getStringExtra(android.content.Intent.EXTRA_HTML_TEXT)
+            val htmlText = intent.getStringExtra(android.content.Intent.EXTRA_HTML_TEXT)
+            val plainText = intent.getCharSequenceExtra(android.content.Intent.EXTRA_TEXT)
             
-            if (text != null) {
+            val textToProcess: CharSequence?
+            val isMarkdown: Boolean
+
+            if (htmlText != null) {
+                // Priority 1: HTML -> Convert to Markdown
+                textToProcess = cloud.wafflecommons.pixelbrainreader.data.utils.ContentSanitizer.htmlToMarkdown(htmlText)
+                isMarkdown = true
+            } else if (plainText != null) {
+                // Priority 2: Plain Text
+                textToProcess = plainText
+                // If it looks like a URL, allow normal processing (fetch).
+                // Otherwise, treat as raw text (markdown) to preserve newlines.
+                isMarkdown = !cloud.wafflecommons.pixelbrainreader.data.utils.ContentSanitizer.URL_REGEX.matches(plainText.trim())
+            } else {
+                textToProcess = null
+                isMarkdown = false
+            }
+            
+            if (textToProcess != null) {
                 isExternalShare = true // Mark as external
                 _uiState.value = _uiState.value.copy(isLoading = true)
                 viewModelScope.launch {
-                    val result = cloud.wafflecommons.pixelbrainreader.data.utils.ContentSanitizer.processSharedContent(text)
+                    val result = cloud.wafflecommons.pixelbrainreader.data.utils.ContentSanitizer.processSharedContent(textToProcess, isMarkdown)
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         importState = ImportState(result.title, result.markdownContent)
@@ -746,6 +764,52 @@ class MainViewModel @Inject constructor(
         // Ensure we are in Edit Mode to see the changes and Save button
         if (!_uiState.value.isEditing) {
             _uiState.value = _uiState.value.copy(isEditing = true)
+        }
+    }
+
+    fun onWikiLinkClick(linkText: String) {
+        // 1. Aggressive Cleaning
+        var target = linkText.replace(Regex("[\\[\\]]"), "") // Remove [[ ]]
+        target = target.split("|")[0] // Remove alias
+        target = target.trim()
+        target = target.removeSuffix("/") // Critical Fix for "Folder/" links
+        
+        val cleanTarget = target // Final clean value
+
+        viewModelScope.launch {
+            // STEP 2: Folder Detection (PRIORITY)
+            val allFolders = repository.getAllFolders()
+            
+            // Check for Exact Match (or "Root/Target" suffix)
+            val matchingFolder = allFolders.find { 
+                it.equals(cleanTarget, ignoreCase = true) || it.endsWith("/$cleanTarget", ignoreCase = true) 
+            }
+            
+            if (matchingFolder != null) {
+                // Folder Found: Update List, Keep Content Open
+                loadFolder(matchingFolder)
+                _uiState.value = _uiState.value.copy(userMessage = "📂 Opened ${matchingFolder.substringAfterLast("/")}")
+                return@launch
+            }
+
+            // STEP 3: File Check (Deterministic Resolver)
+            // Note: resolveLink is Strict (Exact or .md)
+            val entity = repository.resolveLink(cleanTarget)
+            
+            if (entity != null) {
+                if (entity.type == "dir") {
+                    // Redundant Safety Fallback
+                    loadFolder(entity.path)
+                    _uiState.value = _uiState.value.copy(userMessage = "📂 Opened ${entity.name}")
+                } else {
+                    // File Found
+                    loadFile(entity.toDto())
+                }
+                return@launch
+            }
+
+            // STEP 4: Fallback
+            _uiState.value = _uiState.value.copy(userMessage = "Target '$cleanTarget' not found")
         }
     }
 

@@ -63,9 +63,23 @@ import io.noties.markwon.ext.strikethrough.StrikethroughPlugin
 import io.noties.markwon.ext.tables.TablePlugin
 import io.noties.markwon.ext.tasklist.TaskListPlugin
 import io.noties.markwon.linkify.LinkifyPlugin
-import io.noties.markwon.syntax.SyntaxHighlightPlugin
-import io.noties.prism4j.Prism4j
+import io.noties.markwon.LinkResolverDef // For custom link handling if needed, or just Linkify
+import io.noties.markwon.AbstractMarkwonPlugin
+import io.noties.markwon.core.spans.LinkSpan
+import android.text.style.ClickableSpan
+import android.view.View
+import java.util.regex.Pattern
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import cloud.wafflecommons.pixelbrainreader.ui.utils.ObsidianHelper
+import android.text.Spanned
+import android.text.style.LeadingMarginSpan
+import androidx.compose.ui.graphics.toArgb
 
+
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun FileDetailPane(
     content: String?,
@@ -83,6 +97,7 @@ fun FileDetailPane(
     hasUnsavedChanges: Boolean,
     onClose: () -> Unit,
     onRename: (String) -> Unit,
+    onWikiLinkClick: (String) -> Unit, // NEW CALLBACK
     onCreateNew: () -> Unit = {} // Added for Welcome Screen action
 ) {
     // --- LAYOUT LOGIC ---
@@ -164,19 +179,19 @@ fun FileDetailPane(
                     }
                 }
                 content != null -> {
-                    // Editor / Reader
+                    // 1. Parse Content
+                    val parsed = remember(content) { ObsidianHelper.parse(content) }
+                    val displayContent = if (isEditing) content else parsed.cleanContent
+                    
+                    // 2. Editor Mode (Full Screen BasicTextField)
                     if (isEditing) {
-                        // --- EDIT MODE ---
-                        val density = LocalDensity.current
-                        val imeBottom = WindowInsets.ime.getBottom(density)
-
                         BasicTextField(
                             value = content,
                             onValueChange = onContentChange,
                             modifier = Modifier
                                 .fillMaxSize()
                                 .padding(16.dp)
-                                .imePadding(), // Properly handle IME
+                                .imePadding(),
                             textStyle = TextStyle(
                                 color = MaterialTheme.colorScheme.onSurface,
                                 fontSize = 16.sp,
@@ -185,51 +200,160 @@ fun FileDetailPane(
                             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary)
                         )
                     } else {
-                        // View Mode
-                        val textColor = MaterialTheme.colorScheme.onSurface.toArgb()
-                        val primaryColorInt = MaterialTheme.colorScheme.primary.toArgb()
-                        val tertiaryColorInt = MaterialTheme.colorScheme.tertiary.toArgb()
-                        val codeBgColor = MaterialTheme.colorScheme.surfaceContainerHigh.toArgb()
-                        val quoteColor = MaterialTheme.colorScheme.secondary.toArgb()
-                        val checkedColor = MaterialTheme.colorScheme.primary.toArgb()
-                        val uncheckedColor = MaterialTheme.colorScheme.onSurfaceVariant.toArgb()
-                        val colorScheme = MaterialTheme.colorScheme
+                        // 3. Reader Mode (Hybrid Layout)
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 16.dp) // Base padding for the whole column
+                                .verticalScroll(rememberScrollState())
+                                .imePadding()
+                        ) {
+                            // --- Native Metadata Header ---
+                            // Check if we have visible metadata
+                            // Ideally, we always show header if title is present OR tags present OR other metadata.
+                            if (!parsed.metadata.isEmpty() || parsed.tags.isNotEmpty()) {
+                                MetadataHeader(parsed.metadata, parsed.tags)
+                            } else {
+                                Spacer(Modifier.height(16.dp))
+                            }
+                            
+                            // Divider (only if we showed something in header or if we want separation)
+                            // The MetadataHeader itself has a surface, so maybe just a small spacer below it?
+                            Spacer(Modifier.height(8.dp))
 
-                        val density = LocalDensity.current
-                        val imeBottom = WindowInsets.ime.getBottom(density)
+                            // --- Markdown Content ---
+                            val textColor = MaterialTheme.colorScheme.onSurface.toArgb()
+                            val checkedColor = MaterialTheme.colorScheme.primary.toArgb()
+                            val uncheckedColor = MaterialTheme.colorScheme.onSurfaceVariant.toArgb()
+                            val density = LocalDensity.current
 
-                        androidx.compose.runtime.key(content) {
                             AndroidView(
-                                factory = { context ->
-                                    TextView(context).apply {
+                                factory = { ctx ->
+                                    TextView(ctx).apply {
                                         setTextColor(textColor)
                                         textSize = 16f
-                                        setPadding(56, 24, 56, 200) // Standard bottom padding
                                         setLineSpacing(12f, 1.1f)
                                         setTextIsSelectable(true)
                                         movementMethod = android.text.method.LinkMovementMethod.getInstance()
+                                        // CRITICAL: Disable nested scrolling so the Column handles it
+                                        isNestedScrollingEnabled = false 
                                     }
                                 },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 200.dp), // Bottom padding for scrolling
                                 update = { tv ->
-                                    val markwon = Markwon.builder(tv.context)
+                                    val context = tv.context
+                                    val markwon = Markwon.builder(context)
                                         .usePlugin(StrikethroughPlugin.create())
-                                        .usePlugin(TablePlugin.create(tv.context))
-                                        .usePlugin(LinkifyPlugin.create()) // Explicit linkify
-                                        .usePlugin(TaskListPlugin.create(checkedColor, uncheckedColor, uncheckedColor)) // Use colors
-                                        .usePlugin(object : CorePlugin() {
-                                            override fun configureSpansFactory(builder: MarkwonSpansFactory.Builder) {
-                                                // Simplified span config if needed or keep existing
+                                        .usePlugin(TablePlugin.create(context))
+                                        .usePlugin(LinkifyPlugin.create()) 
+                                        .usePlugin(TaskListPlugin.create(checkedColor, uncheckedColor, uncheckedColor))
+// ... (Top of file stays same until Callout Plugin)
+
+// --- UPDATED CALLOUT PLUGIN LOGIC ---
+                                        .usePlugin(object : AbstractMarkwonPlugin() {
+                                            override fun processMarkdown(markdown: String): String {
+                                                 return markdown.replace(ObsidianHelper.WIKI_LINK_REGEX) { match ->
+                                                    val target = match.groupValues[1]
+                                                    val label = match.groupValues[2].takeIf { it.isNotEmpty() } ?: target
+                                                    "[$label](pixelbrain://note/$target)"
+                                                }
+                                            }
+                                            
+                                            override fun afterSetText(textView: TextView) {
+                                                val spannable = textView.text as? android.text.SpannableStringBuilder ?: return
+                                                
+                                                // 1. Find all LeadingMarginSpan (covers Quotes, Lists, etc.)
+                                                val margins = spannable.getSpans(0, spannable.length, android.text.style.LeadingMarginSpan::class.java)
+                                                
+                                                for (span in margins) {
+                                                    val start = spannable.getSpanStart(span)
+                                                    val end = spannable.getSpanEnd(span)
+                                                    
+                                                    if (start == -1 || end == -1 || start >= end) continue
+                                                    
+                                                    val text = spannable.subSequence(start, end).toString()
+                                                    // Regex: Start of content (ignoring initial whitespace) matches [!TYPE]
+                                                    val regex = Regex("^\\s*\\[!(\\w+)\\]")
+                                                    val match = regex.find(text)
+                                                    
+                                                    if (match != null) {
+                                                        val type = match.groupValues[1].uppercase()
+                                                        
+                                                        // 3. Remove original span
+                                                        spannable.removeSpan(span)
+                                                        
+                                                        // 4. Resolve Colors
+                                                        val (bgColor, stripeColor) = when(type) {
+                                                            "TIP", "GOAL", "SUCCESS", "DONE" -> 0xFFE8F5E9.toInt() to 0xFF4CAF50.toInt() // Green
+                                                            "INFO", "NOTE", "FYI" -> 0xFFE3F2FD.toInt() to 0xFF2196F3.toInt() // Blue
+                                                            "WARNING", "CAUTION", "ATTENTION", "IMPORTANT" -> 0xFFFFF3E0.toInt() to 0xFFFF9800.toInt() // Orange
+                                                            "DANGER", "ERROR", "BUG", "FAIL", "JIRA" -> 0xFFFFEBEE.toInt() to 0xFFF44336.toInt() // Red
+                                                            "EXAMPLE", "QUOTE" -> 0xFFF3E5F5.toInt() to 0xFF9C27B0.toInt() // Purple
+                                                            else -> 0xFFF5F5F5.toInt() to 0xFF9E9E9E.toInt() // Grey
+                                                        }
+                                                        
+                                                        // 5. Apply CalloutSpan (Background + Stripe)
+                                                        spannable.setSpan(
+                                                            CalloutSpan(bgColor, stripeColor), 
+                                                            start, end, 
+                                                            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                                                        )
+                                                        
+                                                        // 6. Hide [!TYPE] text
+                                                        val tagStart = start + match.range.first
+                                                        val tagEnd = start + match.range.last + 1
+                                                        
+                                                        if (tagStart < tagEnd && tagEnd <= spannable.length) {
+                                                            spannable.setSpan(
+                                                                android.text.style.ForegroundColorSpan(android.graphics.Color.TRANSPARENT),
+                                                                tagStart, tagEnd,
+                                                                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                                                            )
+                                                            spannable.setSpan(
+                                                                android.text.style.RelativeSizeSpan(0.01f),
+                                                                tagStart, tagEnd,
+                                                                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                                                            )
+                                                            
+                                                            // Bold the title
+                                                            val lineEnd = text.indexOf('\n')
+                                                            val titleEndAbs = if (lineEnd != -1) start + lineEnd else end
+                                                            if (tagEnd < titleEndAbs) {
+                                                                spannable.setSpan(
+                                                                    android.text.style.StyleSpan(android.graphics.Typeface.BOLD),
+                                                                    tagEnd, titleEndAbs,
+                                                                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                                                                )
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        })
+// ... (DetailPane logic continues) ...
+
+
+                                        .usePlugin(object : AbstractMarkwonPlugin() {
+                                            override fun configureConfiguration(builder: io.noties.markwon.MarkwonConfiguration.Builder) {
+                                                builder.linkResolver { view, link ->
+                                                    if (link.startsWith("pixelbrain://note/")) {
+                                                        val target = link.removePrefix("pixelbrain://note/")
+                                                        onWikiLinkClick(target)
+                                                    } else {
+                                                        try {
+                                                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(link))
+                                                            view.context.startActivity(intent)
+                                                        } catch(e: Exception) {}
+                                                    }
+                                                }
                                             }
                                         })
                                         .build()
-                                    markwon.setMarkdown(tv, content)
-                                    // Update padding on update as well just in case
-                                    tv.setPadding(56, 24, 56, 200)
-                                },
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .imePadding() // Compose handles the shrinking
-                                    .verticalScroll(rememberScrollState())
+                                        
+                                    markwon.setMarkdown(tv, displayContent)
+                                }
                             )
                         }
                     }
@@ -279,3 +403,155 @@ fun WelcomeState(onCreateNew: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun MetadataHeader(metadata: Map<String, String>, tags: List<String>) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // TITLE
+            val title = metadata["title"]
+            if (!title.isNullOrBlank()) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+            
+            // OTHER METADATA GRID
+            // Filter out title and internal numeric keys if any
+            val displayMetadata = metadata.filterKeys { it != "title" && it != "tags" }
+            if (displayMetadata.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    displayMetadata.forEach { (key, value) ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "$key: ",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                            )
+                            Text(
+                                text = value,
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                                ),
+                                color = MaterialTheme.colorScheme.onSurface 
+                            )
+                        }
+                    }
+                }
+            }
+            
+            // TAGS
+            if (tags.isNotEmpty()) {
+                if (displayMetadata.isNotEmpty() || !title.isNullOrBlank()) {
+                    Spacer(Modifier.height(8.dp))
+                }
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    tags.forEach { tag ->
+                        AssistChip(
+                            onClick = {},
+                            label = { Text("#$tag") },
+                            colors = AssistChipDefaults.assistChipColors(
+                                containerColor = MaterialTheme.colorScheme.surface, 
+                                labelColor = MaterialTheme.colorScheme.onSurface
+                            ),
+                            border = null,
+                            shape = CircleShape
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+
+
+// --- CUSTOM SPANS ---
+
+class CalloutSpan(
+    private val backgroundColor: Int,
+    private val stripeColor: Int,
+    private val stripeWidth: Int = 15,
+    private val gap: Int = 30
+) : android.text.style.LeadingMarginSpan, android.text.style.LineBackgroundSpan {
+
+    override fun getLeadingMargin(first: Boolean): Int {
+        return stripeWidth + gap
+    }
+
+    override fun drawLeadingMargin(
+        c: android.graphics.Canvas,
+        p: android.graphics.Paint,
+        x: Int,
+        dir: Int,
+        top: Int,
+        baseline: Int,
+        bottom: Int,
+        text: CharSequence?,
+        start: Int,
+        end: Int,
+        first: Boolean,
+        layout: android.text.Layout?
+    ) {
+        val originalStyle = p.style
+        val originalColor = p.color
+
+        p.style = android.graphics.Paint.Style.FILL
+        p.color = stripeColor
+
+        // Draw Stripe logic
+        // x is the start of the paragraph.
+        // dir is direction (1 for LTR).
+        
+        val stripeLeft = x.toFloat()
+        val stripeRight = stripeLeft + stripeWidth * dir
+        
+        c.drawRect(
+            if (dir > 0) stripeLeft else stripeRight,
+            top.toFloat(),
+            if (dir > 0) stripeRight else stripeLeft,
+            bottom.toFloat(),
+            p
+        )
+
+        p.style = originalStyle
+        p.color = originalColor
+    }
+
+    override fun drawBackground(
+        c: android.graphics.Canvas,
+        p: android.graphics.Paint,
+        left: Int,
+        right: Int,
+        top: Int,
+        baseline: Int,
+        bottom: Int,
+        text: CharSequence,
+        start: Int,
+        end: Int,
+        ln: Int
+    ) {
+        val originalColor = p.color
+        p.color = backgroundColor
+        c.drawRect(left.toFloat(), top.toFloat(), right.toFloat(), bottom.toFloat(), p)
+        p.color = originalColor
+    }
+}

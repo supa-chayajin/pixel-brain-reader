@@ -49,6 +49,27 @@ class FileRepository @Inject constructor(
     }
 
     /**
+     * Deterministic WikiLink Resolver.
+     * 1. Exact Match (File or Folder).
+     * 2. Implicit .md Extension.
+     */
+    suspend fun resolveLink(targetPath: String): FileEntity? {
+        val cleanPath = targetPath.trim()
+        
+        // 1. Exact Match
+        val exact = fileDao.getFile(cleanPath)
+        if (exact != null) return exact
+
+        // 2. Implicit Extension (Only if not already .md)
+        if (!cleanPath.endsWith(".md", ignoreCase = true)) {
+            val withExt = fileDao.getFile("$cleanPath.md")
+            if (withExt != null) return withExt
+        }
+        
+        return null
+    }
+
+    /**
      * Sync File List.
      * Fetches from API -> Updates DB.
      * CRITICAL: Uses replaceFolderContent to purge ghosts (Authoritative Sync).
