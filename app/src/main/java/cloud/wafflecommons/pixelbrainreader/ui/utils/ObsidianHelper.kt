@@ -23,10 +23,64 @@ object ObsidianHelper {
             val cleanContent = content.substring(match.range.last + 1).trimStart()
             
             val (metadata, tags) = parseYamlMetadata(yamlBlock)
-            return ParsedMarkdown(metadata, tags, cleanContent)
+            val transformedContent = transformCallouts(cleanContent)
+            return ParsedMarkdown(metadata, tags, transformedContent)
         } else {
-            return ParsedMarkdown(emptyMap(), emptyList(), content)
+            return ParsedMarkdown(emptyMap(), emptyList(), transformCallouts(content))
         }
+    }
+
+    private fun transformCallouts(content: String): String {
+        val sb = StringBuilder()
+        val lines = content.lines()
+        var inCallout = false
+        
+        for (line in lines) {
+            val trimmed = line.trim()
+            
+            // 1. Detect Start: > [!TYPE] Title
+            val startMatch = CALLOUT_REGEX.find(line) // Regex("^>\\s\\[!(\\w+)\\]\\s(.*)$")
+            
+            if (startMatch != null) {
+                if (inCallout) sb.append("</callout>\n") // Close previous if unclosed
+                val type = startMatch.groupValues[1]
+                val title = startMatch.groupValues[2]
+                sb.append("<callout type=\"$type\">**$title**\n")
+                inCallout = true
+            } 
+            // 2. Detect Body: > content
+            else if (inCallout && line.trimStart().startsWith(">")) {
+                // Strip the > and one space if present
+                val contentLine = line.trimStart().removePrefix(">").removePrefix(" ")
+                sb.append(contentLine).append("\n")
+            }
+            // 3. Detect End: Empty line or non-quote line
+            else if (inCallout && trimmed.isEmpty()) {
+                // Empty lines inside callouts are valid in Obsidian, typically marked with just >
+                // But if it's completely empty, it usually signifies end of block in standard markdown spec, 
+                // though Obsidian allows it. Let's assume standard behavior: break on non-quote.
+                // Actually, if the line is JUST ">", it continues. If it's empty "" it breaks.
+                if (line.trim().isEmpty()) {
+                    sb.append("</callout>\n\n")
+                    inCallout = false
+                } else {
+                     // Non-empty, non-quote line -> End of block
+                    sb.append("</callout>\n")
+                    sb.append(line).append("\n")
+                    inCallout = false
+                }
+            }
+            else {
+                if (inCallout) {
+                    sb.append("</callout>\n")
+                    inCallout = false
+                }
+                sb.append(line).append("\n")
+            }
+        }
+        if (inCallout) sb.append("</callout>\n")
+        
+        return sb.toString()
     }
 
     private fun parseYamlMetadata(yaml: String): Pair<Map<String, String>, List<String>> {

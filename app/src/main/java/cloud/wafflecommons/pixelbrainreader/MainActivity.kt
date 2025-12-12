@@ -32,6 +32,9 @@ import android.content.Intent
 import cloud.wafflecommons.pixelbrainreader.ui.main.MainViewModel
 import kotlinx.coroutines.launch
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 
 @AndroidEntryPoint
 class MainActivity : FragmentActivity() {
@@ -78,8 +81,13 @@ class MainActivity : FragmentActivity() {
         // Initial Login Check
         isUserLoggedIn = secretManager.getToken() != null
         
-        // If logged in, we start as NOT authenticated (Locked)
-        isAuthenticated = !isUserLoggedIn 
+        // Fix: Determine initial auth state synchronously based on preference
+        isAuthenticated = if (isUserLoggedIn) {
+             val isBioEnabled = runBlocking { userPrefs.isBiometricEnabled.first() }
+             !isBioEnabled // Authenticated if disabled
+        } else {
+             false
+        } 
 
         // Setup Lifecycle Observer for background detection
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
@@ -140,6 +148,7 @@ class MainActivity : FragmentActivity() {
         viewModel.handleShareIntent(intent)
 
         // Trigger Biometrics ONCE at creation if locked
+        // isAuthenticated logic above ensures this only runs if enabled
         if (isUserLoggedIn && !isAuthenticated) {
             triggerBiometrics()
         }

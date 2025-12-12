@@ -8,17 +8,20 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextRange
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -27,28 +30,25 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Send
+import androidx.compose.material.icons.outlined.Code
+import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.Event
 import androidx.compose.material.icons.outlined.Psychology
-import androidx.compose.material.icons.rounded.Code
-import androidx.compose.material.icons.rounded.Description
-import androidx.compose.material.icons.automirrored.rounded.EventNote
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalDensity
+
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
 import cloud.wafflecommons.pixelbrainreader.data.ai.ScribePersona
-import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -60,9 +60,6 @@ fun ChatPanel(
     var textState by remember { mutableStateOf(TextFieldValue("")) }
     val listState = rememberLazyListState()
 
-    // --- Collapsible Header Logic REMOVED for Stability ---
-    // We use a simple Column layout to keep the header sticky at the top without complex offset calculations.
-
     // Auto-scroll logic (Optimized)
     LaunchedEffect(viewModel.messages.size) {
         if (viewModel.messages.isNotEmpty()) {
@@ -71,7 +68,7 @@ fun ChatPanel(
     }
 
     Scaffold(
-        containerColor = Color.Transparent, 
+        containerColor = Color.Transparent,
         contentWindowInsets = ScaffoldDefaults.contentWindowInsets.exclude(WindowInsets.ime),
     ) { innerPadding ->
         Column(
@@ -85,40 +82,23 @@ fun ChatPanel(
                 color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
                 modifier = Modifier.fillMaxWidth().zIndex(1f)
             ) {
-                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 12.dp, horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    ScribePersona.entries.forEach { persona ->
-                        val icon = when(persona) {
-                            ScribePersona.TECH_WRITER -> Icons.Rounded.Description
-                            ScribePersona.CODER -> Icons.Rounded.Code
-                            ScribePersona.PLANNER -> Icons.AutoMirrored.Rounded.EventNote
-                        }
-                        ExpressiveChip(
-                            label = persona.name.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() },
-                            icon = icon,
-                            isSelected = viewModel.currentPersona == persona,
-                            onClick = { viewModel.switchPersona(persona) }
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                    }
-                }
+                ChatPersonaSelector(
+                    currentPersona = viewModel.currentPersona,
+                    onPersonaSelected = { viewModel.switchPersona(it) }
+                )
             }
 
             // 2. Chat Content & Input
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 Column(modifier = Modifier.fillMaxSize()) {
                     Box(modifier = Modifier.weight(1f)) {
-                         if (viewModel.messages.isEmpty()) {
+                        if (viewModel.messages.isEmpty()) {
                             EmptyStatePlaceholder()
                         } else {
                             LazyColumn(
                                 state = listState,
                                 modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
-                                contentPadding = PaddingValues(top = 16.dp, bottom = 24.dp), 
+                                contentPadding = PaddingValues(top = 16.dp, bottom = 24.dp),
                                 verticalArrangement = Arrangement.spacedBy(24.dp)
                             ) {
                                 items(viewModel.messages) { msg ->
@@ -130,9 +110,9 @@ fun ChatPanel(
                             }
                         }
                     }
-                    
+
                     // Input Bar
-                     StealthInputBar(
+                    StealthInputBar(
                         textState = textState,
                         onTextChange = { textState = it },
                         onSend = {
@@ -152,47 +132,104 @@ fun ChatPanel(
 
 // --- COMPONENTS CUSTOM ---
 
-
-
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ExpressiveChip(
-    label: String,
-    icon: ImageVector,
-    isSelected: Boolean,
-    onClick: () -> Unit
+fun ChatPersonaSelector(
+    currentPersona: ScribePersona,
+    onPersonaSelected: (ScribePersona) -> Unit
 ) {
-    // Couleurs : Tertiary pour se différencier du Secondary (Vault/Scribe)
-    val containerColor by animateColorAsState(
-        if (isSelected) MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest, // Gris doux si inactif
-        label = "chipBg"
-    )
-    val contentColor by animateColorAsState(
-        if (isSelected) MaterialTheme.colorScheme.onTertiaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-        label = "chipContent"
-    )
+    val personas = ScribePersona.entries
+    val selectedIndex = personas.indexOf(currentPersona)
 
-    Surface(
-        onClick = onClick,
-        shape = CircleShape,
-        color = containerColor,
-        modifier = Modifier.height(40.dp) // Hauteur standard Material 3 (plus confortable)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp),
+        contentAlignment = Alignment.Center
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 16.dp)
+        // STYLE "FLOATING SLIDING PILL" (Custom Implementation)
+        // Contrairement au SegmentedButton standard, cela permet une vraie animation de glissement
+
+        Surface(
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            modifier = Modifier
+                .height(64.dp)
+                .widthIn(max = 450.dp)
+                .fillMaxWidth(0.95f) // Prend 95% de la largeur dispo jusqu'à 450dp
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp),
-                tint = contentColor
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelLarge, // Texte un peu plus grand
-                color = contentColor
-            )
+            BoxWithConstraints(
+                modifier = Modifier.fillMaxSize()
+            ) {
+                // Calcul dynamique de la largeur d'un segment
+                val segmentWidth = maxWidth / personas.size
+
+                // ANIMATION: Déplacement fluide du fond (indicateur)
+                val indicatorOffset by animateDpAsState(
+                    targetValue = segmentWidth * selectedIndex,
+                    animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing),
+                    label = "indicatorOffset"
+                )
+
+                // 1. L'Indicateur Glissant (Le fond de l'élément actif)
+                Box(
+                    modifier = Modifier
+                        .offset(x = indicatorOffset)
+                        .width(segmentWidth)
+                        .fillMaxHeight()
+                        .padding(8.dp) // Padding pour l'effet "flottant" à l'intérieur de la piste
+                        .background(MaterialTheme.colorScheme.secondaryContainer, CircleShape)
+                )
+
+                // 2. Les Labels (Icônes + Texte) par dessus
+                Row(modifier = Modifier.fillMaxSize()) {
+                    personas.forEach { persona ->
+                        val isSelected = currentPersona == persona
+
+                        // Animation de la couleur du texte/icône pour le contraste
+                        val contentColor by animateColorAsState(
+                            targetValue = if (isSelected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                            label = "contentColor"
+                        )
+
+                        val label = persona.name.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() }
+                        val icon = when (persona) {
+                            ScribePersona.TECH_WRITER -> Icons.Outlined.Description
+                            ScribePersona.CODER -> Icons.Outlined.Code
+                            ScribePersona.PLANNER -> Icons.Outlined.Event
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .clip(CircleShape) // Ripple rond lors du clic
+                                .clickable { onPersonaSelected(persona) },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    imageVector = icon,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                    tint = contentColor
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = label,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    color = contentColor
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -208,7 +245,7 @@ fun StealthInputBar(
     val context = LocalContext.current
     var lastClickTime by remember { mutableLongStateOf(0L) }
     val isEnabled = textState.text.isNotBlank() && !isLoading
-    
+
     val speechLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -226,7 +263,7 @@ fun StealthInputBar(
             }
         }
     }
-    
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -278,22 +315,21 @@ fun StealthInputBar(
                     if (isEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest,
                     label = "btnColor"
                 )
-                
-                // UX Requirement: Mic when empty, Send when typing
+
                 val showMic = textState.text.isBlank()
 
                 IconButton(
                     onClick = {
                         if (showMic) {
-                             val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                                 putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak now...")
-                             }
-                             try {
-                                 speechLauncher.launch(intent)
-                             } catch (e: ActivityNotFoundException) {
-                                 Toast.makeText(context, "Speech recognition not available", Toast.LENGTH_SHORT).show()
-                             }
+                            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                                putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak now...")
+                            }
+                            try {
+                                speechLauncher.launch(intent)
+                            } catch (e: ActivityNotFoundException) {
+                                Toast.makeText(context, "Speech recognition not available", Toast.LENGTH_SHORT).show()
+                            }
                         } else {
                             val currentTime = System.currentTimeMillis()
                             if (currentTime - lastClickTime > 1000L) {
@@ -302,7 +338,7 @@ fun StealthInputBar(
                             }
                         }
                     },
-                    enabled = true, // Always clickable for the Mic feedback
+                    enabled = true,
                     modifier = Modifier
                         .size(44.dp)
                         .background(btnColor, CircleShape)
@@ -320,7 +356,7 @@ fun StealthInputBar(
                                     Icons.Rounded.Mic,
                                     contentDescription = "Voice Input",
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                ) 
+                                )
                             } else {
                                 Icon(
                                     Icons.AutoMirrored.Rounded.Send,
@@ -386,8 +422,7 @@ fun ChatBubble(message: ChatMessage, onInsert: ((String) -> Unit)?) {
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 if (!isUser) {
-                     // Spacer only for spacing
-                     Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(8.dp))
                 }
 
                 Text(
@@ -404,7 +439,8 @@ fun ChatBubble(message: ChatMessage, onInsert: ((String) -> Unit)?) {
                 onClick = { onInsert(message.content) },
                 modifier = Modifier.height(48.dp),
                 enabled = true,
-                contentPadding = PaddingValues(horizontal = 24.dp)
+                contentPadding = PaddingValues(horizontal = 24.dp),
+                shape = RoundedCornerShape(16.dp)
             ) {
                 Text("Save into Inbox", style = MaterialTheme.typography.labelMedium)
             }

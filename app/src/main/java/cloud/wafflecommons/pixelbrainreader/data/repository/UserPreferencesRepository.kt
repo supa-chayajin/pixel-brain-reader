@@ -54,4 +54,17 @@ class UserPreferencesRepository @Inject constructor(
             preferences[THEME_MODE_KEY] = mode
         }
     }
+    
+    private val BIOMETRIC_ENABLED_KEY = androidx.datastore.preferences.core.booleanPreferencesKey("biometric_enabled")
+    
+    val isBiometricEnabled: Flow<Boolean> = context.dataStore.data
+        .map { preferences ->
+            preferences[BIOMETRIC_ENABLED_KEY] ?: true // Default TRUE
+        }
+        
+    suspend fun setBiometricEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[BIOMETRIC_ENABLED_KEY] = enabled
+        }
+    }
 }

@@ -37,7 +37,8 @@ class SettingsViewModel @Inject constructor(
         val currentAiModel: AiModel = AiModel.GEMINI_FLASH,
         val repoOwner: String? = null,
         val repoName: String? = null,
-        val appVersion: String = "1.0.0"
+        val appVersion: String = "1.0.0",
+        val isBiometricEnabled: Boolean = true
     )
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -61,6 +62,14 @@ class SettingsViewModel @Inject constructor(
                 )
             }
             .launchIn(viewModelScope)
+            
+        userPrefs.isBiometricEnabled
+            .onEach { enabled ->
+                _uiState.value = _uiState.value.copy(
+                    isBiometricEnabled = enabled
+                )
+            }
+            .launchIn(viewModelScope)
     }
 
     private fun loadRepoInfo() {
@@ -80,6 +89,12 @@ class SettingsViewModel @Inject constructor(
     fun updateAiModel(model: AiModel) {
         viewModelScope.launch {
             userPrefs.setAiModel(model.id)
+        }
+    }
+    
+    fun updateBiometricEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            userPrefs.setBiometricEnabled(enabled)
         }
     }
 

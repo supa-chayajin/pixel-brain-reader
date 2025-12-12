@@ -140,6 +140,7 @@ dependencies {
     // HTML Parsing & Conversion (Phase B: Universal Collector)
     implementation("org.jsoup:jsoup:1.17.2")
     implementation("com.vladsch.flexmark:flexmark-html2md-converter:0.64.8")
+    implementation("io.noties.markwon:html:4.6.2")
 
     // AI Core & MediaPipe (V4.0: Neural Vault)
     implementation("com.google.ai.client.generativeai:generativeai:0.9.0")

@@ -71,11 +71,13 @@ fun FileListPane(
         AlertDialog(
             onDismissRequest = { showRenameDialog = null },
             title = { Text("Rename File") },
+            shape = RoundedCornerShape(28.dp),
             text = {
                 OutlinedTextField(
                     value = newName,
                     onValueChange = { newName = it },
-                    singleLine = true
+                    singleLine = true,
+                    shape = RoundedCornerShape(16.dp)
                 )
             },
             confirmButton = {
@@ -97,6 +99,7 @@ fun FileListPane(
         val file = showMoveDialog!!
         AlertDialog(
             onDismissRequest = { showMoveDialog = null },
+            shape = RoundedCornerShape(28.dp),
             title = { 
                 Column {
                     Text("Move to...")
@@ -189,7 +192,7 @@ fun FileListPane(
                 Button(onClick = {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     onRefresh()
-                }) {
+                }, shape = CircleShape) {
                     Text("Retry")
                 }
             }
@@ -251,7 +254,7 @@ fun FileListPane(
                     Button(onClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         onCreateFile()
-                    }) {
+                    }, shape = CircleShape) {
                         Icon(Icons.Default.Add, null)
                         Spacer(Modifier.width(8.dp))
                         Text("Create new file")
@@ -283,7 +286,8 @@ fun FileListPane(
                             colors = ButtonDefaults.filledTonalButtonColors(
                                 containerColor = MaterialTheme.colorScheme.tertiaryContainer,
                                 contentColor = MaterialTheme.colorScheme.onTertiaryContainer
-                            )
+                            ),
+                            shape = CircleShape
                         ) {
                              Icon(Icons.Rounded.AutoAwesome, null, modifier = Modifier.size(18.dp))
                              Spacer(Modifier.width(8.dp))
@@ -358,6 +362,8 @@ fun FileListPane(
                 }
             }
         }
+
+
     }
 }
 

@@ -41,7 +41,9 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.outlined.Dashboard
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Settings
+
 import androidx.compose.material.icons.outlined.Psychology
+import androidx.compose.material.icons.filled.Today
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material3.DrawerValue
@@ -90,6 +92,8 @@ import androidx.window.core.layout.WindowWidthSizeClass
 import kotlinx.coroutines.launch
 
 import androidx.compose.material3.ExperimentalMaterial3Api
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3AdaptiveApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -108,6 +112,14 @@ fun MainScreen(
     val windowAdaptiveInfo: WindowAdaptiveInfo = currentWindowAdaptiveInfo()
     val windowSizeClass = windowAdaptiveInfo.windowSizeClass
     val isLargeScreen = windowSizeClass.windowWidthSizeClass != WindowWidthSizeClass.COMPACT
+
+    // Smart Active State Logic
+    val todayName = remember {
+        val now = LocalDateTime.now()
+        val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+        "${now.format(formatter)}.md"
+    }
+    val isViewingDailyNote = uiState.selectedFileName == todayName
 
     val baseDirective = calculatePaneScaffoldDirective(windowAdaptiveInfo)
     val finalDirective = if (uiState.isFocusMode && isLargeScreen) {
@@ -164,6 +176,20 @@ fun MainScreen(
             navController.navigate("import")
         }
     }
+
+    // Hotfix: Programmatic Navigation (Daily Note)
+    LaunchedEffect(uiState.navigationTrigger) {
+        uiState.navigationTrigger?.let { route ->
+            navController.navigate(route) {
+                popUpTo(navController.graph.findStartDestination().id) {
+                    saveState = true
+                }
+                launchSingleTop = true
+                restoreState = true
+            }
+            viewModel.consumeNavigationTrigger()
+        }
+    }
     
     // Auto-Close logic for External Imports
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -176,7 +202,7 @@ fun MainScreen(
     androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold(
         navigationSuiteItems = {
             item(
-                selected = currentRoute == "home",
+                selected = currentRoute == "home" && !isViewingDailyNote, // Active only if NOT viewing daily note
                 onClick = { 
                     navController.navigate("home") {
                         popUpTo(navController.graph.findStartDestination().id) {
@@ -188,6 +214,21 @@ fun MainScreen(
                 },
                 icon = { Icon(Icons.Default.Dashboard, contentDescription = "Home") },
                 label = { Text("Repo") }
+            )
+            item(
+                 selected = isViewingDailyNote, // Active if viewing daily note
+                 onClick = { 
+                     viewModel.onTodayClicked()
+                     navController.navigate("home") {
+                        popUpTo(navController.graph.findStartDestination().id) {
+                            saveState = true
+                        }
+                        launchSingleTop = true
+                        restoreState = true
+                     }
+                 },
+                 icon = { Icon(Icons.Default.Today, contentDescription = "Today") },
+                 label = { Text("Daily") }
             )
             item(
                 selected = currentRoute == "chat",
@@ -235,6 +276,7 @@ fun MainScreen(
                 if (showExitDialog.value) {
                     androidx.compose.material3.AlertDialog(
                         onDismissRequest = { showExitDialog.value = false },
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
                         title = { Text("Exit & Lock App?") },
                         text = { Text("This will close the application. You will need to authenticate again to open it.") },
                         confirmButton = {
@@ -250,6 +292,15 @@ fun MainScreen(
                                 Text("Cancel")
                             }
                         }
+                    )
+
+                }
+
+                if (uiState.showCreateFileDialog) {
+                    cloud.wafflecommons.pixelbrainreader.ui.components.NewFileBottomSheet(
+                        availableTemplates = uiState.availableTemplates,
+                        onDismiss = { viewModel.dismissCreateFileDialog() },
+                        onCreate = { name, template -> viewModel.createNewFile(name, template) }
                     )
                 }
 
@@ -289,12 +340,11 @@ fun MainScreen(
                                     androidx.compose.material3.TextField(
                                         value = uiState.searchQuery,
                                         onValueChange = { viewModel.onSearchQueryChanged(it) },
-                                        placeholder = { Text("Search directories, files, content...") },
+                                        placeholder = { Text("Search...") },
                                         singleLine = true,
-                                        modifier = Modifier.fillMaxWidth(),
+                                        modifier = Modifier.fillMaxWidth().padding(end = 8.dp),
+                                        shape = androidx.compose.foundation.shape.CircleShape,
                                         colors = androidx.compose.material3.TextFieldDefaults.colors(
-                                            focusedContainerColor = Color.Transparent,
-                                            unfocusedContainerColor = Color.Transparent,
                                             focusedIndicatorColor = Color.Transparent,
                                             unfocusedIndicatorColor = Color.Transparent
                                         ),
@@ -378,7 +428,7 @@ fun MainScreen(
 
                                     } else {
                                         // Browser Actions
-                                        IconButton(onClick = { viewModel.createNewFile() }) {
+                                        IconButton(onClick = { viewModel.openCreateFileDialog() }) {
                                             Icon(Icons.Default.Add, "New File")
                                         }
                                     }
@@ -426,7 +476,7 @@ fun MainScreen(
                                                     onNavigateUp = { viewModel.navigateUp() },
                                                     onMenuClick = { },
                                                     onRefresh = { viewModel.refresh() },
-                                                    onCreateFile = { viewModel.createNewFile() },
+                                                    onCreateFile = { viewModel.openCreateFileDialog() },
                                                     onRenameFile = { newName, file -> viewModel.renameFile(newName, file) },
                                                     onMoveFile = { file, folder -> viewModel.moveFile(file, folder) },
                                                     onPrepareMove = { file -> viewModel.prepareMove(file) },

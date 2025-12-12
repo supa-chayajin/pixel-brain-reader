@@ -7,6 +7,8 @@ import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.FileEntity
 import cloud.wafflecommons.pixelbrainreader.data.remote.model.GithubFileDto
 import cloud.wafflecommons.pixelbrainreader.data.repository.FileRepository
+import cloud.wafflecommons.pixelbrainreader.data.repository.DailyNoteRepository
+import cloud.wafflecommons.pixelbrainreader.data.repository.TemplateRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -30,6 +32,8 @@ import kotlinx.coroutines.flow.flatMapLatest
 @HiltViewModel
 class MainViewModel @Inject constructor(
     private val repository: FileRepository,
+    private val dailyNoteRepository: DailyNoteRepository,
+    private val templateRepository: TemplateRepository,
     private val secretManager: SecretManager,
     private val userPrefs: UserPreferencesRepository,
     private val geminiRagManager: cloud.wafflecommons.pixelbrainreader.data.ai.GeminiRagManager
@@ -71,7 +75,14 @@ class MainViewModel @Inject constructor(
         val folders: List<String> = emptyList(), // Legacy - to be replaced by availableMoveDestinations
         val availableMoveDestinations: List<String> = emptyList(), // Filtered list for Move Dialog
         val moveDialogCurrentPath: String = "", // Current path in Move Dialog
-        val isExitPending: Boolean = false // Signal to close the activity
+        val isExitPending: Boolean = false, // Signal to close the activity
+        
+        // Templates
+        val availableTemplates: List<String> = emptyList(),
+        val showCreateFileDialog: Boolean = false,
+        
+        // Navigation Signal (One-shot)
+        val navigationTrigger: String? = null
     )
 
     data class ImportState(val title: String, val content: String)
@@ -522,6 +533,10 @@ class MainViewModel @Inject constructor(
     fun userMessageShown() {
         _uiState.value = _uiState.value.copy(userMessage = null)
     }
+
+    fun consumeNavigationTrigger() {
+        _uiState.value = _uiState.value.copy(navigationTrigger = null)
+    }
              
     fun renameFile(newName: String, targetFile: GithubFileDto? = null) {
         // Support renaming specific file (swipe) or current selected (menu)
@@ -681,18 +696,52 @@ class MainViewModel @Inject constructor(
         )
     }
 
-    fun createNewFile() {
+    fun openCreateFileDialog() {
+        viewModelScope.launch {
+            val templates = templateRepository.getAvailableTemplates()
+            _uiState.value = _uiState.value.copy(
+                availableTemplates = templates,
+                showCreateFileDialog = true
+            )
+        }
+    }
+
+    fun dismissCreateFileDialog() {
+        _uiState.value = _uiState.value.copy(showCreateFileDialog = false)
+    }
+
+    fun createNewFile(filename: String? = null, templateName: String? = null) {
         val parentPath = _uiState.value.currentPath
-        val name = "Untitled_${System.currentTimeMillis()}.md"
-        val fullPath = if (parentPath.isNotEmpty()) "$parentPath/$name" else name
+        val finalName = if (filename.isNullOrBlank()) "Untitled_${System.currentTimeMillis()}.md" else if(filename.endsWith(".md")) filename else "$filename.md"
+        
+        val fullPath = if (parentPath.isNotEmpty()) "$parentPath/$finalName" else finalName
         
         viewModelScope.launch {
-            // 1. Synchronous Creation (Disk/DB)
-            repository.saveFileLocally(fullPath, "")
+            // 1. Prepare Content
+            var content = ""
+            if (!templateName.isNullOrBlank()) {
+                 // Fetch Template Content
+                 // We reuse Repository logic (or access Dao via Repo?)
+                 // FileRepository.getFileContentFlow works for reading, but we need single shot.
+                 // We can use the same path logic as TemplateRepository (it knows folder).
+                 // For now, let's use a public method on FileRepository if available?
+                 // Or just Read via Repo.
+                 val templatePath = "${TemplateRepository.TEMPLATE_FOLDER}/$templateName"
+                 val templateContent = repository.getFileContentFlow(templatePath).firstOrNull() ?: ""
+                 
+                 // Apply Engine
+                 content = cloud.wafflecommons.pixelbrainreader.data.utils.TemplateEngine.apply(templateContent, finalName.substringBeforeLast("."))
+            }
+
+            // 2. Synchronous Creation (Disk/DB)
+            repository.saveFileLocally(fullPath, content)
             
-            // 2. Immediate UI Update (Don't wait for DB Observer)
+            // 3. Close Dialog
+             _uiState.value = _uiState.value.copy(showCreateFileDialog = false)
+
+            // 4. Immediate UI Update (Don't wait for DB Observer)
             val newDto = GithubFileDto(
-                name = name, 
+                name = finalName, 
                 path = fullPath, 
                 type = "file", 
                 downloadUrl = null,
@@ -700,13 +749,13 @@ class MainViewModel @Inject constructor(
                 lastModified = System.currentTimeMillis()
             )
             
-            // 3. Open immediately
+            // 5. Open immediately
             loadFile(newDto)
             
-            // 4. Set Edit Mode & Ready State
+            // 6. Set Edit Mode & Ready State
             _uiState.value = _uiState.value.copy(
                 isEditing = true,
-                unsavedContent = "", // Ready for typing
+                unsavedContent = content, // Ready for typing (pre-filled with template)
                 hasUnsavedChanges = true // It is a new file
             )
         }
@@ -841,6 +890,45 @@ class MainViewModel @Inject constructor(
              if (owner != null && repo != null) {
                   repository.pushDirtyFiles(owner, repo)
              }
+        }
+    }
+
+    /**
+     * FEATURE C: Daily Note
+     * Triggers logic to open or create today's journal entry.
+     */
+    fun onTodayClicked() {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true)
+            try {
+                // 1. Get Path (This creates file if needed)
+                val notePath = dailyNoteRepository.getOrCreateTodayNote()
+                val noteName = notePath.substringAfterLast("/")
+                
+                // 2. Open File
+                // Construct Pseudo-DTO (Since we know path & name)
+                val dto = GithubFileDto(
+                     name = noteName,
+                     path = notePath,
+                     type = "file",
+                     downloadUrl = null, // Local
+                     sha = null,
+                     lastModified = System.currentTimeMillis()
+                )
+                
+                loadFile(dto)
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    isEditing = false, // User Requirement: Open in Read Mode (Preview) by default
+                    navigationTrigger = "home" // Step B (THE FIX): Force Navigation to Repo Tab
+                )
+            } catch (e: Exception) {
+                Log.e("DailyNote", "Failed to open today", e)
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = "Failed to open Daily Note: ${e.message}"
+                )
+            }
         }
     }
 }

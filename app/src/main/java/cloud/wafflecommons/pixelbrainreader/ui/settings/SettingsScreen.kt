@@ -6,6 +6,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BrightnessMedium
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.*
@@ -109,6 +110,33 @@ fun SettingsScreen(
                             }
                         )
                     }
+                }
+            }
+
+            // 2b. Security Section
+            SettingsSection(
+                title = "Security",
+                icon = Icons.Default.Lock
+            ) {
+                 Row(
+                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Biometric Authentication",
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                        Text(
+                            text = "Require fingerprint or face unlock on app start.",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = uiState.isBiometricEnabled,
+                        onCheckedChange = { viewModel.updateBiometricEnabled(it) }
+                    )
                 }
             }
 

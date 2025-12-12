@@ -5,6 +5,8 @@ import cloud.wafflecommons.pixelbrainreader.data.local.entity.FileEntity
 import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
 import cloud.wafflecommons.pixelbrainreader.data.remote.model.GithubFileDto
 import cloud.wafflecommons.pixelbrainreader.data.repository.FileRepository
+import cloud.wafflecommons.pixelbrainreader.data.repository.DailyNoteRepository
+import cloud.wafflecommons.pixelbrainreader.data.repository.TemplateRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -54,6 +56,8 @@ class MainViewModelTest {
     
     // Mocks
     private val repository: FileRepository = mockk(relaxed = true)
+    private val dailyNoteRepository: DailyNoteRepository = mockk(relaxed = true)
+    private val templateRepository: TemplateRepository = mockk(relaxed = true)
     private val secretManager: SecretManager = mockk(relaxed = true)
     private val userPrefs: UserPreferencesRepository = mockk(relaxed = true)
     private val geminiRagManager: GeminiRagManager = mockk(relaxed = true)
@@ -65,7 +69,7 @@ class MainViewModelTest {
         every { secretManager.getRepoInfo() } returns Pair("user", "repo")
         coEvery { repository.getFiles(any()) } returns flowOf(emptyList()) 
         
-        viewModel = MainViewModel(repository, secretManager, userPrefs, geminiRagManager)
+        viewModel = MainViewModel(repository, dailyNoteRepository, templateRepository, secretManager, userPrefs, geminiRagManager)
     }
 
     // --- 1. Initialization & Navigation ---
@@ -289,7 +293,7 @@ class MainViewModelTest {
         // When query is "1" -> calls searchFiles
         coEvery { repository.searchFiles("1") } returns flowOf(listOf(file1))
         
-        viewModel = MainViewModel(repository, secretManager, userPrefs, geminiRagManager)
+        viewModel = MainViewModel(repository, dailyNoteRepository, templateRepository, secretManager, userPrefs, geminiRagManager)
         advanceUntilIdle() // Initial load
         
         // Assert Initial
@@ -334,7 +338,7 @@ class MainViewModelTest {
          
          // Initial Load (Empty query)
          coEvery { repository.getFiles("") } returns flowOf(emptyList()) // Just needed for init
-        viewModel = MainViewModel(repository, secretManager, userPrefs, geminiRagManager)
+        viewModel = MainViewModel(repository, dailyNoteRepository, templateRepository, secretManager, userPrefs, geminiRagManager)
          advanceUntilIdle()
 
          // 1. Search "plumb"
