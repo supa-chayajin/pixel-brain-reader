@@ -52,6 +52,19 @@
                 android:value="androidx.startup"
                 tools:node="remove" />
         </provider>
+
+        <!-- Mood Tracker Widget -->
+        <receiver
+            android:name=".widget.MoodWidgetReceiver"
+            android:exported="false"
+            android:label="Mood Tracker">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/mood_widget_info" />
+        </receiver>
     </application>
 
 </manifest>
