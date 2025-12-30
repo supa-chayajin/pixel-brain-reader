@@ -8,7 +8,6 @@ data class ParsedMarkdown(
 
 object ObsidianHelper {
     // Regex for Frontmatter: Matches start of file, --- OR +++, content, then --- OR +++
-    // Use (?s) via DOT_MATCHES_ALL option
     private val FRONTMATTER_REGEX = Regex("^(?:---|\\+\\+\\+)\\n([\\s\\S]*?)\\n(?:---|\\+\\+\\+)", RegexOption.MULTILINE)
     
     val WIKI_LINK_REGEX = Regex("\\[\\[([^|\\]]+)(?:\\|([^\\]]+))?\\]\\]")
@@ -19,7 +18,6 @@ object ObsidianHelper {
         
         if (match != null) {
             val yamlBlock = match.groupValues[1]
-            // Remove the ENTIRE matched frontmatter block from the start of the string
             val cleanContent = content.substring(match.range.last + 1).trimStart()
             
             val (metadata, tags) = parseYamlMetadata(yamlBlock)
@@ -36,56 +34,67 @@ object ObsidianHelper {
         var inCallout = false
         
         for (line in lines) {
-            val trimmed = line.trim()
+            val trimmedLine = line.trim()
             
             // 1. Detect Start: > [!TYPE] Title
             val startMatch = CALLOUT_REGEX.find(line)
             
             if (startMatch != null) {
-                if (inCallout) sb.append("</div>\n") // Close previous if unclosed
+                if (inCallout) sb.append("</div></div>\n") // Close previous content and container
                 val type = startMatch.groupValues[1]
-                val title = startMatch.groupValues[2]
-                sb.append(generateHtmlForCallout(type, title)).append("\n")
+                val customTitle = startMatch.groupValues[2].trim()
+                sb.append(generateHtmlForCallout(type, if (customTitle.isEmpty()) null else customTitle)).append("\n")
                 inCallout = true
             } 
             // 2. Detect Body: > content
             else if (inCallout && line.trimStart().startsWith(">")) {
-                // Strip the > and one space if present
                 val contentLine = line.trimStart().removePrefix(">").removePrefix(" ")
                 sb.append(contentLine).append("\n")
             }
             // 3. Detect End: Empty line or non-quote line
-            else if (inCallout && trimmed.isEmpty()) {
-                if (line.trim().isEmpty()) {
-                    sb.append("</div>\n\n")
-                    inCallout = false
-                } else {
-                     // Non-empty, non-quote line -> End of block
-                    sb.append("</div>\n")
-                    sb.append(line).append("\n")
-                    inCallout = false
-                }
+            else if (inCallout && trimmedLine.isEmpty()) {
+                sb.append("</div></div>\n\n")
+                inCallout = false
             }
             else {
                 if (inCallout) {
-                    sb.append("</div>\n")
+                    sb.append("</div></div>\n")
                     inCallout = false
                 }
                 sb.append(line).append("\n")
             }
         }
-        if (inCallout) sb.append("</div>\n")
+        if (inCallout) sb.append("</div></div>\n")
         
         return sb.toString()
     }
 
-    private fun generateHtmlForCallout(type: String, title: String): String {
-        val color = getCalloutColor(type)
-        val rgba = hexToRgba(color, 0.1f)
+    private fun generateHtmlForCallout(type: String, userTitle: String?): String {
+        val (color, icon, defaultTitle) = getCalloutStyle(type)
+        val displayTitle = userTitle ?: defaultTitle
+        val bgColor = hexToRgba(color, 0.12f)
         
-        // CSS transparency (rgba) and inheritance (currentColor)
-        // This makes callouts look good on BOTH Light and Dark themes without duplicate code.
-        return """<div style="background-color: $rgba; border-left: 4px solid $color; padding: 12px; margin: 8px 0; border-radius: 4px; color: currentColor;"><strong>$title</strong><br/>"""
+        return """
+            <div style="
+                background-color: $bgColor;
+                border-left: 5px solid $color;
+                border-radius: 8px;
+                padding: 12px 16px;
+                margin-bottom: 16px;
+                color: currentColor;
+            ">
+                <div style="
+                    color: $color;
+                    font-weight: bold;
+                    font-size: 1.1em;
+                    margin-bottom: 6px;
+                    display: block;
+                ">
+                    <span style="margin-right: 8px;">$icon</span>
+                    <span>$displayTitle</span>
+                </div>
+                <div style="opacity: 0.9; line-height: 1.4;">
+        """.trimIndent()
     }
 
     fun hexToRgba(hex: String, alpha: Float): String {
@@ -97,13 +106,18 @@ object ObsidianHelper {
         return "rgba($r, $g, $b, $alpha)"
     }
 
-    private fun getCalloutColor(type: String): String {
-        return when (type.uppercase()) {
-            "TIP", "GOAL", "SUCCESS", "DONE" -> "#4CAF50"
-            "INFO", "NOTE", "EXAMPLE" -> "#2196F3"
-            "WARNING", "CAUTION", "ATTENTION" -> "#FF9800"
-            "DANGER", "ERROR", "BUG", "FAIL" -> "#F44336"
-            else -> "#9E9E9E"
+    private fun getCalloutStyle(type: String): Triple<String, String, String> {
+        return when (type.lowercase()) {
+            "info", "todo" -> Triple("#2196F3", "ℹ️", "Info")
+            "tip", "hint", "important" -> Triple("#00BCD4", "💡", "Tip")
+            "success", "check", "done" -> Triple("#4CAF50", "✅", "Success")
+            "question", "help", "faq" -> Triple("#FF9800", "❓", "Question")
+            "warning", "caution", "attention" -> Triple("#FFC107", "⚠️", "Warning")
+            "failure", "fail", "missing" -> Triple("#F44336", "❌", "Failure")
+            "danger", "error", "bug" -> Triple("#D32F2F", "🐞", "Error")
+            "example" -> Triple("#9C27B0", "🟣", "Example")
+            "quote", "cite" -> Triple("#9E9E9E", "❝", "Quote")
+            else -> Triple("#607D8B", "📝", type.replaceFirstChar { it.uppercase() })
         }
     }
 
@@ -117,7 +131,6 @@ object ObsidianHelper {
             if (cleanLine.isEmpty() || cleanLine.startsWith("#")) return@forEach
 
             if (cleanLine.startsWith("- ") && currentKey != null) {
-                // List item for the current key
                 val value = cleanLine.removePrefix("- ").trim()
                 if (currentKey == "tags") {
                     tags.add(value.removeSurrounding("\"").removeSurrounding("'"))
@@ -133,7 +146,6 @@ object ObsidianHelper {
                 currentKey = key
                 
                 if (key == "tags") {
-                    // Handle inline array [a, b]
                     if (value.startsWith("[") && value.endsWith("]")) {
                         tags.addAll(
                             value.removeSurrounding("[", "]")
@@ -151,4 +163,3 @@ object ObsidianHelper {
         return metadata to tags
     }
 }
-
