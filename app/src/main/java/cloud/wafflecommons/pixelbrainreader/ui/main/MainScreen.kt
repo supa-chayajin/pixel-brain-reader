@@ -46,11 +46,13 @@ import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.material.icons.filled.Today
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SearchOff
+import androidx.compose.material.icons.filled.Mood
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import cloud.wafflecommons.pixelbrainreader.ui.components.PullToRefreshBox
 import cloud.wafflecommons.pixelbrainreader.ui.settings.SettingsScreen
+import cloud.wafflecommons.pixelbrainreader.ui.journal.DailyCheckInSheet
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
@@ -304,6 +306,11 @@ fun MainScreen(
                     )
                 }
 
+                var showCheckInSheet by remember { mutableStateOf(false) }
+                if (showCheckInSheet) {
+                    DailyCheckInSheet(onDismiss = { showCheckInSheet = false })
+                }
+
                 // Back Handler for Home Logic
                 BackHandler(enabled = true) {
                     when {
@@ -435,6 +442,16 @@ fun MainScreen(
                                 }
                             }
                         )
+                    },
+
+                    floatingActionButton = {
+                        androidx.compose.material3.FloatingActionButton(
+                            onClick = { showCheckInSheet = true },
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        ) {
+                            Icon(androidx.compose.material.icons.Icons.Default.Mood, contentDescription = "Check-In")
+                        }
                     },
 
                     contentWindowInsets = WindowInsets(0, 0, 0, 32) // We handle insets in content (List/Detail)

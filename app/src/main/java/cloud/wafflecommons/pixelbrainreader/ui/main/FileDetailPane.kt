@@ -43,6 +43,7 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -62,6 +63,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import cloud.wafflecommons.pixelbrainreader.ui.utils.ObsidianHelper
+import cloud.wafflecommons.pixelbrainreader.data.utils.FrontmatterManager
+import cloud.wafflecommons.pixelbrainreader.ui.journal.DailyNoteHeader
 import io.noties.markwon.AbstractMarkwonPlugin
 import io.noties.markwon.Markwon
 import io.noties.markwon.ext.strikethrough.StrikethroughPlugin
@@ -154,7 +157,13 @@ fun FileDetailPane(
                     }
                     content != null -> {
                         val parsed = remember(content) { ObsidianHelper.parse(content) }
-                        val displayContent = if (isEditing) content else parsed.cleanContent
+                        val isDailyNote = fileName?.matches(Regex("\\d{4}-\\d{2}-\\d{2}\\.md")) ?: false
+                        val displayContent = if (isEditing) {
+                            content
+                        } else {
+                            // Smart Display Logic: selective stripping based on file type
+                            FrontmatterManager.prepareContentForDisplay(content)
+                        }
                         
                         if (isEditing) {
                             BasicTextField(
@@ -179,9 +188,23 @@ fun FileDetailPane(
                                     .verticalScroll(rememberScrollState())
                                     .imePadding()
                             ) {
-                                if (!parsed.metadata.isEmpty() || parsed.tags.isNotEmpty()) {
-                                    MetadataHeader(parsed.metadata, parsed.tags)
-                                } else {
+                                // Double Frontmatter Logic: Header for Block B, MetadataHeader for whatever is left in Block A
+                                val summary = remember(content) { FrontmatterManager.getDailySummary(content) }
+                                if (summary != null) {
+                                    DailyNoteHeader(summary = summary, modifier = Modifier.padding(top = 16.dp))
+                                    HorizontalDivider(
+                                        modifier = Modifier.padding(vertical = 8.dp),
+                                        color = MaterialTheme.colorScheme.outlineVariant
+                                    )
+                                }
+
+                                // Filter daily metadata keys for the generic header
+                                val dailyKeys = listOf("average_mood", "daily_emoji", "all_activities", "last_update", "timeline", "pixel_brain_log")
+                                val filteredMetadata = parsed.metadata.filterKeys { it !in dailyKeys }
+                                
+                                if (filteredMetadata.isNotEmpty() || parsed.tags.isNotEmpty()) {
+                                    MetadataHeader(filteredMetadata, parsed.tags)
+                                } else if (!isDailyNote) {
                                     Spacer(Modifier.height(16.dp))
                                 }
                                 
