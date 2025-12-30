@@ -158,11 +158,13 @@ fun FileDetailPane(
                     content != null -> {
                         val parsed = remember(content) { ObsidianHelper.parse(content) }
                         val isDailyNote = fileName?.matches(Regex("\\d{4}-\\d{2}-\\d{2}\\.md")) ?: false
-                        val displayContent = if (isEditing) {
-                            content
-                        } else {
-                            // Smart Display Logic: selective stripping based on file type
-                            FrontmatterManager.prepareContentForDisplay(content)
+                        val displayContent = remember(content, isEditing) {
+                            if (isEditing) {
+                                content
+                            } else {
+                                // Use the new smart function that handles both Daily and Standard files correctly
+                                FrontmatterManager.prepareContentForDisplay(content)
+                            }
                         }
                         
                         if (isEditing) {

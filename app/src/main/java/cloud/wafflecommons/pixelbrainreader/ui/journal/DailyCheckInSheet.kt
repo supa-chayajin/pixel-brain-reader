@@ -9,9 +9,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -44,15 +47,33 @@ fun DailyCheckInSheet(
         Pair(5, "🤩")
     )
 
-    data class ActivityItem(val name: String, val icon: ImageVector)
-    val activityItems = listOf(
-        ActivityItem("Dev", Icons.Default.Code),
-        ActivityItem("Gaming", Icons.Default.Gamepad),
-        ActivityItem("Family", Icons.Default.Groups),
-        ActivityItem("Sport", Icons.Default.FitnessCenter),
-        ActivityItem("Sleep", Icons.Default.Bedtime),
-        ActivityItem("Reading", Icons.Default.MenuBook)
-    )
+    data class ActivityItem(val label: String, val icon: ImageVector)
+    data class ActivityCategory(val title: String, val items: List<ActivityItem>)
+
+    val categorizedActivities = remember {
+        listOf(
+            ActivityCategory("Hobbies", listOf(
+                ActivityItem("Coding", Icons.Outlined.Code),
+                ActivityItem("Gaming", Icons.Outlined.SportsEsports),
+                ActivityItem("Reading", Icons.AutoMirrored.Outlined.MenuBook),
+                ActivityItem("Music", Icons.Outlined.MusicNote),
+                ActivityItem("Movie", Icons.Outlined.Movie),
+                ActivityItem("TV", Icons.Outlined.Tv),
+                ActivityItem("Cinema", Icons.Outlined.Theaters)
+            )),
+            ActivityCategory("Social & Vibe", listOf(
+                ActivityItem("Solo", Icons.Outlined.Person),
+                ActivityItem("Family", Icons.Outlined.FamilyRestroom),
+                ActivityItem("Friends", Icons.Outlined.Groups),
+                ActivityItem("Relaxing", Icons.Outlined.SelfImprovement)
+            )),
+            ActivityCategory("Location", listOf(
+                ActivityItem("House", Icons.Outlined.Home),
+                ActivityItem("Office", Icons.Outlined.Work),
+                ActivityItem("Out", Icons.Outlined.NaturePeople)
+            ))
+        )
+    }
 
     val context = LocalContext.current
     LaunchedEffect(uiState.success) {
@@ -75,7 +96,8 @@ fun DailyCheckInSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 24.dp)
-                .padding(bottom = 40.dp),
+                .padding(bottom = 40.dp)
+                .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(32.dp)
         ) {
@@ -94,55 +116,68 @@ fun DailyCheckInSheet(
             )
 
             // Activities Grid
-            Column(horizontalAlignment = Alignment.Start) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.Start
+            ) {
                 Text(
                     text = "Activities",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.padding(start = 4.dp)
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 
-                FlowRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    activityItems.forEach { activity ->
-                        val isSelected = selectedActivities.contains(activity.name)
-                        
-                        // FIX: Explicitly set colors for high contrast visibility
-                        ElevatedFilterChip(
-                            selected = isSelected,
-                            onClick = {
-                                if (isSelected) selectedActivities.remove(activity.name)
-                                else selectedActivities.add(activity.name)
-                            },
-                            label = { 
-                                Text(
-                                    text = activity.name,
-                                    style = MaterialTheme.typography.labelLarge
-                                ) 
-                            },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = activity.icon,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            },
-                            shape = CircleShape,
-                            colors = FilterChipDefaults.elevatedFilterChipColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                labelColor = MaterialTheme.colorScheme.onSurface,
-                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                                selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimaryContainer
-                            ),
-                            elevation = FilterChipDefaults.elevatedFilterChipElevation(elevation = 2.dp)
-                        )
+                categorizedActivities.forEach { category ->
+                    Text(
+                        text = category.title,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(bottom = 12.dp, top = 8.dp)
+                    )
+                    
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        category.items.forEach { item ->
+                            val isSelected = selectedActivities.contains(item.label)
+                            
+                            ElevatedFilterChip(
+                                selected = isSelected,
+                                onClick = {
+                                    if (isSelected) selectedActivities.remove(item.label)
+                                    else selectedActivities.add(item.label)
+                                },
+                                label = { 
+                                    Text(
+                                        text = item.label,
+                                        style = MaterialTheme.typography.labelLarge
+                                    ) 
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = item.icon,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                },
+                                shape = CircleShape,
+                                colors = FilterChipDefaults.elevatedFilterChipColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                    labelColor = MaterialTheme.colorScheme.onSurface,
+                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                ),
+                                elevation = FilterChipDefaults.elevatedFilterChipElevation(elevation = 2.dp)
+                            )
+                        }
                     }
+                    Spacer(modifier = Modifier.height(16.dp))
                 }
             }
 
@@ -229,14 +264,20 @@ fun MoodSelector(
 
         // Icons Overlay
         Row(modifier = Modifier.fillMaxSize()) {
-            moods.forEach { (score, label) ->
+            moods.forEachIndexed { index, (score, label) ->
                 val isSelected = selectedMood == score
                 val contentColor by animateColorAsState(
                     targetValue = if (isSelected) MaterialTheme.colorScheme.onSecondaryContainer 
                                   else MaterialTheme.colorScheme.onSurfaceVariant,
                     label = "contentColor"
                 )
-                val scale by animateFloatAsState(if (isSelected) 1.25f else 1f, label = "scale")
+                
+                // ZOOM ANIMATION: Scale up selected, slightly scale down others
+                val scale by animateFloatAsState(
+                    targetValue = if (isSelected) 1.5f else 0.9f,
+                    animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+                    label = "scale"
+                )
 
                 Box(
                     modifier = Modifier
