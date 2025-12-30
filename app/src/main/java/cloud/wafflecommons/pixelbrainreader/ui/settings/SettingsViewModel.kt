@@ -3,6 +3,7 @@ package cloud.wafflecommons.pixelbrainreader.ui.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
+import cloud.wafflecommons.pixelbrainreader.data.repository.AppThemeConfig
 import cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,10 +23,6 @@ enum class AiModel(val id: String, val displayName: String) {
     }
 }
 
-enum class ThemeMode {
-    SYSTEM, LIGHT, DARK
-}
-
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val userPrefs: UserPreferencesRepository,
@@ -33,7 +30,7 @@ class SettingsViewModel @Inject constructor(
 ) : ViewModel() {
 
     data class SettingsUiState(
-        val themeMode: ThemeMode = ThemeMode.SYSTEM,
+        val themeConfig: AppThemeConfig = AppThemeConfig.FOLLOW_SYSTEM,
         val currentAiModel: AiModel = AiModel.GEMINI_FLASH,
         val repoOwner: String? = null,
         val repoName: String? = null,
@@ -47,10 +44,10 @@ class SettingsViewModel @Inject constructor(
     init {
         loadRepoInfo()
 
-        userPrefs.themeMode
-            .onEach { modeStr ->
+        userPrefs.themeConfig
+            .onEach { config ->
                 _uiState.value = _uiState.value.copy(
-                    themeMode = try { ThemeMode.valueOf(modeStr) } catch(e: Exception) { ThemeMode.SYSTEM }
+                    themeConfig = config
                 )
             }
             .launchIn(viewModelScope)
@@ -80,9 +77,9 @@ class SettingsViewModel @Inject constructor(
         )
     }
 
-    fun updateTheme(mode: ThemeMode) {
+    fun updateTheme(config: AppThemeConfig) {
         viewModelScope.launch {
-            userPrefs.setThemeMode(mode.name)
+            userPrefs.setThemeConfig(config)
         }
     }
 
@@ -100,8 +97,7 @@ class SettingsViewModel @Inject constructor(
 
     fun logout() {
         secretManager.clear()
-        // State update? The UI will likely navigate away or show login screen via MainViewModel monitoring secretManager, 
-        // or we just update local state to show disconnected.
-        loadRepoInfo() // Will clear values
+        loadRepoInfo()
     }
 }
+

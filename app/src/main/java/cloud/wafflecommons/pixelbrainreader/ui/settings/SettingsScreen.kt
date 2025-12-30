@@ -15,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import cloud.wafflecommons.pixelbrainreader.data.repository.AppThemeConfig
 import androidx.hilt.navigation.compose.hiltViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -99,19 +100,24 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    ThemeMode.entries.forEach { mode ->
+                    AppThemeConfig.entries.forEach { config ->
                         FilterChip(
-                            selected = (uiState.themeMode == mode),
-                            onClick = { viewModel.updateTheme(mode) },
+                            selected = (uiState.themeConfig == config),
+                            onClick = { viewModel.updateTheme(config) },
                             label = { 
                                 Text(
-                                    mode.name.lowercase().replaceFirstChar { it.uppercase() }
+                                    when(config) {
+                                        AppThemeConfig.FOLLOW_SYSTEM -> "System"
+                                        AppThemeConfig.LIGHT -> "Light"
+                                        AppThemeConfig.DARK -> "Dark"
+                                    }
                                 )
                             }
                         )
                     }
                 }
             }
+
 
             // 2b. Security Section
             SettingsSection(

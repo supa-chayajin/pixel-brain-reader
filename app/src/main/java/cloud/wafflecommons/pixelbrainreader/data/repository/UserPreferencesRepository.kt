@@ -5,6 +5,8 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
@@ -14,13 +16,16 @@ import javax.inject.Singleton
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "user_preferences")
 
+enum class AppThemeConfig { FOLLOW_SYSTEM, LIGHT, DARK }
+
 @Singleton
 class UserPreferencesRepository @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     private val PANE_WIDTH_KEY = floatPreferencesKey("list_pane_width")
-    private val AI_MODEL_KEY = androidx.datastore.preferences.core.stringPreferencesKey("ai_model")
-    private val THEME_MODE_KEY = androidx.datastore.preferences.core.stringPreferencesKey("theme_mode")
+    private val AI_MODEL_KEY = stringPreferencesKey("ai_model")
+    private val THEME_CONFIG_KEY = stringPreferencesKey("app_theme_config")
+    private val BIOMETRIC_ENABLED_KEY = booleanPreferencesKey("biometric_enabled")
 
     val listPaneWidth: Flow<Float> = context.dataStore.data
         .map { preferences ->
@@ -32,9 +37,19 @@ class UserPreferencesRepository @Inject constructor(
             preferences[AI_MODEL_KEY] ?: "gemini-2.5-flash-lite" // Default
         }
 
-    val themeMode: Flow<String> = context.dataStore.data
+    val themeConfig: Flow<AppThemeConfig> = context.dataStore.data
         .map { preferences ->
-            preferences[THEME_MODE_KEY] ?: "SYSTEM" // Default
+            val value = preferences[THEME_CONFIG_KEY] ?: AppThemeConfig.FOLLOW_SYSTEM.name
+            try {
+                AppThemeConfig.valueOf(value)
+            } catch (e: Exception) {
+                AppThemeConfig.FOLLOW_SYSTEM
+            }
+        }
+
+    val isBiometricEnabled: Flow<Boolean> = context.dataStore.data
+        .map { preferences ->
+            preferences[BIOMETRIC_ENABLED_KEY] ?: true // Default TRUE
         }
 
     suspend fun setListPaneWidth(width: Float) {
@@ -49,22 +64,16 @@ class UserPreferencesRepository @Inject constructor(
         }
     }
 
-    suspend fun setThemeMode(mode: String) {
+    suspend fun setThemeConfig(config: AppThemeConfig) {
         context.dataStore.edit { preferences ->
-            preferences[THEME_MODE_KEY] = mode
+            preferences[THEME_CONFIG_KEY] = config.name
         }
     }
     
-    private val BIOMETRIC_ENABLED_KEY = androidx.datastore.preferences.core.booleanPreferencesKey("biometric_enabled")
-    
-    val isBiometricEnabled: Flow<Boolean> = context.dataStore.data
-        .map { preferences ->
-            preferences[BIOMETRIC_ENABLED_KEY] ?: true // Default TRUE
-        }
-        
     suspend fun setBiometricEnabled(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[BIOMETRIC_ENABLED_KEY] = enabled
         }
     }
 }
+

@@ -39,13 +39,13 @@ object ObsidianHelper {
             val trimmed = line.trim()
             
             // 1. Detect Start: > [!TYPE] Title
-            val startMatch = CALLOUT_REGEX.find(line) // Regex("^>\\s\\[!(\\w+)\\]\\s(.*)$")
+            val startMatch = CALLOUT_REGEX.find(line)
             
             if (startMatch != null) {
-                if (inCallout) sb.append("</callout>\n") // Close previous if unclosed
+                if (inCallout) sb.append("</div>\n") // Close previous if unclosed
                 val type = startMatch.groupValues[1]
                 val title = startMatch.groupValues[2]
-                sb.append("<callout type=\"$type\">**$title**\n")
+                sb.append(generateHtmlForCallout(type, title)).append("\n")
                 inCallout = true
             } 
             // 2. Detect Body: > content
@@ -56,31 +56,55 @@ object ObsidianHelper {
             }
             // 3. Detect End: Empty line or non-quote line
             else if (inCallout && trimmed.isEmpty()) {
-                // Empty lines inside callouts are valid in Obsidian, typically marked with just >
-                // But if it's completely empty, it usually signifies end of block in standard markdown spec, 
-                // though Obsidian allows it. Let's assume standard behavior: break on non-quote.
-                // Actually, if the line is JUST ">", it continues. If it's empty "" it breaks.
                 if (line.trim().isEmpty()) {
-                    sb.append("</callout>\n\n")
+                    sb.append("</div>\n\n")
                     inCallout = false
                 } else {
                      // Non-empty, non-quote line -> End of block
-                    sb.append("</callout>\n")
+                    sb.append("</div>\n")
                     sb.append(line).append("\n")
                     inCallout = false
                 }
             }
             else {
                 if (inCallout) {
-                    sb.append("</callout>\n")
+                    sb.append("</div>\n")
                     inCallout = false
                 }
                 sb.append(line).append("\n")
             }
         }
-        if (inCallout) sb.append("</callout>\n")
+        if (inCallout) sb.append("</div>\n")
         
         return sb.toString()
+    }
+
+    private fun generateHtmlForCallout(type: String, title: String): String {
+        val color = getCalloutColor(type)
+        val rgba = hexToRgba(color, 0.1f)
+        
+        // CSS transparency (rgba) and inheritance (currentColor)
+        // This makes callouts look good on BOTH Light and Dark themes without duplicate code.
+        return """<div style="background-color: $rgba; border-left: 4px solid $color; padding: 12px; margin: 8px 0; border-radius: 4px; color: currentColor;"><strong>$title</strong><br/>"""
+    }
+
+    fun hexToRgba(hex: String, alpha: Float): String {
+        val color = hex.replace("#", "")
+        if (color.length != 6) return "rgba(0,0,0,$alpha)"
+        val r = color.substring(0, 2).toInt(16)
+        val g = color.substring(2, 4).toInt(16)
+        val b = color.substring(4, 6).toInt(16)
+        return "rgba($r, $g, $b, $alpha)"
+    }
+
+    private fun getCalloutColor(type: String): String {
+        return when (type.uppercase()) {
+            "TIP", "GOAL", "SUCCESS", "DONE" -> "#4CAF50"
+            "INFO", "NOTE", "EXAMPLE" -> "#2196F3"
+            "WARNING", "CAUTION", "ATTENTION" -> "#FF9800"
+            "DANGER", "ERROR", "BUG", "FAIL" -> "#F44336"
+            else -> "#9E9E9E"
+        }
     }
 
     private fun parseYamlMetadata(yaml: String): Pair<Map<String, String>, List<String>> {
@@ -98,9 +122,6 @@ object ObsidianHelper {
                 if (currentKey == "tags") {
                     tags.add(value.removeSurrounding("\"").removeSurrounding("'"))
                 } else {
-                    // For other keys, we could append to a list, but our metadata map is String->String.
-                    // For now, let's append comma-separated or just ignore if not supported by UI.
-                    // User asked to capture all keys. Let's append to existing value if any.
                     val existing = metadata[currentKey!!] ?: ""
                     metadata[currentKey!!] = if (existing.isEmpty()) value else "$existing, $value"
                 }
@@ -120,7 +141,7 @@ object ObsidianHelper {
                                 .map { it.trim().removeSurrounding("\"").removeSurrounding("'") }
                                 .filter { it.isNotEmpty() }
                         )
-                        currentKey = null // Inline format usually ends the block for this key
+                        currentKey = null 
                     }
                 } else {
                     metadata[key] = value
@@ -130,3 +151,4 @@ object ObsidianHelper {
         return metadata to tags
     }
 }
+

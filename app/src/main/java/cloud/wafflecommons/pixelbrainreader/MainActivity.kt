@@ -1,44 +1,36 @@
 package cloud.wafflecommons.pixelbrainreader
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.fragment.app.FragmentActivity
-import androidx.compose.foundation.background
+import androidx.activity.viewModels
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.collectAsState
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import cloud.wafflecommons.pixelbrainreader.data.local.security.BiometricAuthenticator
 import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
+import cloud.wafflecommons.pixelbrainreader.data.repository.AppThemeConfig
+import cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
 import cloud.wafflecommons.pixelbrainreader.ui.login.LoginScreen
+import cloud.wafflecommons.pixelbrainreader.ui.login.LockedScreen
+import cloud.wafflecommons.pixelbrainreader.ui.main.MainScreen
+import cloud.wafflecommons.pixelbrainreader.ui.main.MainViewModel
 import cloud.wafflecommons.pixelbrainreader.ui.theme.PixelBrainReaderTheme
 import dagger.hilt.android.AndroidEntryPoint
-import javax.inject.Inject
-import androidx.activity.viewModels
-import android.content.Intent
-import cloud.wafflecommons.pixelbrainreader.ui.main.MainViewModel
-import kotlinx.coroutines.launch
-import androidx.lifecycle.lifecycleScope
-import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : FragmentActivity() {
-    // Changed to FragmentActivity for BiometricPrompt compatibility
 
     @Inject
     lateinit var secretManager: SecretManager
@@ -47,13 +39,13 @@ class MainActivity : FragmentActivity() {
     lateinit var biometricAuthenticator: BiometricAuthenticator
 
     @Inject
-    lateinit var userPrefs: cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
+    lateinit var userPrefs: UserPreferencesRepository
 
     private val viewModel: MainViewModel by viewModels()
 
-    // State for UI
-    private var isAuthenticated by mutableStateOf(false)
+    // State for UI (Refactored to be set before setContent)
     private var isUserLoggedIn by mutableStateOf(false)
+    private var isAuthenticated by mutableStateOf(false)
 
     // Background Timer
     private var lastBackgroundTimeStamp: Long = 0L
@@ -61,33 +53,32 @@ class MainActivity : FragmentActivity() {
 
     // Concurrency Guards
     private var isAuthInProgress = false
-    // private var hasAutoPromptedSession = false // Removed as we only prompt on creation or manual request
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // 1. Synchronous Initialization logic
+        isUserLoggedIn = secretManager.getToken() != null
+        
+        val initialAuthState = if (isUserLoggedIn) {
+             val isBioEnabled = runBlocking { userPrefs.isBiometricEnabled.first() }
+             !isBioEnabled // Authenticated if biometrics are disabled
+        } else {
+             false
+        }
+        
+        // Set the state BEFORE setContent to avoid "Locked Screen" flash
+        isAuthenticated = initialAuthState
+
         enableEdgeToEdge()
 
         // Privacy Curtain (SecOps)
-        // Prevents screenshots and recents preview (Release only)
         if (!BuildConfig.DEBUG) {
             window.setFlags(
                 android.view.WindowManager.LayoutParams.FLAG_SECURE,
                 android.view.WindowManager.LayoutParams.FLAG_SECURE
             )
         }
-
-
-
-        // Initial Login Check
-        isUserLoggedIn = secretManager.getToken() != null
-        
-        // Fix: Determine initial auth state synchronously based on preference
-        isAuthenticated = if (isUserLoggedIn) {
-             val isBioEnabled = runBlocking { userPrefs.isBiometricEnabled.first() }
-             !isBioEnabled // Authenticated if disabled
-        } else {
-             false
-        } 
 
         // Setup Lifecycle Observer for background detection
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
@@ -106,24 +97,23 @@ class MainActivity : FragmentActivity() {
         })
 
         setContent {
-            val themeMode by viewModel.themeMode.collectAsState(initial = "SYSTEM")
+            // Observe the theme from the repository directly
+            val themeConfig by userPrefs.themeConfig.collectAsState(initial = AppThemeConfig.FOLLOW_SYSTEM)
             
-            val isDarkTheme = when (themeMode) {
-                "DARK" -> true
-                "LIGHT" -> false
-                else -> isSystemInDarkTheme()
+            val useDarkTheme = when (themeConfig) {
+                AppThemeConfig.DARK -> true
+                AppThemeConfig.LIGHT -> false
+                AppThemeConfig.FOLLOW_SYSTEM -> isSystemInDarkTheme()
             }
             
-            PixelBrainReaderTheme(darkTheme = isDarkTheme) {
+            PixelBrainReaderTheme(darkTheme = useDarkTheme) {
+                // Use the activity-level states
                 if (isUserLoggedIn && !isAuthenticated) {
-                    cloud.wafflecommons.pixelbrainreader.ui.login.LockedScreen(
-                        // Manual Click always triggers
-                        onUnlockClick = { 
-                            triggerBiometrics() 
-                        }
+                    LockedScreen(
+                        onUnlockClick = { triggerBiometrics() }
                     )
                 } else if (isUserLoggedIn && isAuthenticated) {
-                    cloud.wafflecommons.pixelbrainreader.ui.main.MainScreen(
+                    MainScreen(
                         viewModel = viewModel,
                         onLogout = {
                             isUserLoggedIn = false
@@ -131,40 +121,28 @@ class MainActivity : FragmentActivity() {
                             secretManager.clear()
                         },
                         onExitApp = {
-                            finishAffinity() // Closes App & Task
+                            finishAffinity()
                         }
                     )
                 } else {
                     LoginScreen(onLoginSuccess = {
                         isUserLoggedIn = true
-                        isAuthenticated = true // Fresh login is authenticated
+                        isAuthenticated = true
                     })
                 }
             }
         }
 
-        
-        // Handle Share Intent
         viewModel.handleShareIntent(intent)
 
         // Trigger Biometrics ONCE at creation if locked
-        // isAuthenticated logic above ensures this only runs if enabled
         if (isUserLoggedIn && !isAuthenticated) {
             triggerBiometrics()
         }
 
-        // COLD START SYNC:
-        // Only trigger initial sync if this is a fresh start (savedInstanceState == null)
-        // and user is logged in. 
         if (savedInstanceState == null && isUserLoggedIn) {
             viewModel.performInitialSync()
         }
-    }
-
-    override fun onResume() {
-        super.onResume()
-        // Removed aggressive auto-trigger loop. 
-        // Authentication is now triggered in onCreate or via manual 'Unlock' button.
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -173,8 +151,7 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun triggerBiometrics() {
-        if (isAuthInProgress) return // Prevent parallel calls (Fix Binder Crash)
-        
+        if (isAuthInProgress) return
         isAuthInProgress = true
         
         biometricAuthenticator.prompt(
@@ -184,19 +161,12 @@ class MainActivity : FragmentActivity() {
                 isAuthInProgress = false
             },
             onError = { _ -> 
-                // User cancelled or error. Stay on LockedScreen.
                 isAuthInProgress = false
             },
             onFailure = { 
-                // Transient failure. Stay on LockedScreen.
-                // Prompt is still active? Usually yes for onFailure (wrong finger).
-                // Wait, if prompt is still active, we are technically still in progress.
-                // But onFailure callback in Authenticator typically means "Try again", the prompt stays up.
-                // So we do NOT reset isAuthInProgress here.
-                // However, my BiometricAuthenticator implementation calls onFailure() for transient errors.
-                // If the prompt DISMISED, it would call onError.
-                // So keeping isAuthInProgress = true is correct here.
+                // Wait for another attempt or error
             }
         )
     }
 }
+

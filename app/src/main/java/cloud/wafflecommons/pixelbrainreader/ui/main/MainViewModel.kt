@@ -10,6 +10,7 @@ import cloud.wafflecommons.pixelbrainreader.data.repository.FileRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.DailyNoteRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.TemplateRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
+import cloud.wafflecommons.pixelbrainreader.data.repository.AppThemeConfig
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.Job
@@ -39,12 +40,13 @@ class MainViewModel @Inject constructor(
     private val geminiRagManager: cloud.wafflecommons.pixelbrainreader.data.ai.GeminiRagManager
 ) : ViewModel() {
     // Expose Theme Preference
-    val themeMode: StateFlow<String> = userPrefs.themeMode
+    val themeConfig: StateFlow<AppThemeConfig> = userPrefs.themeConfig
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),
-            initialValue = "SYSTEM" // Safe default
+            initialValue = AppThemeConfig.FOLLOW_SYSTEM
         )
+
     
     // UI State
     private val _uiState = MutableStateFlow(UiState(isLoading = true))
