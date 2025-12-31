@@ -46,7 +46,8 @@ class DailyCheckInViewModel @Inject constructor(
     fun loadTodayStatus() {
         viewModelScope.launch {
             try {
-                val targetPath = dailyNoteRepository.getOrCreateTodayNote()
+                val date = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+                val targetPath = "10_Journal/$date.md"
                 val currentContent = fileRepository.getFileContentFlow(targetPath).first() ?: ""
                 val summary = FrontmatterManager.getDailySummary(currentContent) ?: DailySummary(null, null, emptyList())
                 _uiState.value = _uiState.value.copy(summary = summary)
@@ -61,7 +62,13 @@ class DailyCheckInViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             try {
-                val targetPath = dailyNoteRepository.getOrCreateTodayNote()
+                // 1. Ensure Directory & Path
+                fileRepository.createLocalFolder("10_Journal")
+                val date = java.time.LocalDate.now().toString() // yyyy-MM-dd
+                val targetPath = "10_Journal/$date.md"
+
+                // 2. Ensure File Exists (handles template creation if missing)
+                dailyNoteRepository.getOrCreateTodayNote()
                 val currentContent = fileRepository.getFileContentFlow(targetPath).first() ?: ""
                 
                 val now = LocalDateTime.now()

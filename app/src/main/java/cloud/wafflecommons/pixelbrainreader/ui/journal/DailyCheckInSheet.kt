@@ -55,7 +55,7 @@ fun DailyCheckInSheet(
             ActivityCategory("Hobbies", listOf(
                 ActivityItem("Coding", Icons.Outlined.Code),
                 ActivityItem("Gaming", Icons.Outlined.SportsEsports),
-                ActivityItem("Reading", Icons.AutoMirrored.Outlined.MenuBook),
+                ActivityItem("Relaxing", Icons.AutoMirrored.Outlined.MenuBook),
                 ActivityItem("Music", Icons.Outlined.MusicNote),
                 ActivityItem("Movie", Icons.Outlined.Movie),
                 ActivityItem("TV", Icons.Outlined.Tv),
@@ -70,7 +70,7 @@ fun DailyCheckInSheet(
             ActivityCategory("Location", listOf(
                 ActivityItem("House", Icons.Outlined.Home),
                 ActivityItem("Office", Icons.Outlined.Work),
-                ActivityItem("Out", Icons.Outlined.NaturePeople)
+                ActivityItem("Outside", Icons.Outlined.NaturePeople)
             ))
         )
     }
@@ -102,11 +102,11 @@ fun DailyCheckInSheet(
             verticalArrangement = Arrangement.spacedBy(32.dp)
         ) {
             // Header
-            Text(
-                text = "How are you right now?",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold
-            )
+//            Text(
+//                text = "How are you right now?",
+//                style = MaterialTheme.typography.headlineSmall,
+//                fontWeight = FontWeight.Bold
+//            )
 
             // Stadium Mood Selector (Floating Track)
             MoodSelector(
@@ -182,18 +182,18 @@ fun DailyCheckInSheet(
             }
 
             // Quick Note
-            OutlinedTextField(
-                value = noteText,
-                onValueChange = { noteText = it },
-                label = { Text("Quick Note (Optional)") },
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("What's on your mind?") },
-                shape = MaterialTheme.shapes.large,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
-                )
-            )
+//            OutlinedTextField(
+//                value = noteText,
+//                onValueChange = { noteText = it },
+//                label = { Text("Quick Note (Optional)") },
+//                modifier = Modifier.fillMaxWidth(),
+//                placeholder = { Text("What's on your mind?") },
+//                shape = MaterialTheme.shapes.large,
+//                colors = OutlinedTextFieldDefaults.colors(
+//                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+//                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+//                )
+//            )
 
             // Action Button
             Button(
@@ -215,7 +215,7 @@ fun DailyCheckInSheet(
                     )
                 } else {
                     Text(
-                        text = "Add Moment",
+                        text = "Save",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )

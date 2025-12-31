@@ -1,6 +1,7 @@
 package cloud.wafflecommons.pixelbrainreader.ui.settings
 
 import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
+import cloud.wafflecommons.pixelbrainreader.data.repository.AppThemeConfig
 import cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -9,6 +10,7 @@ import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestDispatcher
@@ -53,8 +55,9 @@ class SettingsViewModelTest {
     fun setup() {
         // Default Stubs
         every { secretManager.getRepoInfo() } returns Pair("testUser", "testRepo")
-        every { userPrefs.themeMode } returns flowOf("SYSTEM")
+        every { userPrefs.themeConfig } returns flowOf(AppThemeConfig.FOLLOW_SYSTEM)
         every { userPrefs.aiModel } returns flowOf("gemini-2.5-flash-lite")
+        every { userPrefs.isBiometricEnabled } returns flowOf(true)
         
         viewModel = SettingsViewModel(userPrefs, secretManager)
     }
@@ -66,24 +69,24 @@ class SettingsViewModelTest {
         val state = viewModel.uiState.value
         assertEquals("testUser", state.repoOwner)
         assertEquals("testRepo", state.repoName)
-        assertEquals(ThemeMode.SYSTEM, state.themeMode)
+        assertEquals(AppThemeConfig.FOLLOW_SYSTEM, state.themeConfig)
         assertEquals(AiModel.GEMINI_FLASH, state.currentAiModel)
     }
 
     @Test
     fun `updateTheme persists selection`() = runTest {
         // Mock persistence
-        coEvery { userPrefs.setThemeMode(any()) } returns Unit
+        coEvery { userPrefs.setThemeConfig(any()) } returns Unit
         
         // Mock Flow Update (simulate reactive update)
         // Note: Real ViewModel relies on Flow observation. 
         // We can't easily change the Flow emission of the mock on the fly in MockK unless we use MutableStateFlow in the mock setup.
         // For this test, verifying the CALL to save is sufficient.
         
-        viewModel.updateTheme(ThemeMode.DARK)
+        viewModel.updateTheme(AppThemeConfig.DARK)
         advanceUntilIdle()
         
-        coVerify { userPrefs.setThemeMode("DARK") }
+        coVerify { userPrefs.setThemeConfig(AppThemeConfig.DARK) }
     }
 
     @Test

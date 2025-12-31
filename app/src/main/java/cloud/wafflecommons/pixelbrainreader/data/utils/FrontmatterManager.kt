@@ -37,35 +37,24 @@ object FrontmatterManager {
         val matchB = blockBRegex.find(content)
         
         if (matchB != null) {
-            // SCENARIO 1: BLOCK B EXISTS -> UPDATE IT
-            // CRITICAL: Do NOT touch any text before or after that specific block.
-            val existingBlockB = matchB.value.removeSurrounding("---").trim()
-            val timeline = parseTimeline(existingBlockB.lines())
-            val updatedTimeline = timeline + entry
+            val existingBlockB = matchB.value
+            val lines = existingBlockB.removeSurrounding("---").trim().lines()
+            val timeline = parseTimeline(lines)
             
-            val reconstructed = reconstructBlockB(updatedTimeline, entry.time)
-            val newBlockB = "---\n$reconstructed\n---\n"
-            
-            return content.replaceRange(matchB.range, newBlockB)
+            val newBlockB = reconstructPixelBrainBlock(existingBlockB, entry, timeline)
+            return content.replaceRange(matchB.range, newBlockB + "\n")
         } else {
-            // SCENARIO 2 or 3
             val matchA = blockARegex.find(content)
-            val reconstructed = reconstructBlockB(listOf(entry), entry.time)
-            val newBlockB = "---\n$reconstructed\n---\n"
+            val newBlockB = reconstructPixelBrainBlock(null, entry, emptyList())
 
             return if (matchA != null) {
-                // SCENARIO 2: BLOCK A EXISTS -> INSERT BLOCK B AFTER IT
-                // Leave Block A completely alone. Insert immediately after it.
                 val insertPos = matchA.range.last + 1
                 val prefix = content.substring(0, insertPos)
                 val suffix = content.substring(insertPos)
-                
-                // Ensure there's a newline between Block A and Block B
                 val separator = if (prefix.endsWith("\n")) "" else "\n"
-                prefix + separator + newBlockB + suffix
+                prefix + separator + newBlockB + "\n" + suffix
             } else {
-                // SCENARIO 3: NO FRONTMATTER -> PREPEND BLOCK B
-                newBlockB + "\n" + content
+                newBlockB + "\n\n" + content
             }
         }
     }
@@ -78,15 +67,14 @@ object FrontmatterManager {
         val emoji = lines.find { it.startsWith("daily_emoji:") }?.substringAfter(":")?.trim()?.removeSurrounding("\"")
         val lastUpdate = lines.find { it.startsWith("last_update:") }?.substringAfter(":")?.trim()?.removeSurrounding("\"")
         
-        val activitiesLine = lines.find { it.startsWith("all_activities:") }
-        val activities = activitiesLine?.substringAfter("[")?.substringBefore("]")?.split(",")
-            ?.map { it.trim().removeSurrounding("\"").removeSurrounding("'") }
-            ?.filter { it.isNotEmpty() } ?: emptyList()
+        // Extract all activities from the timeline for the summary
+        val timeline = parseTimeline(lines)
+        val allActivities = timeline.flatMap { it.activities }.distinct().sorted()
         
         return DailySummary(
             dailyEmoji = emoji,
             lastUpdate = lastUpdate,
-            allActivities = activities
+            allActivities = allActivities
         )
     }
 
@@ -117,30 +105,59 @@ object FrontmatterManager {
         return content.replace(Regex(pattern), "")
     }
 
-    private fun reconstructBlockB(timeline: List<DailyLogEntry>, lastUpdateTime: String): String {
-        val avgMood = if (timeline.isNotEmpty()) timeline.map { it.moodScore }.average() else 0.0
-        val dailyEmoji = calculateDailyEmoji(avgMood)
-        val allActivities = timeline.flatMap { it.activities }.distinct().sorted()
-
-        val sb = StringBuilder()
-        sb.appendLine(BLOCK_B_MARKER)
-        sb.appendLine("average_mood: ${String.format(Locale.US, "%.1f", avgMood)}")
-        sb.appendLine("daily_emoji: \"$dailyEmoji\"")
-        sb.appendLine("all_activities: [${allActivities.joinToString(", ")}]")
-        sb.appendLine("last_update: \"$lastUpdateTime\"")
-        
-        sb.appendLine("timeline:")
-        timeline.forEach { entry ->
-            sb.appendLine("  - time: \"${entry.time}\"")
-            sb.appendLine("    mood_score: ${entry.moodScore}")
-            sb.appendLine("    mood_label: \"${entry.moodLabel}\"")
-            sb.appendLine("    activities: [${entry.activities.joinToString(", ")}]")
-            if (!entry.note.isNullOrBlank()) {
-                val safeNote = entry.note.replace("\"", "\\\"").replace("\n", " ")
-                sb.appendLine("    note: \"$safeNote\"")
-            }
+    private fun reconstructPixelBrainBlock(
+        originalBlock: String?, 
+        newEntry: DailyLogEntry,
+        timeline: List<DailyLogEntry>
+    ): String {
+        // 1. Merge & CLEAN
+        // CRITICAL: Filter out any existing entries that look like "Ghost Entries"
+        val cleanExistingTimeline = timeline.filter { 
+            it.time != "00:00" && it.moodLabel.isNotBlank() 
         }
-        return sb.toString().trim()
+        
+        val fullTimeline = cleanExistingTimeline + newEntry
+        
+        val (emoji, avg) = computeStats(fullTimeline)
+        val lastUpdate = newEntry.time
+        val allActivities = fullTimeline.flatMap { it.activities }.distinct()
+
+        // 2. Build String (STRICT ORDER)
+        return buildString {
+            append("---\n")
+            append("pixel_brain_log: true\n")
+            append("daily_emoji: \"$emoji\"\n")
+            append("last_update: \"$lastUpdate\"\n")
+            append("average_mood: $avg\n")
+            
+            // Serialize activities array properly: ["A", "B"]
+            val activitiesJson = allActivities.joinToString(", ", "[", "]") { "\"$it\"" }
+            append("all_activities: $activitiesJson\n")
+            
+            append("timeline:\n")
+            
+            // 3. Serialize Timeline List
+            // ONLY HERE do we write the entries. NOWHERE ELSE.
+            fullTimeline.forEach { entry ->
+                append("  - time: \"${entry.time}\"\n")
+                append("    mood_score: ${entry.moodScore}\n")
+                append("    mood_label: \"${entry.moodLabel}\"\n")
+                
+                val entryActivities = entry.activities.joinToString(", ", "[", "]") { "\"$it\"" }
+                append("    activities: $entryActivities\n")
+                
+                if (!entry.note.isNullOrBlank()) {
+                    append("    note: \"${entry.note}\"\n")
+                }
+            }
+            
+            append("---\n")
+        }
+    }
+
+    private fun computeStats(timeline: List<DailyLogEntry>): Pair<String, Double> {
+        val avg = if (timeline.isEmpty()) 0.0 else timeline.map { it.moodScore }.average()
+        return Pair(calculateDailyEmoji(avg), avg)
     }
 
     private fun calculateDailyEmoji(avg: Double): String {
