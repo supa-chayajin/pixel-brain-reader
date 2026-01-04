@@ -4,15 +4,20 @@ import android.util.Log
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.FileContentDao
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.FileDao
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.FileEntity
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 import javax.inject.Singleton
+import android.content.Context
 
 @Singleton
 class DailyNoteRepository @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val fileRepository: FileRepository,
     private val fileDao: FileDao,
     private val fileContentDao: FileContentDao
@@ -49,15 +54,12 @@ tags: [journal]
         val month = now.format(DateTimeFormatter.ofPattern("MM"))
         val day = now.format(DateTimeFormatter.ofPattern("dd"))
         
-        // Target Path: 10_Journal/YYYY-MM-DD.md
-        // Note: User asked for 10_Journal/Daily/YYYY/MM structure in optimization step,
-        // but their basic request "Feature C" says "10_Journal/YYYY-MM-DD.md".
-        // HOWEVER, the Templater script handles the move.
-        // So we should create it at the ROOT of 10_Journal (or Daily Inbox) and let Templater/User handle it?
-        // Let's stick to the Spec: 10_Journal/YYYY-MM-DD.md
-        // Wait, Spec says: "Check: Does 10_Journal/YYYY-MM-DD.md exist?"
         val fileName = "$year-$month-$day.md"
+        // THE FIX: Strict path construction, forcing 10_Journal prefix
         val targetPath = "$JOURNAL_ROOT/$fileName"
+
+        // Bonus: Cleanup misplaced notes before proceeding
+        cleanupMisplacedDailyNotes()
 
         // 1. Check if exists (Fast check via DAO)
         val existing = fileDao.getFile(targetPath)
@@ -69,7 +71,14 @@ tags: [journal]
         // 2. Create if missing
         Log.d("DailyNote", "Creating new daily note: $targetPath")
         
-        // A. Ensure Folder Exists
+        // A. Directory Guarantee (Local FS)
+        val journalDir = File(context.filesDir, JOURNAL_ROOT)
+        if (!journalDir.exists()) {
+            Log.d("DailyNote", "Creating directory: ${journalDir.absolutePath}")
+            journalDir.mkdirs()
+        }
+        
+        // Ensure folder entity exists in DB
         fileRepository.createLocalFolder(JOURNAL_ROOT)
 
         // B. Get Template Content
@@ -80,16 +89,40 @@ tags: [journal]
         }
 
         // C. Replace Placeholders (Basic "Mustache" engine)
-        // {{date}} -> YYYY-MM-DD
-        // {{time}} -> HH:mm
-        // {{title}} -> YYYY-MM-DD
         val noteTitle = "$year-$month-$day"
-        
         val processedContent = cloud.wafflecommons.pixelbrainreader.data.utils.TemplateEngine.apply(templateContent, noteTitle)
 
-        // D. Save File
+        // D. Save File (Enforce safe path)
         fileRepository.saveFileLocally(targetPath, processedContent)
 
         return@withContext targetPath
+    }
+
+    /**
+     * Cleanup: Moves or Deletes misplaced daily notes at the root.
+     */
+    private suspend fun cleanupMisplacedDailyNotes() {
+        try {
+            // Find all files at the root (path doesn't contain '/')
+            val rootFiles = fileDao.getFiles("").firstOrNull() ?: emptyList()
+            val dailyNoteRegex = Regex("""^\d{4}-\d{2}-\d{2}\.md$""")
+
+            for (file in rootFiles) {
+                if (dailyNoteRegex.matches(file.name)) {
+                    val correctedPath = "$JOURNAL_ROOT/${file.name}"
+                    val existingInFolder = fileDao.getFile(correctedPath)
+
+                    if (existingInFolder != null) {
+                        Log.d("DailyNote", "Cleaning up duplicate root file: ${file.path}")
+                        fileDao.deleteFile(file.path)
+                    } else {
+                        Log.d("DailyNote", "Moving misplaced root file to journal: ${file.path} -> $correctedPath")
+                        fileRepository.renameFileSafe(file.path, correctedPath)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("DailyNote", "Failed during misplaced notes cleanup", e)
+        }
     }
 }
