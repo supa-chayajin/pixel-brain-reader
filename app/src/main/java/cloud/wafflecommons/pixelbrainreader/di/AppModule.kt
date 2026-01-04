@@ -1,6 +1,7 @@
 package cloud.wafflecommons.pixelbrainreader.di
 
 import cloud.wafflecommons.pixelbrainreader.data.remote.AuthInterceptor
+import com.google.gson.Gson
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -11,7 +12,7 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object AppModule {
 
-    // TokenManager and AuthInterceptor are already provided via @Inject constructor
-    // but if we needed to provide third-party classes, we would do it here.
-    // For now, this module might be empty or used for Retrofit later.
+    @Provides
+    @Singleton
+    fun provideGson(): Gson = Gson()
 }

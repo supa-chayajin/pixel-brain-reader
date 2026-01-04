@@ -50,6 +50,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -65,6 +67,11 @@ import androidx.compose.ui.viewinterop.AndroidView
 import cloud.wafflecommons.pixelbrainreader.ui.utils.ObsidianHelper
 import cloud.wafflecommons.pixelbrainreader.data.utils.FrontmatterManager
 import cloud.wafflecommons.pixelbrainreader.ui.journal.DailyNoteHeader
+import cloud.wafflecommons.pixelbrainreader.ui.mood.MoodViewModel
+import cloud.wafflecommons.pixelbrainreader.data.repository.DailyMoodData
+import cloud.wafflecommons.pixelbrainreader.data.repository.MoodEntry
+import androidx.hilt.navigation.compose.hiltViewModel
+import java.time.LocalDate
 import io.noties.markwon.AbstractMarkwonPlugin
 import io.noties.markwon.Markwon
 import io.noties.markwon.ext.strikethrough.StrikethroughPlugin
@@ -91,7 +98,8 @@ fun FileDetailPane(
     onClose: () -> Unit,
     onRename: (String) -> Unit,
     onWikiLinkClick: (String) -> Unit,
-    onCreateNew: () -> Unit = {}
+    onCreateNew: () -> Unit = {},
+    moodViewModel: MoodViewModel = hiltViewModel()
 ) {
     val shape = if (isExpandedScreen) {
         RoundedCornerShape(24.dp)
@@ -158,12 +166,27 @@ fun FileDetailPane(
                     content != null -> {
                         val parsed = remember(content) { ObsidianHelper.parse(content) }
                         val isDailyNote = fileName?.matches(Regex("\\d{4}-\\d{2}-\\d{2}\\.md")) ?: false
+                        
+                        // Load mood data if it's a daily note
+                        androidx.compose.runtime.LaunchedEffect(fileName) {
+                            if (isDailyNote && fileName != null) {
+                                try {
+                                    val dateStr = fileName.substringBefore(".md")
+                                    val date = LocalDate.parse(dateStr)
+                                    moodViewModel.loadMood(date)
+                                } catch (e: Exception) {
+                                    // Ignore parse errors for non-conforming files
+                                }
+                            }
+                        }
+
+                        val moodState by moodViewModel.uiState.collectAsState()
+
                         val displayContent = remember(content, isEditing) {
                             if (isEditing) {
                                 content
                             } else {
-                                // Use the new smart function that handles both Daily and Standard files correctly
-                                FrontmatterManager.prepareContentForDisplay(content)
+                                FrontmatterManager.stripFrontmatter(content)
                             }
                         }
                         
@@ -190,22 +213,29 @@ fun FileDetailPane(
                                     .verticalScroll(rememberScrollState())
                                     .imePadding()
                             ) {
-                                // Double Frontmatter Logic: Header for Block B, MetadataHeader for whatever is left in Block A
-                                val summary = remember(content) { FrontmatterManager.getDailySummary(content) }
-                                if (summary != null) {
-                                    DailyNoteHeader(summary = summary, modifier = Modifier.padding(top = 16.dp))
+                                if (isDailyNote && moodState.moodData != null) {
+                                    val data = moodState.moodData!!
+                                    val allActivities = remember(data) { 
+                                        data.entries.flatMap { entry: MoodEntry -> entry.activities }
+                                            .distinct()
+                                            .sorted() 
+                                    }
+                                    val lastUpdate = remember(data) { data.entries.lastOrNull()?.time }
+
+                                    DailyNoteHeader(
+                                        emoji = data.summary.mainEmoji,
+                                        lastUpdate = lastUpdate,
+                                        activities = allActivities,
+                                        modifier = Modifier.padding(top = 16.dp)
+                                    )
                                     HorizontalDivider(
                                         modifier = Modifier.padding(vertical = 8.dp),
                                         color = MaterialTheme.colorScheme.outlineVariant
                                     )
                                 }
 
-                                // Filter daily metadata keys for the generic header
-                                val dailyKeys = listOf("average_mood", "daily_emoji", "all_activities", "last_update", "timeline", "pixel_brain_log")
-                                val filteredMetadata = parsed.metadata.filterKeys { it !in dailyKeys }
-                                
-                                if (filteredMetadata.isNotEmpty() || parsed.tags.isNotEmpty()) {
-                                    MetadataHeader(filteredMetadata, parsed.tags)
+                                if (parsed.metadata.isNotEmpty() || parsed.tags.isNotEmpty()) {
+                                    MetadataHeader(parsed.metadata, parsed.tags)
                                 } else if (!isDailyNote) {
                                     Spacer(Modifier.height(16.dp))
                                 }

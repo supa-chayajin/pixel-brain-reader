@@ -7,8 +7,9 @@ import androidx.glance.action.ActionParameters
 import androidx.glance.appwidget.action.ActionCallback
 import androidx.glance.appwidget.state.updateAppWidgetState
 import cloud.wafflecommons.pixelbrainreader.data.repository.DailyNoteRepository
-import cloud.wafflecommons.pixelbrainreader.data.utils.FrontmatterManager
-import cloud.wafflecommons.pixelbrainreader.data.utils.DailyLogEntry
+import cloud.wafflecommons.pixelbrainreader.data.repository.MoodRepository
+import cloud.wafflecommons.pixelbrainreader.data.repository.MoodEntry
+import java.time.LocalDate
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
@@ -23,6 +24,7 @@ class MoodWidgetActionCallback : ActionCallback {
     @InstallIn(SingletonComponent::class)
     interface WidgetEntryPoint {
         fun repository(): DailyNoteRepository
+        fun moodRepository(): MoodRepository
         fun fileRepository(): cloud.wafflecommons.pixelbrainreader.data.repository.FileRepository
         fun fileContentDao(): cloud.wafflecommons.pixelbrainreader.data.local.dao.FileContentDao
     }
@@ -33,10 +35,10 @@ class MoodWidgetActionCallback : ActionCallback {
         parameters: ActionParameters
     ) {
         val score = parameters[SCORE_KEY] ?: return
-        val entry = DailyLogEntry(
+        val entry = MoodEntry(
             time = LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm")),
-            moodScore = score,
-            moodLabel = getMoodLabel(score),
+            score = score,
+            label = getMoodLabel(score),
             activities = emptyList(),
             note = "Logged from Widget"
         )
@@ -47,18 +49,16 @@ class MoodWidgetActionCallback : ActionCallback {
             WidgetEntryPoint::class.java
         )
         val dailyNoteRepository = entryPoint.repository()
+        val moodRepository = entryPoint.moodRepository()
         val fileRepository = entryPoint.fileRepository()
         val fileContentDao = entryPoint.fileContentDao()
 
-        // 1. Update File
-        val dailyNotePath = dailyNoteRepository.getOrCreateTodayNote()
-        val content = fileContentDao.getContent(dailyNotePath) ?: ""
-        val updatedContent = FrontmatterManager.updateDailyLog(content, entry)
-        fileRepository.saveFileLocally(dailyNotePath, updatedContent)
+        // 1. Add Entry via Repository (Autonomous module handles JSON/Folder/Summary)
+        moodRepository.addEntry(LocalDate.now(), entry)
 
         // 2. Update Widget State
         updateAppWidgetState(context, glanceId) { prefs ->
-            prefs[MoodTrackerWidget.LAST_EMOJI_KEY] = entry.moodLabel
+            prefs[MoodTrackerWidget.LAST_EMOJI_KEY] = entry.label
             prefs[MoodTrackerWidget.LAST_UPDATE_KEY] = entry.time
         }
         
