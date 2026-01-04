@@ -49,19 +49,29 @@ class MoodViewModelTest {
     }
 
     @Test
-    fun addMoodEntry_CallsRepository_AndResetsState() = runTest {
+    fun addMoodEntry_CallsRepository() = runTest {
         // Arrange
         coEvery { repository.addEntry(any(), any()) } just Runs
         val date = viewModel.uiState.value.selectedDate
 
         // Act
-        viewModel.addMoodEntry(5, "🤩", listOf("Coding"), "Feel good")
+        viewModel.addMoodEntry(5, listOf("Coding"), "Feel good")
 
         // Assert
         coVerify { repository.addEntry(date, any()) }
-        assertEquals(true, viewModel.uiState.value.success)
-        
-        viewModel.resetState()
-        assertEquals(false, viewModel.uiState.value.success)
+    }
+
+    @Test
+    fun selectDate_UpdatesState() = runTest {
+        // Arrange
+        val date = LocalDate.of(2026, 1, 5)
+        every { repository.getDailyMood(date) } returns flowOf(null)
+
+        // Act
+        viewModel.selectDate(date)
+
+        // Assert
+        assertEquals(date, viewModel.uiState.value.selectedDate)
+        verify { repository.getDailyMood(date) }
     }
 }

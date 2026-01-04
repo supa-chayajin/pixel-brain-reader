@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.map
 import java.time.LocalDate
 import javax.inject.Inject
 import javax.inject.Singleton
+import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
 
 /**
  * Standalone Mood Entry model.
@@ -36,10 +37,12 @@ data class DailyMoodData(
     val summary: MoodSummary
 )
 
+
 @Singleton
 class MoodRepository @Inject constructor(
     private val fileRepository: FileRepository,
-    private val gson: Gson
+    private val gson: Gson,
+    private val secretManager: SecretManager
 ) {
     private val moodDir = "10_Journal/data/health/mood"
 
@@ -80,8 +83,8 @@ class MoodRepository @Inject constructor(
             DailyMoodData(date = date.toString(), entries = emptyList(), summary = MoodSummary(0.0, "😐"))
         }
 
-        // 3. Update & Sort entries (Ascending chronological order)
-        val updatedEntries = (currentData.entries + entry).sortedBy { it.time }
+        // 3. Update & Sort entries (Descending chronological order)
+        val updatedEntries = (currentData.entries + entry).sortedByDescending { it.time }
 
         // 4. Recalculate Summary
         val avg = if (updatedEntries.isEmpty()) 0.0 else updatedEntries.map { it.score }.average()
@@ -96,6 +99,18 @@ class MoodRepository @Inject constructor(
         // 5. Serialize & Save
         val updatedContent = gson.toJson(updatedData)
         fileRepository.saveFileLocally(path, updatedContent)
+
+        // 6. SYNC: Push changes to Remote
+        try {
+            val (owner, repo) = secretManager.getRepoInfo()
+            if (!owner.isNullOrBlank() && !repo.isNullOrBlank()) {
+                val message = "Update mood log: $date"
+                fileRepository.pushDirtyFiles(owner, repo, message)
+            }
+        } catch (e: Exception) {
+            // Log warning but don't crash, local save is successful
+            android.util.Log.w("MoodRepository", "Failed to sync mood entry: ${e.message}")
+        }
     }
 
     private suspend fun ensureDirectoryStructure() {

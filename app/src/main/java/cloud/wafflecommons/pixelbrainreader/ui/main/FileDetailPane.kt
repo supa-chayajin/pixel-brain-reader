@@ -64,13 +64,21 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import cloud.wafflecommons.pixelbrainreader.ui.utils.ObsidianHelper
 import cloud.wafflecommons.pixelbrainreader.data.utils.FrontmatterManager
 import cloud.wafflecommons.pixelbrainreader.ui.journal.DailyNoteHeader
 import cloud.wafflecommons.pixelbrainreader.ui.mood.MoodViewModel
 import cloud.wafflecommons.pixelbrainreader.data.repository.DailyMoodData
 import cloud.wafflecommons.pixelbrainreader.data.repository.MoodEntry
+import cloud.wafflecommons.pixelbrainreader.ui.utils.ObsidianHelper
+import cloud.wafflecommons.pixelbrainreader.ui.utils.ObsidianLinkPlugin
+import cloud.wafflecommons.pixelbrainreader.ui.utils.ObsidianImagePlugin
+import cloud.wafflecommons.pixelbrainreader.ui.utils.ObsidianCalloutPlugin
 import androidx.hilt.navigation.compose.hiltViewModel
+import io.noties.markwon.image.ImagesPlugin
+import java.io.File
+import java.io.FileInputStream
+import java.io.InputStream
+import java.io.IOException
 import java.time.LocalDate
 import io.noties.markwon.AbstractMarkwonPlugin
 import io.noties.markwon.Markwon
@@ -364,49 +372,6 @@ fun MetadataHeader(metadata: Map<String, String>, tags: List<String>) {
     }
 }
 
-// --- UPDATED CALLOUT SPAN ---
-// --- UPDATED CALLOUT SPAN ---
-class CalloutSpan(
-    private val backgroundColor: Int,
-    private val stripeColor: Int,
-    private val stripeWidth: Int = 10, // Default 10px (approx 4dp @ xhdpi)
-    private val gap: Int = 20
-) : LeadingMarginSpan, android.text.style.LineBackgroundSpan {
-
-    override fun getLeadingMargin(first: Boolean): Int = stripeWidth + gap
-
-    override fun drawLeadingMargin(
-        c: Canvas, p: Paint, x: Int, dir: Int,
-        top: Int, baseline: Int, bottom: Int, text: CharSequence?, start: Int, end: Int,
-        first: Boolean, layout: android.text.Layout?
-    ) {
-        val originalStyle = p.style
-        val originalColor = p.color
-
-        p.style = Paint.Style.FILL
-        p.color = stripeColor
-        
-        // Draw Stripe (4dp equivalent logic - keeping at 10px for visibility)
-        val left = x.toFloat()
-        val right = (x + dir * stripeWidth).toFloat()
-        c.drawRect(left, top.toFloat(), right, bottom.toFloat(), p)
-
-        p.style = originalStyle
-        p.color = originalColor
-    }
-
-    override fun drawBackground(
-        c: Canvas, p: Paint,
-        left: Int, right: Int, top: Int, baseline: Int, bottom: Int,
-        text: CharSequence, start: Int, end: Int, lnum: Int
-    ) {
-        val originalColor = p.color
-        p.color = backgroundColor
-        // Draw Background (Full Width)
-        c.drawRect(left.toFloat(), top.toFloat(), right.toFloat(), bottom.toFloat(), p)
-        p.color = originalColor
-    }
-}
 
 @Composable
 fun MarkwonContent(content: String, onWikiLinkClick: (String) -> Unit) {
@@ -428,29 +393,21 @@ fun MarkwonContent(content: String, onWikiLinkClick: (String) -> Unit) {
                 .usePlugin(TablePlugin.create(tv.context))
                 .usePlugin(LinkifyPlugin.create())
                 .usePlugin(TaskListPlugin.create(textColor, textColor, textColor))
-                // --- HTML PLUGIN FOR CALLOUTS ---
+                .usePlugin(ObsidianLinkPlugin { target -> onWikiLinkClick(target) })
+                .usePlugin(ObsidianImagePlugin())
+                .usePlugin(ObsidianCalloutPlugin())
+                .usePlugin(ImagesPlugin.create())
+                // --- HTML PLUGIN FOR FALLBACKS ---
                 .usePlugin(io.noties.markwon.html.HtmlPlugin.create { plugin ->
                     plugin.addHandler(object : io.noties.markwon.html.tag.SimpleTagHandler() {
-                        override fun supportedTags() = listOf("callout")
-                        
+                        override fun supportedTags() = listOf("obsidian-image")
                         override fun getSpans(
                             configuration: io.noties.markwon.MarkwonConfiguration,
                             renderProps: io.noties.markwon.RenderProps,
                             tag: io.noties.markwon.html.HtmlTag
                         ): Any? {
-                            val type = tag.attributes()["type"]?.uppercase() ?: "NOTE"
-                            
-                            // Resolve Colors
-                            val (bg, stripe) = when (type) {
-                                "TIP", "GOAL", "SUCCESS", "DONE" -> 0xFFE8F5E9.toInt() to 0xFF4CAF50.toInt()
-                                "INFO", "NOTE", "EXAMPLE" -> 0xFFE3F2FD.toInt() to 0xFF2196F3.toInt()
-                                "WARNING", "CAUTION", "ATTENTION" -> 0xFFFFF3E0.toInt() to 0xFFFF9800.toInt()
-                                "DANGER", "ERROR", "BUG", "FAIL" -> 0xFFFFEBEE.toInt() to 0xFFF44336.toInt()
-                                else -> 0xFFF5F5F5.toInt() to 0xFF9E9E9E.toInt()
-                            }
-
-                            // Return the span to be applied by SimpleTagHandler
-                            return CalloutSpan(bg, stripe)
+                            // Placeholder for now, images will be handled later
+                            return null
                         }
                     })
                 })

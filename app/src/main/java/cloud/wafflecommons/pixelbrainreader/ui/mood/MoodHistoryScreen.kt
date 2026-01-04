@@ -60,16 +60,14 @@ fun MoodHistoryScreen(
             // Date Selector
             DateSelector(
                 selectedDate = uiState.selectedDate,
-                onDateSelected = { viewModel.loadMood(it) }
+                onDateSelected = { viewModel.selectDate(it) }
             )
-
-            // Summary Header
             SummaryHeader(uiState.moodData?.summary?.mainEmoji, uiState.moodData?.summary?.averageScore)
 
             // Timeline
             if (uiState.moodData?.entries.isNullOrEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No entries for this day", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("No mood data for this day.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             } else {
                 LazyColumn(
@@ -95,28 +93,37 @@ fun DateSelector(
     selectedDate: LocalDate,
     onDateSelected: (LocalDate) -> Unit
 ) {
+    val isToday = selectedDate >= LocalDate.now()
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
         IconButton(onClick = { onDateSelected(selectedDate.minusDays(1)) }) {
             Icon(Icons.Outlined.ChevronLeft, contentDescription = "Previous Day")
         }
-        
+
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Icon(Icons.Outlined.CalendarMonth, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
             Text(
-                text = if (selectedDate == LocalDate.now()) "Today" else selectedDate.format(DateTimeFormatter.ofPattern("MMM d, yyyy")),
+                text = if (isToday) "Today" else selectedDate.format(DateTimeFormatter.ofPattern("MMM d, yyyy")),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
         }
 
-        IconButton(onClick = { onDateSelected(selectedDate.plusDays(1)) }) {
-            Icon(Icons.Outlined.ChevronRight, contentDescription = "Next Day")
+        IconButton(
+            onClick = { onDateSelected(selectedDate.plusDays(1)) },
+            enabled = !isToday
+        ) {
+            Icon(
+                Icons.Outlined.ChevronRight, 
+                contentDescription = "Next Day",
+                tint = if (isToday) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f) else MaterialTheme.colorScheme.onSurface
+            )
         }
     }
 }

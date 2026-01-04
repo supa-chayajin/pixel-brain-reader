@@ -11,6 +11,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
@@ -74,12 +75,6 @@ fun MoodCheckInSheet(
         )
     }
 
-    LaunchedEffect(uiState.success) {
-        if (uiState.success) {
-            onDismiss()
-            viewModel.resetState()
-        }
-    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -170,19 +165,18 @@ fun MoodCheckInSheet(
 
             Button(
                 onClick = {
-                    val moodLabel = moods.find { it.first == selectedMood }?.second ?: "😐"
-                    viewModel.addMoodEntry(selectedMood, moodLabel, selectedActivities.toList(), noteText)
+                    viewModel.addMoodEntry(selectedMood, selectedActivities.toList(), noteText)
+                    onDismiss()
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(64.dp),
-                enabled = !uiState.isLoading,
-                shape = CircleShape
+                    .height(56.dp),
+                shape = RoundedCornerShape(16.dp)
             ) {
                 if (uiState.isLoading) {
                     CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary)
                 } else {
-                    Text("Save Mood", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("Save Mood", style = MaterialTheme.typography.titleMedium)
                 }
             }
         }

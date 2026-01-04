@@ -97,6 +97,14 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
+object Screen {
+    const val Home = "home"
+    const val Chat = "chat"
+    const val MoodTracker = "mood"
+    const val Settings = "settings"
+    const val Import = "import"
+}
+
 @OptIn(ExperimentalMaterial3AdaptiveApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
@@ -204,9 +212,9 @@ fun MainScreen(
     androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold(
         navigationSuiteItems = {
             item(
-                selected = currentRoute == "home" && !isViewingDailyNote, // Active only if NOT viewing daily note
+                selected = currentRoute == Screen.Home && !isViewingDailyNote, // Active only if NOT viewing daily note
                 onClick = { 
-                    navController.navigate("home") {
+                    navController.navigate(Screen.Home) {
                         popUpTo(navController.graph.findStartDestination().id) {
                             saveState = true
                         }
@@ -221,7 +229,7 @@ fun MainScreen(
                  selected = isViewingDailyNote, // Active if viewing daily note
                  onClick = { 
                      viewModel.onTodayClicked()
-                     navController.navigate("home") {
+                     navController.navigate(Screen.Home) {
                         popUpTo(navController.graph.findStartDestination().id) {
                             saveState = true
                         }
@@ -233,9 +241,9 @@ fun MainScreen(
                  label = { Text("Daily") }
             )
             item(
-                selected = currentRoute == "chat",
+                selected = currentRoute == Screen.Chat,
                 onClick = { 
-                    navController.navigate("chat") {
+                    navController.navigate(Screen.Chat) {
                         popUpTo(navController.graph.findStartDestination().id) {
                             saveState = true
                         }
@@ -247,9 +255,9 @@ fun MainScreen(
                 label = { Text("Chat") }
             )
             item(
-                selected = currentRoute == "mood",
+                selected = currentRoute == Screen.MoodTracker,
                 onClick = { 
-                    navController.navigate("mood") {
+                    navController.navigate(Screen.MoodTracker) {
                         popUpTo(navController.graph.findStartDestination().id) {
                             saveState = true
                         }
@@ -261,9 +269,9 @@ fun MainScreen(
                 label = { Text("Mood") }
             )
             item(
-                selected = currentRoute == "settings",
+                selected = currentRoute == Screen.Settings,
                 onClick = { 
-                    navController.navigate("settings") {
+                    navController.navigate(Screen.Settings) {
                         popUpTo(navController.graph.findStartDestination().id) {
                             saveState = true
                         }
@@ -278,10 +286,10 @@ fun MainScreen(
     ) {
         androidx.navigation.compose.NavHost(
             navController = navController,
-            startDestination = "home",
+            startDestination = Screen.Home,
             modifier = Modifier.fillMaxSize()
         ) {
-            composable("home") {
+            composable(Screen.Home) {
                 // Home with ListDetailPaneScaffold, Breadcrumbs, and Global TopBar
                 
                 val canNavigateBack = navigator.canNavigateBack()
@@ -568,7 +576,7 @@ fun MainScreen(
                 }
             }
 
-            composable("chat") {
+            composable(Screen.Chat) {
                 val snackbarHostState = remember { SnackbarHostState() }
                 
                 LaunchedEffect(uiState.userMessage) {
@@ -593,15 +601,15 @@ fun MainScreen(
                 }
             }
 
-            composable("settings") {
+            composable(Screen.Settings) {
                 SettingsScreen()
             }
 
-            composable("mood") {
+            composable(Screen.MoodTracker) {
                 MoodHistoryScreen()
             }
 
-            composable("import") {
+            composable(Screen.Import) {
                 // Intercept System Back to clear state
                 BackHandler {
                     viewModel.dismissImport()

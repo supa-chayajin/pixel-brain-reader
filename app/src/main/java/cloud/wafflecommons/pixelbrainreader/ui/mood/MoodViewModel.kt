@@ -19,9 +19,7 @@ import javax.inject.Inject
 data class MoodState(
     val selectedDate: LocalDate = LocalDate.now(),
     val moodData: DailyMoodData? = null,
-    val isLoading: Boolean = false,
-    val error: String? = null,
-    val success: Boolean = false // Used for auto-dismissing sheets or showing confirmation
+    val isLoading: Boolean = false
 )
 
 @HiltViewModel
@@ -40,15 +38,23 @@ class MoodViewModel @Inject constructor(
     }
 
     /**
-     * Changes the selected date and observes its mood data.
+     * Changes the selected date and reloads data.
+     */
+    fun selectDate(date: LocalDate) {
+        _uiState.update { it.copy(selectedDate = date) }
+        loadMood(date)
+    }
+
+    /**
+     * Observes mood data for a specific date.
      */
     fun loadMood(date: LocalDate) {
-        _uiState.update { it.copy(selectedDate = date) }
+        _uiState.update { it.copy(isLoading = true) }
         
         moodJob?.cancel()
         moodJob = moodRepository.getDailyMood(date)
             .onEach { data ->
-                _uiState.update { it.copy(moodData = data) }
+                _uiState.update { it.copy(moodData = data, isLoading = false) }
             }
             .launchIn(viewModelScope)
     }
@@ -56,11 +62,21 @@ class MoodViewModel @Inject constructor(
     /**
      * Records a new mood entry for the currently selected date.
      */
-    fun addMoodEntry(score: Int, label: String, activities: List<String>, note: String) {
+    fun addMoodEntry(score: Int, activities: List<String>, note: String) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null, success = false) }
+            _uiState.update { it.copy(isLoading = true) }
             try {
                 val now = LocalDateTime.now()
+                // Auto-map score to label for simplicity
+                val label = when(score) {
+                    1 -> "😫"
+                    2 -> "😞"
+                    3 -> "😐"
+                    4 -> "🙂"
+                    5 -> "🤩"
+                    else -> "😐"
+                }
+
                 val entry = MoodEntry(
                     time = now.format(DateTimeFormatter.ofPattern("HH:mm")),
                     score = score,
@@ -69,17 +85,14 @@ class MoodViewModel @Inject constructor(
                     note = note.ifBlank { null }
                 )
                 moodRepository.addEntry(_uiState.value.selectedDate, entry)
-                _uiState.update { it.copy(isLoading = false, success = true) }
+                _uiState.update { it.copy(isLoading = false) }
             } catch (e: Exception) {
-                _uiState.update { it.copy(isLoading = false, error = e.message ?: "Failed to save mood") }
+                _uiState.update { it.copy(isLoading = false) }
             }
         }
     }
 
-    /**
-     * Resets the success/error state (e.g., after dismissing a sheet).
-     */
     fun resetState() {
-        _uiState.update { it.copy(success = false, error = null) }
+        // No longer using success/error for simple autonomous design
     }
 }
