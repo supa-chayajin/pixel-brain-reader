@@ -52,7 +52,7 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import cloud.wafflecommons.pixelbrainreader.ui.components.PullToRefreshBox
 import cloud.wafflecommons.pixelbrainreader.ui.settings.SettingsScreen
-import cloud.wafflecommons.pixelbrainreader.ui.journal.DailyCheckInSheet
+import cloud.wafflecommons.pixelbrainreader.ui.mood.MoodHistoryScreen
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
@@ -247,6 +247,20 @@ fun MainScreen(
                 label = { Text("Chat") }
             )
             item(
+                selected = currentRoute == "mood",
+                onClick = { 
+                    navController.navigate("mood") {
+                        popUpTo(navController.graph.findStartDestination().id) {
+                            saveState = true
+                        }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
+                icon = { Icon(Icons.Default.Mood, contentDescription = "Mood") },
+                label = { Text("Mood") }
+            )
+            item(
                 selected = currentRoute == "settings",
                 onClick = { 
                     navController.navigate("settings") {
@@ -306,10 +320,6 @@ fun MainScreen(
                     )
                 }
 
-                var showCheckInSheet by remember { mutableStateOf(false) }
-                if (showCheckInSheet) {
-                    DailyCheckInSheet(onDismiss = { showCheckInSheet = false })
-                }
 
                 // Back Handler for Home Logic
                 BackHandler(enabled = true) {
@@ -442,16 +452,6 @@ fun MainScreen(
                                 }
                             }
                         )
-                    },
-
-                    floatingActionButton = {
-                        androidx.compose.material3.FloatingActionButton(
-                            onClick = { showCheckInSheet = true },
-                            containerColor = MaterialTheme.colorScheme.primaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                        ) {
-                            Icon(androidx.compose.material.icons.Icons.Default.Mood, contentDescription = "Check-In")
-                        }
                     },
 
                     contentWindowInsets = WindowInsets(0, 0, 0, 32) // We handle insets in content (List/Detail)
@@ -595,6 +595,10 @@ fun MainScreen(
 
             composable("settings") {
                 SettingsScreen()
+            }
+
+            composable("mood") {
+                MoodHistoryScreen()
             }
 
             composable("import") {

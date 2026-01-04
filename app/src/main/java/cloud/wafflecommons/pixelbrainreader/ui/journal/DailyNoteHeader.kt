@@ -9,12 +9,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import cloud.wafflecommons.pixelbrainreader.data.utils.DailySummary
+import cloud.wafflecommons.pixelbrainreader.data.repository.MoodSummary
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun DailyNoteHeader(
-    summary: DailySummary,
+    emoji: String?,
+    lastUpdate: String?,
+    activities: List<String>,
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -33,7 +35,7 @@ fun DailyNoteHeader(
         ) {
             // Left: Huge Emoji
             Text(
-                text = summary.dailyEmoji ?: "😐",
+                text = emoji ?: "😐",
                 fontSize = 48.sp,
                 modifier = Modifier.padding(end = 20.dp)
             )
@@ -47,22 +49,22 @@ fun DailyNoteHeader(
                     color = MaterialTheme.colorScheme.primary
                 )
                 
-                if (summary.lastUpdate != null) {
+                if (lastUpdate != null) {
                     Text(
-                        text = "Last update: ${summary.lastUpdate}",
+                        text = "Last update: $lastUpdate",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
 
-                if (summary.allActivities.isNotEmpty()) {
+                if (activities.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(12.dp))
                     FlowRow(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        summary.allActivities.forEach { activity ->
+                        activities.forEach { activity ->
                             // FIX: Force high-contrast colors for visibility
                             ElevatedAssistChip(
                                 onClick = { },

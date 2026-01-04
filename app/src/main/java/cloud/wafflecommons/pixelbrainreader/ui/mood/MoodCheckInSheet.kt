@@ -1,4 +1,4 @@
-package cloud.wafflecommons.pixelbrainreader.ui.journal
+package cloud.wafflecommons.pixelbrainreader.ui.mood
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
@@ -22,7 +22,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -30,9 +29,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
-fun DailyCheckInSheet(
+fun MoodCheckInSheet(
     onDismiss: () -> Unit,
-    viewModel: DailyCheckInViewModel = hiltViewModel()
+    viewModel: MoodViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var selectedMood by remember { mutableIntStateOf(3) }
@@ -75,12 +74,8 @@ fun DailyCheckInSheet(
         )
     }
 
-    val context = LocalContext.current
     LaunchedEffect(uiState.success) {
         if (uiState.success) {
-            uiState.message?.let {
-                android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_SHORT).show()
-            }
             onDismiss()
             viewModel.resetState()
         }
@@ -101,14 +96,12 @@ fun DailyCheckInSheet(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(32.dp)
         ) {
-            // Header
-//            Text(
-//                text = "How are you right now?",
-//                style = MaterialTheme.typography.headlineSmall,
-//                fontWeight = FontWeight.Bold
-//            )
+            Text(
+                text = "How are you right now?",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
 
-            // Stadium Mood Selector (Floating Track)
             MoodSelector(
                 selectedMood = selectedMood,
                 onMoodSelected = { selectedMood = it },
@@ -124,7 +117,6 @@ fun DailyCheckInSheet(
                     text = "Activities",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.padding(start = 4.dp)
                 )
                 Spacer(modifier = Modifier.height(16.dp))
@@ -146,34 +138,20 @@ fun DailyCheckInSheet(
                         category.items.forEach { item ->
                             val isSelected = selectedActivities.contains(item.label)
                             
-                            ElevatedFilterChip(
+                            FilterChip(
                                 selected = isSelected,
                                 onClick = {
                                     if (isSelected) selectedActivities.remove(item.label)
                                     else selectedActivities.add(item.label)
                                 },
-                                label = { 
-                                    Text(
-                                        text = item.label,
-                                        style = MaterialTheme.typography.labelLarge
-                                    ) 
-                                },
+                                label = { Text(item.label) },
                                 leadingIcon = {
                                     Icon(
                                         imageVector = item.icon,
                                         contentDescription = null,
                                         modifier = Modifier.size(18.dp)
                                     )
-                                },
-                                shape = CircleShape,
-                                colors = FilterChipDefaults.elevatedFilterChipColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                    labelColor = MaterialTheme.colorScheme.onSurface,
-                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimaryContainer
-                                ),
-                                elevation = FilterChipDefaults.elevatedFilterChipElevation(elevation = 2.dp)
+                                }
                             )
                         }
                     }
@@ -181,25 +159,19 @@ fun DailyCheckInSheet(
                 }
             }
 
-            // Quick Note
-//            OutlinedTextField(
-//                value = noteText,
-//                onValueChange = { noteText = it },
-//                label = { Text("Quick Note (Optional)") },
-//                modifier = Modifier.fillMaxWidth(),
-//                placeholder = { Text("What's on your mind?") },
-//                shape = MaterialTheme.shapes.large,
-//                colors = OutlinedTextFieldDefaults.colors(
-//                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-//                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
-//                )
-//            )
+            OutlinedTextField(
+                value = noteText,
+                onValueChange = { noteText = it },
+                label = { Text("Quick Note (Optional)") },
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("What's on your mind?") },
+                shape = MaterialTheme.shapes.large
+            )
 
-            // Action Button
             Button(
                 onClick = {
                     val moodLabel = moods.find { it.first == selectedMood }?.second ?: "😐"
-                    viewModel.submitCheckIn(selectedMood, moodLabel, selectedActivities.toList(), noteText)
+                    viewModel.addMoodEntry(selectedMood, moodLabel, selectedActivities.toList(), noteText)
                 },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -208,17 +180,9 @@ fun DailyCheckInSheet(
                 shape = CircleShape
             ) {
                 if (uiState.isLoading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp),
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        strokeWidth = 2.dp
-                    )
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary)
                 } else {
-                    Text(
-                        text = "Save",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Text("Save Mood", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -244,14 +208,12 @@ fun MoodSelector(
             label = "indicatorOffset"
         )
 
-        // Track Background
         Surface(
             modifier = Modifier.fillMaxSize(),
             shape = CircleShape,
             color = MaterialTheme.colorScheme.surfaceContainerHigh
         ) {}
 
-        // Animated Indicator (The "Floating Track")
         Box(
             modifier = Modifier
                 .padding(4.dp)
@@ -262,17 +224,9 @@ fun MoodSelector(
                 .background(MaterialTheme.colorScheme.secondaryContainer)
         )
 
-        // Icons Overlay
         Row(modifier = Modifier.fillMaxSize()) {
             moods.forEachIndexed { index, (score, label) ->
                 val isSelected = selectedMood == score
-                val contentColor by animateColorAsState(
-                    targetValue = if (isSelected) MaterialTheme.colorScheme.onSecondaryContainer 
-                                  else MaterialTheme.colorScheme.onSurfaceVariant,
-                    label = "contentColor"
-                )
-                
-                // ZOOM ANIMATION: Scale up selected, slightly scale down others
                 val scale by animateFloatAsState(
                     targetValue = if (isSelected) 1.5f else 0.9f,
                     animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
@@ -292,8 +246,7 @@ fun MoodSelector(
                     Text(
                         text = label,
                         fontSize = 24.sp,
-                        modifier = Modifier.scale(scale),
-                        color = contentColor
+                        modifier = Modifier.scale(scale)
                     )
                 }
             }
