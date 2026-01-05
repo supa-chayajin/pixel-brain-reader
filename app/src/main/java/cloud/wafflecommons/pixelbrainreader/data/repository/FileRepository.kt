@@ -8,6 +8,7 @@ import cloud.wafflecommons.pixelbrainreader.data.remote.GithubApiService
 import cloud.wafflecommons.pixelbrainreader.data.remote.GitTreeResponse
 import cloud.wafflecommons.pixelbrainreader.data.remote.GitTreeItem
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.asSharedFlow
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -19,6 +20,9 @@ import cloud.wafflecommons.pixelbrainreader.data.local.dao.FileContentDao
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.FileContentEntity
 import cloud.wafflecommons.pixelbrainreader.data.local.AppDatabase
 import androidx.room.withTransaction
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.Mutex
+
 
 @Singleton
 class FileRepository @Inject constructor(
@@ -135,29 +139,43 @@ class FileRepository @Inject constructor(
      * Save File Local (Offline First).
      * Updates Content DB & Marks as Dirty.
      */
+    private val fileMutex = kotlinx.coroutines.sync.Mutex()
+    private val _fileUpdates = kotlinx.coroutines.flow.MutableSharedFlow<String>(replay = 0)
+    val fileUpdates = _fileUpdates.asSharedFlow()
+
+    /**
+     * Save File Local (Offline First).
+     * Updates Content DB & Marks as Dirty.
+     * SERIALIZED via Mutex.
+     */
     suspend fun saveFileLocally(path: String, content: String) {
-        // 1. Update Content
-        fileContentDao.saveContent(FileContentEntity(path = path, content = content))
-        
-        // 2. Insert or Update File Entity
-        val existing = fileDao.getFile(path)
-        if (existing == null) {
-            val newEntity = FileEntity(
-                path = path,
-                name = path.substringAfterLast("/"),
-                type = "file",
-                downloadUrl = null,
-                isDirty = true,
-                localModifiedTimestamp = System.currentTimeMillis()
-            )
-            fileDao.insertFile(newEntity)
-        } else {
-            // FIX: Ensure timestamp is updated along with dirty flag
-            val updatedEntity = existing.copy(
-                isDirty = true,
-                localModifiedTimestamp = System.currentTimeMillis()
-            )
-            fileDao.insertFile(updatedEntity)
+        fileMutex.withLock {
+            // 1. Update Content
+            fileContentDao.saveContent(FileContentEntity(path = path, content = content))
+            
+            // 2. Insert or Update File Entity
+            val existing = fileDao.getFile(path)
+            if (existing == null) {
+                val newEntity = FileEntity(
+                    path = path,
+                    name = path.substringAfterLast("/"),
+                    type = "file",
+                    downloadUrl = null,
+                    isDirty = true,
+                    localModifiedTimestamp = System.currentTimeMillis()
+                )
+                fileDao.insertFile(newEntity)
+            } else {
+                // FIX: Ensure timestamp is updated along with dirty flag
+                val updatedEntity = existing.copy(
+                    isDirty = true,
+                    localModifiedTimestamp = System.currentTimeMillis()
+                )
+                fileDao.insertFile(updatedEntity)
+            }
+            
+            // 3. Notify Observers (Event Bus)
+            _fileUpdates.emit(path)
         }
     }
 
@@ -543,6 +561,7 @@ class FileRepository @Inject constructor(
                          }
                     } else if (item.type == "blob") {
                          val isMarkdown = item.path.endsWith(".md", ignoreCase = true)
+                         val isData = item.path.endsWith(".json", ignoreCase = true)
                          val localSha = localFileMap[item.path]
                          
                          // INCREMENTAL CHECK
@@ -562,8 +581,8 @@ class FileRepository @Inject constructor(
                          fileDao.insertFile(entity) // Upsert
                          
                          // 2. Content Sync
-                         // Only download content for Markdowns that CHANGED or are NEW.
-                         if (isMarkdown) {
+                         // Only download content for Markdowns/Data that CHANGED or are NEW.
+                         if (isMarkdown || isData) {
                              if (shouldDownload) {
                                   // Construct raw URL (See previous implementation notes)
                                   val rawUrl = "https://raw.githubusercontent.com/$owner/$repo/$branch/${item.path}"

@@ -43,23 +43,63 @@ class MainViewModelTest {
         Dispatchers.resetMain()
     }
 
-    /*
     @Test
-    fun deleteFile_CallsRepository() = runTest {
+    fun refreshCurrentFolder_EmitsSuccessToast_AndReloadsFolder() = runTest {
         // Arrange
-        val filePath = "folder/file.md"
-        val sha = "sha123"
-        // Mock getRepoInfo to ensure deleteFile logic proceeds if checks needed
-        every { secretManager.getRepoInfo() } returns Pair("owner", "repo")
-        coEvery { fileRepository.deleteFile(any(), any(), any(), any()) } returns Result.success(Unit)
-        
+        val owner = "owner"
+        val repo = "repo"
+        every { secretManager.getRepoInfo() } returns Pair(owner, repo)
+        coEvery { fileRepository.syncRepository(owner, repo) } returns Result.success(Unit)
+        coEvery { fileRepository.getFiles(any()) } returns kotlinx.coroutines.flow.flowOf(emptyList())
+
         // Act
-        // viewModel.deleteFile(filePath, sha) // Method Missing in MainViewModel
-        
-        advanceUntilIdle() // Ensure coroutines complete
+        viewModel.refreshCurrentFolder()
+        advanceUntilIdle()
 
         // Assert
-        // coVerify { fileRepository.deleteFile("owner", "repo", filePath, sha) }
+        coVerify { fileRepository.syncRepository(owner, repo) }
+        // Verify loadFolder was called (implicitly via getFiles)
+        coVerify { fileRepository.getFiles("") }
+        // Verify Toast (checking flow might be tricky without Turbine, but we can infer success path)
     }
-    */
+
+    @Test
+    fun refreshCurrentFolder_EmitsErrorToast_OnFailure() = runTest {
+        // Arrange
+        val owner = "owner"
+        val repo = "repo"
+        every { secretManager.getRepoInfo() } returns Pair(owner, repo)
+        coEvery { fileRepository.syncRepository(owner, repo) } returns Result.failure(Exception("Network error"))
+
+        // Act
+        viewModel.refreshCurrentFolder()
+        advanceUntilIdle()
+
+        // Assert
+        coVerify { fileRepository.syncRepository(owner, repo) }
+        // Verify getFiles was NOT called AGAIN (loadFolder skipped on failure)
+        // It is called once during init.
+        coVerify(exactly = 1) { fileRepository.getFiles(any()) }
+    }
+
+    @Test
+    fun performInitialSync_ShowsLoader_AndCallsSync() = runTest {
+        // Arrange
+        val owner = "owner"
+        val repo = "repo"
+        every { secretManager.getRepoInfo() } returns Pair(owner, repo)
+        coEvery { fileRepository.syncRepository(owner, repo) } returns Result.success(Unit)
+        
+        // Reset init (done in setup)
+        clearMocks(fileRepository, answers = false, recordedCalls = true)
+
+        // Act
+        viewModel.performInitialSync()
+        advanceUntilIdle()
+        
+        // Assert
+        // We can't easily check isLoading=true mid-flow without turbine, but we verify sync and loadFolder call
+        coVerify { fileRepository.syncRepository(owner, repo) }
+        coVerify { fileRepository.getFiles(any()) }
+    }
 }

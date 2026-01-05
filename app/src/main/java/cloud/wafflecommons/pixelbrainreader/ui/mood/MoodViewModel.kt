@@ -10,6 +10,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -50,8 +52,15 @@ class MoodViewModel @Inject constructor(
     /**
      * Observes mood data for a specific date.
      */
+    private var loadJob: kotlinx.coroutines.Job? = null
+
+    /**
+     * Observes mood data for a specific date.
+     * Uses UNDISPATCHED start to ensure immediate execution on the current thread until the first suspension.
+     */
     fun loadMood(date: LocalDate) {
-        viewModelScope.launch {
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
             _uiState.update { it.copy(isLoading = true, selectedDate = date) }
 
             moodRepository.getDailyMood(date)
@@ -66,8 +75,20 @@ class MoodViewModel @Inject constructor(
     }
 
     /**
+     * Refreshes the mood data for the currently selected date.
+     * Can be called from UI onResume or after a Git Sync.
+     */
+    fun refreshData() {
+        loadMood(_uiState.value.selectedDate)
+    }
+
+    /**
      * Records a new mood entry for the currently selected date.
      */
+    // Event Channel
+    private val _uiEvent = kotlinx.coroutines.flow.MutableSharedFlow<cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent>()
+    val uiEvent = _uiEvent.asSharedFlow()
+
     fun addMoodEntry(score: Int, activities: List<String>, note: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
@@ -91,8 +112,10 @@ class MoodViewModel @Inject constructor(
                     note = note.ifBlank { null }
                 )
                 moodRepository.addEntry(_uiState.value.selectedDate, entry)
+                _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Mood Saved & Synced ✅"))
                 _uiState.update { it.copy(isLoading = false) }
             } catch (e: Exception) {
+                _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Sync Failed ❌: ${e.message}"))
                 _uiState.update { it.copy(isLoading = false) }
             }
         }

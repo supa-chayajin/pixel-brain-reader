@@ -52,6 +52,7 @@ fun DailyNoteScreen(
     onNavigateBack: () -> Unit,
     onEditClicked: (String) -> Unit,
     onCheckInClicked: () -> Unit,
+    isGlobalSyncing: Boolean = false, // Received from MainViewModel
     viewModel: DailyNoteViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -102,7 +103,7 @@ fun DailyNoteScreen(
                 .padding(padding)
                 .fillMaxSize()
         ) {
-            if (state.isLoading) {
+            if (state.isLoading || isGlobalSyncing) {
                 CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
             } else {
                 Column(

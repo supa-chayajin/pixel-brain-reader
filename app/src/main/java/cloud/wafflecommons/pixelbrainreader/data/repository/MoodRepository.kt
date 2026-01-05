@@ -73,6 +73,7 @@ class MoodRepository @Inject constructor(
             // This is expected if the file doesn't exist
             emit(null)
         } catch (e: Exception) {
+            if (e is java.util.concurrent.CancellationException) throw e
             Log.e("MoodRepo", "Error reading mood for $date", e)
             emit(null) // Emit null on corruption or other errors
         }
@@ -104,7 +105,8 @@ class MoodRepository @Inject constructor(
 
         // 4. Recalculate Summary
         val avg = if (updatedEntries.isEmpty()) 0.0 else updatedEntries.map { it.score }.average()
-        val emoji = calculateDailyEmoji(avg)
+        val latestScore = updatedEntries.firstOrNull()?.score
+        val emoji = calculateDailyEmoji(avg, latestScore)
         
         val updatedData = DailyMoodData(
             date = date.toString(),
@@ -137,7 +139,24 @@ class MoodRepository @Inject constructor(
         fileRepository.createLocalFolder(moodDir)
     }
 
-    private fun calculateDailyEmoji(avg: Double): String {
+    private fun calculateDailyEmoji(avg: Double, latestEntryScore: Int? = null): String {
+        // Fix: If we have a latest entry, use its label/score directly for the "Current Mood" feel
+        // But the summary is "Daily Summary", so maybe Average is better? 
+        // User Request: "Daily Note Dashboard displays the FIRST (08:00) instead of LAST (most recent)."
+        // User requests the Dashboard emoji to reflect the Latest.
+        
+        if (latestEntryScore != null) {
+            return when(latestEntryScore) {
+                1 -> "😫"
+                2 -> "😞"
+                3 -> "😐"
+                4 -> "🙂"
+                5 -> "🤩"
+                else -> "😐"
+            }
+        }
+
+        // Fallback to average if needed
         return when {
             avg < 1.8 -> "😫"
             avg < 2.6 -> "😞"

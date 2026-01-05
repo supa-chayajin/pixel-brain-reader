@@ -62,6 +62,7 @@ class DailyNoteViewModelTest {
             It was good.
         """.trimIndent()
         
+        every { fileRepository.fileUpdates } returns kotlinx.coroutines.flow.MutableSharedFlow()
         every { fileRepository.getFileContentFlow(any()) } returns flowOf(rawContent)
 
         viewModel = DailyNoteViewModel(moodRepository, fileRepository)

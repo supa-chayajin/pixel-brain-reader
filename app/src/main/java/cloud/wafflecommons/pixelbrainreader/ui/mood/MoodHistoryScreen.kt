@@ -30,6 +30,17 @@ fun MoodHistoryScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var showSheet by remember { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    LaunchedEffect(viewModel.uiEvent) {
+        viewModel.uiEvent.collect { event ->
+            when(event) {
+                is cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast -> {
+                    android.widget.Toast.makeText(context, event.message, android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
 
     Scaffold(
         topBar = {

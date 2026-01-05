@@ -36,6 +36,24 @@ class DailyNoteViewModel @Inject constructor(
 
     init {
         loadData()
+        observeUpdates()
+    }
+
+    private fun observeUpdates() {
+        viewModelScope.launch {
+            fileRepository.fileUpdates.collect { path: String ->
+                // Check if the updated file is relevant (Current Daily Note OR Mood JSON)
+                val today = LocalDate.now().format(DateTimeFormatter.ISO_DATE)
+                val notePath = "10_Journal/$today.md"
+                val jsonPath = "10_Journal/$today.json" // Approximation, actual logic in Repo
+                
+                // Relaxed check: Is it a json file (Mood) or likely the daily note?
+                // Also refresh if we are just notified of the exact note path.
+                if (path == notePath || path.endsWith(".json")) {
+                   loadData()
+                }
+            }
+        }
     }
 
     fun loadData() {
@@ -72,5 +90,10 @@ class DailyNoteViewModel @Inject constructor(
                 _uiState.value = newState
             }
         }
+    }
+    
+    // Refresh retained for manual calls if needed, but Reactive loop should handle most.
+    fun refresh() {
+        loadData()
     }
 }

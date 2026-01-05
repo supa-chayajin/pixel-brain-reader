@@ -19,6 +19,11 @@ class MoodRepositoryTest {
 
     @Before
     fun setup() {
+        mockkStatic(android.util.Log::class)
+        every { android.util.Log.e(any(), any(), any()) } returns 0
+        every { android.util.Log.w(any(), any<String>()) } returns 0
+        every { android.util.Log.e(any(), any()) } returns 0
+        
         repository = MoodRepository(fileRepository, gson, secretManager)
     }
 
@@ -86,7 +91,7 @@ class MoodRepositoryTest {
         val date = LocalDate.of(2026, 1, 6)
         val path = "10_Journal/data/health/mood/2026-01-06.json"
         
-        every { fileRepository.getFileContentFlow(path) } returns flowOf(null)
+        every { fileRepository.getFileContentFlow(any()) } returns flowOf(null)
 
         // Act
         val result = repository.getDailyMood(date).first()

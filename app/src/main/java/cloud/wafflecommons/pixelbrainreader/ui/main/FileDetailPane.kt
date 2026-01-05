@@ -204,8 +204,7 @@ fun FileDetailPane(
                                 onValueChange = onContentChange,
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .padding(16.dp)
-                                    .imePadding(),
+                                    .padding(16.dp),
                                 textStyle = TextStyle(
                                     color = MaterialTheme.colorScheme.onSurface,
                                     fontSize = 16.sp,
@@ -219,7 +218,6 @@ fun FileDetailPane(
                                     .fillMaxSize()
                                     .padding(horizontal = 16.dp)
                                     .verticalScroll(rememberScrollState())
-                                    .imePadding()
                             ) {
                                 if (isDailyNote && moodState.moodData != null) {
                                     val data = moodState.moodData!!

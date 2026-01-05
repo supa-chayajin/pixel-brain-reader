@@ -111,11 +111,24 @@ object Screen {
 fun MainScreen(
     onLogout: () -> Unit,
     onExitApp: () -> Unit,
-    viewModel: MainViewModel = hiltViewModel()
+    viewModel: MainViewModel = hiltViewModel(),
+    moodViewModel: cloud.wafflecommons.pixelbrainreader.ui.mood.MoodViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val navigator = rememberListDetailPaneScaffoldNavigator<Any>()
     val scope = rememberCoroutineScope()
+    // context is used for Toasts and Activity control. Ensure single declaration.
+    val context = androidx.compose.ui.platform.LocalContext.current
+    
+    LaunchedEffect(viewModel.uiEvent) {
+        viewModel.uiEvent.collect { event ->
+            when(event) {
+                is cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast -> {
+                    android.widget.Toast.makeText(context, event.message, android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
     val navController = androidx.navigation.compose.rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
@@ -203,10 +216,20 @@ fun MainScreen(
     }
     
     // Auto-Close logic for External Imports
-    val context = androidx.compose.ui.platform.LocalContext.current
     LaunchedEffect(uiState.isExitPending) {
         if (uiState.isExitPending) {
             (context as? android.app.Activity)?.finish()
+        }
+    }
+
+    // Mood Event Listening
+    LaunchedEffect(moodViewModel.uiEvent) {
+        moodViewModel.uiEvent.collect { event ->
+             when(event) {
+                is cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast -> {
+                    android.widget.Toast.makeText(context, event.message, android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
         }
     }
 
@@ -215,7 +238,8 @@ fun MainScreen(
 
     if (showMoodSheet) {
         cloud.wafflecommons.pixelbrainreader.ui.mood.MoodCheckInSheet(
-            onDismiss = { showMoodSheet = false }
+            onDismiss = { showMoodSheet = false },
+            viewModel = moodViewModel
         )
     }
 
@@ -443,7 +467,7 @@ fun MainScreen(
                         )
                     },
 
-                    contentWindowInsets = WindowInsets(0, 0, 0, 32) // We handle insets in content (List/Detail)
+                    contentWindowInsets = androidx.compose.material3.ScaffoldDefaults.contentWindowInsets
                 ) { padding ->
                     Box(
                         modifier = Modifier
@@ -529,7 +553,8 @@ fun MainScreen(
                                             },
                                             onRename = { newName -> viewModel.renameFile(newName) },
                                             onWikiLinkClick = { target -> viewModel.onWikiLinkClick(target) },
-                                            onCreateNew = { viewModel.createNewFile() }
+                                            onCreateNew = { viewModel.createNewFile() },
+                                            moodViewModel = moodViewModel
                                         )
                                     } else {
                                         cloud.wafflecommons.pixelbrainreader.ui.components.WelcomeScreen()
@@ -617,12 +642,29 @@ fun MainScreen(
             }
 
             composable(Screen.DailyNote) {
+                val dailyViewModel: cloud.wafflecommons.pixelbrainreader.ui.daily.DailyNoteViewModel = hiltViewModel()
+                
+                // Refresh Trigger: When Sync finishes, reload Daily View
+                // We use isSyncing going from True -> False
+                val isSyncing = uiState.isSyncing
+                val currentIsSyncing by androidx.compose.runtime.rememberUpdatedState(isSyncing)
+                
+                LaunchedEffect(isSyncing) {
+                     if (!isSyncing) { 
+                         // Sync Finished.
+                         dailyViewModel.refresh()
+                         moodViewModel.refreshData() 
+                     }
+                }
+            
                 cloud.wafflecommons.pixelbrainreader.ui.daily.DailyNoteScreen(
                     onNavigateBack = { navController.popBackStack() },
-                    onEditClicked = { _ ->
-                        viewModel.onTodayClicked(startEditing = true)
+                    onEditClicked = { path ->
+                        viewModel.onTodayClicked(path, startEditing = true)
                     },
-                    onCheckInClicked = { showMoodSheet = true }
+                    onCheckInClicked = { showMoodSheet = true },
+                    isGlobalSyncing = uiState.isSyncing,
+                    viewModel = dailyViewModel
                 )
             }
         }

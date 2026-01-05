@@ -83,4 +83,21 @@ class MoodViewModelTest {
         assertEquals(date, viewModel.uiState.value.selectedDate)
         verify { repository.getDailyMood(date) }
     }
+    @Test
+    fun refreshData_ReloadsMood() = runTest {
+        // Arrange
+        val date = LocalDate.now()
+        every { repository.getDailyMood(any()) } returns flowOf(null)
+
+        viewModel = MoodViewModel(repository)
+        viewModel.selectDate(date)
+        clearMocks(repository, answers = false, recordedCalls = true) // Clear valid loadMood calls
+
+        // Act
+        viewModel.refreshData()
+        advanceUntilIdle()
+
+        // Assert
+        verify { repository.getDailyMood(date) }
+    }
 }
