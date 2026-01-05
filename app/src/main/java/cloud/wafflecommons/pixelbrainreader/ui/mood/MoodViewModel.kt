@@ -1,12 +1,17 @@
 package cloud.wafflecommons.pixelbrainreader.ui.mood
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cloud.wafflecommons.pixelbrainreader.data.repository.DailyMoodData
 import cloud.wafflecommons.pixelbrainreader.data.repository.MoodEntry
 import cloud.wafflecommons.pixelbrainreader.data.repository.MoodRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -30,8 +35,6 @@ class MoodViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(MoodState())
     val uiState: StateFlow<MoodState> = _uiState.asStateFlow()
 
-    private var moodJob: kotlinx.coroutines.Job? = null
-
     init {
         // Initial load for today
         loadMood(LocalDate.now())
@@ -41,7 +44,6 @@ class MoodViewModel @Inject constructor(
      * Changes the selected date and reloads data.
      */
     fun selectDate(date: LocalDate) {
-        _uiState.update { it.copy(selectedDate = date) }
         loadMood(date)
     }
 
@@ -49,14 +51,18 @@ class MoodViewModel @Inject constructor(
      * Observes mood data for a specific date.
      */
     fun loadMood(date: LocalDate) {
-        _uiState.update { it.copy(isLoading = true) }
-        
-        moodJob?.cancel()
-        moodJob = moodRepository.getDailyMood(date)
-            .onEach { data ->
-                _uiState.update { it.copy(moodData = data, isLoading = false) }
-            }
-            .launchIn(viewModelScope)
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, selectedDate = date) }
+
+            moodRepository.getDailyMood(date)
+                .catch { e ->
+                    Log.e("MoodViewModel", "Crash prevented", e)
+                    _uiState.update { it.copy(moodData = null, isLoading = false) }
+                }
+                .collect { data ->
+                    _uiState.update { it.copy(moodData = data, isLoading = false) }
+                }
+        }
     }
 
     /**

@@ -65,7 +65,8 @@ fun MoodHistoryScreen(
             SummaryHeader(uiState.moodData?.summary?.mainEmoji, uiState.moodData?.summary?.averageScore)
 
             // Timeline
-            if (uiState.moodData?.entries.isNullOrEmpty()) {
+            val entries = uiState.moodData?.entries
+            if (entries.isNullOrEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("No mood data for this day.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -75,7 +76,7 @@ fun MoodHistoryScreen(
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    items(uiState.moodData!!.entries) { entry ->
+                    items(entries) { entry ->
                         MoodTimelineItem(entry)
                     }
                 }

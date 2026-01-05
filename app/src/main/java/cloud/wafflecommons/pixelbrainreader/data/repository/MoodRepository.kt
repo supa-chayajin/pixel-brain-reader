@@ -1,13 +1,17 @@
 package cloud.wafflecommons.pixelbrainreader.data.repository
 
+import android.util.Log
 import com.google.gson.Gson
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.catch
 import java.time.LocalDate
 import javax.inject.Inject
 import javax.inject.Singleton
 import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
+import java.time.format.DateTimeFormatter
 
 /**
  * Standalone Mood Entry model.
@@ -50,15 +54,27 @@ class MoodRepository @Inject constructor(
      * Observes mood data for a specific date.
      * Path: 10_Journal/data/health/mood/{date}.json
      */
-    fun getDailyMood(date: LocalDate): Flow<DailyMoodData?> {
-        val path = "$moodDir/$date.json"
-        return fileRepository.getFileContentFlow(path).map { content ->
-            if (content.isNullOrBlank()) null
-            else try {
-                gson.fromJson(content, DailyMoodData::class.java)
-            } catch (e: Exception) {
-                null
+    fun getDailyMood(date: LocalDate): Flow<DailyMoodData?> = flow {
+        try {
+            val fileName = date.format(DateTimeFormatter.ISO_LOCAL_DATE)
+            val path = "$moodDir/$fileName.json"
+
+            // .first() will throw NoSuchElementException if the file doesn't exist and the flow is empty.
+            val content = fileRepository.getFileContentFlow(path).first()
+
+            if (content.isNullOrBlank()) {
+                emit(null) // File is empty or just whitespace
+                return@flow
             }
+
+            val data = gson.fromJson(content, DailyMoodData::class.java)
+            emit(data)
+        } catch (e: java.util.NoSuchElementException) {
+            // This is expected if the file doesn't exist
+            emit(null)
+        } catch (e: Exception) {
+            Log.e("MoodRepo", "Error reading mood for $date", e)
+            emit(null) // Emit null on corruption or other errors
         }
     }
 
