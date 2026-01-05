@@ -57,7 +57,7 @@ class SettingsViewModelTest {
         every { secretManager.getRepoInfo() } returns Pair("testUser", "testRepo")
         every { userPrefs.themeConfig } returns flowOf(AppThemeConfig.FOLLOW_SYSTEM)
         every { userPrefs.aiModel } returns flowOf("gemini-2.5-flash-lite")
-        every { userPrefs.isBiometricEnabled } returns flowOf(true)
+
         
         viewModel = SettingsViewModel(userPrefs, secretManager)
     }
