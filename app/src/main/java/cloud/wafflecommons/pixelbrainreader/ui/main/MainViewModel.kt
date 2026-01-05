@@ -899,7 +899,7 @@ class MainViewModel @Inject constructor(
      * FEATURE C: Daily Note
      * Triggers logic to open or create today's journal entry.
      */
-    fun onTodayClicked() {
+    fun onTodayClicked(startEditing: Boolean = false) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true)
             try {
@@ -921,7 +921,7 @@ class MainViewModel @Inject constructor(
                 loadFile(dto)
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    isEditing = false, // User Requirement: Open in Read Mode (Preview) by default
+                    isEditing = startEditing, // Open in Edit Mode if requested
                     navigationTrigger = "home" // Step B (THE FIX): Force Navigation to Repo Tab
                 )
             } catch (e: Exception) {
