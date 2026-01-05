@@ -49,4 +49,20 @@ object NetworkModule {
     fun provideGitProvider(impl: cloud.wafflecommons.pixelbrainreader.data.remote.DelegatingGitProvider): cloud.wafflecommons.pixelbrainreader.data.remote.GitProvider {
         return impl
     }
+
+    @Provides
+    @Singleton
+    @javax.inject.Named("OpenMeteoRetrofit")
+    fun provideOpenMeteoRetrofit(): Retrofit {
+        return Retrofit.Builder()
+            .baseUrl("https://api.open-meteo.com/")
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+    }
+
+    @Provides
+    @Singleton
+    fun provideOpenMeteoService(@javax.inject.Named("OpenMeteoRetrofit") retrofit: Retrofit): cloud.wafflecommons.pixelbrainreader.data.remote.OpenMeteoService {
+        return retrofit.create(cloud.wafflecommons.pixelbrainreader.data.remote.OpenMeteoService::class.java)
+    }
 }

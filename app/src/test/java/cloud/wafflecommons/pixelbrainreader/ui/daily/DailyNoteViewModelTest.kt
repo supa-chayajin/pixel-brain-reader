@@ -4,6 +4,8 @@ import cloud.wafflecommons.pixelbrainreader.data.repository.DailyMoodData
 import cloud.wafflecommons.pixelbrainreader.data.repository.FileRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.MoodRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.MoodSummary
+import cloud.wafflecommons.pixelbrainreader.data.repository.WeatherRepository
+import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
 import cloud.wafflecommons.pixelbrainreader.data.utils.FrontmatterManager
 import io.mockk.*
 import kotlinx.coroutines.Dispatchers
@@ -20,6 +22,8 @@ class DailyNoteViewModelTest {
 
     private val moodRepository: MoodRepository = mockk()
     private val fileRepository: FileRepository = mockk()
+    private val weatherRepository: WeatherRepository = mockk()
+    private val secretManager: SecretManager = mockk()
     
     // FrontmatterManager is an object, so we might need mockkObject if we want to verify calls, 
     // or just rely on its real implementation if it's pure logic. 
@@ -64,8 +68,14 @@ class DailyNoteViewModelTest {
         
         every { fileRepository.fileUpdates } returns kotlinx.coroutines.flow.MutableSharedFlow()
         every { fileRepository.getFileContentFlow(any()) } returns flowOf(rawContent)
+        
+        // Mock Weather (Relaxed for this test)
+        coEvery { weatherRepository.getCurrentWeatherAndLocation() } returns null
+        coEvery { weatherRepository.getHistoricalWeather(any()) } returns null
+        
+        every { secretManager.getRepoInfo() } returns Pair("testOwner", "testRepo")
 
-        viewModel = DailyNoteViewModel(moodRepository, fileRepository)
+        viewModel = DailyNoteViewModel(moodRepository, fileRepository, weatherRepository, secretManager)
 
         // Act
         viewModel.loadData() // Assuming loadData uses current date by default or takes a param? 
@@ -79,7 +89,12 @@ class DailyNoteViewModelTest {
         assertEquals(moodData, state.moodData)
         
         // Use FrontmatterManager logic expectation
-        val expectedContent = "\n# My Day\nIt was good."
+        // Prior logic: Strip all.
+        // New logic: Strip only PixelBrain. 
+        // Input `rawContent` (lines 61-67) does NOT have pixel_brain_log: true.
+        // So it should be PRESERVED.
+        
+        val expectedContent = rawContent
         assertEquals(expectedContent.trim(), state.noteContent.trim())
     }
 }

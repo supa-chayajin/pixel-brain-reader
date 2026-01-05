@@ -9,7 +9,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import cloud.wafflecommons.pixelbrainreader.data.repository.MoodSummary
+import cloud.wafflecommons.pixelbrainreader.data.repository.WeatherData
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -17,6 +17,7 @@ fun DailyNoteHeader(
     emoji: String?,
     lastUpdate: String?,
     activities: List<String>,
+    weather: WeatherData? = null,
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -48,6 +49,16 @@ fun DailyNoteHeader(
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
                 )
+                
+                // Weather Info
+                if (weather != null) {
+                    Text(
+                        text = "${weather.emoji} ${weather.temperature} • ${weather.location ?: "Unknown"}",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(vertical = 4.dp)
+                    )
+                }
                 
                 if (lastUpdate != null) {
                     Text(

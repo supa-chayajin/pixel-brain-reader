@@ -39,14 +39,34 @@ class FrontmatterManagerTest {
     }
     
     @Test
-    fun stripFrontmatter_RemovesYamlBlock() {
+    fun stripFrontmatter_RemovesFirstBlock() {
+        // Block B (PixelBrain) - If it's the first block, it should be stripped.
         val input = """
             ---
+            pixel_brain_log: true
             meta: data
             ---
             # Content
         """.trimIndent()
         
+        val expected = "\n# Content"
+        val result = FrontmatterManager.stripFrontmatter(input)
+        
+        assertEquals(expected.trim(), result.trim()) 
+    }
+
+    @Test
+    fun stripFrontmatter_RemovesStandardBlock() {
+        // Block A (Standard) - Should NOW be stripped for display
+        val input = """
+            ---
+            title: My Note
+            tags: [journal]
+            ---
+            # Content
+        """.trimIndent()
+        
+        // Expect content only
         val expected = "\n# Content"
         val result = FrontmatterManager.stripFrontmatter(input)
         
