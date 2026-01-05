@@ -21,7 +21,8 @@ class CalloutSpan(
 
     private val stripeWidth = 12
     private val padding = 40
-    private val headerHeight = 60
+    // Updated metrics as per request
+    private val headerHeight = 70 
     private val bottomMargin = 40
 
     override fun chooseHeight(
@@ -35,12 +36,15 @@ class CalloutSpan(
         val spanEnd = spanned.getSpanEnd(this)
 
         // 1. Add Top Padding ONLY for the first line (Header space)
+        // Check if the current line's start matches the span's start
         if (start == spanStart) {
-            fm.ascent -= headerHeight
+            // Push the ascent up (negative direction) to create space above the baseline
+            fm.ascent -= headerHeight 
             fm.top -= headerHeight
         }
-
+        
         // 2. Add Bottom Margin ONLY for the last line
+        // Check if the current line's end matches the span's end
         if (end >= spanEnd) {
             fm.descent += bottomMargin
             fm.bottom += bottomMargin
@@ -62,6 +66,7 @@ class CalloutSpan(
         
         val left = x.toFloat()
         val right = (x + dir * stripeWidth).toFloat()
+        // Draw stripe from top to bottom of the line
         c.drawRect(left, top.toFloat(), right, bottom.toFloat(), p)
 
         if (first) {
@@ -69,11 +74,26 @@ class CalloutSpan(
             p.isFakeBoldText = true
             p.textSize = 40f 
             
-            // Calculate position: standard baseline minus the extra ascent we added
-            // But 'baseline' passed here is the text baseline. 
-            // We want to draw in the "header" area above the text.
-            // Approximate Y: top (which is now higher) + headerHeight - small offset
-            val headerY = top + headerHeight - 12f
+            // Calculate position: standard baseline minus the extra ascent we added?
+            // "top" passed to drawLeadingMargin includes the space adjustment from chooseHeight?
+            // Actually, 'top' IS the top of the line box.
+            // We reserved 'headerHeight' ABOVE the text content.
+            // So we want to draw the header inside that reserved top area.
+            
+            // Text baseline is 'baseline'. 
+            // The content starts roughly at 'baseline + ascent' (standard).
+            // We pushed 'ascent' up by 70. So 'top' is ~70px higher than normal.
+            
+            // Let's aim to center the header text vertically within the 'headerHeight' space?
+            // Or just anchor it near the top.
+            // top + headerHeight is roughly where the content starts.
+            // We want to draw at Y = top + some_offset.
+            
+            // Using a heuristic based on previous value: top + headerHeight - 12f
+            // If top is -100, and headerHeight is 70, then headerY is -42.
+            // This places it above the content.
+            
+            val headerY = top + headerHeight - 20f // Tweaked for 70px height
             
             c.drawText("${icon}  ${title.uppercase()}", x + stripeWidth + 24f, headerY, p)
         }
