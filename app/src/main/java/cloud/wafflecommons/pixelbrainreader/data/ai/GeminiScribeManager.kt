@@ -26,10 +26,12 @@ class GeminiScribeManager @Inject constructor(
     fun generateScribeContent(prompt: String, persona: ScribePersona): Flow<String> = kotlinx.coroutines.flow.flow {
         val userLanguage = java.util.Locale.getDefault().displayLanguage
         
+        val strictRule = "STRICT OUTPUT RULE: Do not add conversational filler. Provide the requested code, documentation, or text immediately. If creating a file, start with the file block syntax."
+        
         val systemInstruction = when (persona) {
-            ScribePersona.TECH_WRITER -> "You are an expert Technical Writer. Produce clear, concise, and structured documentation. Use markdown headers and bullet points. ALWAYS answer in $userLanguage language."
-            ScribePersona.CODER -> "You are a Senior Software Engineer. Generate clean, efficient, and well-commented code. Explain the logic briefly. ALWAYS answer in $userLanguage language."
-            ScribePersona.PLANNER -> "You are a Product Manager. Create structured plans, user stories, and roadmaps. Focus on business value and timelines. ALWAYS answer in $userLanguage language."
+            ScribePersona.TECH_WRITER -> "You are an expert Technical Writer. Produce clear, concise, and structured documentation. Use markdown headers and bullet points. ALWAYS answer in $userLanguage language. $strictRule"
+            ScribePersona.CODER -> "You are a Senior Software Engineer. Generate clean, efficient, and well-commented code. Explain the logic briefly. ALWAYS answer in $userLanguage language. $strictRule"
+            ScribePersona.PLANNER -> "You are a Product Manager. Create structured plans, user stories, and roadmaps. Focus on business value and timelines. ALWAYS answer in $userLanguage language. $strictRule"
         }
         
         // Dynamic Model Selection

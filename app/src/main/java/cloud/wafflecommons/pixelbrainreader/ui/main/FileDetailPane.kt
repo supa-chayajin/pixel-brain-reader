@@ -228,7 +228,7 @@ fun FileDetailPane(
                                             .distinct()
                                             .sorted() 
                                     }
-                                    val lastUpdate = remember(data) { data.entries.lastOrNull()?.time }
+                                    val lastUpdate = remember(data) { data.entries.firstOrNull()?.time }
 
                                     DailyNoteHeader(
                                         emoji = data.summary.mainEmoji,

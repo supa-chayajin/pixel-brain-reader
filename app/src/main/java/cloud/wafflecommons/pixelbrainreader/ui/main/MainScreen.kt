@@ -103,6 +103,7 @@ object Screen {
     const val MoodTracker = "mood"
     const val Settings = "settings"
     const val Import = "import"
+    const val DailyNote = "daily_note"
 }
 
 @OptIn(ExperimentalMaterial3AdaptiveApi::class, ExperimentalMaterial3Api::class)
@@ -209,6 +210,15 @@ fun MainScreen(
         }
     }
 
+    // Mood Sheet State for Daily Note
+    var showMoodSheet by remember { mutableStateOf(false) }
+
+    if (showMoodSheet) {
+        cloud.wafflecommons.pixelbrainreader.ui.mood.MoodCheckInSheet(
+            onDismiss = { showMoodSheet = false }
+        )
+    }
+
     androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold(
         navigationSuiteItems = {
             item(
@@ -226,10 +236,9 @@ fun MainScreen(
                 label = { Text("Repo") }
             )
             item(
-                 selected = isViewingDailyNote, // Active if viewing daily note
+                 selected = currentRoute == Screen.DailyNote, // Active if viewing daily note screen
                  onClick = { 
-                     viewModel.onTodayClicked()
-                     navController.navigate(Screen.Home) {
+                     navController.navigate(Screen.DailyNote) {
                         popUpTo(navController.graph.findStartDestination().id) {
                             saveState = true
                         }
@@ -286,7 +295,7 @@ fun MainScreen(
     ) {
         androidx.navigation.compose.NavHost(
             navController = navController,
-            startDestination = Screen.Home,
+            startDestination = Screen.DailyNote,
             modifier = Modifier.fillMaxSize()
         ) {
             composable(Screen.Home) {
@@ -294,31 +303,6 @@ fun MainScreen(
                 
                 val canNavigateBack = navigator.canNavigateBack()
                 val isSubFolder = uiState.currentPath.isNotEmpty()
-
-                val showExitDialog = remember { mutableStateOf(false) }
-
-                if (showExitDialog.value) {
-                    androidx.compose.material3.AlertDialog(
-                        onDismissRequest = { showExitDialog.value = false },
-                        shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
-                        title = { Text("Exit & Lock App?") },
-                        text = { Text("This will close the application. You will need to authenticate again to open it.") },
-                        confirmButton = {
-                            androidx.compose.material3.TextButton(onClick = { 
-                                showExitDialog.value = false
-                                onExitApp() 
-                            }) {
-                                Text("Exit")
-                            }
-                        },
-                        dismissButton = {
-                            androidx.compose.material3.TextButton(onClick = { showExitDialog.value = false }) {
-                                Text("Cancel")
-                            }
-                        }
-                    )
-
-                }
 
                 if (uiState.showCreateFileDialog) {
                     cloud.wafflecommons.pixelbrainreader.ui.components.NewFileBottomSheet(
@@ -328,17 +312,14 @@ fun MainScreen(
                     )
                 }
 
-
                 // Back Handler for Home Logic
-                BackHandler(enabled = true) {
+                val isBackHandlerEnabled = uiState.isFocusMode || canNavigateBack || isSubFolder
+                
+                BackHandler(enabled = isBackHandlerEnabled) {
                     when {
                         uiState.isFocusMode -> viewModel.toggleFocusMode()
                         canNavigateBack -> navigator.navigateBack()
                         isSubFolder -> viewModel.navigateUp()
-                        else -> {
-                           // Show Exit Dialog instead of default finish
-                           showExitDialog.value = true
-                        }
                     }
                 }
 
@@ -633,6 +614,16 @@ fun MainScreen(
                     // Fallback if state lost
                     LaunchedEffect(Unit) { navController.popBackStack() }
                 }
+            }
+
+            composable(Screen.DailyNote) {
+                cloud.wafflecommons.pixelbrainreader.ui.daily.DailyNoteScreen(
+                    onNavigateBack = { navController.popBackStack() },
+                    onEditClicked = { _ ->
+                        viewModel.onTodayClicked(startEditing = true)
+                    },
+                    onCheckInClicked = { showMoodSheet = true }
+                )
             }
         }
     }
