@@ -138,6 +138,9 @@ dependencies {
     implementation(libs.markwon.syntax.highlight)
     implementation(libs.prism4j)
 
+    // Location
+    implementation("com.google.android.gms:play-services-location:21.0.1")
+
     // HTML Parsing & Conversion (Phase B: Universal Collector)
     implementation("org.jsoup:jsoup:1.17.2")
     implementation("com.vladsch.flexmark:flexmark-html2md-converter:0.64.8")
