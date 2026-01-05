@@ -65,40 +65,50 @@ object FrontmatterManager {
      * Creates Block A if missing.
      * Guaranteed NOT to touch Block B (PixelBrain).
      */
+    /**
+     * Injects/Updates Weather (and other keys) into the Standard Frontmatter Block.
+     * Non-destructive: Updates existing keys or appends new ones.
+     */
     fun injectWeather(content: String, newValues: Map<String, String>): String {
-        // 1. Find Block A (First block that is NOT PixelBrain)
-        val matches = genericYamlRegex.findAll(content).toList()
-        val blockA = matches.firstOrNull { !it.value.contains(pixelBrainToken) }
+        // Regex to match the FIRST YAML block content captured in group 1
+        val frontmatterPattern = "(?s)^---\\s*\\n(.*?)\\n---\\s*\\n?".toRegex()
+        val match = frontmatterPattern.find(content)
         
-        if (blockA != null) {
-            // Update Existing Block A
-            val currentMap = parseYaml(blockA.value).toMutableMap()
-            currentMap.putAll(newValues)
+        if (match != null) {
+            // 1. Extract existing YAML content
+            var yamlContent = match.groupValues[1]
             
-            val newBlock = buildYamlBlock(currentMap)
-            // Replace the EXACT string range of Block A
-            return content.replaceRange(blockA.range, newBlock.trimEnd() + "\n")
+            // 2. Update/Add keys
+            newValues.forEach { (key, value) ->
+                // Ensure value is quoted if it contains spaces and not already quoted
+                val safeValue = if (value.contains(" ") && !value.startsWith("\"")) "\"$value\"" else value
+                yamlContent = updateYamlKey(yamlContent, key, safeValue)
+            }
+            
+            // 3. Reconstruct
+            return content.replaceRange(match.range, "---\n$yamlContent\n---\n")
         } else {
-            // Create New Block A at the top
-            val newBlock = buildYamlBlock(newValues)
-            // If there's a Block B at start, we prepend before it? 
-            // Standard convention is Frontmatter at specific line 1.
-            // If Block B is there, we insert before it. 
-            return newBlock + content
+            // Create new block if missing
+            return buildYamlBlock(newValues) + content
         }
     }
-    
-    // Legacy alias for updating (redirects to strict weather injection or similar logic)
-    // For now, mapping updateFrontmatter to injectWeather to satisfy existing calls safely
-    fun updateFrontmatter(content: String, newValues: Map<String, String>): String {
-        return injectWeather(content, newValues)
+
+    // Helper to replace or append a key in YAML string
+    private fun updateYamlKey(yaml: String, key: String, value: String): String {
+        val keyRegex = "(?m)^$key:.*$".toRegex()
+        return if (keyRegex.containsMatchIn(yaml)) {
+            yaml.replace(keyRegex, "$key: $value")
+        } else {
+            "$yaml\n$key: $value"
+        }
     }
 
     private fun buildYamlBlock(map: Map<String, String>): String {
         return buildString {
             append("---\n")
             map.forEach { (k, v) ->
-                append("$k: \"$v\"\n")
+                val safeValue = if (v.contains(" ") && !v.startsWith("\"")) "\"$v\"" else v
+                append("$k: $safeValue\n")
             }
             append("---\n")
         }

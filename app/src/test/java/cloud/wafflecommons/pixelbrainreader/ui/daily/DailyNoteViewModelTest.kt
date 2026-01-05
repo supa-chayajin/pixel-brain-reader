@@ -88,13 +88,10 @@ class DailyNoteViewModelTest {
         val state = viewModel.uiState.value
         assertEquals(moodData, state.moodData)
         
-        // Use FrontmatterManager logic expectation
-        // Prior logic: Strip all.
-        // New logic: Strip only PixelBrain. 
-        // Input `rawContent` (lines 61-67) does NOT have pixel_brain_log: true.
-        // So it should be PRESERVED.
-        
-        val expectedContent = rawContent
+        val expectedContent = """
+            # My Day
+            It was good.
+        """.trimIndent()
         assertEquals(expectedContent.trim(), state.noteContent.trim())
     }
 }

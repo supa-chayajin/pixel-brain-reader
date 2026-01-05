@@ -191,6 +191,10 @@ class FileRepository @Inject constructor(
     suspend fun pushDirtyFiles(owner: String, repo: String, message: String? = null): Result<Unit> {
         return try {
             val dirtyFiles = fileDao.getDirtyFiles().filter { it.type == "file" }
+            if (dirtyFiles.isEmpty()) {
+                Log.d("PixelBrain", "Sync: Clean working directory (No dirty files). Skipping push.")
+                return Result.success(Unit)
+            }
             Log.d("PixelBrain", "Starting Push. Dirty files count: ${dirtyFiles.size}")
             
             for (file in dirtyFiles) {

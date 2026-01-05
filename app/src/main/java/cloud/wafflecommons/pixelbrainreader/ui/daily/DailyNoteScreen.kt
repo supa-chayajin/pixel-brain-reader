@@ -176,7 +176,9 @@ fun DailyNoteScreen(
                         MetadataView(
                             tags = metadata["tags"]?.removeSurrounding("[", "]")
                                 ?.split(",")?.map { it.trim() } ?: emptyList(),
-                            date = metadata["date"]
+                            date = metadata["date"],
+                            weather = metadata["weather"],
+                            location = metadata["location"]
                         )
                         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                     }
@@ -264,40 +266,55 @@ fun MarkdownText(
 }
 
 @Composable
-fun MetadataView(tags: List<String>, date: String?) {
+fun MetadataView(tags: List<String>, date: String?, weather: String? = null, location: String? = null) {
     Row(
         modifier = Modifier.padding(horizontal = 16.dp),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Date Icon & Text
+        // Date
         if (date != null) {
-            Icon(
-                imageVector = Icons.Default.CalendarToday, 
-                contentDescription = null, 
-                modifier = Modifier.size(16.dp),
-                tint = MaterialTheme.colorScheme.primary
-            )
-            Spacer(Modifier.width(4.dp))
-            Text(
-                text = date, 
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(Modifier.width(16.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Icon(
+                    imageVector = Icons.Default.CalendarToday, 
+                    contentDescription = null, 
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = date, 
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        // Weather
+        if (weather != null) {
+             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = weather.replace("\"", ""), // Strip quotes if present
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
         
         // Tags Chips
-        tags.forEach { tag ->
-            SuggestionChip(
-                onClick = {}, 
-                label = { Text("#$tag") },
-                modifier = Modifier.height(28.dp),
-                colors = SuggestionChipDefaults.suggestionChipColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-                ),
-                border = null
-            )
-            Spacer(Modifier.width(4.dp))
+        if (tags.isNotEmpty()) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                tags.forEach { tag ->
+                    SuggestionChip(
+                        onClick = {}, 
+                        label = { Text("#$tag") },
+                        modifier = Modifier.height(26.dp),
+                        colors = SuggestionChipDefaults.suggestionChipColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                        ),
+                        border = null
+                    )
+                }
+            }
         }
     }
 }
