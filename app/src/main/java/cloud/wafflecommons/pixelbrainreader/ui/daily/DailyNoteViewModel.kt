@@ -86,7 +86,7 @@ class DailyNoteViewModel @Inject constructor(
                 if (content != null) {
                     val frontmatter = FrontmatterManager.extractFrontmatter(content)
                     // Usage of Strict Split Logic
-                    displayContent = FrontmatterManager.stripPixelBrainMetadata(content)
+                    displayContent = FrontmatterManager.stripFrontmatter(content)
                     
                     // Weather Logic: Read from Frontmatter OR Fetch
                     val weatherEmoji = frontmatter["weather"]
@@ -137,23 +137,26 @@ class DailyNoteViewModel @Inject constructor(
              // Update Content string with new Frontmatter (Using strict Injection)
              val updatedContent = FrontmatterManager.injectWeather(currentContent, updates)
              
-             // 1. Save locally (Persist + UI Update via Flow)
-             fileRepository.saveFileLocally(path, updatedContent)
-             
-             // 2. Git Sync (Push)
-             val (owner, repo) = secretManager.getRepoInfo()
-             if (!owner.isNullOrEmpty() && !repo.isNullOrEmpty()) {
-                 try {
-                     val customMessage = "docs(journal): add weather data for ${date}"
-                     val pushResult = fileRepository.pushDirtyFiles(owner, repo, customMessage)
-                     if (pushResult.isFailure) {
-                         // Log error but don't crash UI. 
-                         // Ideally expose a "Sync Error" state, but for now just Log.
-                         android.util.Log.e("DailyNoteVM", "Weather Push Failed: ${pushResult.exceptionOrNull()?.message}")
+             // Optimization: Check if content changed before triggering Save/Sync
+             if (updatedContent != currentContent) {
+                 // 1. Save locally (Persist + UI Update via Flow)
+                 fileRepository.saveFileLocally(path, updatedContent)
+                 
+                 // 2. Git Sync (Push)
+                 val (owner, repo) = secretManager.getRepoInfo()
+                 if (!owner.isNullOrEmpty() && !repo.isNullOrEmpty()) {
+                     try {
+                         val customMessage = "docs(journal): add weather data for ${date}"
+                         val pushResult = fileRepository.pushDirtyFiles(owner, repo, customMessage)
+                         if (pushResult.isFailure) {
+                             android.util.Log.e("DailyNoteVM", "Weather Push Failed: ${pushResult.exceptionOrNull()?.message}")
+                         }
+                     } catch (e: Exception) {
+                         android.util.Log.e("DailyNoteVM", "Weather Push Exception", e)
                      }
-                 } catch (e: Exception) {
-                     android.util.Log.e("DailyNoteVM", "Weather Push Exception", e)
                  }
+             } else {
+                 android.util.Log.d("DailyNoteVM", "Weather data unchanged, skipping save/sync.")
              }
          }
     }

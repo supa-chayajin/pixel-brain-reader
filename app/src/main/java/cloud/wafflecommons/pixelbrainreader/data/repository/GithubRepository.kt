@@ -46,14 +46,21 @@ class GithubRepository @Inject constructor(
             val rawString = response.string()
             
             // Check for GitHub API Blob JSON (starts with { "sha": ..., "content": ..., "encoding": "base64" })
-            if (rawString.trim().startsWith("{") && rawString.contains("\"encoding\": \"base64\"")) {
+            // Check for GitHub API Blob JSON
+            // Heuristic: Starts with { and contains "encoding" and "base64" (robust check)
+            // Or rely on Content-Type if we had access to headers (ResponseBody gives us referencing access if we change return type)
+            // For now, robust parsing check:
+            val trimmed = rawString.trim()
+            if (trimmed.startsWith("{") && trimmed.contains("\"encoding\"") && trimmed.contains("\"base64\"")) {
                 try {
                     val json = org.json.JSONObject(rawString)
                     if (json.has("content")) {
                         val base64Content = json.getString("content")
                         // GitHub Blob content often has newlines; Base64.DEFAULT handles them or we might need to strip.
                         // Ideally use Base64.DEFAULT which ignores non-alphabet characters (newlines)
-                        val decodedBytes = android.util.Base64.decode(base64Content, android.util.Base64.DEFAULT)
+                        // Also explicitly remove newlines if needed, but DEFAULT should work for MIME.
+                        val cleanBase64 = base64Content.replace("\n", "").replace("\r", "")
+                        val decodedBytes = android.util.Base64.decode(cleanBase64, android.util.Base64.DEFAULT)
                         Result.success(String(decodedBytes, Charsets.UTF_8))
                     } else {
                         // JSON but no content field? Return raw.
