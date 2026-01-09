@@ -48,6 +48,7 @@ class DailyNoteViewModel @Inject constructor(
     init {
         loadData()
         observeUpdates()
+        checkAndCreateDailyNote()
     }
 
     private fun observeUpdates() {
@@ -165,5 +166,50 @@ class DailyNoteViewModel @Inject constructor(
     // Refresh retained for manual calls if needed, but Reactive loop should handle most.
     fun refresh() {
         loadData()
+        checkAndCreateDailyNote()
+    }
+
+    private fun checkAndCreateDailyNote() {
+        viewModelScope.launch {
+            val today = LocalDate.now().format(DateTimeFormatter.ISO_DATE)
+            val notePath = "10_Journal/$today.md"
+            
+            // Check existence logic: 
+            // We can try to read it. If flow returns null or entity missing?
+            // Repository.getFileContentFlow returns Flow<String?>. First emission.
+            
+            val content = fileRepository.getFileContentFlow(notePath).firstOrNull()
+            
+            if (content == null) {
+                // File likely doesn't exist. Create it!
+                // Ensure directory exists first?
+                fileRepository.createLocalFolder("10_Journal")
+                
+                val defaultContent = """
+                    ---
+                    mood: 
+                    weather: 
+                    temperature: 
+                    location: 
+                    tags: [daily]
+                    ---
+                    
+                    # Daily Note: $today
+                    
+                    Start your day here...
+                """.trimIndent()
+                
+                fileRepository.saveFileLocally(notePath, defaultContent)
+                
+                 // Trigger Sync (Push) for the new file
+                 val (owner, repo) = secretManager.getRepoInfo()
+                 if (owner != null && repo != null) {
+                     fileRepository.pushDirtyFiles(owner, repo, "docs(daily): create $today.md")
+                 }
+                 
+                 // Refresh Data
+                 loadData()
+            }
+        }
     }
 }

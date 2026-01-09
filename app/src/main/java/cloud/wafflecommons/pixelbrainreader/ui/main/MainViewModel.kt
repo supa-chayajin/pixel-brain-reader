@@ -130,6 +130,9 @@ class MainViewModel @Inject constructor(
                }
             }
             .launchIn(viewModelScope)
+
+        // Trigger Startup Sync
+        performInitialSync()
     }
 
     /**
