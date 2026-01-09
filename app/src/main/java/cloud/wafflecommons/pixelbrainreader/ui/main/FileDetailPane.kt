@@ -38,6 +38,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Article
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
@@ -106,6 +107,8 @@ fun FileDetailPane(
     onClose: () -> Unit,
     onRename: (String) -> Unit,
     onWikiLinkClick: (String) -> Unit,
+    onWikiLinkClick: (String) -> Unit,
+    onDelete: () -> Unit = {},
     onCreateNew: () -> Unit = {},
     moodViewModel: MoodViewModel = hiltViewModel()
 ) {
@@ -156,6 +159,10 @@ fun FileDetailPane(
                             }
                         }
                         Spacer(Modifier.weight(1f))
+                        Button(onClick = { onDelete() }, modifier = Modifier.height(32.dp)) {
+                             Text("Delete")
+                        }
+                        Spacer(Modifier.width(8.dp))
                     }
                 }
             }
