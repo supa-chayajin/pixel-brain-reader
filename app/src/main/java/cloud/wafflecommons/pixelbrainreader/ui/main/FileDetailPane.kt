@@ -107,7 +107,6 @@ fun FileDetailPane(
     onClose: () -> Unit,
     onRename: (String) -> Unit,
     onWikiLinkClick: (String) -> Unit,
-    onWikiLinkClick: (String) -> Unit,
     onDelete: () -> Unit = {},
     onCreateNew: () -> Unit = {},
     moodViewModel: MoodViewModel = hiltViewModel()
