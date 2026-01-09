@@ -543,7 +543,8 @@ fun MainScreen(
                                             isExpandedScreen = isLargeScreen,
                                             isEditing = uiState.isEditing,
                                             onToggleEditMode = { viewModel.toggleEditMode() },
-                                            onSaveContent = { _ -> viewModel.saveFile() },
+                                            onSaveContent = { content -> viewModel.saveFile() },
+
                                             hasUnsavedChanges = uiState.hasUnsavedChanges,
                                             onClose = {
                                                 viewModel.closeFile()
