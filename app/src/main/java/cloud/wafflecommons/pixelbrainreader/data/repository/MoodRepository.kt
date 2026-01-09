@@ -17,6 +17,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
 import java.time.format.DateTimeFormatter
+import kotlin.math.roundToInt
 
 /**
  * Standalone Mood Entry model.
@@ -78,8 +79,8 @@ class MoodRepository @Inject constructor(
                     if (content.isNullOrBlank()) null
                     else {
                         val data = gson.fromJson(content, DailyMoodData::class.java)
-                        val sortedData = data.copy(entries = data.entries.sortedByDescending { it.time })
-                        LocalDate.parse(data.date, DateTimeFormatter.ISO_LOCAL_DATE) to sortedData
+                        val recalculated = recalculateDailyData(data)
+                        LocalDate.parse(data.date, DateTimeFormatter.ISO_LOCAL_DATE) to recalculated
                     }
                 } catch (e: Exception) {
                     null
@@ -105,8 +106,8 @@ class MoodRepository @Inject constructor(
                          val content = fileRepository.getFileContentFlow(path).first()
                          if (!content.isNullOrBlank()) {
                              val data = gson.fromJson(content, DailyMoodData::class.java)
-                             val sortedData = data.copy(entries = data.entries.sortedByDescending { it.time })
-                             _moods.update { current -> current + (date to sortedData) }
+                             val recalculated = recalculateDailyData(data)
+                             _moods.update { current -> current + (date to recalculated) }
                          }
                      } catch (e: Exception) {
                          // Ignore if file doesn't exist
@@ -114,6 +115,45 @@ class MoodRepository @Inject constructor(
                  }
             }
         }
+
+    /**
+     * Returns a synthetic "Daily Mood" entry representing the day's average mood
+     * and the latest update timestamp.
+     */
+    suspend fun getMood(date: LocalDate): MoodEntry? {
+        val dailyData = _moods.value[date] ?: run {
+             // Try load
+             val fileName = date.format(DateTimeFormatter.ISO_LOCAL_DATE)
+             val path = "$moodDir/$fileName.json"
+             try {
+                 val content = fileRepository.getFileContentFlow(path).first()
+                 if (!content.isNullOrBlank()) {
+                     val data = gson.fromJson(content, DailyMoodData::class.java)
+                     recalculateDailyData(data) // Return recalculated
+                 } else null
+             } catch (e: Exception) { null }
+        } ?: return null
+        
+        if (dailyData.entries.isEmpty()) return null
+
+        // 1. Get Latest Timestamp
+        // entries are sorted descending in recalculateDailyData
+        val latestEntry = dailyData.entries.first() 
+        val lastUpdate = latestEntry.time
+
+        // 2. Average already calculated in summary
+        val avgScore = dailyData.summary.averageScore
+        val roundedScore = avgScore.roundToInt()
+        val emoji = calculateDailyEmoji(avgScore)
+
+        return MoodEntry(
+            time = lastUpdate,
+            score = roundedScore,
+            label = emoji,
+            activities = latestEntry.activities, // Or combine? User said "Leave empty or take latest note"
+            note = latestEntry.note
+        )
+    }
 
     /**
      * Adds a new mood entry to the daily log and recalculates the summary.
@@ -139,20 +179,12 @@ class MoodRepository @Inject constructor(
              }
         }
 
-        // 3. Update & Sort entries (Descending chronological order)
-        val updatedEntries = (currentData.entries + entry).sortedByDescending { it.time }
-
-        // 4. Recalculate Summary
-        val avg = if (updatedEntries.isEmpty()) 0.0 else updatedEntries.map { it.score }.average()
+        // 3. Update entries
+        val updatedEntries = currentData.entries + entry
         
-        // FIX: Calculate Emoji based on AVERAGE strictly as per request
-        val emoji = calculateDailyEmoji(avg)
-        
-        val updatedData = DailyMoodData(
-            date = date.toString(),
-            entries = updatedEntries,
-            summary = MoodSummary(avg, emoji)
-        )
+        // 4. Recalculate & Sort
+        val tempContainer = currentData.copy(entries = updatedEntries)
+        val updatedData = recalculateDailyData(tempContainer)
 
         // 5. Update Cache
         _moods.update { current -> current + (date to updatedData) }
@@ -173,6 +205,26 @@ class MoodRepository @Inject constructor(
             android.util.Log.w("MoodRepository", "Failed to sync mood entry: ${e.message}")
         }
     }
+
+
+
+    private fun recalculateDailyData(data: DailyMoodData): DailyMoodData {
+        // 1. Sort descending (Latest first)
+        val sortedEntries = data.entries.sortedByDescending { it.time }
+        
+        // 2. Calculate Average
+        val avg = if (sortedEntries.isEmpty()) 0.0 else sortedEntries.map { it.score }.average()
+        
+        // 3. Determine Emoji
+        val emoji = calculateDailyEmoji(avg)
+        
+        return data.copy(
+            entries = sortedEntries,
+            summary = MoodSummary(averageScore = avg, mainEmoji = emoji)
+        )
+    }
+
+
 
     private suspend fun ensureDirectoryStructure() {
         // We create entities for the nested structure to ensure folder navigation works
