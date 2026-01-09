@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloseFullscreen
 import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
@@ -436,6 +437,15 @@ fun MainScreen(
                                             )
                                         }
 
+                                        // Delete
+                                        IconButton(onClick = { viewModel.deleteFile() }) {
+                                            Icon(
+                                                imageVector = Icons.Default.Delete,
+                                                contentDescription = "Delete File",
+                                                tint = MaterialTheme.colorScheme.error
+                                            )
+                                        }
+
                                         // Focus Mode (Large Screen Only)
                                         if (isLargeScreen) {
                                             IconButton(onClick = { viewModel.toggleFocusMode() }) {
@@ -538,23 +548,10 @@ fun MainScreen(
                                             isLoading = uiState.isLoading,
                                             isRefreshing = uiState.isRefreshing,
                                             onRefresh = { viewModel.refreshCurrentFile() },
-                                            isFocusMode = uiState.isFocusMode,
-                                            onToggleFocusMode = { viewModel.toggleFocusMode() },
                                             isExpandedScreen = isLargeScreen,
                                             isEditing = uiState.isEditing,
-                                            onToggleEditMode = { viewModel.toggleEditMode() },
-                                            onSaveContent = { content -> viewModel.saveFile() },
-
                                             hasUnsavedChanges = uiState.hasUnsavedChanges,
-                                            onClose = {
-                                                viewModel.closeFile()
-                                                if (navigator.canNavigateBack()) {
-                                                    navigator.navigateBack()
-                                                }
-                                            },
-                                            onRename = { newName -> viewModel.renameFile(newName) },
                                             onWikiLinkClick = { target -> viewModel.onWikiLinkClick(target) },
-                                            onDelete = { viewModel.deleteFile() },
                                             onCreateNew = { viewModel.createNewFile() },
                                             moodViewModel = moodViewModel
                                         )

@@ -41,6 +41,8 @@ import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.IconButton
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -96,18 +98,11 @@ fun FileDetailPane(
     isLoading: Boolean,
     isRefreshing: Boolean,
     onRefresh: () -> Unit,
-    isFocusMode: Boolean,
-    onToggleFocusMode: () -> Unit,
     isExpandedScreen: Boolean,
     isEditing: Boolean,
-    onToggleEditMode: () -> Unit,
-    onSaveContent: (String) -> Unit,
     onContentChange: (String) -> Unit,
     hasUnsavedChanges: Boolean,
-    onClose: () -> Unit,
-    onRename: (String) -> Unit,
     onWikiLinkClick: (String) -> Unit,
-    onDelete: () -> Unit = {},
     onCreateNew: () -> Unit = {},
     moodViewModel: MoodViewModel = hiltViewModel()
 ) {
@@ -158,10 +153,6 @@ fun FileDetailPane(
                             }
                         }
                         Spacer(Modifier.weight(1f))
-                        Button(onClick = { onDelete() }, modifier = Modifier.height(32.dp)) {
-                             Text("Delete")
-                        }
-                        Spacer(Modifier.width(8.dp))
                     }
                 }
             }
