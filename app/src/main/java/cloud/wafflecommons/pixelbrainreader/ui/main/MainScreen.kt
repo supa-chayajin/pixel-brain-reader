@@ -553,6 +553,7 @@ fun MainScreen(
                                             },
                                             onRename = { newName -> viewModel.renameFile(newName) },
                                             onWikiLinkClick = { target -> viewModel.onWikiLinkClick(target) },
+                                            onDelete = { viewModel.deleteFile() },
                                             onCreateNew = { viewModel.createNewFile() },
                                             moodViewModel = moodViewModel
                                         )

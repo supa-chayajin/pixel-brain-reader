@@ -409,33 +409,44 @@ class MainViewModel @Inject constructor(
 
         viewModelScope.launch {
             try {
-                // 1. Save Local
-                repository.saveFileLocally(path, contentToSave)
-                
-                // 2. Atomic UI Reset (Clear Dirty State)
-                _uiState.value = _uiState.value.copy(
-                    isEditing = false,
-                    unsavedContent = null,
-                    hasUnsavedChanges = false,
-                    selectedFileContent = contentToSave // Update view immediately
-                )
-                
-                // 3. Trigger Push Immediately (Blocking/Background)
+                // 1. Save & Sync Orchestration
                 val (owner, repo) = secretManager.getRepoInfo()
-                if (owner != null && repo != null) {
-                    _uiState.value = _uiState.value.copy(isSyncing = true)
-                    val result = repository.pushDirtyFiles(owner, repo)
-                     if (result.isFailure) {
-                        val msg = result.exceptionOrNull()?.message ?: "Unknown"
-                        _uiState.value = _uiState.value.copy(error = "Commit Failed: $msg")
-                        _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Git Sync Failed ❌: $msg"))
-                    } else {
-                        _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Synced with Git ✅"))
-                    }
-                    _uiState.value = _uiState.value.copy(isSyncing = false)
+                
+                _uiState.value = _uiState.value.copy(isSyncing = true)
+                
+                val result = repository.saveAndSync(path, contentToSave, owner, repo)
+                
+                if (result.isSuccess) {
+                     // 2. Atomic UI Reset (Clear Dirty State)
+                    _uiState.value = _uiState.value.copy(
+                        isEditing = false,
+                        unsavedContent = null,
+                        hasUnsavedChanges = false,
+                        selectedFileContent = contentToSave // Update view immediately
+                    )
+                    _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Saved & Synced ✅"))
+                } else {
+                    val msg = result.exceptionOrNull()?.message ?: "Unknown"
+                    // Still save local success?
+                    // Repository executes local save first. So if it failed at sync, local is saved.
+                    // We should probably reflect that state.
+                    // For now, let's assume partial success is still "Error" in UI but explain it.
+                    
+                    _uiState.value = _uiState.value.copy(
+                        isEditing = false,
+                        unsavedContent = null,
+                        hasUnsavedChanges = false,
+                        selectedFileContent = contentToSave,
+                        error = "Sync Warning: $msg"
+                    )
+                     _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Saved Locally. Sync Failed: $msg"))
                 }
+                
+                _uiState.value = _uiState.value.copy(isSyncing = false)
+
             } catch (e: Exception) {
                  _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Save Failed ❌: ${e.message}"))
+                 _uiState.value = _uiState.value.copy(isSyncing = false)
             }
         }
     }
@@ -586,6 +597,30 @@ class MainViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(navigationTrigger = null)
     }
     
+    fun deleteFile() {
+        val fileName = _uiState.value.selectedFileName ?: return
+        // Use selectedFilePath as authoritative source
+        val path = _uiState.value.selectedFilePath ?: _uiState.value.files.find { it.name == fileName }?.path ?: return
+        
+        val (owner, repo) = secretManager.getRepoInfo()
+        
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isSyncing = true, userMessage = "Deleting specified file...")
+            
+            val result = repository.deleteFile(path, owner, repo)
+            
+            if (result.isSuccess) {
+                closeFile()
+                navigateBack() // Go back to list
+                _uiState.value = _uiState.value.copy(userMessage = "File Deleted", isSyncing = false)
+            } else {
+                 val msg = result.exceptionOrNull()?.message ?: "Unknown"
+                 _uiState.value = _uiState.value.copy(error = "Delete Failed: $msg", isSyncing = false)
+                 _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Delete Failed ❌: $msg"))
+            }
+        }
+    }
+
     fun renameFile(newName: String, targetFile: GithubFileDto? = null) {
         // Support renaming specific file (swipe) or current selected (menu)
         val fileToRename = targetFile?.name ?: _uiState.value.selectedFileName ?: return

@@ -607,4 +607,80 @@ class FileRepository @Inject constructor(
             Result.failure(e)
         }
     }
+    }
+
+    /**
+     * Orchestrated Save: Save Local -> Push -> Pull (Sync).
+     * Solves "Save/Sync Conflict" by ensuring local changes are pushed before pulling.
+     */
+    suspend fun saveAndSync(path: String, content: String, owner: String?, repo: String?): Result<Unit> {
+        return try {
+            // 1. Save Local (Offline First)
+            saveFileLocally(path, content)
+            
+            // 2. Sync if configured
+            if (owner != null && repo != null) {
+                // A. Push (Commit + Push)
+                val pushResult = pushDirtyFiles(owner, repo)
+                if (pushResult.isFailure) {
+                    return Result.failure(pushResult.exceptionOrNull() ?: Exception("Push Failed"))
+                }
+                
+                // B. Pull (Sync Repository)
+                // This ensures we get updates from other devices, but since we just pushed,
+                // our local state is "ahead" or "up to date" regarding our own file.
+                // Sync might download *other* files.
+                return syncRepository(owner, repo)
+            }
+            
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Delete File (Local + Remote).
+     */
+    suspend fun deleteFile(path: String, owner: String?, repo: String?): Result<Unit> {
+        return try {
+            // 1. Get SHA (Required for Remote Delete) BEFORE deleting local entity
+            // We need to check if it's a file or directory to know what to ask GitProvider,
+            // but currently GitProvider.deleteFile implies a file path.
+            // If it's a directory, we might need a recursive delete or a tree delete?
+            // For now, let's assume File.
+            
+            var sha: String? = null
+            if (owner != null && repo != null) {
+                val shaResult = gitProvider.getFileSha(owner, repo, path)
+                sha = shaResult.getOrNull()
+            }
+
+            // 2. Delete Local
+            database.withTransaction {
+                fileDao.deleteFile(path)
+                // Also clean up content? DAO cascade should handle it or we do it manually if logic requires.
+                // FileEntity deletion usually cascades or is sufficient to hide it.
+                // Assuming DAO `deleteFile` removes specific path.
+            }
+            
+            // 3. Delete Remote
+            if (owner != null && repo != null && sha != null) {
+                val deleteResult = gitProvider.deleteFile(
+                    owner = owner, 
+                    repo = repo, 
+                    path = path, 
+                    sha = sha, 
+                    message = "Delete $path via Pixel Brain"
+                )
+                if (deleteResult.isFailure) {
+                    return Result.failure(deleteResult.exceptionOrNull() ?: Exception("Remote Delete Failed"))
+                }
+            }
+            
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }
