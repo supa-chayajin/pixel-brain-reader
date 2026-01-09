@@ -55,7 +55,7 @@ fun NewFileBottomSheet(
                 value = filename,
                 onValueChange = { filename = it },
                 label = { Text("Filename") },
-                placeholder = { Text("New file name...") },
+                placeholder = { Text("New file name (e.g. Project/Note)") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
                 shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
