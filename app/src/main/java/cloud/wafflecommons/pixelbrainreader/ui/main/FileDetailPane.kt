@@ -201,7 +201,9 @@ fun FileDetailPane(
                                 onValueChange = onContentChange,
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .padding(16.dp),
+                                    .padding(16.dp)
+                                    .imePadding()
+                                    .verticalScroll(rememberScrollState()),
                                 textStyle = TextStyle(
                                     color = MaterialTheme.colorScheme.onSurface,
                                     fontSize = 16.sp,

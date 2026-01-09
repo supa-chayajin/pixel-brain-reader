@@ -11,6 +11,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Mood
 import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.Settings
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.LaunchedEffect
@@ -60,8 +61,9 @@ fun DailyNoteScreen(
     onNavigateBack: () -> Unit,
     onEditClicked: (String) -> Unit,
     onCheckInClicked: () -> Unit,
-    onOpenHabits: () -> Unit, // New Param
-    isGlobalSyncing: Boolean = false, // Received from MainViewModel
+    onOpenHabits: () -> Unit, 
+    onNavigateToSettings: () -> Unit, // New Param
+    isGlobalSyncing: Boolean = false, 
     viewModel: DailyNoteViewModel = hiltViewModel(),
     lifeOSViewModel: cloud.wafflecommons.pixelbrainreader.ui.lifeos.LifeOSViewModel = hiltViewModel()
 ) {
@@ -74,15 +76,12 @@ fun DailyNoteScreen(
 
     LaunchedEffect(Unit) {
         lifeOSViewModel.reloadTrigger.collect {
-             viewModel.refresh() // Sync Markdown content when task toggled
+             viewModel.refresh() 
         }
     }
 
     // 1. Extract Standard Metadata (Now from State)
     val metadata = state.metadata
-
-
-
 
     Scaffold(
         topBar = {
@@ -92,11 +91,15 @@ fun DailyNoteScreen(
                         text = "Today, ${state.date.format(DateTimeFormatter.ofPattern("MMM dd"))}",
                     )
                 },
-                /* actions = { // Removed: Habits accessible via Bottom Nav
-                    IconButton(onClick = onOpenHabits) {
-                        Icon(androidx.compose.material.icons.Icons.Filled.DateRange, contentDescription = "Habits")
-                    }
-                }, */
+                 actions = {
+                     IconButton(onClick = onNavigateToSettings) {
+                         Icon(
+                             imageVector = Icons.Default.Settings,
+                             contentDescription = "Settings",
+                             tint = MaterialTheme.colorScheme.onSurfaceVariant
+                         )
+                     }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,
                     titleContentColor = MaterialTheme.colorScheme.onSurface
@@ -213,7 +216,18 @@ fun DailyNoteScreen(
 
                     // --- Scoped Tasks Section (LifeOS) ---
                     // Always display this section between Intro and Outro
-                    Text("🎯 Focus Tasks", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(vertical = 8.dp))
+                    // Mimic Markdown H2 Style
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "📝 Journal",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 0.dp, vertical = 8.dp)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
                     cloud.wafflecommons.pixelbrainreader.ui.lifeos.TaskTimeline(
                         tasks = lifeOsState.scopedTasks,
                         onToggle = { 
@@ -221,7 +235,7 @@ fun DailyNoteScreen(
                             viewModel.refresh()
                         }
                     )
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+                    Spacer(modifier = Modifier.height(24.dp))
                     // --- End Scoped Tasks Section ---
 
                      // 2. Outro (Read Only)

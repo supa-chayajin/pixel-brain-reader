@@ -248,7 +248,7 @@ fun MainScreen(
     androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold(
         navigationSuiteItems = {
             item(
-                selected = currentRoute == Screen.Home && !isViewingDailyNote, // Active only if NOT viewing daily note
+                selected = currentRoute == Screen.Home && !isViewingDailyNote,
                 onClick = { 
                     navController.navigate(Screen.Home) {
                         popUpTo(navController.graph.findStartDestination().id) {
@@ -262,7 +262,21 @@ fun MainScreen(
                 label = { Text("Repo") }
             )
             item(
-                 selected = currentRoute == Screen.DailyNote, // Active if viewing daily note screen
+                selected = currentRoute == Screen.Chat,
+                onClick = { 
+                    navController.navigate(Screen.Chat) {
+                        popUpTo(navController.graph.findStartDestination().id) {
+                            saveState = true
+                        }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
+                icon = { Icon(Icons.Outlined.Psychology, contentDescription = "Brain") },
+                label = { Text("Chat") }
+            )
+            item(
+                 selected = currentRoute == Screen.DailyNote, 
                  onClick = { 
                      navController.navigate(Screen.DailyNote) {
                         popUpTo(navController.graph.findStartDestination().id) {
@@ -290,20 +304,6 @@ fun MainScreen(
                 label = { Text("Habits") }
             )
             item(
-                selected = currentRoute == Screen.Chat,
-                onClick = { 
-                    navController.navigate(Screen.Chat) {
-                        popUpTo(navController.graph.findStartDestination().id) {
-                            saveState = true
-                        }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                },
-                icon = { Icon(Icons.Outlined.Psychology, contentDescription = "Brain") },
-                label = { Text("Chat") }
-            )
-            item(
                 selected = currentRoute == Screen.MoodTracker,
                 onClick = { 
                     navController.navigate(Screen.MoodTracker) {
@@ -316,20 +316,6 @@ fun MainScreen(
                 },
                 icon = { Icon(Icons.Default.Mood, contentDescription = "Mood") },
                 label = { Text("Mood") }
-            )
-            item(
-                selected = currentRoute == Screen.Settings,
-                onClick = { 
-                    navController.navigate(Screen.Settings) {
-                        popUpTo(navController.graph.findStartDestination().id) {
-                            saveState = true
-                        }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                },
-                icon = { Icon(Icons.Outlined.Settings, contentDescription = "Settings") },
-                label = { Text("Settings") }
             )
         }
     ) {
@@ -622,7 +608,9 @@ fun MainScreen(
             }
 
             composable(Screen.Settings) {
-                SettingsScreen()
+                SettingsScreen(
+                    onBack = { navController.popBackStack() }
+                )
             }
 
             composable(Screen.MoodTracker) {
@@ -679,7 +667,8 @@ fun MainScreen(
                     onCheckInClicked = { showMoodSheet = true },
                     isGlobalSyncing = uiState.isSyncing,
                     viewModel = dailyViewModel,
-                    onOpenHabits = { navController.navigate("habits") }
+                    onOpenHabits = { navController.navigate("habits") },
+                    onNavigateToSettings = { navController.navigate(Screen.Settings) }
                 )
             }
             

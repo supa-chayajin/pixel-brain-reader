@@ -140,7 +140,8 @@ class DailyNoteViewModel @Inject constructor(
                     val body = FrontmatterManager.stripFrontmatter(content)
                     
                     val parsed = parseSplitContent(body)
-                    intro = parsed.first
+                    // Visual Fix: Remove redundant date header from intro (e.g. # 📅 2026-01-09)
+                    intro = parsed.first.replaceFirst(Regex("^# 📅 \\d{4}-\\d{2}-\\d{2}\\s*"), "").trim()
                     outro = parsed.second
                     
                     val weatherEmoji = frontmatter["weather"]

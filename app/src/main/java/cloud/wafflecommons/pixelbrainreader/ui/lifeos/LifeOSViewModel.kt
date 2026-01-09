@@ -18,8 +18,16 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 import javax.inject.Inject
 
+data class HabitWithStats(
+    val config: HabitConfig,
+    val isCompletedToday: Boolean,
+    val currentStreak: Int,
+    val history: List<Boolean> // Last 7 days, boolean status
+)
+
 data class LifeOSUiState(
     val habits: List<HabitConfig> = emptyList(),
+    val habitsWithStats: List<HabitWithStats> = emptyList(),
     val logs: Map<String, List<HabitLogEntry>> = emptyMap(),
     val scopedTasks: List<Task> = emptyList(),
     val selectedDate: LocalDate = LocalDate.now(),
@@ -44,12 +52,45 @@ class LifeOSViewModel @Inject constructor(
             
             val habits = habitRepository.getHabitConfigs()
             val logs = habitRepository.getLogsForYear(date.year)
-            // Filter logs for this specific date might be useful UI side or here
             
             val scopedTasks = taskRepository.getScopedTasks(date)
             
+            // Calculate Stats
+            val habitsWithStats = habits.map { habit ->
+                val habitLogs = logs.flatMap { it.value }.filter { it.habitId == habit.id }
+                
+                // 1. Is Completed Today?
+                val todayLog = habitLogs.find { it.date == date.toString() }
+                val isCompletedToday = todayLog?.status == HabitStatus.COMPLETED
+                
+                // 2. Calculate History (Last 7 days)
+                val history = (0..6).map { i ->
+                    val checkDate = date.minusDays(i.toLong())
+                    val checkLog = habitLogs.find { it.date == checkDate.toString() }
+                    checkLog?.status == HabitStatus.COMPLETED
+                }.reversed() // Oldest to Newest
+                
+                // 3. Calculate Current Streak
+                var streak = 0
+                // Start checking from Yesterday (or Today if completed)
+                var checkDate = if (isCompletedToday) date else date.minusDays(1)
+                
+                while (true) {
+                    val log = habitLogs.find { it.date == checkDate.toString() }
+                    if (log?.status == HabitStatus.COMPLETED) {
+                        streak++
+                        checkDate = checkDate.minusDays(1)
+                    } else {
+                        break
+                    }
+                }
+                
+                HabitWithStats(habit, isCompletedToday, streak, history)
+            }
+            
             _uiState.value = _uiState.value.copy(
                 habits = habits,
+                habitsWithStats = habitsWithStats,
                 logs = logs,
                 scopedTasks = scopedTasks,
                 isLoading = false
@@ -71,9 +112,8 @@ class LifeOSViewModel @Inject constructor(
             
             habitRepository.logHabit(date, newEntry)
             
-            // Reload logs
-            val newLogs = habitRepository.getLogsForYear(date.year)
-            _uiState.value = _uiState.value.copy(logs = newLogs)
+            // Reload everything to update streaks and UI
+            loadData(date)
         }
     }
 

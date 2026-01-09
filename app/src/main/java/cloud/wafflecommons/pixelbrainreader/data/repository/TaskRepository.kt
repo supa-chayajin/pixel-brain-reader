@@ -24,7 +24,7 @@ class TaskRepository @Inject constructor(
 
     // Regex: Start of line, optional whitespace, dash, space, bracket, x or space, bracket, space, everything else
     private val taskRegex = Regex("^(\\s*)-\\s\\[([xX ])\\]\\s*(.*)")
-    private val timeRegex = Regex("(\\d{1,2}:\\d{2})|(\\d{1,2}(?:\\s*)?(?:am|pm|AM|PM))", RegexOption.IGNORE_CASE)
+    private val timeRegex = Regex("(@?\\d{1,2}:\\d{2})|(@?\\d{1,2}(?:\\s*)?(?:am|pm|AM|PM))", RegexOption.IGNORE_CASE)
 
     suspend fun getScopedTasks(date: LocalDate): List<Task> = withContext(Dispatchers.IO) {
         val fileName = date.format(DateTimeFormatter.ISO_DATE) + ".md"
@@ -54,9 +54,13 @@ class TaskRepository @Inject constructor(
                 
                 // Time extraction
                 var time: LocalTime? = null
+                var cleanText = text.trim()
+                
                 val timeMatch = timeRegex.find(text)
                 if (timeMatch != null) {
                     time = parseTime(timeMatch.value)
+                    // Remove the time string from the description to avoid redundancy
+                    cleanText = text.replace(timeMatch.value, "").trim()
                 }
 
                 tasks.add(Task(
@@ -64,7 +68,7 @@ class TaskRepository @Inject constructor(
                     originalText = line,
                     isCompleted = isCompleted,
                     time = time,
-                    cleanText = text.trim()
+                    cleanText = cleanText
                 ))
             }
         }
@@ -104,7 +108,7 @@ class TaskRepository @Inject constructor(
 
     private fun parseTime(str: String): LocalTime? {
         return try {
-            val cleaned = str.trim().uppercase()
+            val cleaned = str.replace("@", "").trim().uppercase()
             if (cleaned.contains(":")) {
                 LocalTime.parse(cleaned, DateTimeFormatter.ofPattern("H:mm"))
             } else {
