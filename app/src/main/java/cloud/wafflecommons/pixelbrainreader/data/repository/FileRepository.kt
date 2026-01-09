@@ -150,6 +150,13 @@ class FileRepository @Inject constructor(
      */
     suspend fun saveFileLocally(path: String, content: String) {
         fileMutex.withLock {
+            // 0. Ensure Parent Folders Exist (Recursive)
+            if (path.contains("/")) {
+                val parentPath = path.substringBeforeLast("/")
+                // Recursive helper to ensure all segments exist
+                ensureParentFoldersExist(parentPath)
+            }
+
             // 1. Update Content
             fileContentDao.saveContent(FileContentEntity(path = path, content = content))
             
@@ -176,6 +183,20 @@ class FileRepository @Inject constructor(
             
             // 3. Notify Observers (Event Bus)
             _fileUpdates.emit(path)
+        }
+    }
+
+    private suspend fun ensureParentFoldersExist(path: String) {
+        if (path.isEmpty()) return
+        
+        // Check if this folder exists
+        if (fileDao.getFile(path) == null) {
+            // If not, ensure its parent exists first
+            if (path.contains("/")) {
+                 ensureParentFoldersExist(path.substringBeforeLast("/"))
+            }
+            // Then create this folder
+            createFolderEntity(path)
         }
     }
 
