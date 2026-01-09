@@ -45,6 +45,7 @@ import androidx.compose.material.icons.outlined.Settings
 
 import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.material.icons.filled.Today
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material.icons.filled.Mood
@@ -273,6 +274,20 @@ fun MainScreen(
                  },
                  icon = { Icon(Icons.Default.Today, contentDescription = "Today") },
                  label = { Text("Daily") }
+            )
+            item(
+                selected = currentRoute == "habits",
+                onClick = { 
+                    navController.navigate("habits") {
+                        popUpTo(navController.graph.findStartDestination().id) {
+                            saveState = true
+                        }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
+                icon = { Icon(Icons.Default.DateRange, contentDescription = "Habits") },
+                label = { Text("Habits") }
             )
             item(
                 selected = currentRoute == Screen.Chat,
@@ -663,7 +678,14 @@ fun MainScreen(
                     },
                     onCheckInClicked = { showMoodSheet = true },
                     isGlobalSyncing = uiState.isSyncing,
-                    viewModel = dailyViewModel
+                    viewModel = dailyViewModel,
+                    onOpenHabits = { navController.navigate("habits") }
+                )
+            }
+            
+            composable("habits") {
+                cloud.wafflecommons.pixelbrainreader.ui.lifeos.HabitDashboardScreen(
+                    onNavigateBack = { navController.popBackStack() }
                 )
             }
         }

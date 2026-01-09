@@ -8,8 +8,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Mood
 import androidx.compose.material.icons.filled.CalendarToday
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -56,20 +60,29 @@ fun DailyNoteScreen(
     onNavigateBack: () -> Unit,
     onEditClicked: (String) -> Unit,
     onCheckInClicked: () -> Unit,
+    onOpenHabits: () -> Unit, // New Param
     isGlobalSyncing: Boolean = false, // Received from MainViewModel
-    viewModel: DailyNoteViewModel = hiltViewModel()
+    viewModel: DailyNoteViewModel = hiltViewModel(),
+    lifeOSViewModel: cloud.wafflecommons.pixelbrainreader.ui.lifeos.LifeOSViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
+    val lifeOsState by lifeOSViewModel.uiState.collectAsStateWithLifecycle()
 
-    // 1. Extract Standard Metadata
-    val metadata = remember(state.noteContent) { 
-        FrontmatterManager.extractFrontmatter(state.noteContent) 
+    LaunchedEffect(state.date) {
+        lifeOSViewModel.loadData(state.date)
     }
 
-    // 2. Clean Content for Body (Strip YAML)
-    val cleanContent = remember(state.noteContent) {
-        FrontmatterManager.stripFrontmatter(state.noteContent)
+    LaunchedEffect(Unit) {
+        lifeOSViewModel.reloadTrigger.collect {
+             viewModel.refresh() // Sync Markdown content when task toggled
+        }
     }
+
+    // 1. Extract Standard Metadata (Now from State)
+    val metadata = state.metadata
+
+
+
 
     Scaffold(
         topBar = {
@@ -79,6 +92,11 @@ fun DailyNoteScreen(
                         text = "Today, ${state.date.format(DateTimeFormatter.ofPattern("MMM dd"))}",
                     )
                 },
+                /* actions = { // Removed: Habits accessible via Bottom Nav
+                    IconButton(onClick = onOpenHabits) {
+                        Icon(androidx.compose.material.icons.Icons.Filled.DateRange, contentDescription = "Habits")
+                    }
+                }, */
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,
                     titleContentColor = MaterialTheme.colorScheme.onSurface
@@ -110,7 +128,7 @@ fun DailyNoteScreen(
                     text = { Text("Edit Text") }
                 )
             }
-        }
+        },
     ) { padding ->
         Box(
             modifier = Modifier
@@ -145,7 +163,6 @@ fun DailyNoteScreen(
                         )
                     } else {
                         // Empty State / CTA for Mood
-                        // Empty State / CTA for Mood
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -171,32 +188,15 @@ fun DailyNoteScreen(
                         }
                     }
 
-                    // NEW: Standard Metadata Visualizer
-                    if (metadata.isNotEmpty()) {
-                        MetadataView(
-                            tags = metadata["tags"]?.removeSurrounding("[", "]")
-                                ?.split(",")?.map { it.trim() } ?: emptyList(),
-                            date = metadata["date"],
-                            weather = metadata["weather"],
-                            location = metadata["location"]
-                        )
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                    }
-
-                    HorizontalDivider(
-                        modifier = Modifier.padding(vertical = 24.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant
-                    )
-
                     // Body
-                    // Body (Cleaned Text - No YAML visible)
-                    if (cleanContent.isNotBlank()) {
+                    // 1. Introduction (Read Only)
+                    if (state.noteIntro.isNotBlank()) {
                         MarkdownText(
-                            markdown = cleanContent,
-                            onWikiLinkClick = { /* No-op for now in Read-Only mode */ }
+                            markdown = state.noteIntro,
+                            onWikiLinkClick = { /* No-op for now */ }
                         )
-                    } else {
-                        // Empty Note State
+                    } else if (state.noteIntro.isBlank() && state.noteOutro.isBlank()) {
+                         // Empty Note State if BOTH are blank
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -209,6 +209,27 @@ fun DailyNoteScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
+                    }
+
+                    // --- Scoped Tasks Section (LifeOS) ---
+                    // Always display this section between Intro and Outro
+                    Text("🎯 Focus Tasks", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(vertical = 8.dp))
+                    cloud.wafflecommons.pixelbrainreader.ui.lifeos.TaskTimeline(
+                        tasks = lifeOsState.scopedTasks,
+                        onToggle = { 
+                            lifeOSViewModel.toggleTask(it)
+                            viewModel.refresh()
+                        }
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+                    // --- End Scoped Tasks Section ---
+
+                     // 2. Outro (Read Only)
+                    if (state.noteOutro.isNotBlank()) {
+                        MarkdownText(
+                            markdown = state.noteOutro,
+                            onWikiLinkClick = { /* No-op */ }
+                        )
                     }
                     
                     // Bottom padding for FAB

@@ -78,7 +78,8 @@ class MoodRepository @Inject constructor(
                     if (content.isNullOrBlank()) null
                     else {
                         val data = gson.fromJson(content, DailyMoodData::class.java)
-                        LocalDate.parse(data.date, DateTimeFormatter.ISO_LOCAL_DATE) to data
+                        val sortedData = data.copy(entries = data.entries.sortedByDescending { it.time })
+                        LocalDate.parse(data.date, DateTimeFormatter.ISO_LOCAL_DATE) to sortedData
                     }
                 } catch (e: Exception) {
                     null
@@ -104,7 +105,8 @@ class MoodRepository @Inject constructor(
                          val content = fileRepository.getFileContentFlow(path).first()
                          if (!content.isNullOrBlank()) {
                              val data = gson.fromJson(content, DailyMoodData::class.java)
-                             _moods.update { current -> current + (date to data) }
+                             val sortedData = data.copy(entries = data.entries.sortedByDescending { it.time })
+                             _moods.update { current -> current + (date to sortedData) }
                          }
                      } catch (e: Exception) {
                          // Ignore if file doesn't exist
