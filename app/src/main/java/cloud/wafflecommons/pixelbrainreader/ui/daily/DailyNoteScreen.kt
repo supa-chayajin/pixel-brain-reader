@@ -265,6 +265,8 @@ private fun TimelineSection(events: List<TimelineEvent>) {
                 .padding(bottom = 16.dp)
         )
 
+        // No spacing here
+
         cloud.wafflecommons.pixelbrainreader.ui.lifeos.DayTimeline(
             events = events
         )
