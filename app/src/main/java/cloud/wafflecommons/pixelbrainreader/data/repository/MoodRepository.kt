@@ -244,4 +244,24 @@ class MoodRepository @Inject constructor(
             else -> "🤩"
         }
     }
+    // Simplified Sparkline Generator
+    suspend fun getWeeklySparkline(): String {
+        val scores = (0..6).map { i ->
+            val date = LocalDate.now().minusDays(6L - i)
+            // Synchronously get cached or fetch (pseudo-code, usage of getDailyMood(date) is Flow)
+            // For now, let's assume we can get it or return 0.
+            try {
+                // In a real scenario, we'd query DB. Transforming Flow to suspended value here for simplicity.
+                val entry = getDailyMood(date).first()
+                if (entry == null) 0 else entry.summary.averageScore.toInt()
+            } catch (e: Exception) { 0 }
+        }
+        
+        val bars = listOf(" ", " ", "▂", "▃", "▅", "▆", "▇", "█") 
+        // Mapping 0-10 score to index 0-7
+        return scores.joinToString("") { score ->
+            val index = ((score / 10.0) * (bars.size - 1)).roundToInt().coerceIn(0, bars.size - 1)
+            bars[index]
+        }
+    }
 }

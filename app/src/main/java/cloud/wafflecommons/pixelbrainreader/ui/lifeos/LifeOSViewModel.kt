@@ -21,6 +21,7 @@ import javax.inject.Inject
 data class HabitWithStats(
     val config: HabitConfig,
     val isCompletedToday: Boolean,
+    val currentValue: Double, // New field for Measurable
     val currentStreak: Int,
     val history: List<Boolean> // Last 7 days, boolean status
 )
@@ -59,9 +60,10 @@ class LifeOSViewModel @Inject constructor(
             val habitsWithStats = habits.map { habit ->
                 val habitLogs = logs.flatMap { it.value }.filter { it.habitId == habit.id }
                 
-                // 1. Is Completed Today?
+                // 1. Is Completed Today & Current Value
                 val todayLog = habitLogs.find { it.date == date.toString() }
                 val isCompletedToday = todayLog?.status == HabitStatus.COMPLETED
+                val currentValue = todayLog?.value ?: 0.0
                 
                 // 2. Calculate History (Last 7 days)
                 val history = (0..6).map { i ->
@@ -85,7 +87,7 @@ class LifeOSViewModel @Inject constructor(
                     }
                 }
                 
-                HabitWithStats(habit, isCompletedToday, streak, history)
+                HabitWithStats(habit, isCompletedToday, currentValue, streak, history)
             }
             
             _uiState.value = _uiState.value.copy(
@@ -113,6 +115,26 @@ class LifeOSViewModel @Inject constructor(
             habitRepository.logHabit(date, newEntry)
             
             // Reload everything to update streaks and UI
+            loadData(date)
+        }
+    }
+
+    fun updateHabitValue(habitId: String, newValue: Double) {
+        viewModelScope.launch {
+            val date = _uiState.value.selectedDate
+            
+            val habitConfig = _uiState.value.habits.find { it.id == habitId } ?: return@launch
+            
+            // Auto STATUS logic
+            val status = when {
+                newValue >= habitConfig.targetValue -> HabitStatus.COMPLETED
+                newValue > 0 -> HabitStatus.PARTIAL
+                else -> HabitStatus.SKIPPED
+            }
+            
+            val newEntry = HabitLogEntry(habitId, date.toString(), newValue, status)
+            habitRepository.logHabit(date, newEntry)
+            
             loadData(date)
         }
     }

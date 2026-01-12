@@ -704,4 +704,22 @@ class FileRepository @Inject constructor(
             Result.failure(e)
         }
     }
+
+    // --- Worker Helper Methods ---
+
+    suspend fun fileExists(path: String): Boolean {
+        return fileDao.getFile(path) != null
+    }
+
+    suspend fun createFile(path: String, initialContent: String) {
+        saveFileLocally(path, initialContent)
+    }
+
+    suspend fun readFile(path: String): String? {
+        return fileContentDao.getContent(path)
+    }
+    
+    suspend fun updateFile(path: String, content: String) {
+        saveFileLocally(path, content)
+    }
 }

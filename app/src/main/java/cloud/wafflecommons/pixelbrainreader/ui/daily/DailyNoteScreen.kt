@@ -2,8 +2,10 @@ package cloud.wafflecommons.pixelbrainreader.ui.daily
 
 import android.widget.TextView
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
@@ -15,6 +17,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -43,7 +46,6 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
 import cloud.wafflecommons.pixelbrainreader.data.repository.MoodEntry
 import cloud.wafflecommons.pixelbrainreader.data.utils.FrontmatterManager
-import cloud.wafflecommons.pixelbrainreader.ui.journal.DailyNoteHeader
 import cloud.wafflecommons.pixelbrainreader.ui.utils.ObsidianCalloutPlugin
 import cloud.wafflecommons.pixelbrainreader.ui.utils.ObsidianImagePlugin
 import cloud.wafflecommons.pixelbrainreader.ui.utils.ObsidianLinkPlugin
@@ -53,6 +55,8 @@ import io.noties.markwon.ext.tables.TablePlugin
 import io.noties.markwon.ext.tasklist.TaskListPlugin
 import io.noties.markwon.image.ImagesPlugin
 import io.noties.markwon.linkify.LinkifyPlugin
+import cloud.wafflecommons.pixelbrainreader.data.model.TimelineEvent
+import cloud.wafflecommons.pixelbrainreader.data.model.Task
 import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -141,116 +145,153 @@ fun DailyNoteScreen(
             if (state.isLoading || isGlobalSyncing) {
                 CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
             } else {
-                Column(
+                androidx.compose.foundation.lazy.LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 16.dp)
+                        .padding(horizontal = 16.dp),
+                    contentPadding = PaddingValues(bottom = 80.dp)
                 ) {
-                    // Header
-                    val moodData = state.moodData
-                    if (moodData != null) {
-                         val allActivities = remember(moodData) { 
-                            moodData.entries.flatMap { entry: MoodEntry -> entry.activities }
-                                .distinct()
-                                .sorted() 
+                    // 1. TOP HEADER (Legacy: Date/Nav/Emoji)
+                    item {
+                        // Logic: Always show header, handle nulls gracefully
+                        val moodData = state.moodData
+                        val lastUpdate = remember(moodData) { moodData?.entries?.firstOrNull()?.time }
+                        val allActivities = remember(moodData) { 
+                            moodData?.entries?.flatMap { it.activities }?.distinct()?.sorted() ?: emptyList()
                         }
-                        val lastUpdate = remember(moodData) { moodData.entries.firstOrNull()?.time }
 
-                        DailyNoteHeader(
-                            emoji = moodData.summary.mainEmoji,
+                        cloud.wafflecommons.pixelbrainreader.ui.journal.DailyNoteHeader(
+                            emoji = moodData?.summary?.mainEmoji,
                             lastUpdate = lastUpdate,
                             activities = allActivities,
-                            weather = state.weatherData,
-                            modifier = Modifier.padding(top = 16.dp)
+                            modifier = Modifier.padding(bottom = 8.dp)
                         )
-                    } else {
-                        // Empty State / CTA for Mood
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 32.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Mood,
-                                contentDescription = null,
-                                modifier = Modifier.size(64.dp),
-                                tint = MaterialTheme.colorScheme.surfaceVariant
+                    }
+
+                    // 2. MORNING BRIEFING 2.0 (Cockpit)
+                    item {
+                        cloud.wafflecommons.pixelbrainreader.ui.journal.MorningBriefingSection(
+                            state = state.briefingState,
+                            modifier = Modifier.padding(bottom = 24.dp)
+                        )
+                    }
+
+                    // 3. BODY (Timeline + Journal)
+                    item {
+                        // Intro Text
+                        if (state.displayIntro.isNotBlank()) {
+                             MarkdownText(
+                                markdown = state.displayIntro,
+                                onWikiLinkClick = { /* No-op */ }
                             )
-                            Spacer(Modifier.height(16.dp))
-                            Text(
-                                text = "Start your day with a check-in",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(Modifier.height(16.dp))
-                            androidx.compose.material3.Button(onClick = onCheckInClicked) {
-                                Text("Check-in")
+                             Spacer(modifier = Modifier.height(24.dp))
+                        }
+
+                        // Split Layout
+                        BoxWithConstraints {
+                            val isWide = maxWidth > 600.dp
+                            
+                            if (isWide) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(24.dp),
+                                    verticalAlignment = Alignment.Top
+                                ) {
+                                    Box(modifier = Modifier.weight(0.4f)) {
+                                         TimelineSection(events = state.timelineEvents)
+                                    }
+
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(0.6f)
+                                            .fillMaxWidth()
+                                    ) {
+                                         JournalSection(
+                                             tasks = lifeOsState.scopedTasks,
+                                             noteOutro = state.noteOutro,
+                                             onToggle = { task -> 
+                                                 viewModel.toggleTask(task)
+                                                 // Trigger LifeOS refresh to update list UI
+                                                 lifeOSViewModel.loadData(state.date)
+                                             },
+                                             modifier = Modifier.fillMaxWidth()
+                                         )
+                                    }
+                                }
+                            } else {
+                                // Mobile Layout (Stacked)
+                                Column {
+                                     TimelineSection(events = state.timelineEvents)
+                                     Spacer(modifier = Modifier.height(24.dp))
+                                     JournalSection(
+                                         tasks = lifeOsState.scopedTasks,
+                                         noteOutro = "",
+                                         onToggle = { task -> 
+                                             viewModel.toggleTask(task)
+                                             lifeOSViewModel.loadData(state.date)
+                                         },
+                                         modifier = Modifier.fillMaxWidth()
+                                     )
+                                }
                             }
                         }
-                    }
-
-                    // Body
-                    // 1. Introduction (Read Only)
-                    if (state.noteIntro.isNotBlank()) {
-                        MarkdownText(
-                            markdown = state.noteIntro,
-                            onWikiLinkClick = { /* No-op for now */ }
-                        )
-                    } else if (state.noteIntro.isBlank() && state.noteOutro.isBlank()) {
-                         // Empty Note State if BOTH are blank
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(vertical = 32.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "No notes yet...",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                        // Outro Text
+                        if (state.noteOutro.isNotBlank()) {
+                            MarkdownText(
+                                markdown = state.noteOutro,
+                                onWikiLinkClick = { /* No-op */ }
                             )
+                            Spacer(modifier = Modifier.height(24.dp))
                         }
                     }
-
-                    // --- Scoped Tasks Section (LifeOS) ---
-                    // Always display this section between Intro and Outro
-                    // Mimic Markdown H2 Style
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "📝 Journal",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 0.dp, vertical = 8.dp)
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    cloud.wafflecommons.pixelbrainreader.ui.lifeos.TaskTimeline(
-                        tasks = lifeOsState.scopedTasks,
-                        onToggle = { 
-                            lifeOSViewModel.toggleTask(it)
-                            viewModel.refresh()
-                        }
-                    )
-                    Spacer(modifier = Modifier.height(24.dp))
-                    // --- End Scoped Tasks Section ---
-
-                     // 2. Outro (Read Only)
-                    if (state.noteOutro.isNotBlank()) {
-                        MarkdownText(
-                            markdown = state.noteOutro,
-                            onWikiLinkClick = { /* No-op */ }
-                        )
-                    }
-                    
-                    // Bottom padding for FAB
-                    Spacer(modifier = Modifier.height(80.dp))
                 }
             }
         }
+    }
+}
+
+// --- Extracted Components for Readability & Layout Reuse ---
+
+@Composable
+private fun TimelineSection(events: List<TimelineEvent>) {
+    Column {
+        Text(
+            text = "🗓️ Timeline",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp)
+        )
+
+        cloud.wafflecommons.pixelbrainreader.ui.lifeos.DayTimeline(
+            events = events
+        )
+    }
+}
+
+@Composable
+private fun JournalSection(
+    tasks: List<Task>,
+    noteOutro: String,
+    onToggle: (Task) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier) {
+        Text(
+            text = "📝 Journal",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
+        cloud.wafflecommons.pixelbrainreader.ui.lifeos.TaskTimeline(
+            tasks = tasks,
+            onToggle = onToggle
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
     }
 }
 
