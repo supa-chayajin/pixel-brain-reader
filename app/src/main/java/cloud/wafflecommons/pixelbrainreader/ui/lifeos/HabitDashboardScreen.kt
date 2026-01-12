@@ -89,9 +89,10 @@ fun HabitDashboardScreen(
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         items(state.habitsWithStats) { habitStats ->
-                            HabitActionCard(
+                            HabitCard(
                                 habit = habitStats,
-                                onToggle = { viewModel.toggleHabit(habitStats.config.id) }
+                                onToggle = { viewModel.toggleHabit(habitStats.config.id) },
+                                onUpdateValue = { newVal -> viewModel.updateHabitValue(habitStats.config.id, newVal) }
                             )
                         }
                     }
@@ -109,59 +110,6 @@ fun HabitDashboardScreen(
                 items(state.habitsWithStats) { habitStats ->
                     HabitStreakRow(habitStats)
                 }
-            }
-        }
-    }
-}
-
-@Composable
-fun HabitActionCard(habit: HabitWithStats, onToggle: () -> Unit) {
-    val isDone = habit.isCompletedToday
-    val containerColor by animateColorAsState(
-        if (isDone) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh
-    )
-    val contentColor by animateColorAsState(
-        if (isDone) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
-    )
-
-    Card(
-        onClick = onToggle,
-        colors = CardDefaults.cardColors(containerColor = containerColor),
-        modifier = Modifier.size(width = 140.dp, height = 180.dp)
-    ) {
-        Column(
-            modifier = Modifier.fillMaxSize().padding(16.dp),
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column {
-                Icon(
-                    imageVector = if (isDone) Icons.Default.Check else Icons.Default.RadioButtonUnchecked,
-                    contentDescription = null,
-                    tint = contentColor
-                )
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    text = habit.config.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = contentColor,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            
-            if (isDone) {
-                Text(
-                    "Done!",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = contentColor,
-                    fontWeight = FontWeight.Bold
-                )
-            } else {
-                 Text(
-                    "Do it",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = contentColor.copy(alpha = 0.7f)
-                )
             }
         }
     }

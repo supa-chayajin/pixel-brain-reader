@@ -32,3 +32,22 @@ data class Task(
     val time: LocalTime? = null,
     val cleanText: String
 )
+
+data class TimelineEvent(
+    val time: LocalTime,
+    val content: String,
+    val originalLine: String
+)
+
+data class MarkdownLink(
+    val title: String,
+    val url: String
+)
+
+data class BriefingData(
+    val weather: String, // E.g., "☀️ 25°C"
+    val parentingAdvice: String,
+    val moodStats: String, // Sparkline
+    val quote: String,
+    val news: List<MarkdownLink>
+)

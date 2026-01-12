@@ -17,7 +17,6 @@ fun DailyNoteHeader(
     emoji: String?,
     lastUpdate: String?,
     activities: List<String>,
-    weather: WeatherData? = null,
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -49,16 +48,6 @@ fun DailyNoteHeader(
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
                 )
-                
-                // Weather Info
-                if (weather != null) {
-                    Text(
-                        text = "${weather.emoji} ${weather.temperature} • ${weather.location ?: "Unknown"}",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.padding(vertical = 4.dp)
-                    )
-                }
                 
                 if (lastUpdate != null) {
                     Text(

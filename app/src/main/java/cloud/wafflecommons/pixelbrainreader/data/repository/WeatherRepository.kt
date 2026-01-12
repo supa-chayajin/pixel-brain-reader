@@ -137,4 +137,14 @@ class WeatherRepository @Inject constructor(
             else -> "🌡️"
         }
     }
+
+    fun getParentingAdvice(weather: WeatherData): String {
+        return when {
+            weather.emoji.contains("🌧️") || weather.emoji.contains("⛈️") -> "Musée / Bibliothèque"
+            weather.emoji.contains("🌫️") -> "Gilet jaune !"
+            weather.temperature.replace("°C", "").toIntOrNull()?.let { it < 10 } == true -> "Bonnet obligatoire"
+            weather.temperature.replace("°C", "").toIntOrNull()?.let { it > 25 } == true -> "Crème solaire & Eau"
+            else -> "Parc / Balade"
+        }
+    }
 }
