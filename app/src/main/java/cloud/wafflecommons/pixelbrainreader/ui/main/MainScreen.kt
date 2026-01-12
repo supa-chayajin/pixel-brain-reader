@@ -106,6 +106,7 @@ object Screen {
     const val Settings = "settings"
     const val Import = "import"
     const val DailyNote = "daily_note"
+    const val Stats = "stats"
 }
 
 @OptIn(ExperimentalMaterial3AdaptiveApi::class, ExperimentalMaterial3Api::class)
@@ -200,6 +201,19 @@ fun MainScreen(
     LaunchedEffect(uiState.importState) {
         if (uiState.importState != null) {
             navController.navigate("import")
+        }
+    }
+
+    // Auto-Navigation Fallback for Stats (Responsive)
+    LaunchedEffect(isLargeScreen, currentRoute) {
+        if (!isLargeScreen && currentRoute == Screen.Stats) {
+             navController.navigate(Screen.DailyNote) {
+                 popUpTo(navController.graph.findStartDestination().id) {
+                     saveState = true
+                 }
+                 launchSingleTop = true
+                 restoreState = true
+             }
         }
     }
 
@@ -317,6 +331,24 @@ fun MainScreen(
                 icon = { Icon(Icons.Default.Mood, contentDescription = "Mood") },
                 label = { Text("Mood") }
             )
+
+            
+            if (isLargeScreen) {
+                item(
+                    selected = currentRoute == Screen.Stats,
+                    onClick = { 
+                        navController.navigate(Screen.Stats) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                    icon = { Icon(Icons.Default.Star, contentDescription = "Stats") }, 
+                    label = { Text("Stats") }
+                )
+            }
         }
     ) {
         androidx.navigation.compose.NavHost(
@@ -676,6 +708,10 @@ fun MainScreen(
                 cloud.wafflecommons.pixelbrainreader.ui.lifeos.HabitDashboardScreen(
                     onNavigateBack = { navController.popBackStack() }
                 )
+            }
+            
+            composable(Screen.Stats) {
+                 cloud.wafflecommons.pixelbrainreader.ui.lifestats.LifeStatsScreen()
             }
         }
     }

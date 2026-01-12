@@ -1,5 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.ui.daily
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cloud.wafflecommons.pixelbrainreader.data.repository.DailyMoodData
@@ -157,78 +158,117 @@ class DailyNoteViewModel @Inject constructor(
                     val body = FrontmatterManager.stripFrontmatter(content)
                     
                     val parsed = parseSplitContent(body)
-                    // Fix: Strip "Timeline" section from intro to prevent double rendering
-                    // Timeline is rendered via UI component, so we remove raw markdown
+                    // Fix: Strip "Timeline" section and ensure clean spacing
                     val rawIntro = parsed.first.replaceFirst(Regex("^# 📅 \\d{4}-\\d{2}-\\d{2}\\s*"), "").trim()
-                    intro = rawIntro.replace(Regex("(?s)## (?:🗓️ )?Timeline.*?(?=^## |\\Z)", setOf(RegexOption.MULTILINE)), "").trim()
+                    
+                    // Remove Timeline Section Robustly (handling different newlines/spacings)
+                    // Matches: ## (Symbol)? Timeline ... (content) ... until next ## Header or EOF
+                    val timelineRegex = Regex("(?s)## (?:🗓️ )?Timeline.*?(?=^## |\\Z)", setOf(RegexOption.MULTILINE))
+                    intro = rawIntro.replace(timelineRegex, "")
+                        .replace(Regex("\n{3,}"), "\n\n") // Collapse multiple blank lines
+                        .trim()
                     
                     outro = parsed.second
                     
                     // Parse Timeline
                     timelineEvents = parseTimeline(body.lines())
                     
-                    // Parse Briefing
+                    // Parse Briefing (if explicit section exists, though we are moving to Cockpit)
                     val briefingData = parseBriefingSection(body)
                     
-                    // Populate Display Content (Filter out Timeline AND Briefing)
-                    // The timeline/briefing are usually in the "intro" section (before Tasks)
+                    // Populate Display Content
                     var filteredIntro = filterTimelineSection(intro)
                     if (briefingData != null) {
                         filteredIntro = filterBriefingSection(filteredIntro)
                     }
                     
+                    // Check if weather is valid in frontmatter
                     val weatherEmoji = frontmatter["weather"]
                     val temp = frontmatter["temperature"]
                     val loc = frontmatter["location"]
                     
                     if (!weatherEmoji.isNullOrEmpty() && !temp.isNullOrEmpty()) {
-                        weather = WeatherData(weatherEmoji, temp, loc, "Saved")
+                         weather = WeatherData(weatherEmoji, temp, loc, "Saved")
                     } else {
-                        // Auto-fetch weather if missing and it's today
+                        // Trigger async save, but don't block UI
                         launch { fetchAndSaveWeather(date, notePath, content, frontmatter) }
                     }
 
-                    // Update State
-                 val mockQuote = "The best way to predict the future is to create it."
-                 val mockNews = listOf(
-                     "AI Model Breakthrough: Gemini 2.0 Released",
-                     "Pixel 10 Rumors: Holographic Display?",
-                     "Global Markets Rally on Tech Earnings"
-                 )
-                               // Mock Trend for now (should fetch from repo)
-                 val mockTrend = listOf(0.6f, 0.7f, 0.5f, 0.8f, 0.9f, 0.7f, 0.8f)
+                    // --- NEW: Load Cockpit Data (Robustly) ---
+                    // launching async to not block the main content flow if using combine-transform, 
+                    // but here we are in a simple map. 
+                    // Ideally we should have a separate flow for briefing, but for now we calculate it here
+                    // or better: let's invoke the suspend function safely.
+                    // Note: This makes the combine block suspend-heavy if we don't be careful.
+                    // Given the request, we will call the suspend validation here.
+                    
+                    val briefingState = loadMorningBriefingData(date, weather)
 
-                 _uiState.value.copy(
-                    date = date,
-                    moodData = mood,
-                    noteIntro = intro,
-                    noteOutro = outro,
-                    // metadata = frontmatter, // Simplified
-                    weatherData = weather,
-                    timelineEvents = timelineEvents,
-                    displayIntro = intro,
-                    briefingState = MorningBriefingUiState(
-                        weather = weather,
-                        moodTrend = mockTrend,
-                        quote = mockQuote,
-                        news = mockNews,
-                        isLoading = false
-                    ),
-                    isLoading = false
-                )
-                } else {
                      _uiState.value.copy(
                         date = date,
                         moodData = mood,
+                        noteIntro = intro,
+                        noteOutro = outro,
+                        weatherData = weather,
+                        timelineEvents = timelineEvents,
+                        displayIntro = intro,
+                        briefingState = briefingState,
+                        isLoading = false
+                    )
+                } else {
+                     val briefingState = loadMorningBriefingData(date, null)
+                     _uiState.value.copy(
+                        date = date,
+                        moodData = mood,
+                        briefingState = briefingState,
                         isLoading = false
                     )
                 }
-            }.catch { 
+            }.catch { e ->
+                Log.e("DailyNoteViewModel", "Error in data stream", e)
                 _uiState.value = _uiState.value.copy(isLoading = false)
             }.collect { newState ->
                 _uiState.value = newState
             }
         }
+    }
+
+    private suspend fun loadMorningBriefingData(date: LocalDate, existingWeather: WeatherData?): MorningBriefingUiState {
+        // 1. Weather (Graceful Fallback)
+        val finalWeather = existingWeather ?: runCatching {
+             val isToday = date == LocalDate.now()
+             if (isToday) weatherRepository.getCurrentWeatherAndLocation() else weatherRepository.getHistoricalWeather(date)
+        }.getOrNull()
+
+        // 2. Trend (Last 7 Days)
+        val trend = runCatching {
+            (0..6).map { offset ->
+                val d = date.minusDays(offset.toLong())
+                // Use getMood safely
+                val entry = moodRepository.getMood(d) 
+                // Normalize 1-5 score to 0.0-1.0 float for sparkline
+                // Assuming max score is 5 based on "🤩" range
+                 (entry?.score ?: 0) / 5f 
+            }.reversed()
+        }.getOrElse { 
+            emptyList() 
+        }
+
+        // 3. Mock Content (Quote/News - Resilient)
+        val quote = "The best way to predict the future is to create it."
+        val news = listOf(
+            "AI Model Breakthrough: Gemini 2.0 Released",
+            "Pixel 10 Rumors: Holographic Display?",
+            "Global Markets Rally on Tech Earnings"
+        )
+
+        return MorningBriefingUiState(
+            weather = finalWeather,
+            moodTrend = trend,
+            quote = quote,
+            news = news,
+            isLoading = false
+        )
     }
 
     private fun parseBriefingSection(content: String): cloud.wafflecommons.pixelbrainreader.data.model.BriefingData? {

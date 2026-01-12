@@ -312,7 +312,8 @@ fun DayTimeline(events: List<TimelineEvent>) {
 @Composable
 fun DayTimelineItem(event: TimelineEvent, isLast: Boolean) {
     Row(
-        modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)
+        modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+        verticalAlignment = Alignment.Top
     ) {
         // Time Column
         Text(
@@ -343,12 +344,14 @@ fun DayTimelineItem(event: TimelineEvent, isLast: Boolean) {
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.primary)
                 )
-                Box(
-                    modifier = Modifier
-                        .width(2.dp)
-                        .height(24.dp)
-                        .background(MaterialTheme.colorScheme.outlineVariant)
-                )
+                if (!isLast) {
+                    Box(
+                        modifier = Modifier
+                            .width(2.dp)
+                            .height(24.dp)
+                            .background(MaterialTheme.colorScheme.outlineVariant)
+                    )
+                }
             }
         }
         
