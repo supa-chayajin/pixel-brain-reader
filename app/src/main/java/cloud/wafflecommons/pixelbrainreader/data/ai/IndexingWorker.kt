@@ -16,7 +16,8 @@ class IndexingWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted workerParams: WorkerParameters,
     private val repository: FileRepository,
-    private val embeddingDao: EmbeddingDao
+    private val embeddingDao: EmbeddingDao,
+    private val vectorSearchEngine: VectorSearchEngine
 ) : CoroutineWorker(appContext, workerParams) {
 
     override suspend fun doWork(): Result {
@@ -29,25 +30,70 @@ class IndexingWorker @AssistedInject constructor(
             return Result.success() // Nothing to index
         }
 
-        // 2. Chunking Strategy (Simple Paragraph/Window split for V4.0 Start)
-        // TODO: Move to a dedicated TextSplitter class later
-        val chunks = content.split("\n\n").filter { it.isNotBlank() }
+        // 2. Chunking Strategy (Split by Headers or Paragraphs)
+        // For better RAG, splitting by headers (#) gives more semantic contexts than just newlines.
+        // Falls back to double newline if no headers found.
+        val chunks = if (content.contains("#")) {
+             content.split(Regex("(?=^# )|(?=^## )|(?=^### )", RegexOption.MULTILINE))
+                 .filter { it.isNotBlank() }
+        } else {
+            content.split("\n\n").filter { it.isNotBlank() }
+        }
 
-        // 3. Generate Embeddings (Placeholder for Gemini Nano / MediaPipe)
-        // In this Foundation Sprint, we just prepare the entities.
-        val embeddings = chunks.mapIndexed { index, chunk ->
-            EmbeddingEntity(
-                filePath = filePath,
-                chunkIndex = index,
-                textChunk = chunk,
-                vector = ByteArray(0) // EMPTY VECTOR - AI Integration in Sprint 2
-            )
+        // 2.5 Ensure Model File Ready (Copy-to-Cache Strategy)
+        // We replicate this logic here to ensure the file exists before invoking engine
+        try {
+            val file = java.io.File(applicationContext.cacheDir, "universal_sentence_encoder.tflite")
+            
+            // A. Purge Corrupted
+            if (file.exists() && file.length() < 1024) {
+                 android.util.Log.w("Cortex", "IndexingWorker: Corrupted cached model. Deleting...")
+                 file.delete()
+            }
+            
+            // B. Copy if needed
+            if (!file.exists()) {
+                 android.util.Log.d("Cortex", "IndexingWorker: Copying universal_sentence_encoder.tflite to cache...")
+                 applicationContext.assets.open("universal_sentence_encoder.tflite").use { inputStream ->
+                     if (inputStream.available() < 1024) {
+                         throw java.io.IOException("Asset is corrupted/empty.")
+                     }
+                     file.outputStream().use { outputStream ->
+                         inputStream.copyTo(outputStream)
+                     }
+                 }
+            }
+        } catch (e: Exception) {
+             android.util.Log.e("Cortex", "IndexingWorker: Model copy failed.", e)
+             return Result.failure()
+        }
+
+        // 3. Generate Embeddings using MediaPipe
+        val embeddings = chunks.mapNotNull { chunk ->
+            try {
+                // Generate Embedding calling the Engine
+                val vectorFloat = vectorSearchEngine.embed(chunk)
+                
+                EmbeddingEntity(
+                    // id generated automatically (UUID)
+                    fileId = filePath,
+                    content = chunk.trim(),
+                    vector = vectorFloat.toList(),
+                    lastUpdated = System.currentTimeMillis()
+                )
+            } catch (e: Exception) {
+                // If embedding fails for one chunk, we skip it but Log it safe
+                android.util.Log.w("Cortex", "Embedding failed for chunk: ${e.message}")
+                null
+            }
         }
 
         // 4. Store Valid Vectors
         // Clear old embeddings for this file first (Re-indexing)
-        embeddingDao.deleteEmbeddingsForFile(filePath)
-        embeddingDao.insertEmbeddings(embeddings)
+        if (embeddings.isNotEmpty()) {
+            embeddingDao.deleteEmbeddingsForFile(filePath)
+            embeddingDao.insertAll(embeddings)
+        }
 
         return Result.success()
     }

@@ -10,13 +10,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cloud.wafflecommons.pixelbrainreader.data.repository.WeatherData
+import androidx.compose.material3.SuggestionChip
+import androidx.compose.material3.SuggestionChipDefaults
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun DailyNoteHeader(
     emoji: String?,
     lastUpdate: String?,
-    activities: List<String>,
+    topDailyTags: List<String>,
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -57,33 +59,25 @@ fun DailyNoteHeader(
                     )
                 }
 
-                if (activities.isNotEmpty()) {
+                if (topDailyTags.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(12.dp))
+                    Text("Today's Top Tags:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.height(4.dp))
                     FlowRow(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        activities.forEach { activity ->
-                            // FIX: Force high-contrast colors for visibility
-                            ElevatedAssistChip(
+                        topDailyTags.forEach { tag ->
+                            SuggestionChip(
                                 onClick = { },
-                                label = { 
-                                    Text(
-                                        text = activity,
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    ) 
-                                },
-                                shape = CircleShape,
-                                colors = AssistChipDefaults.elevatedAssistChipColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                    labelColor = MaterialTheme.colorScheme.onSurface,
-                                    leadingIconContentColor = MaterialTheme.colorScheme.primary,
-                                    disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                    disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                label = { Text("#$tag") },
+                                colors = SuggestionChipDefaults.suggestionChipColors(
+                                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                    labelColor = MaterialTheme.colorScheme.onSecondaryContainer
                                 ),
-                                border = null
+                                border = null,
+                                modifier = Modifier.height(26.dp)
                             )
                         }
                     }

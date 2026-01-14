@@ -62,4 +62,51 @@ class UserPreferencesRepository @Inject constructor(
             preferences[THEME_CONFIG_KEY] = config.name
         }
     }
+
+    // --- Local AI Configuration ---
+
+    private val KEY_EMBEDDING_MODEL = stringPreferencesKey("embedding_model_filename")
+    private val KEY_LLM_MODEL_NAME = stringPreferencesKey("llm_model_name")
+
+    val embeddingModel: Flow<String> = context.dataStore.data
+        .map { preferences ->
+            preferences[KEY_EMBEDDING_MODEL] ?: "universal_sentence_encoder.tflite"
+        }
+
+    val llmModelName: Flow<String> = context.dataStore.data
+        .map { preferences ->
+            preferences[KEY_LLM_MODEL_NAME] ?: "gemini-2.5-flash-lite"
+        }
+
+    suspend fun setEmbeddingModel(filename: String) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_EMBEDDING_MODEL] = filename
+        }
+    }
+
+    suspend fun setLlmModelName(name: String) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_LLM_MODEL_NAME] = name
+        }
+    }
+    // --- Intelligence Configuration ---
+
+    enum class AiModel { GEMINI_PRO, GEMINI_FLASH, CORTEX_ON_DEVICE }
+
+    private val KEY_PREFERRED_AI_MODEL = stringPreferencesKey("preferred_ai_model")
+
+    val preferredAiModel: Flow<AiModel> = context.dataStore.data
+        .map { preferences ->
+            try {
+                AiModel.valueOf(preferences[KEY_PREFERRED_AI_MODEL] ?: AiModel.GEMINI_FLASH.name)
+            } catch (e: Exception) {
+                AiModel.GEMINI_FLASH
+            }
+        }
+
+    suspend fun setPreferredAiModel(model: AiModel) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_PREFERRED_AI_MODEL] = model.name
+        }
+    }
 }

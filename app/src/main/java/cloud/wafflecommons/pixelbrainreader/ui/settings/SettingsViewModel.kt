@@ -1,40 +1,44 @@
 package cloud.wafflecommons.pixelbrainreader.ui.settings
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
 import cloud.wafflecommons.pixelbrainreader.data.repository.AppThemeConfig
 import cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
+import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-enum class AiModel(val id: String, val displayName: String) {
-    GEMINI_FLASH("gemini-2.5-flash-lite", "Gemini 2.5 Flash Lite"),
-    GEMINI_PRO("gemini-2.5-pro", "Gemini 2.5 Pro");
-
-    companion object {
-        fun fromId(id: String): AiModel = entries.find { it.id == id } ?: GEMINI_FLASH
-    }
-}
-
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val userPrefs: UserPreferencesRepository,
-    private val secretManager: SecretManager
+    private val secretManager: SecretManager,
+    private val vectorSearchEngine: cloud.wafflecommons.pixelbrainreader.data.ai.VectorSearchEngine,
+    private val geminiRagManager: cloud.wafflecommons.pixelbrainreader.data.ai.GeminiRagManager
 ) : ViewModel() {
 
     data class SettingsUiState(
+        val paneWidth: Float = 360f,
         val themeConfig: AppThemeConfig = AppThemeConfig.FOLLOW_SYSTEM,
-        val currentAiModel: AiModel = AiModel.GEMINI_FLASH,
+        val currentAiModel: UserPreferencesRepository.AiModel = UserPreferencesRepository.AiModel.GEMINI_FLASH,
+        val appVersion: String = "1.0.0",
         val repoOwner: String? = null,
         val repoName: String? = null,
-        val appVersion: String = "1.0.0"
+        // AI Config (Advanced/Internal)
+        val embeddingModel: String = "universal_sentence_encoder.tflite",
+        val availableEmbeddingModels: List<String> = emptyList(),
+        val llmModelName: String = "gemini-2.5-flash-lite"
     )
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -42,22 +46,67 @@ class SettingsViewModel @Inject constructor(
 
     init {
         loadRepoInfo()
+        scanAssetsForModels()
+        
+        userPrefs.listPaneWidth.onEach { width ->
+            _uiState.value = _uiState.value.copy(paneWidth = width)
+        }.launchIn(viewModelScope)
 
-        userPrefs.themeConfig
-            .onEach { config ->
-                _uiState.value = _uiState.value.copy(
-                    themeConfig = config
-                )
-            }
-            .launchIn(viewModelScope)
+        userPrefs.themeConfig.onEach { theme ->
+             _uiState.value = _uiState.value.copy(themeConfig = theme)
+        }.launchIn(viewModelScope)
+        
+        userPrefs.preferredAiModel.onEach { model ->
+             _uiState.value = _uiState.value.copy(currentAiModel = model)
+        }.launchIn(viewModelScope)
+        
+        // Keep observing low-level config for internal use or advanced UI
+        userPrefs.embeddingModel.onEach { model ->
+             _uiState.value = _uiState.value.copy(embeddingModel = model)
+        }.launchIn(viewModelScope)
+        
+        userPrefs.llmModelName.onEach { name ->
+             _uiState.value = _uiState.value.copy(llmModelName = name)
+        }.launchIn(viewModelScope)
+    }
 
-        userPrefs.aiModel
-            .onEach { modelId ->
-                _uiState.value = _uiState.value.copy(
-                    currentAiModel = AiModel.fromId(modelId)
-                )
-            }
-            .launchIn(viewModelScope)
+    private fun scanAssetsForModels() {
+        try {
+            val files = context.assets.list("")?.filter { it.endsWith(".tflite") } ?: emptyList()
+            _uiState.value = _uiState.value.copy(availableEmbeddingModels = files)
+        } catch (e: Exception) {
+             _uiState.value = _uiState.value.copy(availableEmbeddingModels = listOf("text_embedder.tflite"))
+        }
+    }
+    
+    fun updateTheme(config: AppThemeConfig) {
+        viewModelScope.launch {
+            userPrefs.setThemeConfig(config)
+        }
+    }
+
+    fun updateAiModel(model: UserPreferencesRepository.AiModel) {
+        viewModelScope.launch {
+            userPrefs.setPreferredAiModel(model)
+        }
+    }
+
+    // Advanced Local Config setters
+    fun updateEmbeddingModel(filename: String) {
+        viewModelScope.launch {
+            userPrefs.setEmbeddingModel(filename)
+        }
+    }
+
+    fun updateLlmModelName(name: String) {
+        viewModelScope.launch {
+            userPrefs.setLlmModelName(name)
+        }
+    }
+
+    fun logout() {
+        secretManager.clear()
+        loadRepoInfo()
     }
 
     private fun loadRepoInfo() {
@@ -66,22 +115,5 @@ class SettingsViewModel @Inject constructor(
             repoOwner = owner,
             repoName = repo
         )
-    }
-
-    fun updateTheme(config: AppThemeConfig) {
-        viewModelScope.launch {
-            userPrefs.setThemeConfig(config)
-        }
-    }
-
-    fun updateAiModel(model: AiModel) {
-        viewModelScope.launch {
-            userPrefs.setAiModel(model.id)
-        }
-    }
-
-    fun logout() {
-        secretManager.clear()
-        loadRepoInfo()
     }
 }

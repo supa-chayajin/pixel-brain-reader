@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Mood
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.outlined.Settings
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.LaunchedEffect
@@ -23,9 +24,14 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.SuggestionChip
@@ -89,25 +95,23 @@ fun DailyNoteScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = "Today, ${state.date.format(DateTimeFormatter.ofPattern("MMM dd"))}",
-                    )
-                },
-                 actions = {
-                     IconButton(onClick = onNavigateToSettings) {
+            cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
+                title = "Cortex",
+                subtitle = state.date.format(DateTimeFormatter.ofPattern("MMM dd, yyyy")),
+                actions = {
+                     FilledTonalIconButton(
+                         onClick = onNavigateToSettings,
+                         colors = IconButtonDefaults.filledTonalIconButtonColors(
+                             containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                             contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                         )
+                     ) {
                          Icon(
-                             imageVector = Icons.Default.Settings,
-                             contentDescription = "Settings",
-                             tint = MaterialTheme.colorScheme.onSurfaceVariant
+                             imageVector = Icons.Outlined.Settings,
+                             contentDescription = "Settings"
                          )
                      }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface
-                )
+                }
             )
         },
         floatingActionButton = {
@@ -163,7 +167,7 @@ fun DailyNoteScreen(
                         cloud.wafflecommons.pixelbrainreader.ui.journal.DailyNoteHeader(
                             emoji = moodData?.summary?.mainEmoji,
                             lastUpdate = lastUpdate,
-                            activities = allActivities,
+                            topDailyTags = state.topDailyTags,
                             modifier = Modifier.padding(bottom = 8.dp)
                         )
                     }

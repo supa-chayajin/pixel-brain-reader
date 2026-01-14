@@ -20,6 +20,8 @@ import cloud.wafflecommons.pixelbrainreader.data.local.dao.FileContentDao
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.FileContentEntity
 import cloud.wafflecommons.pixelbrainreader.data.local.AppDatabase
 import androidx.room.withTransaction
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.Mutex
 
@@ -30,7 +32,8 @@ class FileRepository @Inject constructor(
     private val fileDao: FileDao,
     private val metadataDao: SyncMetadataDao,
     private val fileContentDao: FileContentDao,
-    private val database: AppDatabase
+    private val database: AppDatabase,
+    private val dataRefreshBus: cloud.wafflecommons.pixelbrainreader.data.utils.DataRefreshBus
 ) {
     // ... companion object
 
@@ -209,12 +212,12 @@ class FileRepository @Inject constructor(
      * 1. Get Dirty Files.
      * 2. For each: Get SHA -> PUT -> Mark Clean.
      */
-    suspend fun pushDirtyFiles(owner: String, repo: String, message: String? = null): Result<Unit> {
-        return try {
+    suspend fun pushDirtyFiles(owner: String, repo: String, message: String? = null): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
             val dirtyFiles = fileDao.getDirtyFiles().filter { it.type == "file" }
             if (dirtyFiles.isEmpty()) {
                 Log.d("PixelBrain", "Sync: Clean working directory (No dirty files). Skipping push.")
-                return Result.success(Unit)
+                return@withContext Result.success(Unit)
             }
             Log.d("PixelBrain", "Starting Push. Dirty files count: ${dirtyFiles.size}")
             
@@ -545,14 +548,14 @@ class FileRepository @Inject constructor(
      * 3. Prune (Delete Local not in Remote).
      * 4. Upsert (Update/Insert Remote files).
      */
-    suspend fun syncRepository(owner: String, repo: String, branch: String = "main"): Result<Unit> {
-        return try {
+    suspend fun syncRepository(owner: String, repo: String, branch: String = "main"): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
             Log.d("PixelBrain", "Starting Smart Incremental Sync for $owner/$repo/$branch")
             
             // 1. Fetch Remote Tree
             val treeResult = gitProvider.getGitTree(owner, repo, branch)
             if (treeResult.isFailure) {
-                return Result.failure(treeResult.exceptionOrNull() ?: Exception("Failed to fetch remote tree"))
+                return@withContext Result.failure(treeResult.exceptionOrNull() ?: Exception("Failed to fetch remote tree"))
             }
             
             val treeResponse = treeResult.getOrNull() ?: throw Exception("Empty Tree Response")
@@ -564,7 +567,15 @@ class FileRepository @Inject constructor(
             val remotePaths = remoteItems.map { it.path }.toSet()
             
             // 3. Prune Strategy (Delete Local NOT in Remote)
-            val toDelete = localPaths.minus(remotePaths).toList()
+            // CRITICAL FIX: Do NOT delete dirty files. They are local-only work in progress.
+            val dirtyFiles = fileDao.getDirtyFiles().map { it.path }.toSet()
+            val toDelete = localPaths.minus(remotePaths).filter { path -> 
+                val isDirty = dirtyFiles.contains(path)
+                if (isDirty) {
+                    Log.i("PixelBrain", "SafeSync: Preserving local-only dirty file: $path")
+                }
+                !isDirty 
+            }.toList()
             
             // 4. Execution (Transactional)
             database.withTransaction {
@@ -577,6 +588,7 @@ class FileRepository @Inject constructor(
                 // B. Sync (Insert/Update & Download if changed)
                 var downloadCount = 0
                 var skipCount = 0
+                var conflictCount = 0
                 
                 for (item in remoteItems) {
                     if (item.type == "tree") {
@@ -588,39 +600,58 @@ class FileRepository @Inject constructor(
                          val isMarkdown = item.path.endsWith(".md", ignoreCase = true)
                          val isData = item.path.endsWith(".json", ignoreCase = true)
                          val localSha = localFileMap[item.path]
+                         val isLocalDirty = dirtyFiles.contains(item.path)
                          
                          // INCREMENTAL CHECK
                          // Download if: New File (localSha null) OR Content Changed (SHA mismatch)
                          val shouldDownload = (localSha == null) || (localSha != item.sha)
 
                          // 1. Update Entity Metadata (Always, to ensure SHA is synced)
-                         val entity = FileEntity(
+                         // Exception: If local is dirty, we might want to keep "isDirty=true" 
+                         // But we also want to know the "remote SHA" to detect conflicts later.
+                         // Decision: We update SHA but KEEP isDirty state.
+                         
+                         // Upsert Entity
+                         val existing = fileDao.getFile(item.path)
+                         val newEntity = FileEntity(
                              path = item.path,
                              name = item.path.substringAfterLast("/"),
                              type = "file",
                              downloadUrl = item.url, // GitTreeItem Blob URL
                              sha = item.sha,         // Store Remote SHA
-                             isDirty = false,        // Synced
+                             isDirty = isLocalDirty, // PRESERVE DIRTY STATE
+                             localModifiedTimestamp = existing?.localModifiedTimestamp ?: System.currentTimeMillis(),
                              lastSyncedAt = System.currentTimeMillis()
                          )
-                         fileDao.insertFile(entity) // Upsert
+                         fileDao.insertFile(newEntity) 
                          
                          // 2. Content Sync
                          // Only download content for Markdowns/Data that CHANGED or are NEW.
                          if (isMarkdown || isData) {
                              if (shouldDownload) {
-                                  // Construct raw URL (See previous implementation notes)
-                                  val rawUrl = "https://raw.githubusercontent.com/$owner/$repo/$branch/${item.path}"
-                                  refreshFileContent(item.path, rawUrl)
-                                  downloadCount++
+                                  if (isLocalDirty) {
+                                      // CONFLICT DETECTED
+                                      // Remote changed, but Local is Dirty.
+                                      // Strategy: Local Wins (Preserve unsaved work).
+                                      Log.w("PixelBrain", "SafeSync: Conflict for ${item.path}. Local is dirty. Preserving local version.")
+                                      conflictCount++
+                                  } else {
+                                      // Safe to Download (Clean state)
+                                      val rawUrl = "https://raw.githubusercontent.com/$owner/$repo/$branch/${item.path}"
+                                      refreshFileContent(item.path, rawUrl)
+                                      downloadCount++
+                                  }
                              } else {
                                   skipCount++
                              }
                          }
                     }
                 }
-                 Log.d("PixelBrain", "Sync Report: Downloaded $downloadCount, Skipped $skipCount (Up-to-date)")
+                 Log.d("PixelBrain", "Sync Report: Downloaded $downloadCount, Skipped $skipCount, Conflicts/Preserved $conflictCount")
             }
+
+            // [NEW] Notify App Components that Data is Fresh
+            dataRefreshBus.notifyDataChanged()
             
             Result.success(Unit)
         } catch (e: Exception) {

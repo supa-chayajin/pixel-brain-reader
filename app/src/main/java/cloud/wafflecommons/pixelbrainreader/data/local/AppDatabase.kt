@@ -19,15 +19,27 @@ import cloud.wafflecommons.pixelbrainreader.data.local.dao.EmbeddingDao
         FileContentEntity::class,
         EmbeddingEntity::class // V4.0 Neural Vault
     ], 
-    version = 6, 
+    version = 7, 
     exportSchema = false
 )
+@androidx.room.TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun fileDao(): FileDao
     abstract fun metadataDao(): SyncMetadataDao
     abstract fun fileContentDao(): FileContentDao
     abstract fun embeddingDao(): EmbeddingDao
-    
-    // Security Check: This class will eventually be instantiated with a SupportFactory for SQLCipher.
-    // For Phase B Step 1, we use standard Room builder but keep exportSchema=false to prevent schema leaks.
+}
+
+class Converters {
+    @androidx.room.TypeConverter
+    fun fromFloatList(value: List<Float>?): String? {
+        if (value == null) return null
+        return value.joinToString(",")
+    }
+
+    @androidx.room.TypeConverter
+    fun toFloatList(value: String?): List<Float>? {
+        if (value == null || value.isEmpty()) return null
+        return value.split(",").mapNotNull { it.toFloatOrNull() }
+    }
 }

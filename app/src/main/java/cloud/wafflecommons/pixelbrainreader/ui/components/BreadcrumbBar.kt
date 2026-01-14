@@ -6,8 +6,13 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowRight
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -26,7 +31,8 @@ fun BreadcrumbBar(
     isLargeScreen: Boolean
 ) {
     val pathParts = currentPath.split("/").filter { it.isNotEmpty() }
-    val showCompact = !isLargeScreen && pathParts.size > 2
+    val showCompact = !isLargeScreen && pathParts.size > 2 || isLargeScreen && pathParts.size > 3
+
 
     Row(
         modifier = Modifier
@@ -35,36 +41,60 @@ fun BreadcrumbBar(
             .padding(horizontal = 8.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(
-            imageVector = Icons.Default.Home,
-            contentDescription = "Home",
-            modifier = Modifier
-                .clickable(onClick = onHomeClick)
-                .padding(4.dp)
-                .size(20.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        FilledTonalIconButton(
+            onClick = { onHomeClick() },
+            colors = IconButtonDefaults.filledTonalIconButtonColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        ) {
+            Icon(
+                imageVector = Icons.Default.Home,
+                contentDescription = "Home",
+                modifier = Modifier
+                    .padding(4.dp)
+                    .size(20.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
         
         if (pathParts.isEmpty()) return@Row
 
         Icon(Icons.AutoMirrored.Filled.ArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
 
         if (showCompact) {
-             Text(
-                text = "...",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 4.dp)
-            )
+            FilledTonalButton(
+                onClick = { null },
+                colors = ButtonDefaults.filledTonalButtonColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            ) {
+                Text(
+                    text = "...",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 4.dp)
+                )
+            }
              Icon(Icons.AutoMirrored.Filled.ArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             // Show only last part
              val lastPart = pathParts.last()
-             Text(
-                text = lastPart,
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.primary,
-                 modifier = Modifier.padding(horizontal = 4.dp)
-            )
+
+            FilledTonalButton(
+                onClick = { null },
+                colors = ButtonDefaults.filledTonalButtonColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            ) {
+                Text(
+                    text = lastPart,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 4.dp)
+                )
+            }
         } else {
             pathParts.forEachIndexed { index, part ->
                 if (index > 0) {
@@ -75,15 +105,23 @@ fun BreadcrumbBar(
                 // This is a naive reconstruction, assuming unique names in path or sequential.
                 // A better way would be accumulating path.
                 val clickPath = pathParts.take(index + 1).joinToString("/")
-                
-                Text(
-                    text = part,
-                    style = if (index == pathParts.lastIndex) MaterialTheme.typography.titleSmall else MaterialTheme.typography.bodyMedium,
-                    color = if (index == pathParts.lastIndex) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier
-                        .clickable { onPathClick(clickPath) }
-                        .padding(horizontal = 4.dp)
-                )
+
+                FilledTonalButton(
+                    onClick = { onPathClick(clickPath) },
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                ) {
+                    Text(
+                        text = part,
+                        style = if (index == pathParts.lastIndex) MaterialTheme.typography.titleSmall else MaterialTheme.typography.bodyMedium,
+                        color = if (index == pathParts.lastIndex) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .clickable {  }
+                            .padding(horizontal = 4.dp)
+                    )
+                }
             }
         }
     }

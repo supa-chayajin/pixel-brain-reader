@@ -96,6 +96,8 @@ import androidx.window.core.layout.WindowWidthSizeClass
 import kotlinx.coroutines.launch
 
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.IconButtonDefaults
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
@@ -434,26 +436,42 @@ fun MainScreen(
                             actions = {
                                 if (isSearching) {
                                     // SEARCH MODE ACTION: Exit Search
-                                    IconButton(onClick = { 
-                                        isSearching = false
-                                        viewModel.onSearchQueryChanged("") 
-                                    }) { 
+                                    FilledTonalIconButton(
+                                        onClick = {
+                                            isSearching = false
+                                            viewModel.onSearchQueryChanged("")
+                                        },
+                                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    ) {
                                         Icon(Icons.Default.SearchOff, "Close Search Mode")
                                     }
                                 } else {
                                     // VIEW MODE ACTIONS
                                     
                                     // 1. Search Trigger
-                                    IconButton(onClick = { isSearching = true }) {
-                                         Icon(Icons.Default.Search, "Search")
+                                    FilledTonalIconButton(
+                                        onClick = { isSearching = true },
+                                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    ) {
+                                        Icon(Icons.Default.Search, "Search")
                                     }
 
                                     // 2. Existing Actions
                                     if (uiState.selectedFileName != null) {
                                         // Save
-                                        IconButton(
+                                        FilledTonalIconButton(
                                             onClick = { viewModel.saveFile() },
-                                            enabled = uiState.hasUnsavedChanges
+                                            enabled = uiState.hasUnsavedChanges,
+                                            colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
                                         ) {
                                             Icon(
                                                 imageVector = Icons.Filled.Save,
@@ -463,7 +481,13 @@ fun MainScreen(
                                         }
                                         
                                         // Edit/View Toggle
-                                        IconButton(onClick = { viewModel.toggleEditMode() }) {
+                                        FilledTonalIconButton(
+                                            onClick = { viewModel.toggleEditMode() },
+                                            colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        ) {
                                             Icon(
                                                 imageVector = if (uiState.isEditing) Icons.Filled.Visibility else Icons.Filled.Edit,
                                                 contentDescription = if (uiState.isEditing) "View" else "Edit"
@@ -471,7 +495,13 @@ fun MainScreen(
                                         }
 
                                         // Delete
-                                        IconButton(onClick = { viewModel.deleteFile() }) {
+                                        FilledTonalIconButton(
+                                            onClick = { viewModel.deleteFile() },
+                                            colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                                containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
+                                                contentColor = MaterialTheme.colorScheme.onErrorContainer
+                                            )
+                                        ) {
                                             Icon(
                                                 imageVector = Icons.Default.Delete,
                                                 contentDescription = "Delete File",
@@ -481,7 +511,13 @@ fun MainScreen(
 
                                         // Focus Mode (Large Screen Only)
                                         if (isLargeScreen) {
-                                            IconButton(onClick = { viewModel.toggleFocusMode() }) {
+                                            FilledTonalIconButton(
+                                                onClick = { viewModel.toggleFocusMode() },
+                                                colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            ) {
                                                 Icon(
                                                     imageVector = if (uiState.isFocusMode) Icons.Filled.CloseFullscreen else Icons.Filled.OpenInFull,
                                                     contentDescription = "Focus Mode"
@@ -490,18 +526,30 @@ fun MainScreen(
                                         }
 
                                         // Close File
-                                        IconButton(onClick = {
-                                            viewModel.closeFile()
-                                            if (navigator.canNavigateBack()) {
-                                                navigator.navigateBack()
-                                            }
-                                        }) {
+                                        FilledTonalIconButton(
+                                            onClick = {
+                                                viewModel.closeFile()
+                                                if (navigator.canNavigateBack()) {
+                                                    navigator.navigateBack()
+                                                }
+                                            },
+                                            colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        ) {
                                             Icon(Icons.Filled.Close, "Close")
                                         }
 
                                     } else {
                                         // Browser Actions
-                                        IconButton(onClick = { viewModel.openCreateFileDialog() }) {
+                                        FilledTonalIconButton(
+                                            onClick = { viewModel.openCreateFileDialog() },
+                                            colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        ) {
                                             Icon(Icons.Default.Add, "New File")
                                         }
                                     }
@@ -586,7 +634,16 @@ fun MainScreen(
                                             hasUnsavedChanges = uiState.hasUnsavedChanges,
                                             onWikiLinkClick = { target -> viewModel.onWikiLinkClick(target) },
                                             onCreateNew = { viewModel.createNewFile() },
-                                            moodViewModel = moodViewModel
+                                            moodViewModel = moodViewModel,
+                                            onSave = { viewModel.saveFile() },
+                                            onToggleEdit = { viewModel.toggleEditMode() },
+                                            onDelete = { viewModel.deleteFile() },
+                                            onClose = { 
+                                                viewModel.closeFile()
+                                                if (navigator.canNavigateBack()) {
+                                                    navigator.navigateBack()
+                                                }
+                                            }
                                         )
                                     } else {
                                         cloud.wafflecommons.pixelbrainreader.ui.components.WelcomeScreen()

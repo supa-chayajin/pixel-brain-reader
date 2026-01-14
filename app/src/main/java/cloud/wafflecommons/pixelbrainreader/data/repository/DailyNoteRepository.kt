@@ -175,4 +175,58 @@ tags: [journal]
             Log.e("DailyNote", "Failed during misplaced notes cleanup", e)
         }
     }
+
+
+    /**
+     * Safe Sync with Physical Backup.
+     * Prevents data loss by backing up the current daily note before triggering a repo sync.
+     */
+    suspend fun syncWithBackup(date: LocalDate, owner: String, repo: String) = withContext(Dispatchers.IO) {
+        val fileName = date.format(DateTimeFormatter.ISO_DATE) + ".md"
+        val path = "$JOURNAL_ROOT/$fileName"
+        
+        // 1. Locate Physical File
+        // We use FileRepository logic or direct File access? 
+        // Direct access is safer for "Physical Backup" (bypassing DB/Cache).
+        val journalDir = File(context.filesDir, JOURNAL_ROOT)
+        if (!journalDir.exists()) journalDir.mkdirs()
+        
+        val currentFile = File(journalDir, fileName)
+        val backupFile = File(journalDir, "${fileName}.bak")
+        
+        // 2. Create Backup
+        if (currentFile.exists() && currentFile.length() > 0) {
+            try {
+                currentFile.copyTo(backupFile, overwrite = true)
+                Log.d("DailyNote", "Backup created: ${backupFile.path}")
+            } catch (e: Exception) {
+                Log.e("DailyNote", "Backup creation failed", e)
+                // We proceed, but warn.
+            }
+        }
+        
+        try {
+            // 3. Trigger Global Sync
+            // We use fileRepository.syncRepository directly
+            // Note: This syncs the *entire* repo, but our backup protects the current note.
+            val result = fileRepository.syncRepository(owner, repo)
+            if (result.isFailure) throw result.exceptionOrNull() ?: Exception("Sync Failed")
+            
+        } catch (e: Exception) {
+            // 4. Restore on Failure/Corruption
+            Log.e("DailyNote", "Sync failed. Checking integrity...", e)
+            
+            val isCorrupted = !currentFile.exists() || currentFile.length() == 0L
+            if (isCorrupted && backupFile.exists()) {
+                 Log.w("DailyNote", "Restoring from backup due to corruption.")
+                 backupFile.copyTo(currentFile, overwrite = true)
+                 
+                 // Also ensure DB is aware of restoration?
+                 // Ideally we assume File Watcher or next load will pick it up.
+                 // For now, let's allow "Physical Restore" to be the safety net.
+                 // Ideally we should tell FileRepository about it, but this is a panic save.
+            }
+            throw e
+        }
+    }
 }

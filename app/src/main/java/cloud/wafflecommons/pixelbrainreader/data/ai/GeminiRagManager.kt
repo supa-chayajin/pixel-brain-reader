@@ -16,7 +16,7 @@ class GeminiRagManager @Inject constructor(
 ) {
     
     private suspend fun getModel(): GenerativeModel {
-        val modelName = userPrefs.aiModel.first()
+        val modelName = userPrefs.llmModelName.first()
         return GenerativeModel(
             modelName = modelName,
             apiKey = BuildConfig.geminiApiKey
@@ -59,17 +59,53 @@ class GeminiRagManager @Inject constructor(
         }
     }
 
-    // Legacy/Pivot Placeholder
-    suspend fun askQuestion(query: String): Flow<String> {
-        // ... kept for compatibility but practically replaced by Scribe/FolderInsight
-        val relevantContexts = vectorSearchEngine.findRelevantContext(query)
-        val contextBlock = relevantContexts.joinToString("\n\n")
-        val finalPrompt = "Context:\n$contextBlock\n\nQuestion:\n$query\nAnswer based on context."
+    // Legacy RAG method replaced by generateResponse
+
+
+    // Expose retrieving sources for UI
+    suspend fun findSources(query: String): List<String> {
+        return vectorSearchEngine.search(query).map { it.fileId }.distinct()
+    }
+
+    /**
+     * Gemini Nano (Edge) Generation with RAG support.
+     * Function: generateResponse
+     */
+    suspend fun generateResponse(userMessage: String, useRAG: Boolean = true): Flow<String> {
+        var prompt = userMessage
         
-        val stream = getModel().generateContentStream(finalPrompt).map { 
-            it.text ?: ""
+        if (useRAG) {
+            // 1. Retrieve Context
+            val relevantDocs = vectorSearchEngine.search(userMessage, limit = 3)
+            
+            if (relevantDocs.isNotEmpty()) {
+                val contextBlock = relevantDocs.joinToString("\n\n") { 
+                    it.content
+                }
+
+                // 2. Build RAG Prompt
+                prompt = """
+                    CONTEXT:
+                    $contextBlock
+                    
+                    USER QUESTION: $userMessage
+                    
+                    INSTRUCTION: Answer using ONLY the context above. If the answer is not there, say you don't know.
+                """.trimIndent()
+            }
         }
-        return stream
+
+        // 3. Generate Stream (Simulating Nano via GenerativeModel for now, 
+        // as direct aicore dependency requires specific setup not present in build.gradle)
+        return try {
+            // 3. Generate Stream (Simulating Nano via GenerativeModel for now)
+             getModel().generateContentStream(prompt).map { 
+                it.text ?: ""
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("Cortex", "Gemini Generation Failed", e)
+             kotlinx.coroutines.flow.flowOf("Cortex Error: Gemini Nano n'est pas encore prêt. Laissez le téléphone en charge sur Wi-Fi. Details: ${e.message}")
+        }
     }
 }
 

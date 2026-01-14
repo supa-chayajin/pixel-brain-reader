@@ -52,10 +52,11 @@ class DailyBriefingWorker @AssistedInject constructor(
         
         val sparkline = moodRepository.getWeeklySparkline()
         val quote = briefingGenerator.getDailyQuote()
-        val news = newsRepository.getTopHeadlines()
+        // [UPDATED] Use new repository method returning formatted strings
+        val news = newsRepository.getNews()
 
         // 4. Format Markdown
-        val newsMd = news.joinToString("\n    * ") { "[${it.title}](${it.url})" }
+        val newsMd = news.joinToString("\n    * ") { it }
         val briefingMd = """
             
             ## 🌅 Morning Briefing

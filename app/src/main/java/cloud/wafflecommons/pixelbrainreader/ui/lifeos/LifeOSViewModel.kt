@@ -29,6 +29,7 @@ data class HabitWithStats(
 data class LifeOSUiState(
     val habits: List<HabitConfig> = emptyList(),
     val habitsWithStats: List<HabitWithStats> = emptyList(),
+    val groupedHabits: Map<String, List<HabitWithStats>> = emptyMap(), // [NEW] Grouped by Category
     val logs: Map<String, List<HabitLogEntry>> = emptyMap(),
     val scopedTasks: List<Task> = emptyList(),
     val selectedDate: LocalDate = LocalDate.now(),
@@ -38,8 +39,18 @@ data class LifeOSUiState(
 @HiltViewModel
 class LifeOSViewModel @Inject constructor(
     private val habitRepository: HabitRepository,
-    private val taskRepository: TaskRepository
+    private val taskRepository: TaskRepository,
+    private val dataRefreshBus: cloud.wafflecommons.pixelbrainreader.data.utils.DataRefreshBus
 ) : ViewModel() {
+
+    init {
+        viewModelScope.launch {
+            dataRefreshBus.refreshEvents.collect {
+                // Reload on Sync success
+                loadData(_uiState.value.selectedDate)
+            }
+        }
+    }
 
     private val _uiState = MutableStateFlow(LifeOSUiState())
     val uiState: StateFlow<LifeOSUiState> = _uiState.asStateFlow()
@@ -51,10 +62,28 @@ class LifeOSViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, selectedDate = date)
             
-            val habits = habitRepository.getHabitConfigs()
+            val allHabits = habitRepository.getHabitConfigs()
             val logs = habitRepository.getLogsForYear(date.year)
             
             val scopedTasks = taskRepository.getScopedTasks(date)
+
+            // [NEW] 1. Filter by Frequency (Day of Week)
+            // Use Strict Mapping to ensure config.json "MON", "TUE" matches LocalDate.DayOfWeek
+            val dayMap = mapOf(
+                java.time.DayOfWeek.MONDAY to "MON",
+                java.time.DayOfWeek.TUESDAY to "TUE",
+                java.time.DayOfWeek.WEDNESDAY to "WED",
+                java.time.DayOfWeek.THURSDAY to "THU",
+                java.time.DayOfWeek.FRIDAY to "FRI",
+                java.time.DayOfWeek.SATURDAY to "SAT",
+                java.time.DayOfWeek.SUNDAY to "SUN"
+            )
+            val todayKey = dayMap[date.dayOfWeek] ?: "MON"
+            
+            val habits = allHabits.filter { habit -> 
+                val cleanFreq = habit.frequency.map { it.trim().uppercase() }
+                cleanFreq.isEmpty() || cleanFreq.contains(todayKey)
+            }
             
             // Calculate Stats
             val habitsWithStats = habits.map { habit ->
@@ -89,10 +118,31 @@ class LifeOSViewModel @Inject constructor(
                 
                 HabitWithStats(habit, isCompletedToday, currentValue, streak, history)
             }
+
+            // [NEW] 2. Group by RPG Tag
+            // Extract tag from description like (+VIG), (+MND). Default to "General"
+            val groupedHabits = habitsWithStats.groupBy { habitStat ->
+                val regex = Regex("\\(\\+([A-Z]{3})\\)")
+                val match = regex.find(habitStat.config.description)
+                val tag = match?.groupValues?.get(1) // "VIG"
+                
+                when (tag) {
+                    "VIG" -> "Vigor (Physical)"
+                    "MND" -> "Mind (Mental)"
+                    "INT" -> "Intellect (Learning)"
+                    "END" -> "Endurance (Resilience)"
+                    "FTH" -> "Faith (Spiritual)"
+                    "SOC" -> "Social (Connection)"
+                    "CRE" -> "Create (Expression)" // Added generic common RPG stats
+                    null -> "General"
+                    else -> "$tag" 
+                }
+            }
             
             _uiState.value = _uiState.value.copy(
                 habits = habits,
                 habitsWithStats = habitsWithStats,
+                groupedHabits = groupedHabits,
                 logs = logs,
                 scopedTasks = scopedTasks,
                 isLoading = false

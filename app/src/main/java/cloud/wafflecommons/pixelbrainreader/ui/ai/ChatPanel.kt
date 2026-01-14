@@ -7,49 +7,45 @@ import android.speech.RecognizerIntent
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.TextRange
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Send
-import androidx.compose.material.icons.outlined.Code
-import androidx.compose.material.icons.outlined.Description
-import androidx.compose.material.icons.outlined.Event
-import androidx.compose.material.icons.outlined.Psychology
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.Psychology
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
-
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
-import cloud.wafflecommons.pixelbrainreader.data.ai.ScribePersona
+import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -61,22 +57,32 @@ fun ChatPanel(
     var textState by remember { mutableStateOf(TextFieldValue("")) }
     val listState = rememberLazyListState()
 
-    // Auto-scroll logic (Optimized)
+    // Auto-scroll logic
     LaunchedEffect(viewModel.messages.size) {
         if (viewModel.messages.isNotEmpty()) {
             listState.animateScrollToItem(viewModel.messages.lastIndex)
         }
     }
 
+    val modeColor by animateColorAsState(
+        targetValue = if (viewModel.currentMode == ChatMode.ORACLE) Color(0xFF9C27B0) else Color(0xFFFF9800), // Purple vs Orange
+        label = "modeColor"
+    )
+
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Chat with Gemini", fontWeight = FontWeight.Bold) },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface
+            Column(modifier = Modifier.background(MaterialTheme.colorScheme.surface)) {
+                cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(title = "Neural Interface")
+                
+                // --- MODE SWITCHER ---
+                BrainModeSwitch(
+                    currentMode = viewModel.currentMode,
+                    onModeChanged = { viewModel.toggleMode() },
+                    activeColor = modeColor
                 )
-            )
+                Spacer(modifier = Modifier.height(8.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            }
         },
         containerColor = Color.Transparent,
         contentWindowInsets = ScaffoldDefaults.contentWindowInsets.exclude(WindowInsets.ime),
@@ -87,158 +93,222 @@ fun ChatPanel(
                 .padding(innerPadding)
                 .imePadding()
         ) {
-            // 1. Header (Chips) - Fixed at Top
-            Surface(
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
-                modifier = Modifier.fillMaxWidth().zIndex(1f)
-            ) {
-                ChatPersonaSelector(
-                    currentPersona = viewModel.currentPersona,
-                    onPersonaSelected = { viewModel.switchPersona(it) }
-                )
-            }
-
-            // 2. Chat Content & Input
+            // Chat Content
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                Column(modifier = Modifier.fillMaxSize()) {
-                    Box(modifier = Modifier.weight(1f)) {
-                        if (viewModel.messages.isEmpty()) {
-                            EmptyStatePlaceholder()
-                        } else {
-                            LazyColumn(
-                                state = listState,
-                                modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
-                                contentPadding = PaddingValues(top = 16.dp, bottom = 24.dp),
-                                verticalArrangement = Arrangement.spacedBy(24.dp)
-                            ) {
-                                items(viewModel.messages) { msg ->
-                                    ChatBubble(
-                                        message = msg,
-                                        onInsert = if (!msg.isUser) onInsertContent else null
-                                    )
-                                }
-                            }
+                if (viewModel.messages.isEmpty()) {
+                    EmptyStatePlaceholder(mode = viewModel.currentMode)
+                } else {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+                        contentPadding = PaddingValues(top = 16.dp, bottom = 24.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        items(viewModel.messages) { msg ->
+                            ChatBubble(
+                                message = msg,
+                                onInsert = if (!msg.isUser) onInsertContent else null,
+                                accentColor = modeColor
+                            )
                         }
                     }
+                }
+            }
 
-                    // Input Bar
-                    StealthInputBar(
-                        textState = textState,
-                        onTextChange = { textState = it },
-                        onSend = {
-                            if (textState.text.isNotBlank()) {
-                                viewModel.sendMessage(textState.text)
-                                textState = TextFieldValue("")
-                            }
-                        },
-                        isLoading = viewModel.isLoading,
-                        hint = "Describe what to write..."
+            // Input Area
+            Column {
+                // Loading Indicator Text
+                AnimatedVisibility(visible = viewModel.loadingStage != null) {
+                    Text(
+                        text = viewModel.loadingStage ?: "",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = modeColor,
+                        modifier = Modifier.padding(start = 24.dp, bottom = 4.dp)
                     )
                 }
+
+                StealthInputBar(
+                    textState = textState,
+                    onTextChange = { textState = it },
+                    onSend = {
+                        if (textState.text.isNotBlank()) {
+                            viewModel.sendMessage(textState.text)
+                            textState = TextFieldValue("")
+                        }
+                    },
+                    isLoading = viewModel.loadingStage != null,
+                    hint = if (viewModel.currentMode == ChatMode.ORACLE) "Ask your Second Brain..." else "Spark a creative idea...",
+                    accentColor = modeColor
+                )
             }
         }
     }
 }
 
-// --- COMPONENTS CUSTOM ---
+// --- COMPONENTS ---
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChatPersonaSelector(
-    currentPersona: ScribePersona,
-    onPersonaSelected: (ScribePersona) -> Unit
+fun BrainModeSwitch(
+    currentMode: ChatMode,
+    onModeChanged: () -> Unit,
+    activeColor: Color
 ) {
-    val personas = ScribePersona.entries
-    val selectedIndex = personas.indexOf(currentPersona)
-
-    Box(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 12.dp),
-        contentAlignment = Alignment.Center
+            .padding(horizontal = 24.dp, vertical = 8.dp)
+            .height(48.dp)
+            .background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape)
+            .padding(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        // STYLE "FLOATING SLIDING PILL" (Custom Implementation)
-        // Contrairement au SegmentedButton standard, cela permet une vraie animation de glissement
-
-        Surface(
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        // CORTEX OPTION
+        Box(
             modifier = Modifier
-                .height(64.dp)
-                .widthIn(max = 450.dp)
-                .fillMaxWidth(0.95f) // Prend 95% de la largeur dispo jusqu'à 450dp
+                .weight(1f)
+                .fillMaxHeight()
+                .clip(CircleShape)
+                .background(if (currentMode == ChatMode.ORACLE) activeColor else Color.Transparent)
+                .clickable { if (currentMode != ChatMode.ORACLE) onModeChanged() },
+            contentAlignment = Alignment.Center
         ) {
-            BoxWithConstraints(
-                modifier = Modifier.fillMaxSize()
-            ) {
-                // Calcul dynamique de la largeur d'un segment
-                val segmentWidth = maxWidth / personas.size
-
-                // ANIMATION: Déplacement fluide du fond (indicateur)
-                val indicatorOffset by animateDpAsState(
-                    targetValue = segmentWidth * selectedIndex,
-                    animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing),
-                    label = "indicatorOffset"
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Rounded.Psychology, 
+                    contentDescription = null, 
+                    tint = if (currentMode == ChatMode.ORACLE) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
                 )
-
-                // 1. L'Indicateur Glissant (Le fond de l'élément actif)
-                Box(
-                    modifier = Modifier
-                        .offset(x = indicatorOffset)
-                        .width(segmentWidth)
-                        .fillMaxHeight()
-                        .padding(8.dp) // Padding pour l'effet "flottant" à l'intérieur de la piste
-                        .background(MaterialTheme.colorScheme.secondaryContainer, CircleShape)
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "Cortex (RAG)",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = if (currentMode == ChatMode.ORACLE) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+        }
 
-                // 2. Les Labels (Icônes + Texte) par dessus
-                Row(modifier = Modifier.fillMaxSize()) {
-                    personas.forEach { persona ->
-                        val isSelected = currentPersona == persona
+        // SPARK OPTION
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                .clip(CircleShape)
+                .background(if (currentMode == ChatMode.SCRIBE) activeColor else Color.Transparent)
+                .clickable { if (currentMode != ChatMode.SCRIBE) onModeChanged() },
+            contentAlignment = Alignment.Center
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Rounded.AutoAwesome, 
+                    contentDescription = null, 
+                    tint = if (currentMode == ChatMode.SCRIBE) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "Spark (Creative)",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = if (currentMode == ChatMode.SCRIBE) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
 
-                        // Animation de la couleur du texte/icône pour le contraste
-                        val contentColor by animateColorAsState(
-                            targetValue = if (isSelected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                            label = "contentColor"
-                        )
+@Composable
+fun ChatBubble(
+    message: ChatMessage, 
+    onInsert: ((String) -> Unit)?,
+    accentColor: Color
+) {
+    val isUser = message.isUser
 
-                        val label = persona.name.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() }
-                        val icon = when (persona) {
-                            ScribePersona.TECH_WRITER -> Icons.Outlined.Description
-                            ScribePersona.CODER -> Icons.Outlined.Code
-                            ScribePersona.PLANNER -> Icons.Outlined.Event
-                        }
+    val bubbleShape = if (isUser) {
+        RoundedCornerShape(20.dp, 20.dp, 4.dp, 20.dp)
+    } else {
+        RoundedCornerShape(20.dp, 20.dp, 20.dp, 4.dp)
+    }
 
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight()
-                                .clip(CircleShape) // Ripple rond lors du clic
-                                .clickable { onPersonaSelected(persona) },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center
-                            ) {
-                                Icon(
-                                    imageVector = icon,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp),
-                                    tint = contentColor
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = label,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    color = contentColor
-                                )
-                            }
+    val containerColor = if (isUser) {
+        MaterialTheme.colorScheme.primaryContainer
+    } else {
+        MaterialTheme.colorScheme.surfaceContainerHigh
+    }
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
+    ) {
+        Surface(
+            shape = bubbleShape,
+            color = containerColor,
+            modifier = Modifier.widthIn(max = 340.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                
+                // Message Content
+                Text(
+                    text = message.content,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                
+                // SOURCES SECTION (RAG CITATIONS)
+                if (!isUser && message.sources.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f))
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    Text(
+                        "Sources:",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = accentColor,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    
+                    @OptIn(ExperimentalLayoutApi::class)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        message.sources.forEach { source ->
+                            AssistChip(
+                                onClick = { /* TODO: Navigate to File */ },
+                                label = { 
+                                    Text(
+                                        source.substringAfterLast("/"), 
+                                        style = MaterialTheme.typography.labelSmall,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    ) 
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Outlined.Description,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                },
+                                colors = AssistChipDefaults.assistChipColors(
+                                    containerColor = MaterialTheme.colorScheme.surface,
+                                    labelColor = MaterialTheme.colorScheme.onSurface
+                                ),
+                                border = AssistChipDefaults.assistChipBorder(true)
+                            )
                         }
                     }
                 }
+            }
+        }
+
+        if (onInsert != null && !message.isStreaming && message.content.isNotBlank()) {
+            Spacer(Modifier.height(8.dp))
+            TextButton(onClick = { onInsert(message.content) }) {
+                Icon(Icons.Outlined.SaveAlt, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("Save to Inbox")
             }
         }
     }
@@ -250,7 +320,8 @@ fun StealthInputBar(
     onTextChange: (TextFieldValue) -> Unit,
     onSend: () -> Unit,
     isLoading: Boolean,
-    hint: String
+    hint: String,
+    accentColor: Color
 ) {
     val context = LocalContext.current
     var lastClickTime by remember { mutableLongStateOf(0L) }
@@ -264,12 +335,7 @@ fun StealthInputBar(
                 result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
             if (!spokenText.isNullOrBlank()) {
                 val newText = if (textState.text.isBlank()) spokenText else "${textState.text} $spokenText"
-                onTextChange(
-                    TextFieldValue(
-                        text = newText,
-                        selection = TextRange(newText.length)
-                    )
-                )
+                onTextChange(TextFieldValue(newText, TextRange(newText.length)))
             }
         }
     }
@@ -278,17 +344,17 @@ fun StealthInputBar(
         modifier = Modifier
             .fillMaxWidth()
             .padding(16.dp)
-            .imePadding()
             .navigationBarsPadding(),
         contentAlignment = Alignment.Center
     ) {
         Surface(
-            modifier = Modifier.widthIn(max = 640.dp).fillMaxWidth(),
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(28.dp),
+            color = MaterialTheme.colorScheme.surfaceContainer,
+            border = BorderStroke(1.dp, if (textState.text.isNotEmpty()) accentColor else Color.Transparent)
         ) {
             Row(
-                modifier = Modifier.padding(start = 20.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
+                modifier = Modifier.padding(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(modifier = Modifier.weight(1f)) {
@@ -296,85 +362,48 @@ fun StealthInputBar(
                         Text(
                             text = hint,
                             style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                         )
                     }
                     BasicTextField(
                         value = textState,
                         onValueChange = onTextChange,
                         textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
-                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                        cursorBrush = SolidColor(accentColor),
                         maxLines = 4,
                         modifier = Modifier.fillMaxWidth(),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                        keyboardActions = KeyboardActions(
-                            onSend = {
-                                val currentTime = System.currentTimeMillis()
-                                if (isEnabled && (currentTime - lastClickTime > 1000L)) {
-                                    lastClickTime = currentTime
-                                    onSend()
-                                }
-                            }
-                        )
+                        keyboardActions = KeyboardActions(onSend = { if (isEnabled) onSend() })
                     )
                 }
 
-                Spacer(modifier = Modifier.width(12.dp))
-
-                val btnColor by animateColorAsState(
-                    if (isEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest,
-                    label = "btnColor"
-                )
-
-                val showMic = textState.text.isBlank()
+                Spacer(modifier = Modifier.width(8.dp))
 
                 IconButton(
                     onClick = {
-                        if (showMic) {
-                            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                                putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak now...")
-                            }
-                            try {
+                        if (textState.text.isBlank()) {
+                             try {
+                                val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                                }
                                 speechLauncher.launch(intent)
-                            } catch (e: ActivityNotFoundException) {
-                                Toast.makeText(context, "Speech recognition not available", Toast.LENGTH_SHORT).show()
-                            }
+                            } catch (e: ActivityNotFoundException) { }
                         } else {
-                            val currentTime = System.currentTimeMillis()
-                            if (currentTime - lastClickTime > 1000L) {
-                                lastClickTime = currentTime
-                                onSend()
-                            }
+                            onSend()
                         }
                     },
-                    enabled = true,
                     modifier = Modifier
                         .size(44.dp)
-                        .background(btnColor, CircleShape)
+                        .background(if (isEnabled) accentColor else MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape)
                 ) {
                     if (isLoading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            strokeWidth = 2.dp
-                        )
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
                     } else {
-                        AnimatedContent(targetState = showMic, label = "iconSwitch") { isMic ->
-                            if (isMic) {
-                                Icon(
-                                    Icons.Rounded.Mic,
-                                    contentDescription = "Voice Input",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            } else {
-                                Icon(
-                                    Icons.AutoMirrored.Rounded.Send,
-                                    contentDescription = "Send",
-                                    tint = MaterialTheme.colorScheme.onPrimary
-                                )
-                            }
-                        }
+                         Icon(
+                            if (textState.text.isBlank()) Icons.Rounded.Mic else Icons.AutoMirrored.Rounded.Send,
+                            contentDescription = null,
+                            tint = if (isEnabled) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
@@ -383,77 +412,24 @@ fun StealthInputBar(
 }
 
 @Composable
-fun EmptyStatePlaceholder() {
+fun EmptyStatePlaceholder(mode: ChatMode) {
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(
-                imageVector = Icons.Outlined.Psychology,
+                imageVector = if (mode == ChatMode.ORACLE) Icons.Rounded.Psychology else Icons.Rounded.AutoAwesome,
                 contentDescription = null,
-                modifier = Modifier.size(100.dp),
+                modifier = Modifier.size(80.dp),
                 tint = MaterialTheme.colorScheme.surfaceContainerHighest
             )
             Spacer(modifier = Modifier.height(16.dp))
             Text(
-                "Pixel Brain is ready",
+                if (mode == ChatMode.ORACLE) "Accessing Cortex..." else "Igniting Spark...",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-        }
-    }
-}
-
-@Composable
-fun ChatBubble(message: ChatMessage, onInsert: ((String) -> Unit)?) {
-    val isUser = message.isUser
-
-    val bubbleShape = if (isUser) {
-        RoundedCornerShape(24.dp, 24.dp, 4.dp, 24.dp)
-    } else {
-        RoundedCornerShape(24.dp, 24.dp, 24.dp, 4.dp)
-    }
-
-    val containerColor = if (isUser) {
-        MaterialTheme.colorScheme.primaryContainer
-    } else {
-        MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f)
-    }
-
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
-    ) {
-        Surface(
-            shape = bubbleShape,
-            color = containerColor,
-            modifier = Modifier.widthIn(max = 340.dp)
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                if (!isUser) {
-                    Spacer(Modifier.height(8.dp))
-                }
-
-                Text(
-                    text = message.content,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            }
-        }
-
-        if (onInsert != null && !message.isStreaming && message.content.isNotBlank()) {
-            Spacer(Modifier.height(12.dp))
-            FilledTonalButton(
-                onClick = { onInsert(message.content) },
-                modifier = Modifier.height(48.dp),
-                enabled = true,
-                contentPadding = PaddingValues(horizontal = 24.dp),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Text("Save into Inbox", style = MaterialTheme.typography.labelMedium)
-            }
         }
     }
 }

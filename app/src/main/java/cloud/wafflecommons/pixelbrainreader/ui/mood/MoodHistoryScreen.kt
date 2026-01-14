@@ -11,6 +11,9 @@ import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.ChevronLeft
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material3.*
+import androidx.compose.material3.TopAppBarDefaults // Added
+import androidx.compose.material3.ExperimentalMaterial3Api // Added
+import androidx.compose.ui.input.nestedscroll.nestedScroll // Added
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,25 +45,14 @@ fun MoodHistoryScreen(
         }
     }
 
+    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
+
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Mood Tracker", fontWeight = FontWeight.Bold) },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface
-                )
+            cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
+                title = "Mood Tracker",
+                scrollBehavior = scrollBehavior
             )
-        },
-        floatingActionButton = {
-            LargeFloatingActionButton(
-                onClick = { showSheet = true },
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                shape = CircleShape
-            ) {
-                Icon(Icons.Outlined.Add, contentDescription = "Add Mood", modifier = Modifier.size(32.dp))
-            }
         }
     ) { padding ->
         Column(

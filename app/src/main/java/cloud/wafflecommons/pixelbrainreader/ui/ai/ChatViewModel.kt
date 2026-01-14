@@ -17,10 +17,12 @@ data class ChatMessage(
     val id: String = java.util.UUID.randomUUID().toString(),
     val content: String,
     val isUser: Boolean,
-    val isStreaming: Boolean = false
+    val isStreaming: Boolean = false,
+    val sources: List<String> = emptyList() // Renamed to 'sources' per request
 )
 
-// ChatMode Enum Removed (Scribe Only)
+// Modes: Scribe (Persona-based) vs Oracle (RAG-based)
+enum class ChatMode { SCRIBE, ORACLE }
 
 @HiltViewModel
 class ChatViewModel @Inject constructor(
@@ -29,18 +31,22 @@ class ChatViewModel @Inject constructor(
 ) : ViewModel() {
 
     // UI State
-    // We use mutableStateOf for Compose observability
     val messages = mutableStateListOf<ChatMessage>()
-    // Mode is now Always Scribe
-    // var currentMode by mutableStateOf(ChatMode.SCRIBE) 
+    var currentMode by mutableStateOf(ChatMode.ORACLE) // Default to RAG for V4.0
     
     var currentPersona by mutableStateOf(ScribePersona.TECH_WRITER)
         private set
-    var isLoading by mutableStateOf(false)
+        
+    // Granular Loading State (null = idle)
+    var loadingStage by mutableStateOf<String?>(null)
         private set
 
     fun switchPersona(persona: ScribePersona) {
         currentPersona = persona
+    }
+    
+    fun toggleMode() {
+        currentMode = if (currentMode == ChatMode.SCRIBE) ChatMode.ORACLE else ChatMode.SCRIBE
     }
 
     fun sendMessage(query: String) {
@@ -50,47 +56,67 @@ class ChatViewModel @Inject constructor(
         messages.add(ChatMessage(content = query, isUser = true))
         
         // Add Placeholder Bot Message
-        isLoading = true
         val botMessageId = java.util.UUID.randomUUID().toString()
-        messages.add(ChatMessage(id = botMessageId, content = "Thinking...", isUser = false, isStreaming = true))
+        messages.add(ChatMessage(id = botMessageId, content = "", isUser = false, isStreaming = true))
         
         viewModelScope.launch {
             try {
-                // Always use Scribe Manager
-                val flow = scribeManager.generateScribeContent(query, currentPersona)
+                // 1. Fetch Sources if in Oracle Mode
+                var sources: List<String> = emptyList()
+                
+                if (currentMode == ChatMode.ORACLE) {
+                    loadingStage = "🔎 Searching your Second Brain..."
+                    sources = ragManager.findSources(query)
+                    
+                    if (sources.isNotEmpty()) {
+                        loadingStage = "🧠 Analyzing ${sources.size} notes..."
+                    } else {
+                        loadingStage = "✨ No relevant notes found. Switching to creative mode..."
+                    }
+                } else {
+                    loadingStage = "✨ Sparking creativity..."
+                }
+
+                // 2. Select Flow based on Mode
+                val flow = if (currentMode == ChatMode.ORACLE) {
+                    ragManager.generateResponse(query, useRAG = true)
+                } else {
+                    scribeManager.generateScribeContent(query, currentPersona)
+                }
+                
+                // Start Generation
+                loadingStage = "⚡ Generating answer..."
 
                 val sb = StringBuilder()
                 var lastUpdate = 0L
+                
                 flow.collect { token ->
                     sb.append(token)
                     val currentTime = System.currentTimeMillis()
-                    // Throttle updates to ~16ms (60fps) to prevent main thread starvation (ANR Prevention)
                     if (currentTime - lastUpdate > 16) {
                         lastUpdate = currentTime
-                        val index = messages.indexOfFirst { it.id == botMessageId }
-                        if (index != -1) {
-                            messages[index] = messages[index].copy(content = sb.toString())
-                        }
+                        updateMessage(botMessageId, sb.toString(), sources)
                     }
                 }
-                // Ensure Final Update
-                val index = messages.indexOfFirst { it.id == botMessageId }
-                if (index != -1) {
-                    messages[index] = messages[index].copy(content = sb.toString())
-                }
+                // Final Update
+                updateMessage(botMessageId, sb.toString(), sources)
+                
             } catch (e: Exception) {
-                // Handle Error
-                val index = messages.indexOfFirst { it.id == botMessageId }
-                if (index != -1) {
-                    messages[index] = messages[index].copy(content = "Error: ${e.message}")
-                }
+                updateMessage(botMessageId, "Error: ${e.message}", emptyList())
             } finally {
-                isLoading = false
-                 val index = messages.indexOfFirst { it.id == botMessageId }
+                loadingStage = null
+                val index = messages.indexOfFirst { it.id == botMessageId }
                 if (index != -1) {
                     messages[index] = messages[index].copy(isStreaming = false)
                 }
             }
+        }
+    }
+    
+    private fun updateMessage(id: String, content: String, sources: List<String>) {
+        val index = messages.indexOfFirst { it.id == id }
+        if (index != -1) {
+            messages[index] = messages[index].copy(content = content, sources = sources)
         }
     }
     
