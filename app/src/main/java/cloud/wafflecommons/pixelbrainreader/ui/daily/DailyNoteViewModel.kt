@@ -44,13 +44,22 @@ data class DailyNoteState(
     val briefing: cloud.wafflecommons.pixelbrainreader.data.model.BriefingData? = null,
     val isLoading: Boolean = true,
     // Morning Briefing 2.0 (Cockpit)
-    val briefingState: MorningBriefingUiState = MorningBriefingUiState()
+    val briefingState: MorningBriefingUiState = MorningBriefingUiState(),
+    val topDailyTags: List<String> = emptyList() // [NEW] Top 5 daily tags
+)
+
+data class DailyMoodPoint(
+    val date: LocalDate,
+    val score: Float, // 0 if missing/skipped
+    val emoji: String
 )
 
 data class MorningBriefingUiState(
     val weather: WeatherData? = null,
-    val moodTrend: List<Float> = emptyList(), // 0.0 to 1.0 Normalized Score
+    val moodTrend: List<DailyMoodPoint> = emptyList(), // [UPDATED] Richer data
+    val topTags: List<String> = emptyList(),
     val quote: String = "",
+    val quoteAuthor: String = "",
     val news: List<String> = emptyList(),
     val isLoading: Boolean = true
 )
@@ -59,12 +68,14 @@ data class MorningBriefingUiState(
 @HiltViewModel
 class DailyNoteViewModel @Inject constructor(
     private val moodRepository: MoodRepository,
+    private val newsRepository: cloud.wafflecommons.pixelbrainreader.data.repository.NewsRepository,
     private val fileRepository: FileRepository,
     private val weatherRepository: WeatherRepository,
     private val secretManager: SecretManager,
     private val dailyNoteRepository: cloud.wafflecommons.pixelbrainreader.data.repository.DailyNoteRepository,
     private val templateRepository: cloud.wafflecommons.pixelbrainreader.data.repository.TemplateRepository,
-    private val taskRepository: cloud.wafflecommons.pixelbrainreader.data.repository.TaskRepository
+    private val taskRepository: cloud.wafflecommons.pixelbrainreader.data.repository.TaskRepository,
+    private val dataRefreshBus: cloud.wafflecommons.pixelbrainreader.data.utils.DataRefreshBus
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DailyNoteState())
@@ -204,6 +215,16 @@ class DailyNoteViewModel @Inject constructor(
                     
                     val briefingState = loadMorningBriefingData(date, weather)
 
+                    // Calculate Top 5 Daily Tags (from mood entries of the day)
+                    val dailyTags = mood?.entries?.flatMap { it.activities ?: emptyList() }
+                        ?.groupingBy { it }
+                        ?.eachCount()
+                        ?.entries
+                        ?.sortedByDescending { it.value }
+                        ?.take(5)
+                        ?.map { it.key }
+                        ?: emptyList()
+
                      _uiState.value.copy(
                         date = date,
                         moodData = mood,
@@ -213,14 +234,27 @@ class DailyNoteViewModel @Inject constructor(
                         timelineEvents = timelineEvents,
                         displayIntro = intro,
                         briefingState = briefingState,
+                        topDailyTags = dailyTags, // [UPDATED]
                         isLoading = false
                     )
                 } else {
                      val briefingState = loadMorningBriefingData(date, null)
+                     
+                     // Calculate Top 5 Daily Tags even if no content file (but mood exists)
+                    val dailyTags = mood?.entries?.flatMap { it.activities ?: emptyList() }
+                        ?.groupingBy { it }
+                        ?.eachCount()
+                        ?.entries
+                        ?.sortedByDescending { it.value }
+                        ?.take(5)
+                        ?.map { it.key }
+                        ?: emptyList()
+
                      _uiState.value.copy(
                         date = date,
                         moodData = mood,
                         briefingState = briefingState,
+                        topDailyTags = dailyTags, // [UPDATED]
                         isLoading = false
                     )
                 }
@@ -234,38 +268,91 @@ class DailyNoteViewModel @Inject constructor(
     }
 
     private suspend fun loadMorningBriefingData(date: LocalDate, existingWeather: WeatherData?): MorningBriefingUiState {
-        // 1. Weather (Graceful Fallback)
+        // 1. Weather (Safe Call)
         val finalWeather = existingWeather ?: runCatching {
              val isToday = date == LocalDate.now()
              if (isToday) weatherRepository.getCurrentWeatherAndLocation() else weatherRepository.getHistoricalWeather(date)
         }.getOrNull()
 
-        // 2. Trend (Last 7 Days)
-        val trend = runCatching {
-            (0..6).map { offset ->
-                val d = date.minusDays(offset.toLong())
-                // Use getMood safely
-                val entry = moodRepository.getMood(d) 
-                // Normalize 1-5 score to 0.0-1.0 float for sparkline
-                // Assuming max score is 5 based on "🤩" range
-                 (entry?.score ?: 0) / 5f 
-            }.reversed()
-        }.getOrElse { 
-            emptyList() 
-        }
+        // 2. Trend & Top Tags (Last 7 Days)
+        // 2. Trend & Top Tags (Last 7 Days)
+        val recentMoods = mutableListOf<DailyMoodPoint>()
+        val recentTags = mutableListOf<String>()
 
-        // 3. Mock Content (Quote/News - Resilient)
-        val quote = "The best way to predict the future is to create it."
-        val news = listOf(
-            "AI Model Breakthrough: Gemini 2.0 Released",
-            "Pixel 10 Rumors: Holographic Display?",
-            "Global Markets Rally on Tech Earnings"
+        runCatching {
+            // Iterate 6..0 (Past -> Today) to get correct order for Graph
+            (6 downTo 0).forEach { offset ->
+                val d = date.minusDays(offset.toLong())
+                // Use getDailyMood to get the precise average score (Double) from MoodSummary
+                val dailyData = moodRepository.getDailyMood(d).firstOrNull()
+                
+                if (dailyData != null && dailyData.entries.isNotEmpty()) {
+                    val score = dailyData.summary.averageScore.toFloat()
+                    val emoji = dailyData.summary.mainEmoji
+                    recentMoods.add(DailyMoodPoint(d, score, emoji))
+                    
+                    // Aggregate tags from ALL entries of the day
+                    val dayTags = dailyData.entries.flatMap { it.activities ?: emptyList() }
+                    recentTags.addAll(dayTags)
+                } else {
+                     // Crucial: Add fallback point to prevent graph gaps
+                     recentMoods.add(DailyMoodPoint(d, 0f, "∅"))
+                }
+            }
+        }
+        
+        // Process Tags: Freq Desc -> Top 5
+        val topTags = recentTags.groupingBy { it }
+            .eachCount()
+            .entries
+            .sortedByDescending { it.value }
+            .take(5)
+            .map { it.key }
+
+        // 3. Dynamic Content (Seeded Random)
+        val seed = date.toEpochDay()
+        val random = kotlin.random.Random(seed)
+        
+        // Real RSS News (Parallel Fetch)
+        // Only fetch if Today (or maybe cache? Repository handles fetching logic but here strict parallel per User Request)
+        // User Request: "Call newsRepository.getNews() within existing coroutine scope."
+        // Warning: This is a suspend function.
+        val news = try {
+            val fetched = newsRepository.getNews()
+            if (fetched.isNotEmpty()) fetched else listOf("Impossible de charger les flux", "Vérifiez votre connexion")
+        } catch (e: Exception) {
+            listOf("Impossible de charger les flux", "Erreur: ${e.message}")
+        }
+        
+        // Mock Quotes (Stoic & Tech Mix)
+        val allQuotes = listOf(
+            "The impediment to action advances action. What stands in the way becomes the way." to "Marcus Aurelius",
+            "First, solve the problem. Then, write the code." to "John Johnson",
+            "Simplicity is the soul of efficiency." to "Austin Freeman",
+            "We suffer more often in imagination than in reality." to "Seneca",
+            "He who has a why to live can bear almost any how." to "Friedrich Nietzsche",
+            "Waste no more time arguing about what a good man should be. Be one." to "Marcus Aurelius",
+            "It is not the man who has too little, but the man who craves more, that is poor." to "Seneca",
+            "Code is like humor. When you have to explain it, it’s bad." to "Cory House",
+            "Fix the cause, not the symptom." to "Steve Maguire",
+            "Make it work, make it right, make it fast." to "Kent Beck",
+            "What one programmer can do in one month, two programmers can do in two months." to "Fred Brooks",
+            "Simplicity is the ultimate sophistication." to "Leonardo da Vinci",
+            "Stay hungry, stay foolish." to "Steve Jobs",
+            "Move fast and break things." to "Mark Zuckerberg",
+            "Do. Or do not. There is no try." to "Yoda",
+            "Talk is cheap. Show me the code." to "Linus Torvalds",
+            "Truth can only be found in one place: the code." to "Robert C. Martin",
+            "Before software can be reusable it first has to be usable." to "Ralph Johnson"
         )
+        val (quoteText, quoteAuthor) = allQuotes.random(random)
 
         return MorningBriefingUiState(
             weather = finalWeather,
-            moodTrend = trend,
-            quote = quote,
+            moodTrend = recentMoods, 
+            topTags = topTags,
+            quote = quoteText,
+            quoteAuthor = quoteAuthor,
             news = news,
             isLoading = false
         )
@@ -468,6 +555,20 @@ class DailyNoteViewModel @Inject constructor(
     
     init {
         setupDebounce()
+        
+        // [NEW] Reactive Sync Refresh
+        viewModelScope.launch {
+            dataRefreshBus.refreshEvents.collect {
+                // Reload Daily Note on Sync success
+                // We use reloadDataOnly to avoid re-triggering expensive checks if possible, or full load?
+                // Full load is safer if we missed creation/check logic.
+                // But loadDailyNote is expensive.
+                // Let's use reloadDataOnly which fetches content + mood.
+                reloadDataOnly(_uiState.value.date)
+                // Also trigger refresh of morning briefing effectively done by reloadDataOnly -> loadMorningBriefingData
+            }
+        }
+
         // On init, we load today's note implicitly
         loadDailyNote(LocalDate.now())
         observeUpdates()

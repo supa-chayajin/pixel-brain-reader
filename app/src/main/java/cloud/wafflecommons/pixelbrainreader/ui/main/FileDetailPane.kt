@@ -46,6 +46,13 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -104,6 +111,10 @@ fun FileDetailPane(
     hasUnsavedChanges: Boolean,
     onWikiLinkClick: (String) -> Unit,
     onCreateNew: () -> Unit = {},
+    onSave: () -> Unit = {},
+    onToggleEdit: () -> Unit = {},
+    onDelete: () -> Unit = {},
+    onClose: () -> Unit = {},
     moodViewModel: MoodViewModel = hiltViewModel()
 ) {
     val shape = if (isExpandedScreen) {
@@ -162,7 +173,8 @@ fun FileDetailPane(
                 onRefresh = onRefresh,
                 modifier = Modifier.weight(1f)
             ) {
-                when {
+                Box(Modifier.fillMaxSize()) { // Wrap for FAB
+                    when {
                     isLoading && content == null -> {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             CircularProgressIndicator()
@@ -220,17 +232,21 @@ fun FileDetailPane(
                             ) {
                                 if (isDailyNote && moodState.moodData != null) {
                                     val data = moodState.moodData!!
-                                    val allActivities = remember(data) { 
+                                    val topDailyTags = remember(data) { 
                                         data.entries.flatMap { entry: MoodEntry -> entry.activities }
-                                            .distinct()
-                                            .sorted() 
+                                            .groupingBy { it }
+                                            .eachCount()
+                                            .entries
+                                            .sortedByDescending { it.value }
+                                            .take(5)
+                                            .map { it.key }
                                     }
                                     val lastUpdate = remember(data) { data.entries.firstOrNull()?.time }
 
                                     DailyNoteHeader(
                                         emoji = data.summary.mainEmoji,
                                         lastUpdate = lastUpdate,
-                                        activities = allActivities,
+                                        topDailyTags = topDailyTags,
                                         modifier = Modifier.padding(top = 16.dp)
                                     )
                                     HorizontalDivider(
@@ -255,8 +271,23 @@ fun FileDetailPane(
                         WelcomeState(onCreateNew = onCreateNew)
                     }
                 }
-            }
+
+                // Floating Save Action Button
+                if (isEditing) {
+                    FloatingActionButton(
+                        onClick = onSave,
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(24.dp),
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    ) {
+                        Icon(Icons.Default.Save, contentDescription = "Save Changes")
+                    }
+                }
+            } // End Box (FAB Wrapper)
         }
+    }
     }
 }
 

@@ -68,6 +68,10 @@ android {
     androidResources {
         noCompress += "tflite"
     }
+    // Fallback for asset compression
+    aaptOptions {
+        noCompress("tflite")
+    }
 }
 
 // CORRECTION DU CRASH "Duplicate Class"
@@ -149,6 +153,7 @@ dependencies {
     // AI Core & MediaPipe (V4.0: Neural Vault)
     implementation("com.google.ai.client.generativeai:generativeai:0.9.0")
     implementation("com.google.mediapipe:tasks-text:0.20230731")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-guava:1.10.2")
 
     // Home Screen Widget (Jetpack Glance)
     implementation("androidx.glance:glance-appwidget:1.1.0")
@@ -164,4 +169,7 @@ dependencies {
     debugImplementation(libs.androidx.ui.test.manifest)
     testImplementation("io.mockk:mockk:1.13.8")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
+
+    // RSS Parser
+    implementation("com.prof18.rssparser:rssparser:6.0.8")
 }

@@ -4,10 +4,13 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.BrightnessMedium
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.*
@@ -17,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import cloud.wafflecommons.pixelbrainreader.data.repository.AppThemeConfig
+import cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
 import androidx.hilt.navigation.compose.hiltViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -27,11 +31,15 @@ fun SettingsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val scrollState = rememberScrollState()
+    val snackbarHostState = remember { SnackbarHostState() }
 
+
+    
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            TopAppBar(
-                title = { Text("Settings") },
+            cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
+                title = "Settings",
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
@@ -58,44 +66,71 @@ fun SettingsScreen(
                 icon = Icons.Default.Psychology
             ) {
                 Text(
-                    "Select the AI model used for analysis and chat.",
+                    "Select the brain that powers your insights.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(16.dp))
                 
-                AiModel.entries.forEach { model ->
+                // Gemini 1.5 Pro
+                IntelligenceOption(
+                    title = "Gemini 1.5 Pro",
+                    subtitle = "Maximum reasoning. Requires Internet.",
+                    selected = (uiState.currentAiModel == UserPreferencesRepository.AiModel.GEMINI_PRO),
+                    onClick = { viewModel.updateAiModel(UserPreferencesRepository.AiModel.GEMINI_PRO) }
+                )
+
+                // Gemini 1.5 Flash
+                IntelligenceOption(
+                    title = "Gemini 1.5 Flash",
+                    subtitle = "Fast & Efficient. Requires Internet.",
+                    selected = (uiState.currentAiModel == UserPreferencesRepository.AiModel.GEMINI_FLASH),
+                    onClick = { viewModel.updateAiModel(UserPreferencesRepository.AiModel.GEMINI_FLASH) }
+                )
+
+                // Cortex (On-Device)
+                val isCortex = (uiState.currentAiModel == UserPreferencesRepository.AiModel.CORTEX_ON_DEVICE)
+                Card(
+                     colors = CardDefaults.cardColors(
+                         containerColor = if (isCortex) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface,
+                     ),
+                     border = if (isCortex) null else androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                     modifier = Modifier
+                         .fillMaxWidth()
+                         .padding(vertical = 4.dp)
+                         .clickable { viewModel.updateAiModel(UserPreferencesRepository.AiModel.CORTEX_ON_DEVICE) }
+                ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(56.dp)
-                            .padding(vertical = 4.dp),
+                            .padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         RadioButton(
-                            selected = (uiState.currentAiModel == model),
-                            onClick = { viewModel.updateAiModel(model) }
+                            selected = isCortex,
+                            onClick = { viewModel.updateAiModel(UserPreferencesRepository.AiModel.CORTEX_ON_DEVICE) }
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
                         Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Lock,
+                                    contentDescription = "Private",
+                                    modifier = Modifier.size(14.dp),
+                                    tint = if (isCortex) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "Cortex (On-Device)",
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = if (isCortex) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface
+                                )
+                            }
                             Text(
-                                text = model.displayName,
-                                style = MaterialTheme.typography.bodyLarge
+                                "Gemini Nano. 100% Private & Offline.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (isCortex) MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            if (model == AiModel.GEMINI_FLASH) {
-                                Text(
-                                    "Fast & Efficient (Default)",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            if (model == AiModel.GEMINI_PRO) {
-                                Text(
-                                    "Smarter (Paid)",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
                         }
                     }
                 }
@@ -125,46 +160,6 @@ fun SettingsScreen(
                             }
                         )
                     }
-                }
-            }
-
-
-
-
-            // 3. Repository Section
-            SettingsSection(
-                title = "Repository",
-                icon = Icons.Default.Storage
-            ) {
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            text = "Connected Account",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "${uiState.repoOwner ?: "Unknown"} / ${uiState.repoName ?: "Unknown"}",
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.height(16.dp))
-                Button(
-                    onClick = { viewModel.logout() },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                        contentColor = MaterialTheme.colorScheme.onErrorContainer
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Disconnect")
                 }
             }
             
@@ -208,5 +203,38 @@ fun SettingsSection(
         }
         Spacer(modifier = Modifier.height(16.dp))
         content()
+    }
+}
+
+@Composable
+fun IntelligenceOption(
+    title: String,
+    subtitle: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        RadioButton(
+            selected = selected,
+            onClick = onClick
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Column {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }

@@ -31,6 +31,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import cloud.wafflecommons.pixelbrainreader.data.model.HabitType
 // Removed incorrect import
 import cloud.wafflecommons.pixelbrainreader.data.model.TimelineEvent
@@ -147,49 +148,92 @@ fun HabitCard(
             }
         },
         colors = CardDefaults.cardColors(containerColor = containerColor),
-        modifier = Modifier.size(width = 160.dp, height = 180.dp)
+        modifier = Modifier.fillMaxWidth().wrapContentHeight() // [MODIFIED] Wrap Height
     ) {
         Column(
-            modifier = Modifier.fillMaxSize().padding(16.dp),
-            verticalArrangement = Arrangement.SpaceBetween
+            modifier = Modifier.padding(12.dp) // [MODIFIED] Padding 12.dp
         ) {
-            // Top Section: Icon & Title
-            Column {
+            // Top Section: Info (Icon + Text)
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 // Icon (Visual)
                 Icon(
                     imageVector = if (isDone) Icons.Default.Check else Icons.Default.RadioButtonUnchecked, 
                     contentDescription = null,
                     tint = themeColor,
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier.size(24.dp)
                 )
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.width(8.dp))
+                
                 Text(
                     text = config.title,
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 2,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
-
-            // Bottom Section: Progress or Status
-            Column {
-                if (config.type == HabitType.MEASURABLE) {
-                    val target = if (config.targetValue > 0) config.targetValue else 1.0
-                    val progress = (habit.currentValue / target).toFloat().coerceIn(0f, 1f)
+            
+            Spacer(Modifier.height(4.dp))
+            
+            // Description (Middle)
+            if (config.description.isNotBlank()) {
+                val styledDescription = androidx.compose.ui.text.buildAnnotatedString {
+                    val regex = Regex("\\(\\+[A-Z]{3}\\)")
+                    val text = config.description
                     
-                    Text(
-                        text = "${habit.currentValue.toInt()} / ${config.targetValue.toInt()} ${config.unit}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    LinearProgressIndicator(
-                        progress = { progress },
-                        modifier = Modifier.fillMaxWidth().height(6.dp),
-                        color = themeColor,
-                        trackColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    )
+                    var lastIndex = 0
+                    regex.findAll(text).forEach { result ->
+                        append(text.substring(lastIndex, result.range.first))
+                        
+                        // Highlight the tag
+                        withStyle(
+                            androidx.compose.ui.text.SpanStyle(
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold
+                            )
+                        ) {
+                            append(result.value)
+                        }
+                        lastIndex = result.range.last + 1
+                    }
+                    append(text.substring(lastIndex))
+                }
+                
+                Text(
+                    text = styledDescription,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            
+            // Visual Separator
+            Spacer(Modifier.height(12.dp))
+
+            // Bottom Section: Input Control
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.CenterEnd // Align controls to end
+            ) {
+                if (config.type == HabitType.MEASURABLE) {
+                    Column(horizontalAlignment = Alignment.End) {
+                        val target = if (config.targetValue > 0) config.targetValue else 1.0
+                        val progress = (habit.currentValue / target).toFloat().coerceIn(0f, 1f)
+                        
+                        Text(
+                            text = "${habit.currentValue.toInt()} / ${config.targetValue.toInt()} ${config.unit}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        LinearProgressIndicator(
+                            progress = { progress },
+                            modifier = Modifier.width(80.dp).height(8.dp).clip(RoundedCornerShape(4.dp)),
+                            color = themeColor,
+                            trackColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        )
+                    }
                 } else {
                     // Boolean
                      if (isDone) {
@@ -201,7 +245,7 @@ fun HabitCard(
                         )
                     } else {
                          Text(
-                            "Do it",
+                            "Tap to Complete",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

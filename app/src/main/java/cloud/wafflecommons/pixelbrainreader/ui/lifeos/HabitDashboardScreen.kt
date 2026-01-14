@@ -43,22 +43,10 @@ fun HabitDashboardScreen(
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
-            LargeTopAppBar(
-                title = { 
-                    Column {
-                        Text("Good Day!", style = MaterialTheme.typography.headlineLarge)
-                        Text(
-                            "${state.habitsWithStats.count { it.isCompletedToday }}/${state.habits.size} Habits done today", 
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                },
-                scrollBehavior = scrollBehavior,
-                colors = TopAppBarDefaults.largeTopAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    scrolledContainerColor = MaterialTheme.colorScheme.surface,
-                )
+            cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
+                title = "Habits",
+                subtitle = "${state.habitsWithStats.count { it.isCompletedToday }}/${state.habits.size} done today",
+                scrollBehavior = scrollBehavior
             )
         },
         floatingActionButton = {
@@ -72,43 +60,64 @@ fun HabitDashboardScreen(
                 Text("No habits configured. Tap + to add one.")
             }
         } else {
-            LazyColumn(
+            androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+                columns = androidx.compose.foundation.lazy.grid.GridCells.Adaptive(minSize = 155.dp),
                 modifier = Modifier.padding(padding),
                 contentPadding = PaddingValues(bottom = 80.dp),
-                verticalArrangement = Arrangement.spacedBy(24.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // SECTION A: TODAY'S FOCUS
-                item {
-                    Text(
-                        "Today's Focus",
-                        style = MaterialTheme.typography.titleLarge,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                    )
-                    LazyRow(
-                        contentPadding = PaddingValues(horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        items(state.habitsWithStats) { habitStats ->
-                            HabitCard(
-                                habit = habitStats,
-                                onToggle = { viewModel.toggleHabit(habitStats.config.id) },
-                                onUpdateValue = { newVal -> viewModel.updateHabitValue(habitStats.config.id, newVal) }
-                            )
-                        }
+                // Iterate over Grouped Habits
+                state.groupedHabits.forEach { (category, habits) ->
+                    // Section Header (Full Width)
+                    item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                        Text(
+                            text = category,
+                            style = MaterialTheme.typography.titleLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .padding(horizontal = 16.dp)
+                                .padding(top = 16.dp, bottom = 8.dp)
+                        )
+                    }
+
+                    // Habits in Category (Grid Layout)
+                    items(habits.size) { index ->
+                        val habitStats = habits[index]
+                        // Need to wrap in Box for padding if not using contentPadding? 
+                        // Grid handles spacing via vertical/horizontalArrangement.
+                        // But we want to ensure edge padding matches. 
+                        // LazyVerticalGrid contentPadding applies to the whole container.
+                        // Let's rely on standard grid behavior but keeping the card internal padding logic.
+                        // Since we aren't using the Box wrapper from before, let's verify visual.
+                        // The user asked for Arrangement.spacedBy(12.dp).
+                        // I will add horizontal content padding to the Grid itself to align edges.
+                        HabitCard(
+                            habit = habitStats,
+                            onToggle = { viewModel.toggleHabit(habitStats.config.id) },
+                            onUpdateValue = { newVal -> viewModel.updateHabitValue(habitStats.config.id, newVal) }
+                        )
                     }
                 }
-
-                // SECTION B: INSIGHTS
-                item {
-                    Text(
-                        "Your Journey",
-                        style = MaterialTheme.typography.titleLarge,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                    )
+                
+                // Footer: Streak History (Restored)
+                item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                   Column { 
+                        Spacer(Modifier.height(24.dp))
+                        Text(
+                            "Your Journey",
+                            style = MaterialTheme.typography.titleLarge,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                   }
                 }
 
-                items(state.habitsWithStats) { habitStats ->
-                    HabitStreakRow(habitStats)
+                // Streak Rows (Full Width)
+                items(
+                    count = state.habitsWithStats.size,
+                    span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }
+                ) { index ->
+                    HabitStreakRow(state.habitsWithStats[index])
                 }
             }
         }

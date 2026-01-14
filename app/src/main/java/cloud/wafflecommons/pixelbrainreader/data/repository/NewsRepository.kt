@@ -1,96 +1,77 @@
 package cloud.wafflecommons.pixelbrainreader.data.repository
 
-import android.util.Log
-import cloud.wafflecommons.pixelbrainreader.data.model.MarkdownLink
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import org.xmlpull.v1.XmlPullParser
-import org.xmlpull.v1.XmlPullParserFactory
+import com.prof18.rssparser.RssParser
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
-import java.io.StringReader
 
 @Singleton
-class NewsRepository @Inject constructor(
-    private val client: OkHttpClient
-) {
+class NewsRepository @Inject constructor() {
 
-    suspend fun getTopHeadlines(): List<MarkdownLink> = withContext(Dispatchers.IO) {
-        val feeds = listOf(
-            "https://feeds.feedburner.com/blogspot/hsDu" to "Android",
-            "https://www.php.net/news.rss" to "PHP"
-        )
-        
-        val allNews = mutableListOf<MarkdownLink>()
-        
-        feeds.forEach { (url, source) ->
-             try {
-                val request = Request.Builder().url(url).build()
-                val response = client.newCall(request).execute()
-                val xml = response.body?.string()
-                
-                if (xml != null) {
-                    val items = parseRss(xml, source)
-                    allNews.addAll(items.take(2)) // Take top 2 from each
-                }
-            } catch (e: Exception) {
-                Log.e("NewsRepository", "Failed to fetch $source", e)
+    private val parser = RssParser()
+
+    private val feeds = listOf(
+        FeedSource("https://www.myastuce.fr/fr/rss/rss-feed", "[MyAstuce]"),
+        FeedSource("https://actu.fr/76actu/rss.xml", "[76Actu]"),
+        FeedSource("https://www.ouest-france.fr/rss/une", "[OuestFrance]"),
+        FeedSource("https://feeds.feedburner.com/symfony/blog", "[Symfony]"),
+        FeedSource("https://feed.laravel-news.com/", "[Laravel]"),
+        FeedSource("https://php.watch/feed/news.xml", "[PHP]"),
+        FeedSource("https://androidweekly.net/rss.xml", "[Android]")
+    )
+
+    suspend fun getNews(): List<String> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        val deferredResults = feeds.map { source ->
+            async {
+                // Fetch and strictly take Top 2 per source to ensure diversity
+                fetchFeed(source).take(2)
             }
         }
-        
-        // Return Top 3 Total
-        allNews.take(3)
+
+        deferredResults.map { it.await() }
+            .flatten()
+            .shuffled() // Mix them up to ensure visibility of all sources regardless of time
+            .map { "${it.tag} ${it.title}" }
     }
 
-    private fun parseRss(xml: String, source: String): List<MarkdownLink> {
-        val items = mutableListOf<MarkdownLink>()
-        try {
-            val factory = XmlPullParserFactory.newInstance()
-            val parser = factory.newPullParser()
-            parser.setInput(StringReader(xml))
-            
-            var eventType = parser.eventType
-            var title = ""
-            var link = ""
-            var inItem = false
-            
-            while (eventType != XmlPullParser.END_DOCUMENT) {
-                val tagName = parser.name
-                
-                when (eventType) {
-                    XmlPullParser.START_TAG -> {
-                        if (tagName.equals("item", ignoreCase = true) || tagName.equals("entry", ignoreCase = true)) {
-                            inItem = true
-                            title = ""
-                            link = ""
-                        } else if (inItem) {
-                            if (tagName.equals("title", ignoreCase = true)) {
-                                title = parser.nextText()
-                            } else if (tagName.equals("link", ignoreCase = true)) {
-                                link = parser.nextText()
-                                // Atom feeds might have link as attribute href
-                                if (link.isBlank()) { 
-                                     link = parser.getAttributeValue(null, "href") ?: ""
-                                }
-                            }
-                        }
-                    }
-                    XmlPullParser.END_TAG -> {
-                        if (tagName.equals("item", ignoreCase = true) || tagName.equals("entry", ignoreCase = true)) {
-                            if (title.isNotBlank() && link.isNotBlank()) {
-                                items.add(MarkdownLink("[$source] $title", link))
-                            }
-                            inItem = false
-                        }
-                    }
-                }
-                eventType = parser.next()
+    private suspend fun fetchFeed(source: FeedSource): List<NewsItem> {
+        return try {
+            val channel = parser.getRssChannel(source.url)
+            channel.items.map { item ->
+                NewsItem(
+                    title = item.title ?: "No Title",
+                    tag = source.tag,
+                    pubDate = parseDate(item.pubDate)
+                )
             }
         } catch (e: Exception) {
-             Log.e("NewsRepository", "RSS Parse Error", e)
+            emptyList()
         }
-        return items
     }
+
+    private fun parseDate(dateString: String?): Date {
+        if (dateString.isNullOrBlank()) return Date() // Fallback to Now to ensure visibility
+
+        val patterns = listOf(
+            "EEE, dd MMM yyyy HH:mm:ss Z",
+            "EEE, dd MMM yyyy HH:mm:ss z",
+            "yyyy-MM-dd'T'HH:mm:ss'Z'"
+        )
+
+        for (pattern in patterns) {
+            try {
+                // Try US Locale first (most common for XML)
+                return SimpleDateFormat(pattern, Locale.US).parse(dateString) ?: continue
+            } catch (e: Exception) { /* Continue */ }
+        }
+
+        return Date() // Ultimate Fallback: Show it as "Fresh" rather than hiding it
+    }
+
+    private data class FeedSource(val url: String, val tag: String)
+    private data class NewsItem(val title: String, val tag: String, val pubDate: Date)
 }
