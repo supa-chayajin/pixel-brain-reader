@@ -22,7 +22,7 @@ class UserPreferencesRepository @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     private val PANE_WIDTH_KEY = floatPreferencesKey("list_pane_width")
-    private val AI_MODEL_KEY = stringPreferencesKey("ai_model")
+
     private val THEME_CONFIG_KEY = stringPreferencesKey("app_theme_config")
 
     val listPaneWidth: Flow<Float> = context.dataStore.data
@@ -30,10 +30,7 @@ class UserPreferencesRepository @Inject constructor(
             preferences[PANE_WIDTH_KEY] ?: 360f // Default width
         }
         
-    val aiModel: Flow<String> = context.dataStore.data
-        .map { preferences ->
-            preferences[AI_MODEL_KEY] ?: "gemini-2.5-flash-lite" // Default
-        }
+
 
     val themeConfig: Flow<AppThemeConfig> = context.dataStore.data
         .map { preferences ->
@@ -51,11 +48,7 @@ class UserPreferencesRepository @Inject constructor(
         }
     }
     
-    suspend fun setAiModel(modelId: String) {
-        context.dataStore.edit { preferences ->
-            preferences[AI_MODEL_KEY] = modelId
-        }
-    }
+
 
     suspend fun setThemeConfig(config: AppThemeConfig) {
         context.dataStore.edit { preferences ->
@@ -63,7 +56,33 @@ class UserPreferencesRepository @Inject constructor(
         }
     }
 
-    // --- Local AI Configuration ---
+    // --- Intelligence Configuration ---
+
+    enum class AiModel(val id: String, val displayName: String) {
+        GEMINI_FLASH("gemini-2.5-flash-lite", "Gemini 2.5 Flash Lite"),
+        GEMINI_PRO("gemini-2.5-pro", "Gemini 2.5 Pro"),
+        CORTEX_LOCAL("cortex-local", "Cortex (On-Device)"); // Added Local Option
+
+        companion object {
+            fun fromId(id: String): AiModel = entries.find { it.id == id } ?: GEMINI_FLASH
+        }
+    }
+
+    private val KEY_AI_MODEL = stringPreferencesKey("ai_model_selection")
+    
+    val selectedAiModel: Flow<AiModel> = context.dataStore.data
+        .map { preferences ->
+            val id = preferences[KEY_AI_MODEL] ?: AiModel.GEMINI_FLASH.id
+            AiModel.fromId(id)
+        }
+
+    suspend fun setAiModel(model: AiModel) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_AI_MODEL] = model.id
+        }
+    }
+
+    // --- Local AI Configuration (Legacy/Advanced) ---
 
     private val KEY_EMBEDDING_MODEL = stringPreferencesKey("embedding_model_filename")
     private val KEY_LLM_MODEL_NAME = stringPreferencesKey("llm_model_name")
@@ -89,24 +108,19 @@ class UserPreferencesRepository @Inject constructor(
             preferences[KEY_LLM_MODEL_NAME] = name
         }
     }
-    // --- Intelligence Configuration ---
 
-    enum class AiModel { GEMINI_PRO, GEMINI_FLASH, CORTEX_ON_DEVICE }
+    // --- UI/UX Persisted States ---
 
-    private val KEY_PREFERRED_AI_MODEL = stringPreferencesKey("preferred_ai_model")
+    private val KEY_BRIEFING_EXPANDED = androidx.datastore.preferences.core.booleanPreferencesKey("briefing_expanded_state")
 
-    val preferredAiModel: Flow<AiModel> = context.dataStore.data
+    val isBriefingExpanded: Flow<Boolean> = context.dataStore.data
         .map { preferences ->
-            try {
-                AiModel.valueOf(preferences[KEY_PREFERRED_AI_MODEL] ?: AiModel.GEMINI_FLASH.name)
-            } catch (e: Exception) {
-                AiModel.GEMINI_FLASH
-            }
+            preferences[KEY_BRIEFING_EXPANDED] ?: true // Default to Expanded
         }
 
-    suspend fun setPreferredAiModel(model: AiModel) {
+    suspend fun setBriefingExpanded(expanded: Boolean) {
         context.dataStore.edit { preferences ->
-            preferences[KEY_PREFERRED_AI_MODEL] = model.name
+            preferences[KEY_BRIEFING_EXPANDED] = expanded
         }
     }
 }

@@ -14,77 +14,26 @@ class GeminiRagManager @Inject constructor(
     private val vectorSearchEngine: VectorSearchEngine,
     private val userPrefs: cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
 ) {
-    
-    private suspend fun getModel(): GenerativeModel {
-        val modelName = userPrefs.llmModelName.first()
-        return GenerativeModel(
-            modelName = modelName,
-            apiKey = BuildConfig.geminiApiKey
-        )
-    }
 
-    suspend fun analyzeFolder(files: List<Pair<String, String>>): String {
-        if (files.isEmpty()) return "No files to analyze in this folder."
-
-        // Construct Prompt with File Contexts
-        val fileContexts = files.joinToString("\n---\n") { (name, content) ->
-            "File: $name\nContent:\n${content.take(2000)}" // Truncate per file
-        }
-
-        val userLanguage = java.util.Locale.getDefault().displayLanguage
-
-        val prompt = """
-            You are an expert archivist.
-            Context: The user's system language is $userLanguage.
-            Task: Analyze the following files and generate a comprehensive summary in Markdown format.
-            Output Language: STRICTLY $userLanguage.
-
-            Files:
-            $fileContexts
-            
-            Task Details:
-            1. Generate a comprehensive Markdown summary of this folder.
-            2. Create a Table of Contents.
-            3. Provide a brief summary of each file's key points.
-            4. Identify connections or themes between files.
-            
-            Output strictly in Markdown.
-        """.trimIndent()
-
-        return try {
-            val response = getModel().generateContent(prompt)
-            response.text ?: "AI returned no content."
-        } catch (e: Exception) {
-            "Analysis Failed: ${e.localizedMessage}. Please check API Key or Model Name."
-        }
-    }
-
-    // Legacy RAG method replaced by generateResponse
-
-
-    // Expose retrieving sources for UI
-    suspend fun findSources(query: String): List<String> {
-        return vectorSearchEngine.search(query).map { it.fileId }.distinct()
-    }
+    // --- Unified Entry Point ---
 
     /**
-     * Gemini Nano (Edge) Generation with RAG support.
-     * Function: generateResponse
+     * Generates a response stream based on the user's selected AI Model.
+     * Handles switching between Cloud (Gemini) and Local (Gemini Nano) engines.
+     *
+     * @param userMessage The user's query.
+     * @param useRAG Whether to use Retrieval-Augmented Generation (context from notes).
      */
     suspend fun generateResponse(userMessage: String, useRAG: Boolean = true): Flow<String> {
-        var prompt = userMessage
+        val selectedModel = userPrefs.selectedAiModel.first()
         
+        // 1. Context Retrieval (RAG)
+        var finalPrompt = userMessage
         if (useRAG) {
-            // 1. Retrieve Context
             val relevantDocs = vectorSearchEngine.search(userMessage, limit = 3)
-            
             if (relevantDocs.isNotEmpty()) {
-                val contextBlock = relevantDocs.joinToString("\n\n") { 
-                    it.content
-                }
-
-                // 2. Build RAG Prompt
-                prompt = """
+                val contextBlock = relevantDocs.joinToString("\n\n") { it.content }
+                finalPrompt = """
                     CONTEXT:
                     $contextBlock
                     
@@ -95,16 +44,69 @@ class GeminiRagManager @Inject constructor(
             }
         }
 
-        // 3. Generate Stream (Simulating Nano via GenerativeModel for now, 
-        // as direct aicore dependency requires specific setup not present in build.gradle)
-        return try {
-            // 3. Generate Stream (Simulating Nano via GenerativeModel for now)
-             getModel().generateContentStream(prompt).map { 
-                it.text ?: ""
+        // 2. Model Switching & Execution
+        return when (selectedModel) {
+            cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository.AiModel.CORTEX_LOCAL -> {
+                generateWithLocalEngine(finalPrompt)
             }
+            else -> {
+                generateWithCloudEngine(selectedModel.id, finalPrompt)
+            }
+        }
+    }
+
+    // --- Engines ---
+
+    private fun generateWithCloudEngine(modelId: String, prompt: String): Flow<String> {
+        val generativeModel = GenerativeModel(
+            modelName = modelId,
+            apiKey = BuildConfig.geminiApiKey
+        )
+        return generativeModel.generateContentStream(prompt).map { it.text ?: "" }
+    }
+
+    private fun generateWithLocalEngine(prompt: String): Flow<String> {
+        // Placeholder for Gemini Nano (AICore) implementation.
+        // Currently simulating using Flash Lite to prevent build errors as AICore dependency is missing.
+        // TODO: Replace with Google AI Edge SDK implementation when available.
+        android.util.Log.w("Cortex", "Gemini Nano not integrated. Simulating with Cloud Flash Lite.")
+        
+        return try {
+             val generativeModel = GenerativeModel(
+                modelName = "gemini-2.5-flash-lite", // Fallback simulation
+                apiKey = BuildConfig.geminiApiKey
+            )
+            generativeModel.generateContentStream(prompt).map { it.text ?: "" }
         } catch (e: Exception) {
-            android.util.Log.e("Cortex", "Gemini Generation Failed", e)
-             kotlinx.coroutines.flow.flowOf("Cortex Error: Gemini Nano n'est pas encore prêt. Laissez le téléphone en charge sur Wi-Fi. Details: ${e.message}")
+            kotlinx.coroutines.flow.flowOf("Cortex Error: Local Engine currently unavailable. (${e.localizedMessage})")
+        }
+    }
+
+    // --- Legacy / Aux Methods ---
+
+    suspend fun findSources(query: String): List<String> {
+        return vectorSearchEngine.search(query).map { it.fileId }.distinct()
+    }
+
+    suspend fun analyzeFolder(files: List<Pair<String, String>>): String {
+        if (files.isEmpty()) return "No files to analyze."
+        
+        val fileContexts = files.joinToString("\n---\n") { (name, content) ->
+            "File: $name\nContent:\n${content.take(2000)}"
+        }
+
+        val userLanguage = java.util.Locale.getDefault().displayLanguage
+        val prompt = "Analyze these files and summarize in $userLanguage:\n$fileContexts"
+        
+        // Use Cloud Model for heavy analysis
+        return try {
+            val model = GenerativeModel(
+                modelName = "gemini-2.5-flash-lite",
+                apiKey = BuildConfig.geminiApiKey
+            )
+            model.generateContent(prompt).text ?: "No content."
+        } catch (e: Exception) {
+            "Analysis Failed: ${e.message}"
         }
     }
 }

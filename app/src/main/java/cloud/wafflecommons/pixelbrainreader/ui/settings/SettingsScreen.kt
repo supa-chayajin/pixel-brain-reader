@@ -65,74 +65,21 @@ fun SettingsScreen(
                 title = "Intelligence",
                 icon = Icons.Default.Psychology
             ) {
-                Text(
-                    "Select the brain that powers your insights.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                // Gemini 1.5 Pro
-                IntelligenceOption(
-                    title = "Gemini 1.5 Pro",
-                    subtitle = "Maximum reasoning. Requires Internet.",
-                    selected = (uiState.currentAiModel == UserPreferencesRepository.AiModel.GEMINI_PRO),
-                    onClick = { viewModel.updateAiModel(UserPreferencesRepository.AiModel.GEMINI_PRO) }
-                )
-
-                // Gemini 1.5 Flash
-                IntelligenceOption(
-                    title = "Gemini 1.5 Flash",
-                    subtitle = "Fast & Efficient. Requires Internet.",
-                    selected = (uiState.currentAiModel == UserPreferencesRepository.AiModel.GEMINI_FLASH),
-                    onClick = { viewModel.updateAiModel(UserPreferencesRepository.AiModel.GEMINI_FLASH) }
-                )
-
-                // Cortex (On-Device)
-                val isCortex = (uiState.currentAiModel == UserPreferencesRepository.AiModel.CORTEX_ON_DEVICE)
-                Card(
-                     colors = CardDefaults.cardColors(
-                         containerColor = if (isCortex) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface,
-                     ),
-                     border = if (isCortex) null else androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                     modifier = Modifier
-                         .fillMaxWidth()
-                         .padding(vertical = 4.dp)
-                         .clickable { viewModel.updateAiModel(UserPreferencesRepository.AiModel.CORTEX_ON_DEVICE) }
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
-                            selected = isCortex,
-                            onClick = { viewModel.updateAiModel(UserPreferencesRepository.AiModel.CORTEX_ON_DEVICE) }
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.Lock,
-                                    contentDescription = "Private",
-                                    modifier = Modifier.size(14.dp),
-                                    tint = if (isCortex) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.primary
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = "Cortex (On-Device)",
-                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                    color = if (isCortex) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-                            Text(
-                                "Gemini Nano. 100% Private & Offline.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = if (isCortex) MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                UserPreferencesRepository.AiModel.entries.forEach { model ->
+                    val isSelected = (uiState.currentAiModel == model)
+                    
+                    val subtitle = when(model) {
+                         UserPreferencesRepository.AiModel.GEMINI_FLASH -> "Fast & Efficient. Requires Internet."
+                         UserPreferencesRepository.AiModel.GEMINI_PRO -> "Maximum reasoning. Requires Internet."
+                         UserPreferencesRepository.AiModel.CORTEX_LOCAL -> "Gemini Nano. 100% Private & Offline."
                     }
+
+                    IntelligenceOption(
+                        title = model.displayName,
+                        subtitle = subtitle,
+                        selected = isSelected,
+                        onClick = { viewModel.updateAiModel(model) }
+                    )
                 }
             }
 

@@ -176,6 +176,7 @@ fun DailyNoteScreen(
                     item {
                         cloud.wafflecommons.pixelbrainreader.ui.journal.MorningBriefingSection(
                             state = state.briefingState,
+                            onToggle = { viewModel.toggleBriefing() },
                             modifier = Modifier.padding(bottom = 24.dp)
                         )
                     }

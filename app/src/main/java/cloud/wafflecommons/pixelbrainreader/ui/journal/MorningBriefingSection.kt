@@ -35,9 +35,10 @@ import cloud.wafflecommons.pixelbrainreader.ui.daily.DailyMoodPoint
 @Composable
 fun MorningBriefingSection(
     state: MorningBriefingUiState,
+    onToggle: () -> Unit, // [NEW] Callback
     modifier: Modifier = Modifier
 ) {
-    var isExpanded by remember { mutableStateOf(true) }
+    // var isExpanded by remember { mutableStateOf(true) } // DELETED: Stateless now
 
     Card(
         modifier = modifier
@@ -51,7 +52,7 @@ fun MorningBriefingSection(
         Column(
             modifier = Modifier
                 .padding(16.dp)
-                .clickable { isExpanded = !isExpanded }
+                .clickable { onToggle() } // Use callback
         ) {
             // Header Row
             Row(
@@ -66,14 +67,14 @@ fun MorningBriefingSection(
                     fontWeight = FontWeight.Bold
                 )
                 Icon(
-                    imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                    contentDescription = if (isExpanded) "Collapse" else "Expand",
+                    imageVector = if (state.isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = if (state.isExpanded) "Collapse" else "Expand",
                     tint = MaterialTheme.colorScheme.primary
                 )
             }
 
             // Body Content
-            AnimatedVisibility(visible = isExpanded) {
+            AnimatedVisibility(visible = state.isExpanded) {
                 if (state.isLoading) {
                     BriefingSkeleton()
                 } else {

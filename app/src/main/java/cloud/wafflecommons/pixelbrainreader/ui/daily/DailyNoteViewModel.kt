@@ -61,6 +61,7 @@ data class MorningBriefingUiState(
     val quote: String = "",
     val quoteAuthor: String = "",
     val news: List<String> = emptyList(),
+    val isExpanded: Boolean = true, // [NEW] Persisted State
     val isLoading: Boolean = true
 )
 
@@ -75,6 +76,7 @@ class DailyNoteViewModel @Inject constructor(
     private val dailyNoteRepository: cloud.wafflecommons.pixelbrainreader.data.repository.DailyNoteRepository,
     private val templateRepository: cloud.wafflecommons.pixelbrainreader.data.repository.TemplateRepository,
     private val taskRepository: cloud.wafflecommons.pixelbrainreader.data.repository.TaskRepository,
+    private val userPrefs: cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository, // Injected
     private val dataRefreshBus: cloud.wafflecommons.pixelbrainreader.data.utils.DataRefreshBus
 ) : ViewModel() {
 
@@ -157,8 +159,9 @@ class DailyNoteViewModel @Inject constructor(
             // Parallel Fetch
             val moodFlow = moodRepository.getDailyMood(date)
             val contentFlow = fileRepository.getFileContentFlow(notePath)
+            val briefingExpandedFlow = userPrefs.isBriefingExpanded // Observe Preference
 
-            combine(moodFlow, contentFlow) { mood, content ->
+            combine(moodFlow, contentFlow, briefingExpandedFlow) { mood, content, isBriefingExpanded ->
                 var intro = ""
                 var outro = ""
                 var weather: WeatherData? = null
@@ -213,7 +216,7 @@ class DailyNoteViewModel @Inject constructor(
                     // Note: This makes the combine block suspend-heavy if we don't be careful.
                     // Given the request, we will call the suspend validation here.
                     
-                    val briefingState = loadMorningBriefingData(date, weather)
+                    val briefingState = loadMorningBriefingData(date, weather, isBriefingExpanded)
 
                     // Calculate Top 5 Daily Tags (from mood entries of the day)
                     val dailyTags = mood?.entries?.flatMap { it.activities ?: emptyList() }
@@ -238,7 +241,7 @@ class DailyNoteViewModel @Inject constructor(
                         isLoading = false
                     )
                 } else {
-                     val briefingState = loadMorningBriefingData(date, null)
+                     val briefingState = loadMorningBriefingData(date, null, isBriefingExpanded)
                      
                      // Calculate Top 5 Daily Tags even if no content file (but mood exists)
                     val dailyTags = mood?.entries?.flatMap { it.activities ?: emptyList() }
@@ -267,7 +270,14 @@ class DailyNoteViewModel @Inject constructor(
         }
     }
 
-    private suspend fun loadMorningBriefingData(date: LocalDate, existingWeather: WeatherData?): MorningBriefingUiState {
+    fun toggleBriefing() {
+        viewModelScope.launch {
+            val current = _uiState.value.briefingState.isExpanded
+            userPrefs.setBriefingExpanded(!current)
+        }
+    }
+
+    private suspend fun loadMorningBriefingData(date: LocalDate, existingWeather: WeatherData?, isExpanded: Boolean): MorningBriefingUiState {
         // 1. Weather (Safe Call)
         val finalWeather = existingWeather ?: runCatching {
              val isToday = date == LocalDate.now()
@@ -354,6 +364,7 @@ class DailyNoteViewModel @Inject constructor(
             quote = quoteText,
             quoteAuthor = quoteAuthor,
             news = news,
+            isExpanded = isExpanded, // Pass through
             isLoading = false
         )
     }

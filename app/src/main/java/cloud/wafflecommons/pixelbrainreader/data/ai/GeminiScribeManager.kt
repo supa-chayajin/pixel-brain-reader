@@ -35,7 +35,8 @@ class GeminiScribeManager @Inject constructor(
         }
         
         // Dynamic Model Selection
-        val modelName = userPrefs.aiModel.first()
+        // Dynamic Model Selection
+        val modelName = userPrefs.selectedAiModel.first().id
 
         val generativeModel = GenerativeModel(
             modelName = modelName,

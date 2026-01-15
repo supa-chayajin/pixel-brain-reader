@@ -56,7 +56,7 @@ class SettingsViewModel @Inject constructor(
              _uiState.value = _uiState.value.copy(themeConfig = theme)
         }.launchIn(viewModelScope)
         
-        userPrefs.preferredAiModel.onEach { model ->
+        userPrefs.selectedAiModel.onEach { model ->
              _uiState.value = _uiState.value.copy(currentAiModel = model)
         }.launchIn(viewModelScope)
         
@@ -87,7 +87,7 @@ class SettingsViewModel @Inject constructor(
 
     fun updateAiModel(model: UserPreferencesRepository.AiModel) {
         viewModelScope.launch {
-            userPrefs.setPreferredAiModel(model)
+            userPrefs.setAiModel(model)
         }
     }
 

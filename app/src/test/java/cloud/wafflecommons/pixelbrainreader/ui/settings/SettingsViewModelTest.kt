@@ -48,18 +48,22 @@ class SettingsViewModelTest {
     private lateinit var viewModel: SettingsViewModel
 
     // Mocks
+    private val context: android.content.Context = mockk(relaxed = true)
     private val userPrefs: UserPreferencesRepository = mockk(relaxed = true)
     private val secretManager: SecretManager = mockk(relaxed = true)
+    private val vectorSearchEngine: cloud.wafflecommons.pixelbrainreader.data.ai.VectorSearchEngine = mockk(relaxed = true)
+    private val geminiRagManager: cloud.wafflecommons.pixelbrainreader.data.ai.GeminiRagManager = mockk(relaxed = true)
 
     @Before
     fun setup() {
         // Default Stubs
         every { secretManager.getRepoInfo() } returns Pair("testUser", "testRepo")
         every { userPrefs.themeConfig } returns flowOf(AppThemeConfig.FOLLOW_SYSTEM)
-        every { userPrefs.aiModel } returns flowOf("gemini-2.5-flash-lite")
-
+        every { userPrefs.selectedAiModel } returns flowOf(UserPreferencesRepository.AiModel.GEMINI_FLASH)
+        every { userPrefs.embeddingModel } returns flowOf("universal_sentence_encoder.tflite")
+        every { userPrefs.llmModelName } returns flowOf("gemini-2.5-flash-lite")
         
-        viewModel = SettingsViewModel(userPrefs, secretManager)
+        viewModel = SettingsViewModel(context, userPrefs, secretManager, vectorSearchEngine, geminiRagManager)
     }
 
     @Test
@@ -70,7 +74,7 @@ class SettingsViewModelTest {
         assertEquals("testUser", state.repoOwner)
         assertEquals("testRepo", state.repoName)
         assertEquals(AppThemeConfig.FOLLOW_SYSTEM, state.themeConfig)
-        assertEquals(AiModel.GEMINI_FLASH, state.currentAiModel)
+        assertEquals(UserPreferencesRepository.AiModel.GEMINI_FLASH, state.currentAiModel)
     }
 
     @Test
@@ -93,10 +97,10 @@ class SettingsViewModelTest {
     fun `updateAiModel persists selection`() = runTest {
         coEvery { userPrefs.setAiModel(any()) } returns Unit
         
-        viewModel.updateAiModel(AiModel.GEMINI_PRO)
+        viewModel.updateAiModel(UserPreferencesRepository.AiModel.GEMINI_PRO)
         advanceUntilIdle()
         
-        coVerify { userPrefs.setAiModel("gemini-2.5-pro") }
+        coVerify { userPrefs.setAiModel(UserPreferencesRepository.AiModel.GEMINI_PRO) }
     }
 
     @Test
