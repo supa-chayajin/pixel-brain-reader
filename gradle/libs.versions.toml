@@ -24,6 +24,9 @@ navigationCompose = "2.8.0"
 roomKtx = "2.8.4"
 biometric = "1.2.0-alpha05"
 datastore = "1.1.1"
+coroutinesPlayServices = "1.7.3"
+mlkitGenai = "1.0.0-alpha1"
+mlkitGenaiBeta = "1.0.0-beta1"
 
 
 [libraries]
@@ -87,6 +90,12 @@ androidx-security-crypto = { group = "androidx.security", name = "security-crypt
 androidx-room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "roomKtx" }
 androidx-room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "roomKtx" }
 androidx-biometric = { group = "androidx.biometric", name = "biometric", version.ref = "biometric" }
+# FORCE: Task to Coroutine Adapter
+kotlinx-coroutines-play-services = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-play-services", version.ref = "coroutinesPlayServices" }
+mlkit-genai-prompt = { group = "com.google.mlkit", name = "genai-prompt", version.ref = "mlkitGenai" }
+mlkit-genai-summarization = { group = "com.google.mlkit", name = "genai-summarization", version.ref = "mlkitGenaiBeta" }
+mlkit-genai-rewriting = { group = "com.google.mlkit", name = "genai-rewriting", version.ref = "mlkitGenaiBeta" }
+mlkit-genai-proofreading = { group = "com.google.mlkit", name = "genai-proofreading", version.ref = "mlkitGenaiBeta" }
 
 
 [plugins]

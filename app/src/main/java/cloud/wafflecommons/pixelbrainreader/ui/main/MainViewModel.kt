@@ -1,6 +1,11 @@
 package cloud.wafflecommons.pixelbrainreader.ui.main
 
 import android.util.Log
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
+import androidx.work.OneTimeWorkRequest
+import androidx.work.WorkManager
+import androidx.work.workDataOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
@@ -38,7 +43,8 @@ class MainViewModel @Inject constructor(
     private val templateRepository: TemplateRepository,
     private val secretManager: SecretManager,
     private val userPrefs: UserPreferencesRepository,
-    private val geminiRagManager: cloud.wafflecommons.pixelbrainreader.data.ai.GeminiRagManager
+    private val geminiRagManager: cloud.wafflecommons.pixelbrainreader.data.ai.GeminiRagManager,
+    @ApplicationContext private val context: Context
 ) : ViewModel() {
     // Expose Theme Preference
     val themeConfig: StateFlow<AppThemeConfig> = userPrefs.themeConfig
@@ -219,6 +225,16 @@ class MainViewModel @Inject constructor(
                     _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Synced with Remote ✅"))
                     // CRITICAL: Reload Local Files
                     loadFolder(_uiState.value.currentPath)
+
+
+                    // Integrity Pipeline: Trigger Full Neural Re-index
+                    // Ensures deleted files are removed from Vector DB
+                    val reindexRequest = OneTimeWorkRequest.Builder(cloud.wafflecommons.pixelbrainreader.data.ai.IndexingWorker::class.java)
+                        .setInputData(workDataOf("FULL_REINDEX" to true))
+                        .build()
+                    WorkManager.getInstance(context).enqueue(reindexRequest)
+
+                    _uiState.value = _uiState.value.copy(userMessage = "Optimizing Brain (Re-indexing)...")
                 } else {
                     val errorMsg = result.exceptionOrNull()?.localizedMessage ?: "Unknown error"
                     _uiState.value = _uiState.value.copy(error = "Sync Failed: $errorMsg")

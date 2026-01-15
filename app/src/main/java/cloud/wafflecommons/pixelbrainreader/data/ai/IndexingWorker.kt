@@ -1,104 +1,90 @@
 package cloud.wafflecommons.pixelbrainreader.data.ai
 
 import android.content.Context
+import android.util.Log
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.EmbeddingDao
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.EmbeddingEntity
-import cloud.wafflecommons.pixelbrainreader.data.repository.FileRepository
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
-import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.util.UUID
 
 @HiltWorker
 class IndexingWorker @AssistedInject constructor(
-    @Assisted appContext: Context,
+    @Assisted private val appContext: Context,
     @Assisted workerParams: WorkerParameters,
-    private val repository: FileRepository,
-    private val embeddingDao: EmbeddingDao,
-    private val vectorSearchEngine: VectorSearchEngine
+    private val vectorSearchEngine: VectorSearchEngine,
+    private val embeddingDao: EmbeddingDao
 ) : CoroutineWorker(appContext, workerParams) {
 
-    override suspend fun doWork(): Result {
-        val filePath = inputData.getString(KEY_FILE_PATH) ?: return Result.failure()
-        
-        // 1. Read Content
-        // We use the repository to get the confirmed local content
-        val content = repository.getFileContentFlow(filePath).firstOrNull()
-        if (content.isNullOrBlank()) {
-            return Result.success() // Nothing to index
-        }
-
-        // 2. Chunking Strategy (Split by Headers or Paragraphs)
-        // For better RAG, splitting by headers (#) gives more semantic contexts than just newlines.
-        // Falls back to double newline if no headers found.
-        val chunks = if (content.contains("#")) {
-             content.split(Regex("(?=^# )|(?=^## )|(?=^### )", RegexOption.MULTILINE))
-                 .filter { it.isNotBlank() }
-        } else {
-            content.split("\n\n").filter { it.isNotBlank() }
-        }
-
-        // 2.5 Ensure Model File Ready (Copy-to-Cache Strategy)
-        // We replicate this logic here to ensure the file exists before invoking engine
+    override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         try {
-            val file = java.io.File(applicationContext.cacheDir, "universal_sentence_encoder.tflite")
+            val isFullReindex = inputData.getBoolean("FULL_REINDEX", false)
             
-            // A. Purge Corrupted
-            if (file.exists() && file.length() < 1024) {
-                 android.util.Log.w("Cortex", "IndexingWorker: Corrupted cached model. Deleting...")
-                 file.delete()
+            if (isFullReindex) {
+                Log.w("Cortex", "🧹 FULL RE-INDEX TRIGGERED: Wiping Neural Database...")
+                embeddingDao.deleteAll()
+            }
+
+            // Fix: Use appContext.filesDir directly or check if there is a 'vault' subdir?
+            // The previous code had `File("")` which was wrong, but user snippet says `appContext.filesDir`
+            // Let's assume files are in root of filesDir or handle it properly. 
+            // The user snippet explicitly uses `appContext.filesDir`.
+            val rootDir = appContext.filesDir
+            if (!rootDir.exists()) return@withContext Result.failure()
+
+            val markdownFiles = rootDir.walkTopDown()
+                .filter { it.isFile && it.extension == "md" }
+                .toList()
+
+            Log.i("Cortex", "🧠 Indexing ${markdownFiles.size} files...")
+
+            var count = 0
+            markdownFiles.forEach { file ->
+                if (!file.name.startsWith(".")) {
+                    try {
+                        indexFile(file)
+                        count++
+                    } catch (e: Exception) {
+                        Log.e("Cortex", "Failed to index ${file.name}", e)
+                    }
+                }
             }
             
-            // B. Copy if needed
-            if (!file.exists()) {
-                 android.util.Log.d("Cortex", "IndexingWorker: Copying universal_sentence_encoder.tflite to cache...")
-                 applicationContext.assets.open("universal_sentence_encoder.tflite").use { inputStream ->
-                     if (inputStream.available() < 1024) {
-                         throw java.io.IOException("Asset is corrupted/empty.")
-                     }
-                     file.outputStream().use { outputStream ->
-                         inputStream.copyTo(outputStream)
-                     }
-                 }
-            }
+            Log.i("Cortex", "✅ Indexing Complete ($count files processed)")
+            Result.success()
         } catch (e: Exception) {
-             android.util.Log.e("Cortex", "IndexingWorker: Model copy failed.", e)
-             return Result.failure()
+            Log.e("Cortex", "Indexing Critical Failure", e)
+            Result.failure()
         }
-
-        // 3. Generate Embeddings using MediaPipe
-        val embeddings = chunks.mapNotNull { chunk ->
-            try {
-                // Generate Embedding calling the Engine
-                val vectorFloat = vectorSearchEngine.embed(chunk)
-                
-                EmbeddingEntity(
-                    // id generated automatically (UUID)
-                    fileId = filePath,
-                    content = chunk.trim(),
-                    vector = vectorFloat.toList(),
-                    lastUpdated = System.currentTimeMillis()
-                )
-            } catch (e: Exception) {
-                // If embedding fails for one chunk, we skip it but Log it safe
-                android.util.Log.w("Cortex", "Embedding failed for chunk: ${e.message}")
-                null
-            }
-        }
-
-        // 4. Store Valid Vectors
-        // Clear old embeddings for this file first (Re-indexing)
-        if (embeddings.isNotEmpty()) {
-            embeddingDao.deleteEmbeddingsForFile(filePath)
-            embeddingDao.insertAll(embeddings)
-        }
-
-        return Result.success()
     }
 
-    companion object {
-        const val KEY_FILE_PATH = "file_path"
+    private suspend fun indexFile(file: File) {
+        val text = file.readText()
+        if (text.isBlank()) return
+        val cleanContent = text.replace(Regex("^---[\\s\\S]*?---"), "").trim()
+        if (cleanContent.isBlank()) return
+
+        val chunks = cleanContent.split(Regex("(?m)^(?=#{1,3}\\s)")).filter { it.isNotBlank() }
+        
+        // Even in full re-index, defensive delete ensures no duplicates if logic changes
+        embeddingDao.deleteByFileId(file.path)
+
+        chunks.forEach { chunk ->
+            val vector = vectorSearchEngine.embed(chunk) // Use existing robust engine
+            val entity = EmbeddingEntity(
+                id = UUID.randomUUID().toString(),
+                fileId = file.path,
+                content = chunk.trim(),
+                vector = vector.toList(),
+                lastUpdated = System.currentTimeMillis()
+            )
+            embeddingDao.insert(entity)
+        }
     }
 }
