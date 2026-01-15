@@ -8,18 +8,15 @@ import cloud.wafflecommons.pixelbrainreader.data.local.entity.EmbeddingEntity
 
 @Dao
 interface EmbeddingDao {
-    @androidx.room.Upsert
-    suspend fun upsert(embedding: EmbeddingEntity)
-
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertAll(embeddings: List<EmbeddingEntity>)
-
-    @Query("DELETE FROM embeddings WHERE fileId = :fileId")
-    suspend fun deleteEmbeddingsForFile(fileId: String)
-
-    @Query("SELECT * FROM embeddings WHERE fileId = :fileId")
-    suspend fun getEmbeddingsForFile(fileId: String): List<EmbeddingEntity>
+    suspend fun insert(embedding: EmbeddingEntity)
 
     @Query("SELECT * FROM embeddings")
     suspend fun getAllEmbeddings(): List<EmbeddingEntity>
+
+    @Query("DELETE FROM embeddings WHERE fileId = :fileId")
+    suspend fun deleteByFileId(fileId: String)
+
+    @Query("DELETE FROM embeddings")
+    suspend fun deleteAll()
 }

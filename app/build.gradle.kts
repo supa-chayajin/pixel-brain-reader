@@ -151,9 +151,16 @@ dependencies {
     implementation("io.noties.markwon:html:4.6.2")
 
     // AI Core & MediaPipe (V4.0: Neural Vault)
+    implementation(libs.kotlinx.coroutines.play.services)
     implementation("com.google.ai.client.generativeai:generativeai:0.9.0")
-    implementation("com.google.mediapipe:tasks-text:0.20230731")
+    implementation("com.google.mediapipe:tasks-text:0.10.14")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-guava:1.10.2")
+    implementation(libs.mlkit.genai.prompt)
+    implementation(libs.mlkit.genai.proofreading)
+    implementation(libs.mlkit.genai.rewriting)
+    implementation(libs.mlkit.genai.summarization)
+
+    implementation("androidx.concurrent:concurrent-futures:1.3.0")
 
     // Home Screen Widget (Jetpack Glance)
     implementation("androidx.glance:glance-appwidget:1.1.0")
