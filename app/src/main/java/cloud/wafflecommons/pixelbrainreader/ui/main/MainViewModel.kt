@@ -4,8 +4,11 @@ import android.util.Log
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
 import androidx.work.OneTimeWorkRequest
+import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
+import androidx.work.WorkRequest
 import androidx.work.workDataOf
+import cloud.wafflecommons.pixelbrainreader.data.ai.IndexingWorker
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
@@ -227,14 +230,12 @@ class MainViewModel @Inject constructor(
                     loadFolder(_uiState.value.currentPath)
 
 
-                    // Integrity Pipeline: Trigger Full Neural Re-index
-                    // Ensures deleted files are removed from Vector DB
-                    val reindexRequest = OneTimeWorkRequest.Builder(cloud.wafflecommons.pixelbrainreader.data.ai.IndexingWorker::class.java)
+                    // 2. Trigger Full Re-index on success
+                    Log.i("MainViewModel", "Git Pull Success. Queuing Neural Indexing.")
+                    val workRequest = OneTimeWorkRequestBuilder<IndexingWorker>()
                         .setInputData(workDataOf("FULL_REINDEX" to true))
                         .build()
-                    WorkManager.getInstance(context).enqueue(reindexRequest)
-
-                    _uiState.value = _uiState.value.copy(userMessage = "Optimizing Brain (Re-indexing)...")
+                    WorkManager.getInstance(context).enqueue(workRequest as WorkRequest)
                 } else {
                     val errorMsg = result.exceptionOrNull()?.localizedMessage ?: "Unknown error"
                     _uiState.value = _uiState.value.copy(error = "Sync Failed: $errorMsg")

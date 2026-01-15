@@ -27,26 +27,23 @@ class IndexingWorker @AssistedInject constructor(
             val isFullReindex = inputData.getBoolean("FULL_REINDEX", false)
             
             if (isFullReindex) {
-                Log.w("Cortex", "🧹 FULL RE-INDEX TRIGGERED: Wiping Neural Database...")
+                Log.w("Cortex", "🧹 FULL RE-INDEX: Wiping Neural Memory...")
                 embeddingDao.deleteAll()
             }
 
-            // Fix: Use appContext.filesDir directly or check if there is a 'vault' subdir?
-            // The previous code had `File("")` which was wrong, but user snippet says `appContext.filesDir`
-            // Let's assume files are in root of filesDir or handle it properly. 
-            // The user snippet explicitly uses `appContext.filesDir`.
             val rootDir = appContext.filesDir
             if (!rootDir.exists()) return@withContext Result.failure()
 
+            // Recursive scan for Markdown files
             val markdownFiles = rootDir.walkTopDown()
                 .filter { it.isFile && it.extension == "md" }
                 .toList()
 
-            Log.i("Cortex", "🧠 Indexing ${markdownFiles.size} files...")
+            Log.i("Cortex", "🧠 Indexing ${markdownFiles.size} notes...")
 
             var count = 0
             markdownFiles.forEach { file ->
-                if (!file.name.startsWith(".")) {
+                if (!file.name.startsWith(".")) { // Skip hidden files
                     try {
                         indexFile(file)
                         count++
@@ -56,10 +53,10 @@ class IndexingWorker @AssistedInject constructor(
                 }
             }
             
-            Log.i("Cortex", "✅ Indexing Complete ($count files processed)")
+            Log.i("Cortex", "✅ Indexing Complete. Processed $count files.")
             Result.success()
         } catch (e: Exception) {
-            Log.e("Cortex", "Indexing Critical Failure", e)
+            Log.e("Cortex", "Indexing Job Failed", e)
             Result.failure()
         }
     }
@@ -67,16 +64,21 @@ class IndexingWorker @AssistedInject constructor(
     private suspend fun indexFile(file: File) {
         val text = file.readText()
         if (text.isBlank()) return
+        
+        // Remove Frontmatter (Metadata) to index only content
         val cleanContent = text.replace(Regex("^---[\\s\\S]*?---"), "").trim()
         if (cleanContent.isBlank()) return
 
+        // Semantic Chunking by Headers
         val chunks = cleanContent.split(Regex("(?m)^(?=#{1,3}\\s)")).filter { it.isNotBlank() }
         
-        // Even in full re-index, defensive delete ensures no duplicates if logic changes
+        // Always clear previous entries for this file to avoid duplicates
         embeddingDao.deleteByFileId(file.path)
 
         chunks.forEach { chunk ->
-            val vector = vectorSearchEngine.embed(chunk) // Use existing robust engine
+            // Vectorize
+            val vector = vectorSearchEngine.embed(chunk) 
+            
             val entity = EmbeddingEntity(
                 id = UUID.randomUUID().toString(),
                 fileId = file.path,

@@ -160,8 +160,6 @@ dependencies {
     implementation(libs.mlkit.genai.rewriting)
     implementation(libs.mlkit.genai.summarization)
 
-    implementation("androidx.concurrent:concurrent-futures:1.3.0")
-
     // Home Screen Widget (Jetpack Glance)
     implementation("androidx.glance:glance-appwidget:1.1.0")
     implementation("androidx.glance:glance-material3:1.1.0")
