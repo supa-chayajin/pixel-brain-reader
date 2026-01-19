@@ -11,15 +11,18 @@ import cloud.wafflecommons.pixelbrainreader.data.local.dao.FileContentDao
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.FileContentEntity
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.EmbeddingEntity
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.EmbeddingDao
+import cloud.wafflecommons.pixelbrainreader.data.local.entity.NewsArticleEntity
+import cloud.wafflecommons.pixelbrainreader.data.local.dao.NewsDao
 
 @Database(
     entities = [
         FileEntity::class, 
         SyncMetadataEntity::class, 
         FileContentEntity::class,
-        EmbeddingEntity::class // V4.0 Neural Vault
+        EmbeddingEntity::class, // V4.0 Neural Vault
+        cloud.wafflecommons.pixelbrainreader.data.local.entity.NewsArticleEntity::class // V4.2 Neural Briefing
     ], 
-    version = 7, 
+    version = 9, 
     exportSchema = false
 )
 @androidx.room.TypeConverters(Converters::class)
@@ -28,6 +31,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun metadataDao(): SyncMetadataDao
     abstract fun fileContentDao(): FileContentDao
     abstract fun embeddingDao(): EmbeddingDao
+    abstract fun newsDao(): NewsDao
 }
 
 class Converters {

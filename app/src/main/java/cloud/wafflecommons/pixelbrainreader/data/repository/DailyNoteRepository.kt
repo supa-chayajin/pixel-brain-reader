@@ -82,6 +82,26 @@ tags: [journal]
     }
 
     /**
+     * Reads the Daily Note content DIRECTLY from Disk (Bypassing DB/Cache).
+     * Critical for post-sync updates where DB might be stale.
+     */
+    suspend fun getDailyNoteContent(date: LocalDate): String? = withContext(Dispatchers.IO) {
+        val fileName = date.format(DateTimeFormatter.ISO_DATE) + ".md"
+        val file = File(context.filesDir, "$JOURNAL_ROOT/$fileName")
+        
+        if (file.exists()) {
+             try {
+                 file.readText()
+             } catch (e: Exception) {
+                 Log.e("DailyNoteRepository", "Failed to read file from disk: ${file.path}", e)
+                 null
+             }
+        } else {
+            null
+        }
+    }
+
+    /**
      * Creates a new Daily Note from template.
      * WARNING: Does NOT check if file exists (Caller must check).
      */

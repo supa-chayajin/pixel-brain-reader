@@ -51,4 +51,10 @@ object DatabaseModule {
     fun provideEmbeddingDao(database: AppDatabase): cloud.wafflecommons.pixelbrainreader.data.local.dao.EmbeddingDao {
         return database.embeddingDao()
     }
+
+    @Provides
+    @Singleton
+    fun provideNewsDao(database: AppDatabase): cloud.wafflecommons.pixelbrainreader.data.local.dao.NewsDao {
+        return database.newsDao()
+    }
 }

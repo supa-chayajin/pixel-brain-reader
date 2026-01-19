@@ -47,6 +47,7 @@ class MainViewModel @Inject constructor(
     private val secretManager: SecretManager,
     private val userPrefs: UserPreferencesRepository,
     private val geminiRagManager: cloud.wafflecommons.pixelbrainreader.data.ai.GeminiRagManager,
+    private val dataRefreshBus: cloud.wafflecommons.pixelbrainreader.data.utils.DataRefreshBus,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
     // Expose Theme Preference
@@ -78,9 +79,11 @@ class MainViewModel @Inject constructor(
         val isFocusMode: Boolean = false,
         val isEditing: Boolean = false, // Edit Mode
         val isSyncing: Boolean = false,
+        val isIndexing: Boolean = false, // Brain Optimization Indicator
 
         val hasUnsavedChanges: Boolean = false,
         val importState: ImportState? = null,
+        val analysisResult: String? = null, // [NEW] AI Analysis Result
         
         val listPaneWidth: Float = 360f, // Default width
 
@@ -95,7 +98,10 @@ class MainViewModel @Inject constructor(
         val showCreateFileDialog: Boolean = false,
         
         // Navigation Signal (One-shot)
-        val navigationTrigger: String? = null
+        val navigationTrigger: String? = null,
+        
+        // Confirmation Dialogs
+        val showDeleteConfirmation: Boolean = false
     )
 
     data class ImportState(val title: String, val content: String)
@@ -176,6 +182,9 @@ class MainViewModel @Inject constructor(
                      _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Sync Complete ✅"))
                      // Reload DB/Cache to ensure freshness
                      loadFolder(_uiState.value.currentPath)
+                     
+                     // Trigger Brain Optimization
+                     triggerBrainOptimization()
                  } else {
                      val msg = result.exceptionOrNull()?.message ?: "Unknown"
                      Log.w("MainViewModel", "Initial Sync failed: $msg")
@@ -226,16 +235,18 @@ class MainViewModel @Inject constructor(
                 
                 if (result.isSuccess) {
                     _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Synced with Remote ✅"))
+                    
+                    // Trigger Bus
+                    Log.i("Cortex", "Git Pull Success. Triggering Global UI Refresh.")
+                    dataRefreshBus.triggerRefresh()
+
                     // CRITICAL: Reload Local Files
                     loadFolder(_uiState.value.currentPath)
 
 
                     // 2. Trigger Full Re-index on success
                     Log.i("MainViewModel", "Git Pull Success. Queuing Neural Indexing.")
-                    val workRequest = OneTimeWorkRequestBuilder<IndexingWorker>()
-                        .setInputData(workDataOf("FULL_REINDEX" to true))
-                        .build()
-                    WorkManager.getInstance(context).enqueue(workRequest as WorkRequest)
+                    triggerBrainOptimization()
                 } else {
                     val errorMsg = result.exceptionOrNull()?.localizedMessage ?: "Unknown error"
                     _uiState.value = _uiState.value.copy(error = "Sync Failed: $errorMsg")
@@ -617,7 +628,16 @@ class MainViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(navigationTrigger = null)
     }
     
-    fun deleteFile() {
+    fun requestDeleteFile() {
+        _uiState.value = _uiState.value.copy(showDeleteConfirmation = true)
+    }
+
+    fun dismissDeleteConfirmation() {
+        _uiState.value = _uiState.value.copy(showDeleteConfirmation = false)
+    }
+
+    fun confirmDeleteFile() {
+        dismissDeleteConfirmation()
         val fileName = _uiState.value.selectedFileName ?: return
         // Use selectedFilePath as authoritative source
         val path = _uiState.value.selectedFilePath ?: _uiState.value.files.find { it.name == fileName }?.path ?: return
@@ -733,6 +753,8 @@ class MainViewModel @Inject constructor(
             }
         }
     }
+
+
 
     // Cache for valid move destinations during a move operation
     private var cachedValidMoveDestinations: List<String> = emptyList()
@@ -1035,6 +1057,30 @@ class MainViewModel @Inject constructor(
                     error = "Failed to open Daily Note: ${e.message}"
                 )
             }
+        }
+    }
+    private fun triggerBrainOptimization() {
+        _uiState.value = _uiState.value.copy(isIndexing = true)
+        
+        val workRequest = OneTimeWorkRequestBuilder<IndexingWorker>()
+            .setInputData(workDataOf("FULL_REINDEX" to true))
+            .addTag("brain_optimization")
+            .build()
+            
+        WorkManager.getInstance(context).enqueue(workRequest as WorkRequest)
+        
+        // Observe Work Status to clear flag
+        viewModelScope.launch {
+            WorkManager.getInstance(context)
+                .getWorkInfoByIdFlow(workRequest.id)
+                .collect { workInfo ->
+                    if (workInfo != null && workInfo.state.isFinished) {
+                        _uiState.value = _uiState.value.copy(
+                            isIndexing = false,
+                            userMessage = if(workInfo.state == androidx.work.WorkInfo.State.SUCCEEDED) "Brain Optimized 🧠" else null
+                        )
+                    }
+                }
         }
     }
 }

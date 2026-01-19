@@ -65,13 +65,13 @@ fun SettingsScreen(
                 title = "Intelligence",
                 icon = Icons.Default.Psychology
             ) {
-                UserPreferencesRepository.AiModel.entries.forEach { model ->
+                cloud.wafflecommons.pixelbrainreader.data.model.AiModel.entries.forEach { model ->
                     val isSelected = (uiState.currentAiModel == model)
                     
                     val subtitle = when(model) {
-                         UserPreferencesRepository.AiModel.GEMINI_FLASH -> "Fast & Efficient. Requires Internet."
-                         UserPreferencesRepository.AiModel.GEMINI_PRO -> "Maximum reasoning. Requires Internet."
-                         UserPreferencesRepository.AiModel.CORTEX_LOCAL -> "Gemini Nano. 100% Private & Offline."
+                         cloud.wafflecommons.pixelbrainreader.data.model.AiModel.GEMINI_FLASH -> "Fast & Efficient. Requires Internet."
+                         cloud.wafflecommons.pixelbrainreader.data.model.AiModel.GEMINI_PRO -> "Maximum reasoning. Requires Internet."
+                         cloud.wafflecommons.pixelbrainreader.data.model.AiModel.CORTEX_LOCAL -> "Gemini Nano. 100% Private & Offline."
                     }
 
                     IntelligenceOption(

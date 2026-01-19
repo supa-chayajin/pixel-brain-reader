@@ -30,6 +30,7 @@ class SecretManager @Inject constructor(
         private const val KEY_REPO_OWNER = "repo_owner"
         private const val KEY_REPO_NAME = "repo_name"
         const val KEY_PROVIDER = "provider_type"
+        private const val KEY_GEMINI_API_KEY = "gemini_api_key"
     }
 
     private val masterKey = MasterKey.Builder(context)
@@ -116,5 +117,13 @@ class SecretManager @Inject constructor(
 
     fun clear() {
         encryptedPrefs.edit().clear().apply()
+    }
+
+    fun saveGeminiApiKey(apiKey: String) {
+        encryptedPrefs.edit().putString(KEY_GEMINI_API_KEY, apiKey).apply()
+    }
+
+    fun getGeminiApiKey(): String? {
+        return encryptedPrefs.getString(KEY_GEMINI_API_KEY, null)
     }
 }

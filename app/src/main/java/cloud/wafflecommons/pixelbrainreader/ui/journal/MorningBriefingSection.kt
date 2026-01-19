@@ -1,5 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.ui.journal
 
+import android.util.Log
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
@@ -11,10 +12,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.icons.filled.OpenInBrowser
+import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -27,6 +33,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import cloud.wafflecommons.pixelbrainreader.ui.daily.MorningBriefingUiState
@@ -80,7 +87,7 @@ fun MorningBriefingSection(
                 } else {
                     Column(modifier = Modifier.padding(top = 16.dp)) {
                         // 1. Logistic Weather
-                        WeatherAdviceBlock(state.weather)
+                        WeatherAdviceBlock(state.weather, state.weatherAdvice)
                         
                         HorizontalDivider(
                             modifier = Modifier.padding(vertical = 12.dp),
@@ -114,17 +121,52 @@ fun MorningBriefingSection(
                                 }
                             }
                         }
+                        
+                         HorizontalDivider(
+                             modifier = Modifier.padding(vertical = 12.dp),
+                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
+                         )
 
-                        // 5. Signal News
+                        // 5. Neural Briefing (News Cards)
                         if (state.news.isNotEmpty()) {
-                            state.news.forEach { newsItem ->
-                                Text(
-                                    text = "• $newsItem",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(bottom = 4.dp)
-                                )
+                            Text(
+                                text = "Veille",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(bottom = 8.dp)
+                            )
+                            
+                            val groupedNews = remember(state.news) { state.news.groupBy { it.sourceName } }
+                            
+                            androidx.compose.foundation.lazy.LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                contentPadding = PaddingValues(end = 16.dp)
+                            ) {
+                                groupedNews.forEach { (source, articles) ->
+                                    item {
+                                        Column(modifier = Modifier.width(280.dp)) {
+                                            Text(
+                                                text = source,
+                                                style = MaterialTheme.typography.labelMedium,
+                                                color = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.padding(bottom = 4.dp, start = 4.dp)
+                                            )
+                                            
+                                            articles.forEach { article ->
+                                                NewsCard(article = article)
+                                                Spacer(modifier = Modifier.height(8.dp))
+                                            }
+                                        }
+                                    }
+                                }
                             }
+                        } else {
+                             Text(
+                                text = "Aucune actualité pour le moment.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                fontStyle = FontStyle.Italic
+                            )
                         }
                     }
                 }
@@ -134,7 +176,89 @@ fun MorningBriefingSection(
 }
 
 @Composable
-private fun WeatherAdviceBlock(weather: cloud.wafflecommons.pixelbrainreader.data.repository.WeatherData?) {
+private fun NewsCard(article: cloud.wafflecommons.pixelbrainreader.data.local.entity.NewsArticleEntity) {
+    val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+    val context = androidx.compose.ui.platform.LocalContext.current
+    
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        modifier = Modifier.fillMaxWidth().clickable {
+             uriHandler.openUri(article.url)
+        }
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = article.title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                maxLines = 2,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                 // Open Button
+                 Button(
+                     onClick = { uriHandler.openUri(article.url) },
+                     modifier = Modifier.weight(1f),
+                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                 ) {
+                     Icon(
+                         imageVector = Icons.Default.OpenInNew,
+                         contentDescription = null,
+                         modifier = Modifier.size(18.dp)
+                     )
+                     Spacer(modifier = Modifier.width(8.dp))
+                     Text(text = "Open")
+                 }
+
+                 // Import Button
+                 Button(
+                     onClick = {
+                        try {
+                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("pixelbrain://import?url=${article.url}"))
+                            context.startActivity(intent)
+                        } catch(e: Exception) {
+                            // Toast?
+                        }
+                     },
+                     modifier = Modifier.weight(1f),
+                     colors = ButtonDefaults.buttonColors(
+                         containerColor = MaterialTheme.colorScheme.tertiary,
+                         contentColor = MaterialTheme.colorScheme.onTertiary
+                     ),
+                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                 ) {
+                     Icon(
+                         imageVector = Icons.Default.Download, // Using Download as requested
+                         contentDescription = null,
+                         modifier = Modifier.size(18.dp)
+                     )
+                     Spacer(modifier = Modifier.width(8.dp))
+                     Text(text = "Import")
+                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WeatherAdviceBlock(
+    weather: cloud.wafflecommons.pixelbrainreader.data.repository.WeatherData?,
+    advice: String?
+) {
+    Log.d("WeatherAdviceBlock", "advice: $advice")
     Row(verticalAlignment = Alignment.CenterVertically) {
         if (weather != null) {
             Text(
@@ -146,12 +270,11 @@ private fun WeatherAdviceBlock(weather: cloud.wafflecommons.pixelbrainreader.dat
                 Text(
                     text = "${weather.temperature} • ${weather.location ?: "Unknown"}",
                     style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold
                 )
-                // Mock Advice Logic
-                val advice = if (weather.emoji.contains("rain", ignoreCase = true)) "Pack an umbrella!" else "Great day for a walk!"
+                // Real Advice from AI/Frontmatter
+                val displayAdvice = if (!advice.isNullOrBlank()) advice else "Météo du jour"
                 Text(
-                    text = "💡 $advice",
+                    text = "💡 $displayAdvice",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

@@ -1,6 +1,7 @@
 package cloud.wafflecommons.pixelbrainreader.data.workers
 
 import android.content.Context
+import android.util.Log
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
@@ -13,6 +14,7 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.flow.firstOrNull
 
 @HiltWorker
 class DailyBriefingWorker @AssistedInject constructor(
@@ -31,8 +33,6 @@ class DailyBriefingWorker @AssistedInject constructor(
         val notePath = "10_Journal/$formattedDate.md"
 
         // 1. Check if file exists. If not, we might want to skip or create. 
-        // For 'Morning Briefing', usually the file is created by check-in. 
-        // But prompt says "Check/Create Today's Note".
         if (!fileRepository.fileExists(notePath)) {
             fileRepository.createFile(notePath, "# 📅 $formattedDate\n")
         }
@@ -46,28 +46,45 @@ class DailyBriefingWorker @AssistedInject constructor(
 
         // 3. Fetch Data
         val weather = weatherRepository.getCurrentWeatherAndLocation()
-        val advice = if (weather != null) weatherRepository.getParentingAdvice(weather) else "Profiter de la journée"
+        // AI WEATHER ADVICE
+        // AI WEATHER ADVICE
+        Log.d("DailyBriefingWorker", weather?.description ?: "null")
+        val insight = if (weather != null) {
+            briefingGenerator.getWeatherInsight(weather)
+        } else {
+            "Préparez-vous pour la journée."
+        }
+        
         val temp = weather?.temperature ?: "?°C"
         val weatherIcon = weather?.emoji ?: "🌤️"
         
         val sparkline = moodRepository.getWeeklySparkline()
-        val quote = briefingGenerator.getDailyQuote()
-        // [UPDATED] Use new repository method returning formatted strings
-        val news = newsRepository.getNews()
+        
+        // AI MOOD QUOTE
+        // Determine simple trend
+        val moodTrend = try {
+            val yesterdayMood = moodRepository.getDailyMood(today.minusDays(1)).firstOrNull()
+            if ((yesterdayMood?.summary?.averageScore ?: 0.0) > 3.0) "Positive" else "Reflective"
+        } catch (e: Exception) { "Neutral" }
+        
+        val quote = briefingGenerator.getDailyQuote(moodTrend)
+        
+        // 4. Update Frontmatter with Insight
+        val updates = mapOf(
+            "weather_insight" to insight
+        )
+        content = cloud.wafflecommons.pixelbrainreader.data.utils.FrontmatterManager.injectWeather(content, updates)
 
-        // 4. Format Markdown
-        val newsMd = news.joinToString("\n    * ") { it }
+        // 5. Format Markdown (Without News)
         val briefingMd = """
             
             ## 🌅 Morning Briefing
-            * **Météo :** $weatherIcon $temp - *$advice*
+            * **Météo :** $weatherIcon $temp - *$insight*
             * **Mood 7j :** $sparkline
             * **Mindset :** $quote
-            * **Veille :**
-                * $newsMd
         """.trimIndent()
 
-        // 5. Injection Strategy
+        // 6. Injection Strategy
         val insertionPoint = "## Daily Summary" // Or "## 📝 Journal" fallback
         
         content = if (content.contains("## 📝 Journal")) {
@@ -83,3 +100,4 @@ class DailyBriefingWorker @AssistedInject constructor(
         return Result.success()
     }
 }
+

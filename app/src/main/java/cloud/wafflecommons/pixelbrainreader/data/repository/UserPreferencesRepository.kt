@@ -58,25 +58,15 @@ class UserPreferencesRepository @Inject constructor(
 
     // --- Intelligence Configuration ---
 
-    enum class AiModel(val id: String, val displayName: String) {
-        GEMINI_FLASH("gemini-2.5-flash-lite", "Gemini 2.5 Flash Lite"),
-        GEMINI_PRO("gemini-2.5-pro", "Gemini 2.5 Pro"),
-        CORTEX_LOCAL("cortex-local", "Cortex (On-Device)"); // Added Local Option
-
-        companion object {
-            fun fromId(id: String): AiModel = entries.find { it.id == id } ?: GEMINI_FLASH
-        }
-    }
-
     private val KEY_AI_MODEL = stringPreferencesKey("ai_model_selection")
     
-    val selectedAiModel: Flow<AiModel> = context.dataStore.data
+    val selectedAiModel: Flow<cloud.wafflecommons.pixelbrainreader.data.model.AiModel> = context.dataStore.data
         .map { preferences ->
-            val id = preferences[KEY_AI_MODEL] ?: AiModel.GEMINI_FLASH.id
-            AiModel.fromId(id)
+            val id = preferences[KEY_AI_MODEL] ?: cloud.wafflecommons.pixelbrainreader.data.model.AiModel.GEMINI_FLASH.id
+            cloud.wafflecommons.pixelbrainreader.data.model.AiModel.fromId(id)
         }
 
-    suspend fun setAiModel(model: AiModel) {
+    suspend fun setAiModel(model: cloud.wafflecommons.pixelbrainreader.data.model.AiModel) {
         context.dataStore.edit { preferences ->
             preferences[KEY_AI_MODEL] = model.id
         }

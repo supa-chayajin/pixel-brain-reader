@@ -31,7 +31,7 @@ class SettingsViewModel @Inject constructor(
     data class SettingsUiState(
         val paneWidth: Float = 360f,
         val themeConfig: AppThemeConfig = AppThemeConfig.FOLLOW_SYSTEM,
-        val currentAiModel: UserPreferencesRepository.AiModel = UserPreferencesRepository.AiModel.GEMINI_FLASH,
+        val currentAiModel: cloud.wafflecommons.pixelbrainreader.data.model.AiModel = cloud.wafflecommons.pixelbrainreader.data.model.AiModel.GEMINI_FLASH,
         val appVersion: String = "1.0.0",
         val repoOwner: String? = null,
         val repoName: String? = null,
@@ -85,7 +85,7 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun updateAiModel(model: UserPreferencesRepository.AiModel) {
+    fun updateAiModel(model: cloud.wafflecommons.pixelbrainreader.data.model.AiModel) {
         viewModelScope.launch {
             userPrefs.setAiModel(model)
         }

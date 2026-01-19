@@ -23,7 +23,8 @@ data class HabitWithStats(
     val isCompletedToday: Boolean,
     val currentValue: Double, // New field for Measurable
     val currentStreak: Int,
-    val history: List<Boolean> // Last 7 days, boolean status
+    val history: List<Boolean>, // Last 7 days, boolean status
+    val isScheduledToday: Boolean // [NEW] For visual dimming
 )
 
 data class LifeOSUiState(
@@ -45,7 +46,7 @@ class LifeOSViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            dataRefreshBus.refreshEvents.collect {
+            dataRefreshBus.refreshEvent.collect {
                 // Reload on Sync success
                 loadData(_uiState.value.selectedDate)
             }
@@ -80,14 +81,16 @@ class LifeOSViewModel @Inject constructor(
             )
             val todayKey = dayMap[date.dayOfWeek] ?: "MON"
             
-            val habits = allHabits.filter { habit -> 
-                val cleanFreq = habit.frequency.map { it.trim().uppercase() }
-                cleanFreq.isEmpty() || cleanFreq.contains(todayKey)
-            }
+            // [UPDATED] Do NOT filter out inactive habits. We want to show All.
+            // Just calculate 'isScheduledToday'
             
             // Calculate Stats
-            val habitsWithStats = habits.map { habit ->
+            val habitsWithStats = allHabits.map { habit ->
                 val habitLogs = logs.flatMap { it.value }.filter { it.habitId == habit.id }
+                
+                // Check if scheduled
+                val cleanFreq = habit.frequency.map { it.trim().uppercase() }
+                val isScheduledToday = cleanFreq.isEmpty() || cleanFreq.contains(todayKey)
                 
                 // 1. Is Completed Today & Current Value
                 val todayLog = habitLogs.find { it.date == date.toString() }
@@ -116,7 +119,7 @@ class LifeOSViewModel @Inject constructor(
                     }
                 }
                 
-                HabitWithStats(habit, isCompletedToday, currentValue, streak, history)
+                HabitWithStats(habit, isCompletedToday, currentValue, streak, history, isScheduledToday)
             }
 
             // [NEW] 2. Group by RPG Tag
@@ -140,7 +143,7 @@ class LifeOSViewModel @Inject constructor(
             }
             
             _uiState.value = _uiState.value.copy(
-                habits = habits,
+                habits = allHabits, // Show ALL
                 habitsWithStats = habitsWithStats,
                 groupedHabits = groupedHabits,
                 logs = logs,

@@ -100,25 +100,6 @@ fun HabitDashboardScreen(
                     }
                 }
                 
-                // Footer: Streak History (Restored)
-                item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
-                   Column { 
-                        Spacer(Modifier.height(24.dp))
-                        Text(
-                            "Your Journey",
-                            style = MaterialTheme.typography.titleLarge,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                        )
-                   }
-                }
-
-                // Streak Rows (Full Width)
-                items(
-                    count = state.habitsWithStats.size,
-                    span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }
-                ) { index ->
-                    HabitStreakRow(state.habitsWithStats[index])
-                }
             }
         }
     }

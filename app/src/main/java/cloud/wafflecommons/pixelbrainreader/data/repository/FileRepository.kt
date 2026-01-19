@@ -651,7 +651,7 @@ class FileRepository @Inject constructor(
             }
 
             // [NEW] Notify App Components that Data is Fresh
-            dataRefreshBus.notifyDataChanged()
+            dataRefreshBus.triggerRefresh()
             
             Result.success(Unit)
         } catch (e: Exception) {

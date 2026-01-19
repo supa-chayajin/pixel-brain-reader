@@ -27,6 +27,7 @@ datastore = "1.1.1"
 coroutinesPlayServices = "1.7.3"
 mlkitGenai = "1.0.0-alpha1"
 mlkitGenaiBeta = "1.0.0-beta1"
+googleAiClient = "0.9.0"
 
 
 [libraries]
@@ -96,6 +97,7 @@ mlkit-genai-prompt = { group = "com.google.mlkit", name = "genai-prompt", versio
 mlkit-genai-summarization = { group = "com.google.mlkit", name = "genai-summarization", version.ref = "mlkitGenaiBeta" }
 mlkit-genai-rewriting = { group = "com.google.mlkit", name = "genai-rewriting", version.ref = "mlkitGenaiBeta" }
 mlkit-genai-proofreading = { group = "com.google.mlkit", name = "genai-proofreading", version.ref = "mlkitGenaiBeta" }
+google-ai-client = { group = "com.google.ai.client.generativeai", name = "generativeai", version.ref = "googleAiClient" }
 
 
 [plugins]
