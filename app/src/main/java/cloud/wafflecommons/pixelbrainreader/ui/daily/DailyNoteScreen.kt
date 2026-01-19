@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Mood
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.Settings
@@ -99,18 +100,32 @@ fun DailyNoteScreen(
                 title = "Cortex",
                 subtitle = state.date.format(DateTimeFormatter.ofPattern("MMM dd, yyyy")),
                 actions = {
-                     FilledTonalIconButton(
-                         onClick = onNavigateToSettings,
-                         colors = IconButtonDefaults.filledTonalIconButtonColors(
-                             containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                             contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                         )
-                     ) {
-                         Icon(
-                             imageVector = Icons.Outlined.Settings,
-                             contentDescription = "Settings"
-                         )
-                     }
+                     // Manual Refresh
+                    FilledTonalIconButton(
+                        onClick = { viewModel.refreshDailyData() },
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "Refresh Daily Data"
+                        )
+                    }
+
+                    FilledTonalIconButton(
+                        onClick = onNavigateToSettings,
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Settings,
+                            contentDescription = "Settings"
+                        )
+                    }
                 }
             )
         },

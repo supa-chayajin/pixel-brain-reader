@@ -254,10 +254,34 @@ fun MainScreen(
     // Mood Sheet State for Daily Note
     var showMoodSheet by remember { mutableStateOf(false) }
 
+
     if (showMoodSheet) {
         cloud.wafflecommons.pixelbrainreader.ui.mood.MoodCheckInSheet(
             onDismiss = { showMoodSheet = false },
             viewModel = moodViewModel
+        )
+    }
+    
+    // Delete Confirmation Dialog
+    if (uiState.showDeleteConfirmation) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { viewModel.dismissDeleteConfirmation() },
+            title = { Text("Supprimer ce fichier ?") },
+            text = { Text("Cette action est irréversible et supprimera le fichier du coffre-fort et du dépôt Git.") },
+            icon = { Icon(Icons.Default.Delete, contentDescription = null) },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = { viewModel.confirmDeleteFile() },
+                    colors = androidx.compose.material3.ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Supprimer")
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { viewModel.dismissDeleteConfirmation() }) {
+                    Text("Annuler")
+                }
+            }
         )
     }
 
@@ -496,7 +520,7 @@ fun MainScreen(
 
                                         // Delete
                                         FilledTonalIconButton(
-                                            onClick = { viewModel.deleteFile() },
+                                            onClick = { viewModel.requestDeleteFile() },
                                             colors = IconButtonDefaults.filledTonalIconButtonColors(
                                                 containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
                                                 contentColor = MaterialTheme.colorScheme.onErrorContainer
@@ -637,7 +661,7 @@ fun MainScreen(
                                             moodViewModel = moodViewModel,
                                             onSave = { viewModel.saveFile() },
                                             onToggleEdit = { viewModel.toggleEditMode() },
-                                            onDelete = { viewModel.deleteFile() },
+                                            onDelete = { viewModel.requestDeleteFile() },
                                             onClose = { 
                                                 viewModel.closeFile()
                                                 if (navigator.canNavigateBack()) {

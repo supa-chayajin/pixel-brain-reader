@@ -32,9 +32,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.draw.alpha
 import cloud.wafflecommons.pixelbrainreader.data.model.HabitType
-// Removed incorrect import
 import cloud.wafflecommons.pixelbrainreader.data.model.TimelineEvent
+
 
 @Composable
 fun TaskTimeline(
@@ -139,6 +140,9 @@ fun HabitCard(
         if (isDone) themeColor.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceContainer
     )
 
+    // Dim if not scheduled today
+    val alpha = if (habit.isScheduledToday) 1f else 0.5f
+
     Card(
         onClick = {
             if (config.type == HabitType.MEASURABLE) {
@@ -148,10 +152,10 @@ fun HabitCard(
             }
         },
         colors = CardDefaults.cardColors(containerColor = containerColor),
-        modifier = Modifier.fillMaxWidth().wrapContentHeight() // [MODIFIED] Wrap Height
+        modifier = Modifier.fillMaxWidth().wrapContentHeight().alpha(alpha) // [MODIFIED] Alpha
     ) {
         Column(
-            modifier = Modifier.padding(12.dp) // [MODIFIED] Padding 12.dp
+            modifier = Modifier.padding(12.dp)
         ) {
             // Top Section: Info (Icon + Text)
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -209,7 +213,7 @@ fun HabitCard(
             }
             
             // Visual Separator
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(8.dp))
 
             // Bottom Section: Input Control
             Box(
@@ -235,7 +239,27 @@ fun HabitCard(
                         )
                     }
                 } else {
-                    // Boolean
+                    // Boolean - Just show Streak here? Or keep "Tap to Complete"?
+                    // User Request: 'display the current "Streak"... at the bottom of the card with a small flame 🔥 icon.'
+                    // Let's put Streak on the LEFT and Status on the RIGHT.
+                }
+            }
+            
+            // [NEW] Footer Row: Streak + Status/Action
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                // Streak Display
+                Text(
+                    text = "🔥 ${habit.currentStreak}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (habit.currentStreak > 2) Color(0xFFFF9800) else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                
+                // Status / Action Hint
+                if (config.type != HabitType.MEASURABLE) {
                      if (isDone) {
                         Text(
                             "Done!",
@@ -243,11 +267,17 @@ fun HabitCard(
                             color = themeColor,
                             fontWeight = FontWeight.Bold
                         )
-                    } else {
+                    } else if (habit.isScheduledToday) {
                          Text(
                             "Tap to Complete",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                         Text(
+                            "Not Today",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha=0.7f)
                         )
                     }
                 }

@@ -87,8 +87,8 @@ class MainActivity : FragmentActivity() {
             }
         }
 
-        viewModel.handleShareIntent(intent)
-
+        handleIntent(intent)
+        
         if (savedInstanceState == null && isUserLoggedIn) {
             viewModel.performInitialSync()
         }
@@ -96,6 +96,28 @@ class MainActivity : FragmentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        viewModel.handleShareIntent(intent)
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: Intent?) {
+        if (intent == null) return
+        
+        // Share Intent
+        if (intent.action == Intent.ACTION_SEND) {
+            viewModel.handleShareIntent(intent)
+        }
+        
+        // Deep Link (pixelbrain://import?url=...)
+        if (intent.action == Intent.ACTION_VIEW && intent.scheme == "pixelbrain" && intent.data?.host == "import") {
+             val url = intent.data?.getQueryParameter("url")
+             if (!url.isNullOrBlank()) {
+                 val workRequest = androidx.work.OneTimeWorkRequestBuilder<cloud.wafflecommons.pixelbrainreader.data.workers.ImportWorker>()
+                     .setInputData(androidx.work.workDataOf("url" to url))
+                     .build()
+                 androidx.work.WorkManager.getInstance(this).enqueue(workRequest)
+                 
+                 android.widget.Toast.makeText(this, "Importing Article...", android.widget.Toast.LENGTH_SHORT).show()
+             }
+        }
     }
 }

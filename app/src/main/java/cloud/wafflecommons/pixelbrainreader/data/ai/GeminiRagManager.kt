@@ -2,11 +2,11 @@ package cloud.wafflecommons.pixelbrainreader.data.ai
 
 import android.content.Context
 import android.util.Log
-import com.google.mlkit.genai.prompt.GenerateContentRequest
+import cloud.wafflecommons.pixelbrainreader.BuildConfig
 import com.google.mlkit.genai.prompt.GenerateContentResponse
 import com.google.mlkit.genai.prompt.GenerativeModel
+import kotlinx.coroutines.flow.firstOrNull
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
@@ -15,41 +15,68 @@ import kotlinx.coroutines.flow.flow
 @Singleton
 class GeminiRagManager @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val vectorSearchEngine: VectorSearchEngine
+    private val vectorSearchEngine: VectorSearchEngine,
+    private val userPrefs: cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
 ) {
-    // Initialize the ML Kit Generative Model
-    // Based on Google Samples: defaults to Gemini Nano
-    private val localModel: GenerativeModel? = initOrGetModel()
+    // Initialize the ML Kit Generative Model (Local)
+    private val localModel: GenerativeModel? by lazy { initOrGetModel() }
 
     private fun initOrGetModel(): GenerativeModel? {
-        return null// TODO: URGENT !!!!
+        // FIXME: GenerativeModel is an interface. Need to find correct Factory/Builder.
+        // Disabling Local AI for now to allow build.
+        Log.e("Cortex", "ML Kit GenerativeModel init disabled: API mismatch.")
+        return null
     }
 
-    suspend fun retrieveContext(query: String, limit: Int = 3): List<String> {
-        return try {
-            // Hybrid Search logic (Cosine Similarity)
-            val results = vectorSearchEngine.search(query, limit)
-            results.map { it.content }
-        } catch (e: Exception) {
-            Log.e("Cortex", "RAG Retrieval Error", e)
-            emptyList()
+    // --- RAG Core ---
+    private suspend fun retrieveContext(query: String): List<String> {
+        return vectorSearchEngine.search(query).map { it.content }
+    }
+
+    private fun buildAugmentedPrompt(userMessage: String, contextChunks: List<String>): String {
+        return if (contextChunks.isEmpty()) {
+            userMessage
+        } else {
+            """
+            Context from my notes:
+            ${contextChunks.joinToString("\n---\n")}
+            
+            Based on the context above, answer the user's question:
+            $userMessage
+            """.trimIndent()
         }
     }
 
-    fun buildAugmentedPrompt(userQuery: String, contextChunks: List<String>): String {
-        if (contextChunks.isEmpty()) return userQuery
-        val contextString = contextChunks.joinToString("\n\n---\n\n")
+    suspend fun generateResponse(userMessage: String, useRAG: Boolean = true): Flow<String> = flow {
+        // 1. Initial State
+        emit("Thinking...")
         
-        return """
-        CONTEXT (My Notes):
-        $contextString
+        // 2. Resolve Model Preference
+        val modelPrefs = userPrefs.selectedAiModel.firstOrNull() ?: cloud.wafflecommons.pixelbrainreader.data.model.AiModel.GEMINI_FLASH
         
-        QUESTION:
-        $userQuery
+        // 3. RAG Retrieval
+        var prompt = userMessage
+        if (useRAG) {
+            val context = retrieveContext(userMessage)
+            if (context.isNotEmpty()) {
+                prompt = buildAugmentedPrompt(userMessage, context)
+            }
+        }
         
-        INSTRUCTIONS:
-        Answer based on the Context above. Be concise.
-        """.trimIndent()
+        // 4. Inference Routing
+        val response = if (modelPrefs == cloud.wafflecommons.pixelbrainreader.data.model.AiModel.CORTEX_LOCAL) {
+            generateWithLocalEngine(prompt)
+        } else {
+             // Cloud
+             val apiKey = BuildConfig.geminiApiKey
+             if (apiKey.isBlank()) {
+                 emit("Error: Gemini API Key not found. Please check settings.")
+                 return@flow
+             }
+             generateWithRemoteEngine(prompt, apiKey, modelPrefs.id)
+        }
+        
+        emit(response)
     }
 
     /**
@@ -58,38 +85,54 @@ class GeminiRagManager @Inject constructor(
      */
     suspend fun generateWithLocalEngine(prompt: String): String {
         Log.d("Cortex", "🚀 Prompting Gemini Nano via ML Kit...")
+        val model = localModel
+        if (model == null) return "Cortex Intelligence (Local) is not available on this device."
         
-        return try {
-            val text = localModel?.generateContent(prompt).toString()
-            text.ifBlank {
-                "Thinking..." // or generic fallback
-            }
-        } catch (e: Exception) {
-            Log.e("Cortex", "Gemini Nano Inference Failed", e)
-            throw Exception("Local Brain Error: ${e.localizedMessage}. Ensure Gemini Nano is downloaded.")
-        }
+            val response = model.generateContent(prompt)
+             return response.candidates.firstOrNull()?.text ?: "No response from Cortex."
+
     }
-    
-    // --- Compatibility Methods (Legacy) ---
-    
-    suspend fun generateResponse(userMessage: String, useRAG: Boolean = true): Flow<String> = flow {
-        val context = if (useRAG) retrieveContext(userMessage) else emptyList()
-        val prompt = buildAugmentedPrompt(userMessage, context)
-        try {
-            val response = generateWithLocalEngine(prompt)
-            emit(response)
+
+    /**
+     * Executes the prompt on Gemini Cloud (Flash/Pro)
+     * Uses Google AI Client SDK
+     */
+    suspend fun generateWithRemoteEngine(prompt: String, apiKey: String, modelId: String): String {
+        Log.d("Cortex", "☁️ Prompting Cloud Model: $modelId")
+        Log.d("WeatherInsight", "Prompt: $prompt")
+        return try {
+            val remoteModel = com.google.ai.client.generativeai.GenerativeModel(
+                modelName = modelId,
+                apiKey = apiKey
+            )
+            val response = remoteModel.generateContent(prompt)
+            response.text ?: "No response received."
         } catch (e: Exception) {
-            emit("Error: ${e.message}")
+             "Cloud Error: ${e.localizedMessage}"
         }
     }
     
     suspend fun analyzeFolder(files: List<Pair<String, String>>): String {
         return try {
-             val fileContexts = files.joinToString("\n---\n") { (name, content) ->
-                "File: $name\nContent:\n${content.take(2000)}"
+             // Summarize approach to fit context window
+             val fileContexts = files.take(10).joinToString("\n---\n") { (name, content) ->
+                "File: $name\nContent:\n${content.take(1500)}"
             }
-            val prompt = "Analyze these files and summarize their common themes and key points:\n$fileContexts"
-            generateWithLocalEngine(prompt)
+            val prompt = "Analyze these files and summarize their common themes, key points, and any interesting connections:\n$fileContexts"
+            
+            // Re-use routing logic via flow? Or direct call?
+            // Since generateResponse emits a Flow and adds "Thinking...", let's just use it and take the last value.
+            // But we need a String return.
+            
+            val flow = generateResponse(prompt, useRAG = false) // No RAG for folder analysis, context provided in prompt
+            
+            // Collect flow
+            var result = ""
+            flow.collect { 
+                 if (!it.startsWith("Thinking")) result = it
+            }
+            result.ifBlank { "Analysis failed or timed out." }
+            
         } catch (e: Exception) {
             "Analysis Failed: ${e.message}"
         }
@@ -99,4 +142,3 @@ class GeminiRagManager @Inject constructor(
         return retrieveContext(query)
     }
 }
-

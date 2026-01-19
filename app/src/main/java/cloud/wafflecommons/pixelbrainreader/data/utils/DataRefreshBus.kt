@@ -8,10 +8,10 @@ import javax.inject.Singleton
 
 @Singleton
 class DataRefreshBus @Inject constructor() {
-    private val _refreshEvents = MutableSharedFlow<Unit>(replay = 0)
-    val refreshEvents: SharedFlow<Unit> = _refreshEvents.asSharedFlow()
+    private val _refreshEvent = MutableSharedFlow<Unit>(replay = 0)
+    val refreshEvent: SharedFlow<Unit> = _refreshEvent.asSharedFlow()
 
-    suspend fun notifyDataChanged() {
-        _refreshEvents.emit(Unit)
+    suspend fun triggerRefresh() {
+        _refreshEvent.emit(Unit)
     }
 }

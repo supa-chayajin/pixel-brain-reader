@@ -41,6 +41,14 @@
                 <data android:mimeType="text/plain" />
                 <data android:mimeType="text/html" />
             </intent-filter>
+
+            <!-- Phase C: Import Deep Link -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="pixelbrain" android:host="import" />
+            </intent-filter>
         </activity>
 
         <provider
