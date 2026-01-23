@@ -6,6 +6,7 @@ plugins {
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.hilt.android)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 val localProperties = Properties()
@@ -102,6 +103,7 @@ dependencies {
     implementation(libs.androidx.material3.adaptive.layout)
     implementation(libs.androidx.material3.adaptive.navigation)
     implementation(libs.androidx.material3.adaptive.navigation.suite)
+    implementation("androidx.window:window:1.2.0")
 
     // Navigation
     implementation(libs.androidx.navigation.compose)
@@ -141,6 +143,9 @@ dependencies {
     // Syntax Highlighting
     implementation(libs.markwon.syntax.highlight)
     implementation(libs.prism4j)
+    
+    // JGit (Local-First Version Control)
+    implementation(libs.jgit)
 
     // Location
     implementation("com.google.android.gms:play-services-location:21.0.1")
@@ -177,5 +182,9 @@ dependencies {
 
     // RSS Parser
     implementation("com.prof18.rssparser:rssparser:6.0.8")
+
+    // YAML & Serialization
+    implementation(libs.kaml)
+    implementation(libs.kotlinx.serialization.json)
 }
 

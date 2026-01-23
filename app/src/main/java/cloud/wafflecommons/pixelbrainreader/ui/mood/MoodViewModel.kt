@@ -60,7 +60,7 @@ class MoodViewModel @Inject constructor(
      */
     fun loadMood(date: LocalDate) {
         loadJob?.cancel()
-        loadJob = viewModelScope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+        loadJob = viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, selectedDate = date) }
 
             moodRepository.getDailyMood(date)

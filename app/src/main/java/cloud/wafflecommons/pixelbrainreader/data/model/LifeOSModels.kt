@@ -1,10 +1,12 @@
 package cloud.wafflecommons.pixelbrainreader.data.model
 
+import androidx.compose.runtime.Immutable
 import java.time.LocalTime
 
 enum class HabitType { BOOLEAN, MEASURABLE }
 enum class HabitStatus { COMPLETED, PARTIAL, SKIPPED, FAILED }
 
+@Immutable
 data class HabitConfig(
     val id: String,
     val title: String,
@@ -17,6 +19,7 @@ data class HabitConfig(
     val unit: String = ""
 )
 
+@Immutable
 data class HabitLogEntry(
     val habitId: String,
     val date: String, // ISO8601 Date String "YYYY-MM-DD"
@@ -25,6 +28,7 @@ data class HabitLogEntry(
     val timestamp: Long = System.currentTimeMillis()
 )
 
+@Immutable
 data class Task(
     val lineIndex: Int, // CRITICAL for atomic updates
     val originalText: String,
@@ -33,17 +37,20 @@ data class Task(
     val cleanText: String
 )
 
+@Immutable
 data class TimelineEvent(
     val time: LocalTime,
     val content: String,
     val originalLine: String
 )
 
+@Immutable
 data class MarkdownLink(
     val title: String,
     val url: String
 )
 
+@Immutable
 data class BriefingData(
     val weather: String, // E.g., "☀️ 25°C"
     val parentingAdvice: String,

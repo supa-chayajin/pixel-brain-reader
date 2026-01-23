@@ -57,4 +57,16 @@ object DatabaseModule {
     fun provideNewsDao(database: AppDatabase): cloud.wafflecommons.pixelbrainreader.data.local.dao.NewsDao {
         return database.newsDao()
     }
+    
+    @Provides
+    @Singleton
+    fun provideMoodDao(database: AppDatabase): cloud.wafflecommons.pixelbrainreader.data.local.dao.MoodDao {
+        return database.moodDao()
+    }
+    
+    @Provides
+    @Singleton
+    fun provideHabitDao(database: AppDatabase): cloud.wafflecommons.pixelbrainreader.data.local.dao.HabitDao {
+        return database.habitDao()
+    }
 }

@@ -18,9 +18,13 @@ import javax.inject.Singleton
 import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
 import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
 
 /**
- * Standalone Mood Entry model.
+ * Standalone Mood Entry model (Domain).
  */
 data class MoodEntry(
     val time: String,
@@ -47,218 +51,222 @@ data class DailyMoodData(
     val summary: MoodSummary
 )
 
+// --- DTOs (Internal Serialization) ---
+@Serializable
+data class MoodEntryDto(
+    val time: String,
+    val score: Int,
+    val label: String,
+    val activities: List<String> = emptyList(),
+    val note: String? = null
+)
+
+@Serializable
+data class MoodSummaryDto(
+    val averageScore: Double,
+    val mainEmoji: String
+)
+
+@Serializable
+data class DailyMoodDataDto(
+    val date: String = "",
+    val entries: List<MoodEntryDto> = emptyList(),
+    val summary: MoodSummaryDto? = null
+)
 
 @Singleton
 class MoodRepository @Inject constructor(
     private val fileRepository: FileRepository,
-    private val gson: Gson,
+    private val moodDao: cloud.wafflecommons.pixelbrainreader.data.local.dao.MoodDao,
+    private val database: cloud.wafflecommons.pixelbrainreader.data.local.AppDatabase,
     private val secretManager: SecretManager
 ) {
     private val moodDir = "10_Journal/data/health/mood"
+    
+    private val jsonParser = Json { 
+        ignoreUnknownKeys = true 
+        isLenient = true 
+        prettyPrint = true
+    }
 
-    private val _moods = kotlinx.coroutines.flow.MutableStateFlow<Map<LocalDate, DailyMoodData>>(emptyMap())
-    val moods = _moods.asStateFlow()
-
-    init {
-        // Preload cache asynchronously
-        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
-            getAllMoods()
-        }
+    // SSOT: Room Database
+    fun getMoodFlow(): Flow<List<cloud.wafflecommons.pixelbrainreader.data.local.entity.MoodEntity>> {
+         return moodDao.getAllMoods()
     }
 
     /**
-     * Loads all mood files into cache.
+     * Sync Bridge: Scans local JSON files and upserts to Room.
+     * Called by Workers or on App Start.
      */
-    suspend fun getAllMoods() {
-        val files = fileRepository.getFilesFlow("10_Journal/data/health/mood").first()
-        val loadedCache = files
-            .filter { it.name.endsWith(".json") }
-            .mapNotNull { fileEntity ->
+    /**
+     * Sync Bridge: Scans local JSON files and upserts to Room.
+     * Called by Workers or on App Start.
+     */
+    suspend fun syncWithFileSystem() = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        val root = fileRepository.getLocalFile(moodDir)
+        if (!root.exists()) {
+             Log.w("DataSync", "Mood directory not found: ${root.absolutePath}")
+             return@withContext
+        }
+        
+        Log.d("PBR_SYNC", "Scanning mood folder: ${root.absolutePath}")
+        
+        // Atomic Transaction (Blocking - Safe in Dispatchers.IO)
+        database.runInTransaction {
+            var parsedCount = 0
+            var filesCount = 0
+            root.walk().filter { it.isFile && it.name.endsWith(".json") }.forEach { file ->
                 try {
-                    val content = fileRepository.getFileContentFlow(fileEntity.path).first()
-                    if (content.isNullOrBlank()) null
-                    else {
-                        val data = gson.fromJson(content, DailyMoodData::class.java)
-                        val recalculated = recalculateDailyData(data)
-                        LocalDate.parse(data.date, DateTimeFormatter.ISO_LOCAL_DATE) to recalculated
+                    val content = file.readText()
+                    if (content.isNotBlank()) {
+                         val data = jsonParser.decodeFromString<DailyMoodDataDto>(content)
+                         
+                         // 1. Validate Date
+                         var dateKey = data.date
+                         if (dateKey.isBlank()) {
+                             dateKey = file.nameWithoutExtension.take(10) // Fallback to filename (YYYY-MM-DD)
+                         }
+                         
+                         // 2. Map Entries
+                         if (data.entries.isNotEmpty()) {
+                            data.entries.forEach { entry ->
+                                 // Calc Timestamp
+                                 val timeStr = if (entry.time.length == 5) entry.time else "12:00" // Simple Validation
+                                 val localDateTime = java.time.LocalDateTime.parse("${dateKey}T${timeStr}")
+                                 val timestamp = localDateTime.atZone(java.time.ZoneId.systemDefault()).toEpochSecond() * 1000
+
+                                 val entity = cloud.wafflecommons.pixelbrainreader.data.local.entity.MoodEntity(
+                                     timestamp = timestamp,
+                                     date = dateKey,
+                                     time = timeStr,
+                                     score = entry.score,
+                                     label = entry.label,
+                                     activities = entry.activities.joinToString(","),
+                                     note = entry.note
+                                 )
+                                 moodDao.insertMoodBlocking(entity)
+                                 parsedCount++
+                            }
+                            filesCount++
+                         }
                     }
                 } catch (e: Exception) {
-                    null
+                    Log.e("PBR_SYNC", "Failed to parse ${file.name}: ${e.message}")
                 }
             }
-            .toMap()
-        
-        _moods.value = loadedCache
+            Log.d("PBR_SYNC", "Imported $parsedCount mood entries (from $filesCount files)")
+        }
     }
 
     /**
-     * Observes mood data for a specific date.
-     * Uses Cache first, falling back to file load if missing (and updates cache).
+     * Observes mood data for a specific date (Reactive from DB).
      */
-    fun getDailyMood(date: LocalDate): Flow<DailyMoodData?> = _moods.map { it[date] }
-        .onStart {
-            // If not in cache, try to load specific file
-            if (_moods.value[date] == null) {
-                 kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
-                     try {
-                         val fileName = date.format(DateTimeFormatter.ISO_LOCAL_DATE)
-                         val path = "$moodDir/$fileName.json"
-                         val content = fileRepository.getFileContentFlow(path).first()
-                         if (!content.isNullOrBlank()) {
-                             val data = gson.fromJson(content, DailyMoodData::class.java)
-                             val recalculated = recalculateDailyData(data)
-                             _moods.update { current -> current + (date to recalculated) }
-                         }
-                     } catch (e: Exception) {
-                         // Ignore if file doesn't exist
-                     }
-                 }
-            }
-        }
+    fun getDailyMood(date: LocalDate): Flow<DailyMoodData?> {
+         return moodDao.getMood(date.toString()).map { entities ->
+             if (entities.isNotEmpty()) mapToDomain(entities, date.toString()) else null
+         }
+    }
 
     /**
-     * Returns a synthetic "Daily Mood" entry representing the day's average mood
-     * and the latest update timestamp.
+     * Legacy synchronous accessor for Stats
      */
     suspend fun getMood(date: LocalDate): MoodEntry? {
-        val dailyData = _moods.value[date] ?: run {
-             // Try load
-             val fileName = date.format(DateTimeFormatter.ISO_LOCAL_DATE)
-             val path = "$moodDir/$fileName.json"
-             try {
-                 val content = fileRepository.getFileContentFlow(path).first()
-                 if (!content.isNullOrBlank()) {
-                     val data = gson.fromJson(content, DailyMoodData::class.java)
-                     recalculateDailyData(data) // Return recalculated
-                 } else null
-             } catch (e: Exception) { null }
-        } ?: return null
-        
-        if (dailyData.entries.isEmpty()) return null
-
-        // 1. Get Latest Timestamp
-        // entries are sorted descending in recalculateDailyData
-        val latestEntry = dailyData.entries.first() 
-        val lastUpdate = latestEntry.time
-
-        // 2. Average already calculated in summary
-        val avgScore = dailyData.summary.averageScore
-        val roundedScore = avgScore.roundToInt()
-        val emoji = calculateDailyEmoji(avgScore)
-
-        return MoodEntry(
-            time = lastUpdate,
-            score = roundedScore,
-            label = emoji,
-            activities = latestEntry.activities, // Or combine? User said "Leave empty or take latest note"
-            note = latestEntry.note
-        )
+         // Return the LATEST entry for the day based on time
+         return getDailyMood(date).first()?.entries?.maxByOrNull { it.time }
     }
 
     /**
-     * Adds a new mood entry to the daily log and recalculates the summary.
+     * Adds a new mood entry:
      */
     suspend fun addEntry(date: LocalDate, entry: MoodEntry) {
         val path = "$moodDir/$date.json"
         
-        // 1. Ensure Directory Structure exists in DB metadata
-        ensureDirectoryStructure()
-
-        // 2. Load Existing Data (Use Cache or default)
-        val currentData = _moods.value[date] ?: run {
-             // Fallback to File if not in cache (rare if we observed it, but possible)
-             try {
-                val content = fileRepository.getFileContentFlow(path).first()
-                if (content.isNullOrBlank()) {
-                     DailyMoodData(date = date.toString(), entries = emptyList(), summary = MoodSummary(0.0, "😐"))
-                } else {
-                    gson.fromJson(content, DailyMoodData::class.java)
-                }
-             } catch (e: Exception) {
-                 DailyMoodData(date = date.toString(), entries = emptyList(), summary = MoodSummary(0.0, "😐"))
+        // 1. Read existing JSON from Disk
+        val currentContent = try { fileRepository.readFile(path) } catch(e:Exception) { null }
+        val currentData = try {
+             if (!currentContent.isNullOrBlank()) {
+                 jsonParser.decodeFromString<DailyMoodDataDto>(currentContent)
+             } else {
+                 DailyMoodDataDto(date = date.toString())
              }
+        } catch (e: Exception) {
+             DailyMoodDataDto(date = date.toString())
         }
 
-        // 3. Update entries
-        val updatedEntries = currentData.entries + entry
+        // 2. Add
+        val newDto = MoodEntryDto(entry.time, entry.score, entry.label, entry.activities, entry.note)
+        val updatedEntries = currentData.entries + newDto
         
-        // 4. Recalculate & Sort
-        val tempContainer = currentData.copy(entries = updatedEntries)
-        val updatedData = recalculateDailyData(tempContainer)
+        // 3. Calc Summary
+        val avg = updatedEntries.map { it.score }.average()
+        val summary = MoodSummaryDto(avg, calculateDailyEmoji(avg))
+        
+        val updatedData = currentData.copy(entries = updatedEntries, summary = summary)
 
-        // 5. Update Cache
-        _moods.update { current -> current + (date to updatedData) }
+        // 4. Save
+        val jsonString = jsonParser.encodeToString(updatedData)
+        fileRepository.saveFileLocally(path, jsonString)
 
-        // 6. Serialize & Save
-        val updatedContent = gson.toJson(updatedData)
-        fileRepository.saveFileLocally(path, updatedContent)
+        // 5. Update DB
+        // 5. Update DB
+        val localDateTime = java.time.LocalDateTime.parse("${date}T${entry.time}")
+        val timestamp = localDateTime.atZone(java.time.ZoneId.systemDefault()).toEpochSecond() * 1000
 
-        // 7. SYNC: Push changes to Remote
+        val entity = cloud.wafflecommons.pixelbrainreader.data.local.entity.MoodEntity(
+             timestamp = timestamp,
+             date = date.toString(),
+             time = entry.time,
+             score = entry.score,
+             label = entry.label,
+             activities = entry.activities.joinToString(","),
+             note = entry.note
+        )
+        moodDao.insertMood(entity)
+        
+        // 6. Push
         try {
             val (owner, repo) = secretManager.getRepoInfo()
             if (!owner.isNullOrBlank() && !repo.isNullOrBlank()) {
-                val message = "Update mood log: $date"
-                fileRepository.pushDirtyFiles(owner, repo, message)
+                fileRepository.pushDirtyFiles(owner, repo, "feat(health): update mood $date")
             }
-        } catch (e: Exception) {
-            // Log warning but don't crash, local save is successful
-            android.util.Log.w("MoodRepository", "Failed to sync mood entry: ${e.message}")
-        }
+        } catch (e: Exception) {}
     }
 
-
-
-    private fun recalculateDailyData(data: DailyMoodData): DailyMoodData {
-        // 1. Sort descending (Latest first)
-        val sortedEntries = data.entries.sortedByDescending { it.time }
-        
-        // 2. Calculate Average
-        val avg = if (sortedEntries.isEmpty()) 0.0 else sortedEntries.map { it.score }.average()
-        
-        // 3. Determine Emoji
-        val emoji = calculateDailyEmoji(avg)
-        
-        return data.copy(
-            entries = sortedEntries,
-            summary = MoodSummary(averageScore = avg, mainEmoji = emoji)
-        )
-    }
-
-
-
-    private suspend fun ensureDirectoryStructure() {
-        // We create entities for the nested structure to ensure folder navigation works
-        fileRepository.createLocalFolder("10_Journal")
-        fileRepository.createLocalFolder("10_Journal/data")
-        fileRepository.createLocalFolder("10_Journal/data/health")
-        fileRepository.createLocalFolder(moodDir)
+    // --- Mappers ---
+    
+    private fun mapToDomain(entities: List<cloud.wafflecommons.pixelbrainreader.data.local.entity.MoodEntity>, dateIdx: String): DailyMoodData {
+         val entries = entities.map { 
+             MoodEntry(it.time, it.score, it.label, it.activities.split(",").filter { s -> s.isNotBlank() }, it.note)
+         }
+         val avg = if (entries.isNotEmpty()) entries.map { it.score }.average() else 0.0
+         val summary = MoodSummary(avg, calculateDailyEmoji(avg))
+         return DailyMoodData(dateIdx, entries, summary)
     }
 
     private fun calculateDailyEmoji(avg: Double): String {
-        // Strict mapping based on Average Score
         return when {
             avg < 1.8 -> "😫"
+            avg.isNaN() -> "😐"
             avg < 2.6 -> "😞"
             avg < 3.4 -> "😐"
             avg < 4.2 -> "🙂"
             else -> "🤩"
         }
     }
-    // Simplified Sparkline Generator
+
     suspend fun getWeeklySparkline(): String {
-        val scores = (0..6).map { i ->
-            val date = LocalDate.now().minusDays(6L - i)
-            // Synchronously get cached or fetch (pseudo-code, usage of getDailyMood(date) is Flow)
-            // For now, let's assume we can get it or return 0.
-            try {
-                // In a real scenario, we'd query DB. Transforming Flow to suspended value here for simplicity.
-                val entry = getDailyMood(date).first()
-                if (entry == null) 0 else entry.summary.averageScore.toInt()
-            } catch (e: Exception) { 0 }
+        val all = moodDao.getAllMoods().first()
+        // Map: Date -> Average Score
+        val map = all.groupBy { it.date }.mapValues { (_, list) -> 
+            list.map { it.score }.average()
         }
         
-        val bars = listOf(" ", " ", "▂", "▃", "▅", "▆", "▇", "█") 
-        // Mapping 0-10 score to index 0-7
+        val scores = (0..6).map { i ->
+             val d = LocalDate.now().minusDays(6L - i).toString()
+             map[d]?.roundToInt() ?: 0
+        }
+        
+        val bars = listOf(" ", " ", "▂", "▃", "▅", "▆", "▇", "█")
         return scores.joinToString("") { score ->
             val index = ((score / 10.0) * (bars.size - 1)).roundToInt().coerceIn(0, bars.size - 1)
             bars[index]

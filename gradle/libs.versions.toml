@@ -98,6 +98,9 @@ mlkit-genai-summarization = { group = "com.google.mlkit", name = "genai-summariz
 mlkit-genai-rewriting = { group = "com.google.mlkit", name = "genai-rewriting", version.ref = "mlkitGenaiBeta" }
 mlkit-genai-proofreading = { group = "com.google.mlkit", name = "genai-proofreading", version.ref = "mlkitGenaiBeta" }
 google-ai-client = { group = "com.google.ai.client.generativeai", name = "generativeai", version.ref = "googleAiClient" }
+jgit = { group = "org.eclipse.jgit", name = "org.eclipse.jgit", version = "6.8.0.202311291450-r" }
+kaml = { group = "com.charleskorn.kaml", name = "kaml", version = "0.60.0" }
+kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version = "1.6.3" }
 
 
 [plugins]
@@ -106,3 +109,4 @@ jetbrains-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = 
 hilt-android = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }

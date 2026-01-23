@@ -13,7 +13,9 @@ data class FileEntity(
     val sha: String? = null, // Remote SHA for incremental sync
     val lastSyncedAt: Long = System.currentTimeMillis(),
     val isDirty: Boolean = false,
-    val localModifiedTimestamp: Long? = null
+    val localModifiedTimestamp: Long? = null,
+    val tags: String? = null, // Comma separated tags
+    val rawMetadata: String? = null // JSON blob of other frontmatter
 )
 
 fun GithubFileDto.toEntity() = FileEntity(
@@ -21,7 +23,9 @@ fun GithubFileDto.toEntity() = FileEntity(
     name = name,
     type = type,
     downloadUrl = downloadUrl,
-    sha = sha
+    sha = sha,
+    tags = null,
+    rawMetadata = null
 )
 
 fun cloud.wafflecommons.pixelbrainreader.data.remote.model.RemoteFile.toEntity() = FileEntity(
@@ -29,5 +33,7 @@ fun cloud.wafflecommons.pixelbrainreader.data.remote.model.RemoteFile.toEntity()
     name = name,
     type = type,
     downloadUrl = downloadUrl,
-    sha = sha // Assuming RemoteFile also has sha, if not valid check needed.
+    sha = sha, // Assuming RemoteFile also has sha, if not valid check needed.
+    tags = null,
+    rawMetadata = null
 )

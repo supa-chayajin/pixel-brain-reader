@@ -13,7 +13,8 @@ import androidx.room.ColumnInfo
             entity = FileEntity::class,
             parentColumns = ["path"],
             childColumns = ["fileId"],
-            onDelete = ForeignKey.CASCADE
+            onDelete = ForeignKey.CASCADE,
+            onUpdate = ForeignKey.CASCADE
         )
     ],
     indices = [Index(value = ["fileId"])]

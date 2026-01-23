@@ -1,6 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.di
 
-import cloud.wafflecommons.pixelbrainreader.data.remote.AuthInterceptor
+
 import com.google.gson.Gson
 import dagger.Module
 import dagger.Provides
@@ -16,15 +16,7 @@ object AppModule {
     @Singleton
     fun provideGson(): Gson = Gson()
 
-    @Provides
-    @Singleton
-    fun provideHabitRepository(
-        fileRepository: cloud.wafflecommons.pixelbrainreader.data.repository.FileRepository,
-        gson: Gson,
-        secretManager: cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
-    ): cloud.wafflecommons.pixelbrainreader.data.repository.HabitRepository {
-        return cloud.wafflecommons.pixelbrainreader.data.repository.HabitRepository(fileRepository, gson, secretManager)
-    }
+
 
     @Provides
     @Singleton

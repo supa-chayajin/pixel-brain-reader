@@ -1,7 +1,5 @@
 package cloud.wafflecommons.pixelbrainreader.di
 
-import cloud.wafflecommons.pixelbrainreader.data.remote.AuthInterceptor
-import cloud.wafflecommons.pixelbrainreader.data.remote.GithubApiService
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -18,36 +16,13 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideOkHttpClient(authInterceptor: AuthInterceptor): OkHttpClient {
+    fun provideOkHttpClient(): OkHttpClient {
         val logging = HttpLoggingInterceptor().apply {
             level = HttpLoggingInterceptor.Level.BODY
         }
         return OkHttpClient.Builder()
-            .addInterceptor(authInterceptor)
             .addInterceptor(logging)
             .build()
-    }
-
-    @Provides
-    @Singleton
-    fun provideRetrofit(okHttpClient: OkHttpClient): Retrofit {
-        return Retrofit.Builder()
-            .baseUrl("https://api.github.com/")
-            .client(okHttpClient)
-            .addConverterFactory(GsonConverterFactory.create())
-            .build()
-    }
-
-    @Provides
-    @Singleton
-    fun provideGithubApiService(retrofit: Retrofit): GithubApiService {
-        return retrofit.create(GithubApiService::class.java)
-    }
-
-    @Provides
-    @Singleton
-    fun provideGitProvider(impl: cloud.wafflecommons.pixelbrainreader.data.remote.DelegatingGitProvider): cloud.wafflecommons.pixelbrainreader.data.remote.GitProvider {
-        return impl
     }
 
     @Provides

@@ -52,20 +52,23 @@ class LifeStatsViewModel @Inject constructor(
     private fun observeMoods() {
         viewModelScope.launch {
             combine(
-                moodRepository.moods,
+                moodRepository.getMoodFlow(),
                 _currentMonth
             ) { allMoods, month ->
-                // Filter for current month and map to Emoji logic
+                // allMoods is List<MoodEntity>
                 val start = month.atDay(1)
                 val end = month.atEndOfMonth()
                 
-                allMoods.filterKeys { date ->
-                    !date.isBefore(start) && !date.isAfter(end)
-                }.mapValues { (_, data) ->
-                    // Use the summary logic from Repo or custom mapping
-                    val avg = data.summary.averageScore
-                    calculateEmoji(avg)
-                }
+                allMoods
+                    .mapNotNull { entity ->
+                        try {
+                            val date = LocalDate.parse(entity.date)
+                            if (!date.isBefore(start) && !date.isAfter(end)) {
+                                date to calculateEmoji(entity.score)
+                            } else null
+                        } catch (e: Exception) { null }
+                    }
+                    .toMap()
             }.collect { monthlyMoods ->
                 _uiState.update { it.copy(
                     monthlyMoods = monthlyMoods,
@@ -84,9 +87,9 @@ class LifeStatsViewModel @Inject constructor(
     }
     
     // Custom mapping as requested
-    private fun calculateEmoji(score: Double): String {
-        val rounded = score.roundToInt()
-        return when (rounded) {
+    // Custom mapping as requested
+    private fun calculateEmoji(score: Int): String {
+        return when (score) {
              1 -> "😭"
              2 -> "☹️"
              3 -> "😐"

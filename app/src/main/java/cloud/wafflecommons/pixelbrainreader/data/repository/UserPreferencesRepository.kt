@@ -113,4 +113,17 @@ class UserPreferencesRepository @Inject constructor(
             preferences[KEY_BRIEFING_EXPANDED] = expanded
         }
     }
+    // --- Sync Metadata ---
+    private val KEY_LAST_INDEX_TIME = androidx.datastore.preferences.core.longPreferencesKey("last_index_timestamp")
+
+    val lastIndexTime: Flow<Long> = context.dataStore.data
+        .map { preferences ->
+            preferences[KEY_LAST_INDEX_TIME] ?: 0L 
+        }
+
+    suspend fun setLastIndexTime(timestamp: Long) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_LAST_INDEX_TIME] = timestamp
+        }
+    }
 }
