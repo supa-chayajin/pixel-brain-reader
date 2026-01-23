@@ -17,25 +17,28 @@ import android.util.Log
  */
 @Singleton
 class NoteRepository @Inject constructor(
-    @ApplicationContext private val context: Context,
+    private val safeFileProvider: cloud.wafflecommons.pixelbrainreader.data.utils.SafeFileProvider,
     private val jGitProvider: JGitProvider,
     private val vaultDiscoveryRepository: VaultDiscoveryRepository
 ) {
     
-    private val rootDir: File
-        get() = File(context.filesDir, "vault")
 
     suspend fun getNoteContent(path: String): String? = withContext(Dispatchers.IO) {
-        val file = File(rootDir, path)
-        Log.d("FileAudit", "Reading file at: ${file.absolutePath}")
-        
-        if (file.exists()) {
-            if (file.isDirectory) return@withContext null
-            val content = file.readText()
-            Log.d("FileAudit", "Read ${content.length} bytes from ${file.name}")
-            content
-        } else {
-            Log.w("FileAudit", "File not found: ${file.absolutePath}")
+        try {
+            val file = safeFileProvider.getSafeFile(path)
+            Log.d("FileAudit", "Reading file at: ${file.absolutePath}")
+            
+            if (file.exists()) {
+                if (file.isDirectory) return@withContext null
+                val content = file.readText()
+                Log.d("FileAudit", "Read ${content.length} bytes from ${file.name}")
+                content
+            } else {
+                Log.w("FileAudit", "File not found: ${file.absolutePath}")
+                null
+            }
+        } catch (e: SecurityException) {
+            Log.e("SecurityAudit", "Access Denied: ${e.message}")
             null
         }
     }
@@ -46,17 +49,20 @@ class NoteRepository @Inject constructor(
     }
 
     suspend fun saveNote(path: String, content: String) = withContext(Dispatchers.IO) {
-        val file = File(rootDir, path)
-        file.parentFile?.mkdirs()
-        file.writeText(content)
-        
-        // Trigger Git tracking
-        // We defer to VaultDiscovery to update the index
-        vaultDiscoveryRepository.scanSingleFile(path)
-        
-        // Git Add & Auto-commit if configured
-        jGitProvider.addAll()
-        // jGitProvider.commit("Update $path") // Optional: Auto-commit on every save?
+        try {
+            safeFileProvider.atomicWrite(path, content)
+            
+            // Trigger Git tracking
+            // We defer to VaultDiscovery to update the index
+            vaultDiscoveryRepository.scanSingleFile(path)
+            
+            // Git Add & Auto-commit if configured
+            jGitProvider.addAll()
+            // jGitProvider.commit("Update $path") // Optional: Auto-commit on every save?
+        } catch (e: SecurityException) {
+             Log.e("SecurityAudit", "Write Denied: ${e.message}")
+             throw e
+        }
     }
     
     suspend fun updateNoteMetadata(path: String, updates: Map<String, Any?>) = withContext(Dispatchers.IO) {
