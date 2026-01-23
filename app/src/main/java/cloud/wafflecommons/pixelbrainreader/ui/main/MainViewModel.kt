@@ -194,6 +194,10 @@ class MainViewModel @Inject constructor(
                  Log.e("MainViewModel", "Sync Error", e)
                  _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Sync Error ⚠️: ${e.message}"))
              } finally {
+                 // Always trigger Brain Optimization (Local Indexing) regardless of Network Sync status
+                 // Critical for Offline-First functionality
+                 triggerBrainOptimization()
+                 
                  // Release UI
                  _uiState.value = _uiState.value.copy(isLoading = false, isSyncing = false)
              }

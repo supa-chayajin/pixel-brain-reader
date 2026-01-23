@@ -7,6 +7,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import cloud.wafflecommons.pixelbrainreader.data.ai.BriefingGenerator
 import cloud.wafflecommons.pixelbrainreader.data.repository.FileRepository
+import cloud.wafflecommons.pixelbrainreader.data.repository.NoteRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.MoodRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.NewsRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.WeatherRepository
@@ -20,7 +21,8 @@ import kotlinx.coroutines.flow.firstOrNull
 class DailyBriefingWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted workerParams: WorkerParameters,
-    private val fileRepository: FileRepository,
+    private val noteRepository: NoteRepository,
+    private val fileRepository: FileRepository, // Keep for fallback/legacy or remove if unused? Repo replaces it.
     private val weatherRepository: WeatherRepository,
     private val moodRepository: MoodRepository,
     private val newsRepository: NewsRepository,
@@ -32,36 +34,35 @@ class DailyBriefingWorker @AssistedInject constructor(
         val formattedDate = today.format(DateTimeFormatter.ISO_DATE)
         val notePath = "10_Journal/$formattedDate.md"
 
-        // 1. Check if file exists. If not, we might want to skip or create. 
-        if (!fileRepository.fileExists(notePath)) {
-            fileRepository.createFile(notePath, "# 📅 $formattedDate\n")
+        // 1. Ensure Note Exists via NoteRepository (or fallback)
+        // Note: NoteRepository acts on vault root.
+        var content = noteRepository.getNoteContent(notePath)
+        
+        if (content == null) {
+            // Create if missing
+            content = "# 📅 $formattedDate\n"
+            noteRepository.saveNote(notePath, content)
         }
-
-        var content = fileRepository.readFile(notePath) ?: return Result.failure()
 
         // 2. Check if already briefed
         if (content.contains("## 🌅 Morning Briefing")) {
             return Result.success() // Already done
         }
 
-        // 3. Fetch Data
+        // 3. Fetch Data & Log
         val weather = weatherRepository.getCurrentWeatherAndLocation()
-        // AI WEATHER ADVICE
-        // AI WEATHER ADVICE
-        Log.d("DailyBriefingWorker", weather?.description ?: "null")
-        val insight = if (weather != null) {
-            briefingGenerator.getWeatherInsight(weather)
-        } else {
-            "Préparez-vous pour la journée."
-        }
+        Log.d("WeatherAI", "Weather data fetched: ${weather?.emoji} ${weather?.temperature}")
+
+        // AI BRIEFING GENERATION
+        val aiBriefing = briefingGenerator.generateBriefing(weather)
         
         val temp = weather?.temperature ?: "?°C"
         val weatherIcon = weather?.emoji ?: "🌤️"
+        val location = weather?.location ?: "Unknown"
         
         val sparkline = moodRepository.getWeeklySparkline()
         
         // AI MOOD QUOTE
-        // Determine simple trend
         val moodTrend = try {
             val yesterdayMood = moodRepository.getDailyMood(today.minusDays(1)).firstOrNull()
             if ((yesterdayMood?.summary?.averageScore ?: 0.0) > 3.0) "Positive" else "Reflective"
@@ -69,25 +70,19 @@ class DailyBriefingWorker @AssistedInject constructor(
         
         val quote = briefingGenerator.getDailyQuote(moodTrend)
         
-        // 4. Update Frontmatter with Insight
-        val updates = mapOf(
-            "weather_insight" to insight
-        )
-        content = cloud.wafflecommons.pixelbrainreader.data.utils.FrontmatterManager.injectWeather(content, updates)
-
-        // 5. Format Markdown (Without News)
+        // 4. Format Markdown
         val briefingMd = """
             
             ## 🌅 Morning Briefing
-            * **Météo :** $weatherIcon $temp - *$insight*
+            * **Météo ($location) :** $weatherIcon $temp
+            * **Briefing :** $aiBriefing
             * **Mood 7j :** $sparkline
             * **Mindset :** $quote
         """.trimIndent()
 
-        // 6. Injection Strategy
-        val insertionPoint = "## Daily Summary" // Or "## 📝 Journal" fallback
-        
-        content = if (content.contains("## 📝 Journal")) {
+        // 5. Injection Strategy
+        // Update Content
+        val updatedContent = if (content.contains("## 📝 Journal")) {
              // Insert before Journal to match UX placement
              content.replace("## 📝 Journal", "$briefingMd\n\n## 📝 Journal")
         } else {
@@ -95,7 +90,7 @@ class DailyBriefingWorker @AssistedInject constructor(
              "$content\n$briefingMd"
         }
 
-        fileRepository.updateFile(notePath, content)
+        noteRepository.saveNote(notePath, updatedContent)
 
         return Result.success()
     }

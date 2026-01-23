@@ -6,6 +6,7 @@ import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.EmbeddingDao
+import cloud.wafflecommons.pixelbrainreader.data.local.dao.FileDao
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.EmbeddingEntity
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
@@ -19,7 +20,8 @@ class IndexingWorker @AssistedInject constructor(
     @Assisted private val appContext: Context,
     @Assisted workerParams: WorkerParameters,
     private val vectorSearchEngine: VectorSearchEngine,
-    private val embeddingDao: EmbeddingDao
+    private val embeddingDao: EmbeddingDao,
+    private val fileDao: FileDao
 ) : CoroutineWorker(appContext, workerParams) {
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
@@ -31,11 +33,11 @@ class IndexingWorker @AssistedInject constructor(
                 embeddingDao.deleteAll()
             }
 
-            val rootDir = appContext.filesDir
-            if (!rootDir.exists()) return@withContext Result.failure()
+            val vaultDir = File(appContext.filesDir, "vault")
+            if (!vaultDir.exists()) return@withContext Result.success()
 
             // Recursive scan for Markdown files
-            val markdownFiles = rootDir.walkTopDown()
+            val markdownFiles = vaultDir.walkTopDown()
                 .filter { it.isFile && it.extension == "md" }
                 .toList()
 
@@ -45,8 +47,16 @@ class IndexingWorker @AssistedInject constructor(
             markdownFiles.forEach { file ->
                 if (!file.name.startsWith(".")) { // Skip hidden files
                     try {
-                        indexFile(file)
-                        count++
+                        // FIX: Use relative path for fileId to match FileEntity.path and avoid FK constraint failure
+                        val relativePath = file.relativeTo(vaultDir).path
+                        
+                        // Ensure the file exists in the files table before inserting embeddings
+                        if (fileDao.existsBlocking(relativePath)) {
+                            indexFile(file, relativePath)
+                            count++
+                        } else {
+                            Log.w("Cortex", "Skipping $relativePath: Not found in database index.")
+                        }
                     } catch (e: Exception) {
                         Log.e("Cortex", "Failed to index ${file.name}", e)
                     }
@@ -61,7 +71,7 @@ class IndexingWorker @AssistedInject constructor(
         }
     }
 
-    private suspend fun indexFile(file: File) {
+    private suspend fun indexFile(file: File, relativePath: String) {
         val text = file.readText()
         if (text.isBlank()) return
         
@@ -73,7 +83,7 @@ class IndexingWorker @AssistedInject constructor(
         val chunks = cleanContent.split(Regex("(?m)^(?=#{1,3}\\s)")).filter { it.isNotBlank() }
         
         // Always clear previous entries for this file to avoid duplicates
-        embeddingDao.deleteByFileId(file.path)
+        embeddingDao.deleteByFileId(relativePath)
 
         chunks.forEach { chunk ->
             // Vectorize
@@ -81,7 +91,7 @@ class IndexingWorker @AssistedInject constructor(
             
             val entity = EmbeddingEntity(
                 id = UUID.randomUUID().toString(),
-                fileId = file.path,
+                fileId = relativePath,
                 content = chunk.trim(),
                 vector = vector.toList(),
                 lastUpdated = System.currentTimeMillis()

@@ -177,8 +177,7 @@ class DailyNoteViewModel @Inject constructor(
                     // Fix: Strip "Timeline" section and ensure clean spacing
                     val rawIntro = parsed.first.replaceFirst(Regex("^# 📅 \\d{4}-\\d{2}-\\d{2}\\s*"), "").trim()
                     
-                    // Remove Timeline Section Robustly (handling different newlines/spacings)
-                    // Matches: ## (Symbol)? Timeline ... (content) ... until next ## Header or EOF
+                    // Remove Timeline Section Robustly
                     val timelineRegex = Regex("(?s)## (?:🗓️ )?Timeline.*?(?=^## |\\Z)", setOf(RegexOption.MULTILINE))
                     intro = rawIntro.replace(timelineRegex, "")
                         .replace(Regex("\n{3,}"), "\n\n") // Collapse multiple blank lines
@@ -198,6 +197,7 @@ class DailyNoteViewModel @Inject constructor(
                         filteredIntro = filterBriefingSection(filteredIntro)
                     }
                     
+                    // Check if weather is valid in frontmatter
                     // Check if weather is valid in frontmatter
                     val weatherEmoji = frontmatter["weather"]
                     val temp = frontmatter["temperature"]

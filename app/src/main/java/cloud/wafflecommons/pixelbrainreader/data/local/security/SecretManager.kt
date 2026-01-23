@@ -37,13 +37,34 @@ class SecretManager @Inject constructor(
         .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
         .build()
 
-    private val encryptedPrefs: SharedPreferences = EncryptedSharedPreferences.create(
-        context,
-        VAULT_FILENAME,
-        masterKey,
-        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-    )
+    private val encryptedPrefs: SharedPreferences by lazy {
+        try {
+            createEncryptedPrefs()
+        } catch (e: Exception) {
+            // GeneralSecurityException, AEADBadTagException, KeyStoreException
+            Log.e("SecretManager", "EncryptedSharedPreferences corrupted. Resetting vault.", e)
+            // Delete the corrupted file
+            context.deleteSharedPreferences(VAULT_FILENAME)
+            try {
+                // Try again nicely
+                createEncryptedPrefs()
+            } catch (retryException: Exception) {
+                Log.e("SecretManager", "Failed to recreate vault after reset. Fallback to unencrypted mode or fatal crash?", retryException)
+                // If it fails again, we are in trouble. But usually, deleting the file fixes the "Bad Tag" / "Signature Failed" issue.
+                throw retryException
+            }
+        }
+    }
+
+    private fun createEncryptedPrefs(): SharedPreferences {
+        return EncryptedSharedPreferences.create(
+            context,
+            VAULT_FILENAME,
+            masterKey,
+            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+        )
+    }
 
     init {
         migrateFromLegacy()

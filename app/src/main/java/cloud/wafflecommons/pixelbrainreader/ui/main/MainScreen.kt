@@ -93,6 +93,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.window.core.layout.WindowWidthSizeClass
+import androidx.window.layout.FoldingFeature
 import kotlinx.coroutines.launch
 
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -644,6 +645,14 @@ fun MainScreen(
                                     }
                                 },
                                 detailPane = {
+                                    // Detect Posture
+                                    val feature = windowAdaptiveInfo.windowPosture.hingeList.firstOrNull()
+                                    val foldingFeature = feature as? androidx.window.layout.FoldingFeature
+                                    val isTabletop = foldingFeature != null && 
+                                        foldingFeature.isSeparating && 
+                                        foldingFeature.state == androidx.window.layout.FoldingFeature.State.HALF_OPENED &&
+                                        foldingFeature.orientation == androidx.window.layout.FoldingFeature.Orientation.HORIZONTAL
+
                                     if (uiState.selectedFileName != null) {
                                         FileDetailPane(
                                             content = uiState.unsavedContent
@@ -654,6 +663,7 @@ fun MainScreen(
                                             isRefreshing = uiState.isRefreshing,
                                             onRefresh = { viewModel.refreshCurrentFile() },
                                             isExpandedScreen = isLargeScreen,
+                                            isTabletop = isTabletop, // Pass Posture
                                             isEditing = uiState.isEditing,
                                             hasUnsavedChanges = uiState.hasUnsavedChanges,
                                             onWikiLinkClick = { target -> viewModel.onWikiLinkClick(target) },

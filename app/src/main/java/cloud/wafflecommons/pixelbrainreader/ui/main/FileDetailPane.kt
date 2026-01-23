@@ -106,6 +106,7 @@ fun FileDetailPane(
     isRefreshing: Boolean,
     onRefresh: () -> Unit,
     isExpandedScreen: Boolean,
+    isTabletop: Boolean = false, // New Param
     isEditing: Boolean,
     onContentChange: (String) -> Unit,
     hasUnsavedChanges: Boolean,
@@ -117,6 +118,8 @@ fun FileDetailPane(
     onClose: () -> Unit = {},
     moodViewModel: MoodViewModel = hiltViewModel()
 ) {
+    // ... (Shape and Surface logic remains) ...
+
     val shape = if (isExpandedScreen) {
         RoundedCornerShape(24.dp)
     } else {
@@ -208,27 +211,57 @@ fun FileDetailPane(
                         }
                         
                         if (isEditing) {
-                            BasicTextField(
-                                value = content,
-                                onValueChange = onContentChange,
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(16.dp)
-                                    .imePadding()
-                                    .verticalScroll(rememberScrollState()),
-                                textStyle = TextStyle(
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    fontSize = 16.sp,
-                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
-                                ),
-                                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary)
-                            )
+                            if (isTabletop) {
+                                // --- TABLETOP MODE: Split View ---
+                                Column(Modifier.fillMaxSize()) {
+                                    // Top: Preview
+                                    Box(
+                                        Modifier
+                                            .weight(1f)
+                                            .padding(16.dp)
+                                            .verticalScroll(rememberScrollState())
+                                    ) {
+                                        MarkwonContent(content = displayContent, onWikiLinkClick = onWikiLinkClick)
+                                    }
+                                    
+                                    HorizontalDivider()
+                                    
+                                    // Bottom: Editor
+                                    cloud.wafflecommons.pixelbrainreader.ui.components.ComposeCortexEditor(
+                                        content = content,
+                                        onContentChange = onContentChange,
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .padding(16.dp)
+                                            .imePadding()
+                                    )
+                                }
+                            } else {
+                                // --- STANDARD MODE ---
+                                val scrollState = androidx.compose.runtime.saveable.rememberSaveable(saver = androidx.compose.foundation.ScrollState.Saver) {
+                                    androidx.compose.foundation.ScrollState(initial = 0)
+                                }
+                                
+                                cloud.wafflecommons.pixelbrainreader.ui.components.ComposeCortexEditor(
+                                    content = content,
+                                    onContentChange = onContentChange,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(16.dp)
+                                        .imePadding()
+                                        .verticalScroll(scrollState)
+                                )
+                            }
                         } else {
+                            val scrollState = androidx.compose.runtime.saveable.rememberSaveable(saver = androidx.compose.foundation.ScrollState.Saver) {
+                                androidx.compose.foundation.ScrollState(initial = 0)
+                            }
+                            
                             Column(
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .padding(horizontal = 16.dp)
-                                    .verticalScroll(rememberScrollState())
+                                    .verticalScroll(scrollState)
                             ) {
                                 if (isDailyNote && moodState.moodData != null) {
                                     val data = moodState.moodData!!

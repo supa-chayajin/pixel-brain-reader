@@ -20,9 +20,12 @@ import cloud.wafflecommons.pixelbrainreader.data.local.dao.NewsDao
         SyncMetadataEntity::class, 
         FileContentEntity::class,
         EmbeddingEntity::class, // V4.0 Neural Vault
-        cloud.wafflecommons.pixelbrainreader.data.local.entity.NewsArticleEntity::class // V4.2 Neural Briefing
+        cloud.wafflecommons.pixelbrainreader.data.local.entity.NewsArticleEntity::class, // V4.2 Neural Briefing
+        cloud.wafflecommons.pixelbrainreader.data.local.entity.MoodEntity::class,
+        cloud.wafflecommons.pixelbrainreader.data.local.entity.HabitConfigEntity::class,
+        cloud.wafflecommons.pixelbrainreader.data.local.entity.HabitLogEntity::class
     ], 
-    version = 9, 
+    version = 14, 
     exportSchema = false
 )
 @androidx.room.TypeConverters(Converters::class)
@@ -32,6 +35,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun fileContentDao(): FileContentDao
     abstract fun embeddingDao(): EmbeddingDao
     abstract fun newsDao(): NewsDao
+    abstract fun moodDao(): cloud.wafflecommons.pixelbrainreader.data.local.dao.MoodDao
+    abstract fun habitDao(): cloud.wafflecommons.pixelbrainreader.data.local.dao.HabitDao
 }
 
 class Converters {

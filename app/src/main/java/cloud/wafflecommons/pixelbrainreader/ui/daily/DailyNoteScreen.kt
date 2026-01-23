@@ -322,11 +322,38 @@ fun MarkdownText(
     markdown: String,
     onWikiLinkClick: (String) -> Unit
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val textColor = MaterialTheme.colorScheme.onSurface.toArgb()
     
+    // Optimize: Create Markwon once
+    val markwon = remember(context, textColor) {
+        Markwon.builder(context)
+            .usePlugin(StrikethroughPlugin.create())
+            .usePlugin(TablePlugin.create(context))
+            .usePlugin(LinkifyPlugin.create())
+            .usePlugin(TaskListPlugin.create(textColor, textColor, textColor))
+            .usePlugin(ObsidianLinkPlugin { target -> onWikiLinkClick(target) })
+            .usePlugin(ObsidianImagePlugin())
+            .usePlugin(ObsidianCalloutPlugin())
+            .usePlugin(ImagesPlugin.create())
+            .usePlugin(io.noties.markwon.html.HtmlPlugin.create { plugin ->
+                plugin.addHandler(object : io.noties.markwon.html.tag.SimpleTagHandler() {
+                    override fun supportedTags() = listOf("obsidian-image")
+                    override fun getSpans(
+                        configuration: io.noties.markwon.MarkwonConfiguration,
+                        renderProps: io.noties.markwon.RenderProps,
+                        tag: io.noties.markwon.html.HtmlTag
+                    ): Any? {
+                        return null
+                    }
+                })
+            })
+            .build()
+    }
+
     AndroidView(
-        factory = { context ->
-            TextView(context).apply {
+        factory = { ctx ->
+            TextView(ctx).apply {
                 setTextColor(textColor)
                 textSize = 16f
                 setLineSpacing(12f, 1.1f)
@@ -335,29 +362,7 @@ fun MarkdownText(
             }
         },
         update = { tv ->
-            val markwon = Markwon.builder(tv.context)
-                .usePlugin(StrikethroughPlugin.create())
-                .usePlugin(TablePlugin.create(tv.context))
-                .usePlugin(LinkifyPlugin.create())
-                .usePlugin(TaskListPlugin.create(textColor, textColor, textColor))
-                .usePlugin(ObsidianLinkPlugin { target -> onWikiLinkClick(target) })
-                .usePlugin(ObsidianImagePlugin())
-                .usePlugin(ObsidianCalloutPlugin())
-                .usePlugin(ImagesPlugin.create())
-                .usePlugin(io.noties.markwon.html.HtmlPlugin.create { plugin ->
-                    plugin.addHandler(object : io.noties.markwon.html.tag.SimpleTagHandler() {
-                        override fun supportedTags() = listOf("obsidian-image")
-                        override fun getSpans(
-                            configuration: io.noties.markwon.MarkwonConfiguration,
-                            renderProps: io.noties.markwon.RenderProps,
-                            tag: io.noties.markwon.html.HtmlTag
-                        ): Any? {
-                            return null
-                        }
-                    })
-                })
-                .build()
-            
+            // Optimization: Only update text, Markwon is reused
             markwon.setMarkdown(tv, markdown)
         }
     )

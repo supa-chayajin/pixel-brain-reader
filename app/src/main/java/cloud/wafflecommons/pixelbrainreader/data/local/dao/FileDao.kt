@@ -80,6 +80,12 @@ abstract class FileDao {
 
     @Query("SELECT path, sha FROM files")
     abstract suspend fun getAllFileShas(): List<FileShaTuple>
+
+    @Query("SELECT COUNT(*) > 0 FROM files WHERE path = :path")
+    abstract suspend fun exists(path: String): Boolean
+
+    @Query("SELECT COUNT(*) > 0 FROM files WHERE path = :path")
+    abstract fun existsBlocking(path: String): Boolean
 }
 
 data class FileShaTuple(

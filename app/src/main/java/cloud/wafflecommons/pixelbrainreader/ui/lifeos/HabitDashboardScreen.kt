@@ -48,11 +48,6 @@ fun HabitDashboardScreen(
                 subtitle = "${state.habitsWithStats.count { it.isCompletedToday }}/${state.habits.size} done today",
                 scrollBehavior = scrollBehavior
             )
-        },
-        floatingActionButton = {
-            FloatingActionButton(onClick = { viewModel.addDebugHabit() }) {
-                Icon(Icons.Default.Add, contentDescription = "Add Habit")
-            }
         }
     ) { padding ->
         if (state.habits.isEmpty()) {
