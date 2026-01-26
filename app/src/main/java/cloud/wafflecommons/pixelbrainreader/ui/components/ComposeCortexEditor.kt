@@ -76,75 +76,95 @@ class MarkdownVisualTransformation(
 
     private fun parseMarkdown(text: String): AnnotatedString {
         return buildAnnotatedString {
-            append(text) // Base text
-            
-            // We apply styles on top of the raw text. 
-            // Note: VisualTransformation normally maps encoded text to visual.
-            // Here we just style the raw text for "Highlighting" while editing (Syntax Highlighting).
-            
+            append(text)
             val raw = text
             
             // 1. Headers (# H1, ## H2...)
             val headerRegex = Regex("^(#{1,6})\\s+(.*)", RegexOption.MULTILINE)
             headerRegex.findAll(raw).forEach { match ->
-                val range = match.range
+                val hashtags = match.groups[1]!!
+                val content = match.groups[2]!!
+                
+                // Style hashtags (Subtle)
+                addStyle(
+                    SpanStyle(color = highlightColor.copy(alpha = 0.4f), fontWeight = FontWeight.Normal),
+                    hashtags.range.first,
+                    hashtags.range.last + 1
+                )
+                
+                // Style content (Bold & Large)
+                val fontSize = when (hashtags.value.length) {
+                    1 -> 22.sp
+                    2 -> 20.sp
+                    3 -> 18.sp
+                    else -> 16.sp
+                }
                 addStyle(
                     SpanStyle(
                         color = highlightColor,
                         fontWeight = FontWeight.Bold,
-                        fontSize = when (match.groupValues[1].length) {
-                            1 -> 24.sp
-                            2 -> 20.sp
-                            3 -> 18.sp
-                            else -> 16.sp
-                        }
+                        fontSize = fontSize
                     ),
-                    range.first,
-                    range.last + 1
+                    content.range.first,
+                    content.range.last + 1
                 )
             }
             
             // 2. Bold (**text**)
             val boldRegex = Regex("(\\*\\*|__)(.*?)\\1")
             boldRegex.findAll(raw).forEach { match ->
+                val symbols = match.groups[1]!!
+                val content = match.groups[2]!!
+                
+                // Symbols (Subtle)
+                addStyle(SpanStyle(color = defaultColor.copy(alpha = 0.4f)), match.range.first, content.range.first)
+                addStyle(SpanStyle(color = defaultColor.copy(alpha = 0.4f)), content.range.last + 1, match.range.last + 1)
+                
+                // Content (Bold)
                 addStyle(
                     SpanStyle(fontWeight = FontWeight.Bold, color = highlightColor),
-                    match.range.first,
-                    match.range.last + 1
+                    content.range.first,
+                    content.range.last + 1
                 )
             }
             
             // 3. Italic (*text*)
-            val italicRegex = Regex("(\\*|_)(.*?)\\1")
+            val italicRegex = Regex("(?<!\\*)(\\*|_)(?!\\s)(.*?)(?<!\\s)\\1(?!\\*)")
             italicRegex.findAll(raw).forEach { match ->
-                // Avoid matching empty or bold parts if regex overlaps (simple implementation)
+                val symbols = match.groups[1]!!
+                val content = match.groups[2]!!
+
+                // Symbols (Subtle)
+                addStyle(SpanStyle(color = defaultColor.copy(alpha = 0.4f)), match.range.first, content.range.first)
+                addStyle(SpanStyle(color = defaultColor.copy(alpha = 0.4f)), content.range.last + 1, match.range.last + 1)
+
                 addStyle(
                     SpanStyle(fontStyle = FontStyle.Italic),
-                    match.range.first,
-                    match.range.last + 1
+                    content.range.first,
+                    content.range.last + 1
                 )
             }
             
-            // 4. Code (`text`)
-            val codeRegex = Regex("(`[^`]+`)")
+            // 4. Bullets (- item or * item)
+            val bulletRegex = Regex("^\\s*([-*])\\s+(.*)", RegexOption.MULTILINE)
+            bulletRegex.findAll(raw).forEach { match ->
+                val symbol = match.groups[1]!!
+                // Style bullet (Muted Gray / highlightColor dimmed)
+                addStyle(
+                    SpanStyle(color = defaultColor.copy(alpha = 0.5f), fontWeight = FontWeight.Bold),
+                    symbol.range.first,
+                    symbol.range.last + 1
+                )
+            }
+            
+            // 5. Code (`text`)
+            val codeRegex = Regex("`([^`]+)`")
             codeRegex.findAll(raw).forEach { match ->
                  addStyle(
                     SpanStyle(
                         fontFamily = FontFamily.Monospace,
-                        background = codeBackground
-                    ),
-                    match.range.first,
-                    match.range.last + 1
-                )
-            }
-            
-            // 5. Links ([text])
-            val linkRegex = Regex("\\[(.*?)\\]")
-            linkRegex.findAll(raw).forEach { match ->
-                 addStyle(
-                    SpanStyle(
-                        color = highlightColor,
-                        textDecoration = TextDecoration.Underline
+                        background = codeBackground,
+                        color = highlightColor
                     ),
                     match.range.first,
                     match.range.last + 1

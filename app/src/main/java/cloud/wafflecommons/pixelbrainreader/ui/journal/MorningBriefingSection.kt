@@ -71,7 +71,7 @@ fun MorningBriefingSection(
                 Text(
                     text = "Morning Briefing",
                     style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = MaterialTheme.colorScheme.secondary,
                     fontWeight = FontWeight.Bold
                 )
                 Icon(

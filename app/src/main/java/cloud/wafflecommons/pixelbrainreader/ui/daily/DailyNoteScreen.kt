@@ -1,5 +1,8 @@
 package cloud.wafflecommons.pixelbrainreader.ui.daily
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -7,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Mood
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
@@ -23,10 +27,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyTaskEntity
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.TimelineEntryEntity
 import cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar
+import cloud.wafflecommons.pixelbrainreader.ui.components.MarkdownVisualTransformation
 import cloud.wafflecommons.pixelbrainreader.ui.journal.DailyNoteHeader
 import cloud.wafflecommons.pixelbrainreader.ui.journal.MorningBriefingSection
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
+import androidx.compose.ui.unit.sp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -60,8 +66,7 @@ fun DailyNoteScreen(
             CortexTopAppBar(
                 title = "Cortex",
                 subtitle = state.date.format(DateTimeFormatter.ofPattern("MMM dd, yyyy")),
-                actions = {
-                    // Emergency Sync
+                navigationIcon = {
                     if (state.isLoading) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(24.dp).padding(4.dp),
@@ -72,12 +77,13 @@ fun DailyNoteScreen(
                         IconButton(onClick = { viewModel.triggerEmergencySync() }) {
                             Icon(
                                 imageVector = Icons.Default.CloudUpload,
-                                contentDescription = "Force Push",
+                                contentDescription = "Force Push (Iron Vault Override)",
                                 tint = MaterialTheme.colorScheme.error
                             )
                         }
                     }
-
+                },
+                actions = {
                     // Refresh
                     FilledTonalIconButton(
                         onClick = { viewModel.refreshDailyData() },
@@ -87,6 +93,13 @@ fun DailyNoteScreen(
                         )
                     ) {
                         Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                    }
+
+                    IconButton(onClick = {
+                        // Just toggle calendar/refresh? 
+                        // Existing refresh logic
+                    }) {
+                        Icon(Icons.Default.DateRange, contentDescription = "Calendar")
                     }
 
                     // Settings
@@ -244,8 +257,8 @@ fun DailyNoteScreen(
     if (showAddTaskDialog) {
         AddTaskDialog(
             onDismiss = { showAddTaskDialog = false },
-            onConfirm = { label ->
-                viewModel.addTask(label)
+            onConfirm = { label, time ->
+                viewModel.addTask(label, time)
                 showAddTaskDialog = false
             }
         )
@@ -261,23 +274,72 @@ private fun SecondBrainSection(
     onIdeasChange: (String) -> Unit,
     onNotesChange: (String) -> Unit
 ) {
+    val textColor = MaterialTheme.colorScheme.onSurface
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val secondaryColor = MaterialTheme.colorScheme.secondary
+    val tertiaryColor = MaterialTheme.colorScheme.tertiary
+    val codeBackground = MaterialTheme.colorScheme.surfaceContainerHighest
+
+    val visualTransformation = remember(textColor, primaryColor) {
+        MarkdownVisualTransformation(textColor, primaryColor, codeBackground)
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        HorizontalDivider()
-        Text("🧠 Idées / Second Cerveau", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        OutlinedTextField(
-            value = ideas,
-            onValueChange = onIdeasChange,
-            modifier = Modifier.fillMaxWidth().height(120.dp),
-            placeholder = { Text("Capture ideas, quick thoughts...") }
-        )
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
         
-        Text("📑 Notes / Self-care", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        OutlinedTextField(
-            value = notes,
-            onValueChange = onNotesChange,
-            modifier = Modifier.fillMaxWidth().height(120.dp),
-            placeholder = { Text("Reflection, gratitude, notes...") }
-        )
+        // Ideas
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = "🧠 Idées / Second Cerveau",
+                style = MaterialTheme.typography.titleMedium,
+                color = secondaryColor,
+                fontWeight = FontWeight.Bold
+            )
+            OutlinedTextField(
+                value = ideas,
+                onValueChange = onIdeasChange,
+                modifier = Modifier.fillMaxWidth().height(160.dp),
+                placeholder = { Text("Capture lightning ideas...", color = textColor.copy(alpha = 0.4f)) },
+                visualTransformation = visualTransformation,
+                textStyle = MaterialTheme.typography.bodyLarge.copy(
+                    lineHeight = 26.sp,
+                    color = textColor
+                ),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = primaryColor.copy(alpha = 0.5f),
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.3f)
+                ),
+                shape = MaterialTheme.shapes.medium
+            )
+        }
+        
+        // Notes
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = "📑 Notes / Self-care",
+                style = MaterialTheme.typography.titleMedium,
+                color = secondaryColor,
+                fontWeight = FontWeight.Bold
+            )
+            OutlinedTextField(
+                value = notes,
+                onValueChange = onNotesChange,
+                modifier = Modifier.fillMaxWidth().height(160.dp),
+                placeholder = { Text("Reflection, gratitude, logs...", color = textColor.copy(alpha = 0.4f)) },
+                visualTransformation = visualTransformation,
+                textStyle = MaterialTheme.typography.bodyLarge.copy(
+                    lineHeight = 26.sp,
+                    color = textColor
+                ),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = secondaryColor.copy(alpha = 0.5f),
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.3f)
+                ),
+                shape = MaterialTheme.shapes.medium
+            )
+        }
     }
 }
 
@@ -290,6 +352,7 @@ private fun TimelineHeader(onAdd: () -> Unit) {
     ) {
         Text(
             text = "🗓️ Timeline",
+            color = MaterialTheme.colorScheme.secondary,
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold
         )
@@ -312,6 +375,7 @@ private fun JournalHeader(onAdd: () -> Unit) {
     ) {
         Text(
             text = "📝 Journal",
+            color = MaterialTheme.colorScheme.secondary,
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold
         )
@@ -335,22 +399,61 @@ private fun TimelineList(events: List<TimelineEntryEntity>) {
             modifier = Modifier.padding(start = 8.dp)
         )
     } else {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            events.sortedBy { it.time }.forEach { event ->
-                Row(verticalAlignment = Alignment.Top) {
-                    Text(
-                        text = event.time.format(DateTimeFormatter.ofPattern("HH:mm")),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.width(60.dp)
-                    )
-                    Text(
-                        text = event.content,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
+        Column(modifier = Modifier.padding(start = 8.dp)) {
+            val sortedEvents = events.sortedBy { it.time }
+            sortedEvents.forEachIndexed { index, event ->
+                TimelineItem(
+                    event = event,
+                    isLast = index == sortedEvents.lastIndex
+                )
             }
         }
+    }
+}
+
+@Composable
+private fun TimelineItem(event: TimelineEntryEntity, isLast: Boolean) {
+    Row(modifier = Modifier.height(IntrinsicSize.Min)) {
+        // Time Column & Line
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.width(48.dp)
+        ) {
+            Text(
+                text = event.time.format(DateTimeFormatter.ofPattern("HH:mm")),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            
+            // Dot
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .background(MaterialTheme.colorScheme.primary, androidx.compose.foundation.shape.CircleShape)
+            )
+            
+            // Line
+            if (!isLast) {
+                Box(
+                    modifier = Modifier
+                        .width(2.dp)
+                        .fillMaxHeight()
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                )
+            }
+        }
+        
+        Spacer(modifier = Modifier.width(12.dp))
+        
+        // Content
+        Text(
+            text = event.content,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(bottom = 24.dp) // Spacing for next item
+        )
     }
 }
 
@@ -364,11 +467,14 @@ private fun TaskList(tasks: List<DailyTaskEntity>, onToggle: (String, Boolean) -
             modifier = Modifier.padding(start = 8.dp)
         )
     } else {
-        // Sorted: Done Last, then by time (nulls last), then Priority
+        // IRON SORTING:
+        // 1. Incomplete before Complete
+        // 2. Timed tasks (ASC) before No-time tasks
+        // 3. No-time tasks at the bottom
         val sorted = remember(tasks) {
             tasks.sortedWith(
                 compareBy<DailyTaskEntity> { it.isDone }
-                    .thenBy { it.scheduledTime == null } // Nulls last
+                    .thenBy { it.scheduledTime == null } // False (has time) < True (null) -> Timed first
                     .thenBy { it.scheduledTime }
                     .thenByDescending { it.priority }
             )
@@ -401,17 +507,21 @@ private fun TaskItem(task: DailyTaskEntity, onToggle: (String, Boolean) -> Unit)
             )
             Spacer(Modifier.width(12.dp))
             Column {
-                Text(
-                    text = task.label,
-                    style = MaterialTheme.typography.bodyLarge,
-                    textDecoration = if (task.isDone) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
-                    color = if (task.isDone) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
-                )
-                if (task.scheduledTime != null) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (task.scheduledTime != null) {
+                        Text(
+                            text = task.scheduledTime.format(DateTimeFormatter.ofPattern("HH:mm")),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(end = 6.dp)
+                        )
+                    }
                     Text(
-                        text = "at ${task.scheduledTime.format(DateTimeFormatter.ofPattern("HH:mm"))}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.secondary
+                        text = task.label,
+                        style = MaterialTheme.typography.bodyLarge,
+                        textDecoration = if (task.isDone) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
+                        color = if (task.isDone) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
                     )
                 }
             }
@@ -471,16 +581,10 @@ private fun AddTimelineDialog(onDismiss: () -> Unit, onConfirm: (String, LocalTi
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AddTaskDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+private fun AddTaskDialog(onDismiss: () -> Unit, onConfirm: (String, LocalTime?) -> Unit) {
     var label by remember { mutableStateOf("") }
-    // User: "Add button opens a TextField + optional TimePicker"
-    // But currently the Task add only accepted label in VM... wait, Repository supports time!
-    // But `DailyNoteViewModel.addTask` signature is `addTask(label)`.
-    // I need to update ViewModel to accept Time! It was `addTask(label, time?)`.
-    // Yes, the new VM has `addTask(label, time?)`.
-    
-    // So I need UI for optional time.
     var useTime by remember { mutableStateOf(false) }
+    
     val timePickerState = rememberTimePickerState(
         initialHour = LocalTime.now().hour,
         initialMinute = LocalTime.now().minute,
@@ -499,28 +603,30 @@ private fun AddTaskDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                
+                // Time Toggle
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().clickable { useTime = !useTime }
+                ) {
                     Checkbox(checked = useTime, onCheckedChange = { useTime = it })
-                    Text("Scheduled?")
+                    Spacer(Modifier.width(8.dp))
+                    Text("Scheduled Time?")
                 }
-                if (useTime) {
-                    TimeInput(state = timePickerState)
+                
+                // Visible Time Input
+                AnimatedVisibility(visible = useTime) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        TimeInput(state = timePickerState)
+                    }
                 }
             }
         },
         confirmButton = {
             Button(onClick = { 
                 if (label.isNotBlank()) {
-                     // Wait, I need to pass time to onConfirm.
-                     // The signature passed to this Composable was (String)->Unit.
-                     // I must update the caller to pass (String, LocalTime?) -> Unit.
-                     // But for now I'm inside the component.
-                     // I need to update the parameter of AddTaskDialog.
-                     // Wait, I can't change param type inside `ReplacementContent` without changing caller.
-                     // Caller is `DailyNoteScreen`. I am replacing the WHOLE FILE. So I can change everything.
-                     // OK.
-                     onConfirm(label) // This is wrong if I don't pass time.
-                     // I will update signature below.
+                     val time = if (useTime) LocalTime.of(timePickerState.hour, timePickerState.minute) else null
+                     onConfirm(label, time)
                 } 
             }) {
                 Text("Add")

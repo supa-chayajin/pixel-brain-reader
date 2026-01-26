@@ -100,9 +100,17 @@ class DailyNoteViewModel @Inject constructor(
         // Listen for global refresh
         viewModelScope.launch {
             dataRefreshBus.refreshEvent.collect {
-                Log.d("DailyNoteVM", "Data refresh event received. Re-ingesting from file.")
-                // On Git Pull, re-ingest data from file to Room
-                ingestFromFile(currentDate)
+                Log.d("DailyNoteVM", "Data refresh event received.")
+                // SYNC SHIELD: On Git Pull, DO NOT overwrite if we are working on the current day's buffer.
+                // We only ingest if the buffer is MISSING.
+                val bufferExists = dashboardRepository.hasBuffer(currentDate)
+                if (!bufferExists) {
+                     Log.d("DailyNoteVM", "Buffer missing, ingesting from file safely.")
+                     ingestFromFile(currentDate)
+                } else {
+                     Log.d("DailyNoteVM", "Buffer exists. SYNC SHIELD ACTIVE. Ignoring external file changes for today to protect local work.")
+                     // Optional: notification to user? "External changes detected but ignored to protect your work."
+                }
             }
         }
     }
@@ -113,7 +121,6 @@ class DailyNoteViewModel @Inject constructor(
             _uiState.update { it.copy(date = date, isLoading = true) }
 
             // 1. Ensure Buffer is Ready (Ingest if needed)
-            // Check if buffer exists, if not try to ingest from file
             val bufferExists = dashboardRepository.hasBuffer(date)
             if (!bufferExists) {
                 Log.d("DailyNoteVM", "Buffer for $date not found, ingesting from file.")
@@ -130,10 +137,13 @@ class DailyNoteViewModel @Inject constructor(
         }
     }
     
+    // Ingests ONLY if called. Caller is responsible for "Sync Shield" checks.
     private suspend fun ingestFromFile(date: LocalDate) {
         val path = "10_Journal/${date.format(DateTimeFormatter.ISO_DATE)}.md"
         val content = fileRepository.readFile(path)
         if (content != null) {
+            // Logic Pivot: Repository.ingest will overwrite. 
+            // We trust the caller has verified we WANT to overwrite (e.g. init empty).
             dashboardRepository.ingest(date, content)
         } else {
             // If file doesn't exist, create an empty buffer for the day
@@ -142,14 +152,18 @@ class DailyNoteViewModel @Inject constructor(
     }
 
     private fun observeRoomData(date: LocalDate) {
+        val dashboardFlow = dashboardRepository.getDashboard(date)
         val timelineFlow = dashboardRepository.getLiveTimeline(date)
         val tasksFlow = dashboardRepository.getLiveTasks(date)
         
-        combine(timelineFlow, tasksFlow) { timeline, tasks ->
-            Pair(timeline, tasks)
-        }.onEach { (timeline, tasks) ->
+        combine(dashboardFlow, timelineFlow, tasksFlow) { dashboard, timeline, tasks ->
+            Triple(dashboard, timeline, tasks)
+        }.onEach { (dashboard, timeline, tasks) ->
             _uiState.update { 
                 it.copy(
+                    mantra = dashboard?.dailyMantra ?: "",
+                    ideasContent = dashboard?.ideasContent ?: "",
+                    notesContent = dashboard?.notesContent ?: "",
                     timelineEvents = timeline,
                     dailyTasks = tasks,
                     isLoading = false
@@ -194,9 +208,9 @@ class DailyNoteViewModel @Inject constructor(
         }
     }
 
-    fun addTask(label: String) {
+    fun addTask(label: String, scheduledTime: LocalTime? = null) {
         viewModelScope.launch {
-            dashboardRepository.addTask(currentDate, label)
+            dashboardRepository.addTask(currentDate, label, scheduledTime)
         }
     }
 
@@ -220,11 +234,11 @@ class DailyNoteViewModel @Inject constructor(
     
     @OptIn(FlowPreview::class)
     private fun setupDebouncers() {
-        _ideasUpdates.debounce(1000L).filterNotNull().onEach { 
+        _ideasUpdates.debounce(300L).filterNotNull().onEach { 
             dashboardRepository.updateSecondBrain(currentDate, "IDEAS", it)
         }.launchIn(viewModelScope)
 
-        _notesUpdates.debounce(1000L).filterNotNull().onEach { 
+        _notesUpdates.debounce(300L).filterNotNull().onEach { 
             dashboardRepository.updateSecondBrain(currentDate, "NOTES", it)
         }.launchIn(viewModelScope)
     }
