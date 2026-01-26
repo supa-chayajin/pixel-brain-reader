@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Mood
@@ -94,12 +95,40 @@ fun DailyNoteScreen(
     // 1. Extract Standard Metadata (Now from State)
     val metadata = state.metadata
 
+    val snackbarHostState = remember { androidx.compose.material3.SnackbarHostState() }
+    
+    // Snackbar Logic
+    LaunchedEffect(state.userMessage) {
+        state.userMessage?.let { message ->
+            snackbarHostState.showSnackbar(message)
+            viewModel.clearUserMessage()
+        }
+    }
+
     Scaffold(
+        snackbarHost = { androidx.compose.material3.SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
                 title = "Cortex",
                 subtitle = state.date.format(DateTimeFormatter.ofPattern("MMM dd, yyyy")),
                 actions = {
+                    // [NEW] Emergency Sync Button
+                    if (state.isLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp).padding(4.dp), 
+                            color = MaterialTheme.colorScheme.error,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        IconButton(onClick = { viewModel.triggerEmergencySync() }) {
+                            Icon(
+                                imageVector = Icons.Default.CloudUpload,
+                                contentDescription = "Commit All & Force Push",
+                                tint = MaterialTheme.colorScheme.error // Distinctive Color
+                            )
+                        }
+                    }
+
                      // Manual Refresh
                     FilledTonalIconButton(
                         onClick = { viewModel.refreshDailyData() },

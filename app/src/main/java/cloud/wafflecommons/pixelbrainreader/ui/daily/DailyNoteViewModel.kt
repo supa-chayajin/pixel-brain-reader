@@ -45,7 +45,8 @@ data class DailyNoteState(
     val isLoading: Boolean = true,
     // Morning Briefing 2.0 (Cockpit)
     val briefingState: MorningBriefingUiState = MorningBriefingUiState(),
-    val topDailyTags: List<String> = emptyList() // [NEW] Top 5 daily tags
+    val topDailyTags: List<String> = emptyList(), // [NEW] Top 5 daily tags
+    val userMessage: String? = null // [NEW] For Snackbar
 )
 
 data class DailyMoodPoint(
@@ -79,7 +80,8 @@ class DailyNoteViewModel @Inject constructor(
     private val taskRepository: cloud.wafflecommons.pixelbrainreader.data.repository.TaskRepository,
     private val userPrefs: cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository, // Injected
     private val dataRefreshBus: cloud.wafflecommons.pixelbrainreader.data.utils.DataRefreshBus,
-    private val briefingGenerator: cloud.wafflecommons.pixelbrainreader.data.ai.BriefingGenerator
+    private val briefingGenerator: cloud.wafflecommons.pixelbrainreader.data.ai.BriefingGenerator,
+    private val jGitProvider: cloud.wafflecommons.pixelbrainreader.data.remote.JGitProvider // [NEW] Direct Injection for Emergency Sync
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DailyNoteState())
@@ -663,6 +665,37 @@ class DailyNoteViewModel @Inject constructor(
      */
     fun onContentChanged(newContent: String) {
         _contentUpdates.value = newContent
+    }
+
+    // [NEW] Emergency Sync Logic
+    fun triggerEmergencySync() {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true)
+            try {
+                val result = jGitProvider.commitAndForcePush("Manual emergency sync from Dashboard")
+                if (result.isSuccess) {
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        userMessage = "Vault forced to remote successfully"
+                    )
+                } else {
+                    val error = result.exceptionOrNull()?.message ?: "Unknown error"
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        userMessage = "Sync Failed: $error"
+                    )
+                }
+            } catch (e: Exception) {
+                 _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    userMessage = "Sync Error: ${e.message}"
+                )
+            }
+        }
+    }
+    
+    fun clearUserMessage() {
+        _uiState.value = _uiState.value.copy(userMessage = null)
     }
 
     private suspend fun saveNoteInternal(content: String) {

@@ -205,6 +205,50 @@ class JGitProvider @Inject constructor(
     fun isReady(): Boolean = File(rootDir, ".git").exists()
 
     /**
+     * EMERGENCY SYNC: Commits all changes and FORCE PUSHES to remote.
+     * This overrides the remote state with the local state.
+     * Use with caution.
+     */
+    suspend fun commitAndForcePush(message: String): Result<Unit> = withContext(Dispatchers.IO) {
+        Log.w("GitSync", "Starting EMERGENCY FORCE PUSH")
+        if (!isReady()) return@withContext Result.failure(Exception("Repository not initialized"))
+        
+        try {
+            val token = secretManager.getToken() ?: return@withContext Result.failure(Exception("No API Token found"))
+            val provider = UsernamePasswordCredentialsProvider("token", token)
+
+            Git.open(rootDir).use { git ->
+                // Step A: Add All
+                git.add().addFilepattern(".").call()
+                git.add().addFilepattern(".").setUpdate(true).call()
+                
+                // Step B: Commit
+                val status = git.status().call()
+                if (status.hasUncommittedChanges()) {
+                    git.commit()
+                        .setMessage(message)
+                        .setAuthor("PixelBrain User", "user@pixelbrain.local")
+                        .call()
+                    Log.i("GitSync", "Emergency Commit Created")
+                }
+
+                // Step C: Force Push
+                git.push()
+                    .setRemote("origin")
+                    .setCredentialsProvider(provider)
+                    .setForce(true) // FORCE PUSH
+                    .setProgressMonitor(AndroidLogProgressMonitor())
+                    .call()
+            }
+            Log.w("GitSync", "EMERGENCY FORCE PUSH COMPLETED")
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e("GitSync", "Force Push Failed", e)
+            Result.failure(e)
+        }
+    }
+
+    /**
      * Custom Progress Monitor that logs to Logcat
      */
     private class AndroidLogProgressMonitor : TextProgressMonitor(LogWriter()) {
