@@ -69,4 +69,10 @@ object DatabaseModule {
     fun provideHabitDao(database: AppDatabase): cloud.wafflecommons.pixelbrainreader.data.local.dao.HabitDao {
         return database.habitDao()
     }
+
+    @Provides
+    @Singleton
+    fun provideDailyBufferDao(database: AppDatabase): cloud.wafflecommons.pixelbrainreader.data.local.dao.DailyBufferDao {
+        return database.dailyBufferDao()
+    }
 }

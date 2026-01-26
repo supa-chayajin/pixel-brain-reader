@@ -175,6 +175,11 @@ object FrontmatterManager {
         return content.replaceFirst(frontmatterRegex, "").trimStart()
     }
     
+    fun extractFrontmatterRaw(content: String): String {
+        val match = frontmatterRegex.find(content)
+        return match?.value ?: ""
+    }
+    
     // Re-implemented standard injector (Regex-based is actually superior for non-destructive edits)
     // Refactoring to be cleaner.
     fun injectWeather(content: String, newValues: Map<String, String>): String {

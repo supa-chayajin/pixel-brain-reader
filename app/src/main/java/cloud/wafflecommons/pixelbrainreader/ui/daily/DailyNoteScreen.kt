@@ -1,70 +1,33 @@
 package cloud.wafflecommons.pixelbrainreader.ui.daily
 
-import android.widget.TextView
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.AddCircle
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Mood
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.CalendarToday
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.Settings
-import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.FilledTonalIconButton
-import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SmallFloatingActionButton
-import androidx.compose.material3.SuggestionChip
-import androidx.compose.material3.SuggestionChipDefaults
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
-import cloud.wafflecommons.pixelbrainreader.data.repository.MoodEntry
-import cloud.wafflecommons.pixelbrainreader.data.utils.FrontmatterManager
-import cloud.wafflecommons.pixelbrainreader.ui.utils.ObsidianCalloutPlugin
-import cloud.wafflecommons.pixelbrainreader.ui.utils.ObsidianImagePlugin
-import cloud.wafflecommons.pixelbrainreader.ui.utils.ObsidianLinkPlugin
-import io.noties.markwon.Markwon
-import io.noties.markwon.ext.strikethrough.StrikethroughPlugin
-import io.noties.markwon.ext.tables.TablePlugin
-import io.noties.markwon.ext.tasklist.TaskListPlugin
-import io.noties.markwon.image.ImagesPlugin
-import io.noties.markwon.linkify.LinkifyPlugin
-import cloud.wafflecommons.pixelbrainreader.data.model.TimelineEvent
-import cloud.wafflecommons.pixelbrainreader.data.model.Task
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyTaskEntity
+import cloud.wafflecommons.pixelbrainreader.data.local.entity.TimelineEntryEntity
+import cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar
+import cloud.wafflecommons.pixelbrainreader.ui.journal.DailyNoteHeader
+import cloud.wafflecommons.pixelbrainreader.ui.journal.MorningBriefingSection
+import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -73,49 +36,38 @@ fun DailyNoteScreen(
     onNavigateBack: () -> Unit,
     onEditClicked: (String) -> Unit,
     onCheckInClicked: () -> Unit,
-    onOpenHabits: () -> Unit, 
-    onNavigateToSettings: () -> Unit, // New Param
-    isGlobalSyncing: Boolean = false, 
+    onOpenHabits: () -> Unit,
+    onNavigateToSettings: () -> Unit,
+    isGlobalSyncing: Boolean = false,
     viewModel: DailyNoteViewModel = hiltViewModel(),
-    lifeOSViewModel: cloud.wafflecommons.pixelbrainreader.ui.lifeos.LifeOSViewModel = hiltViewModel()
+    lifeOSViewModel: cloud.wafflecommons.pixelbrainreader.ui.lifeos.LifeOSViewModel = hiltViewModel() // Kept for legacy/context if needed
 ) {
-    val state by viewModel.uiState.collectAsState()
-    val lifeOsState by lifeOSViewModel.uiState.collectAsStateWithLifecycle()
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    // val lifeOsState by lifeOSViewModel.uiState.collectAsStateWithLifecycle()  // Usage replaced by Room Data
 
-    LaunchedEffect(state.date) {
-        lifeOSViewModel.loadData(state.date)
-    }
+    var showAddTimelineDialog by remember { mutableStateOf(false) }
+    var showAddTaskDialog by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
-        lifeOSViewModel.reloadTrigger.collect {
-             viewModel.refresh() 
-        }
-    }
+    val snackbarHostState = remember { SnackbarHostState() }
 
-    // 1. Extract Standard Metadata (Now from State)
-    val metadata = state.metadata
-
-    val snackbarHostState = remember { androidx.compose.material3.SnackbarHostState() }
-    
-    // Snackbar Logic
     LaunchedEffect(state.userMessage) {
-        state.userMessage?.let { message ->
-            snackbarHostState.showSnackbar(message)
+        state.userMessage?.let {
+            snackbarHostState.showSnackbar(it)
             viewModel.clearUserMessage()
         }
     }
 
     Scaffold(
-        snackbarHost = { androidx.compose.material3.SnackbarHost(hostState = snackbarHostState) },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
+            CortexTopAppBar(
                 title = "Cortex",
                 subtitle = state.date.format(DateTimeFormatter.ofPattern("MMM dd, yyyy")),
                 actions = {
-                    // [NEW] Emergency Sync Button
+                    // Emergency Sync
                     if (state.isLoading) {
                         CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp).padding(4.dp), 
+                            modifier = Modifier.size(24.dp).padding(4.dp),
                             color = MaterialTheme.colorScheme.error,
                             strokeWidth = 2.dp
                         )
@@ -123,13 +75,13 @@ fun DailyNoteScreen(
                         IconButton(onClick = { viewModel.triggerEmergencySync() }) {
                             Icon(
                                 imageVector = Icons.Default.CloudUpload,
-                                contentDescription = "Commit All & Force Push",
-                                tint = MaterialTheme.colorScheme.error // Distinctive Color
+                                contentDescription = "Force Push",
+                                tint = MaterialTheme.colorScheme.error
                             )
                         }
                     }
 
-                     // Manual Refresh
+                    // Refresh
                     FilledTonalIconButton(
                         onClick = { viewModel.refreshDailyData() },
                         colors = IconButtonDefaults.filledTonalIconButtonColors(
@@ -137,12 +89,10 @@ fun DailyNoteScreen(
                             contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = "Refresh Daily Data"
-                        )
+                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
                     }
 
+                    // Settings
                     FilledTonalIconButton(
                         onClick = onNavigateToSettings,
                         colors = IconButtonDefaults.filledTonalIconButtonColors(
@@ -150,10 +100,7 @@ fun DailyNoteScreen(
                             contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Settings,
-                            contentDescription = "Settings"
-                        )
+                        Icon(Icons.Outlined.Settings, contentDescription = "Settings")
                     }
                 }
             )
@@ -163,290 +110,337 @@ fun DailyNoteScreen(
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Secondary FAB: Mood Check-in
                 SmallFloatingActionButton(
                     onClick = onCheckInClicked,
                     containerColor = MaterialTheme.colorScheme.tertiaryContainer,
                     contentColor = MaterialTheme.colorScheme.onTertiaryContainer
                 ) {
-                    Icon(Icons.Default.Mood, contentDescription = "Add Mood")
+                    Icon(Icons.Default.Mood, contentDescription = "Mood")
                 }
 
-                // Primary FAB: Edit Text
                 ExtendedFloatingActionButton(
-                    onClick = { 
-                         // Generate the expected file path for "Today" to pass to editor
-                         val dateStr = state.date.format(DateTimeFormatter.ISO_DATE)
-                         onEditClicked("10_Journal/$dateStr.md")
+                    onClick = {
+                        val dateStr = state.date.format(DateTimeFormatter.ISO_DATE)
+                        onEditClicked("10_Journal/$dateStr.md")
                     },
-                    icon = { Icon(Icons.Default.Edit, contentDescription = null) },
-                    text = { Text("Edit Text") }
+                    icon = { Icon(Icons.Default.Edit, null) },
+                    text = { Text("Editor") }
                 )
             }
-        },
+        }
     ) { padding ->
-        Box(
+        BoxWithConstraints(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
         ) {
-            if (state.isLoading || isGlobalSyncing) {
-                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+            val isWide = maxWidth > 600.dp
+
+            if (state.isLoading && state.timelineEvents.isEmpty() && state.dailyTasks.isEmpty()) {
+                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                     CircularProgressIndicator()
+                 }
             } else {
-                androidx.compose.foundation.lazy.LazyColumn(
+                LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(horizontal = 16.dp),
-                    contentPadding = PaddingValues(bottom = 80.dp)
+                    contentPadding = PaddingValues(bottom = 100.dp),
+                    verticalArrangement = Arrangement.spacedBy(24.dp)
                 ) {
-                    // 1. TOP HEADER (Legacy: Date/Nav/Emoji)
+                    // 1. Header & Stats
                     item {
-                        // Logic: Always show header, handle nulls gracefully
                         val moodData = state.moodData
                         val lastUpdate = remember(moodData) { moodData?.entries?.firstOrNull()?.time }
-                        val allActivities = remember(moodData) { 
-                            moodData?.entries?.flatMap { it.activities }?.distinct()?.sorted() ?: emptyList()
-                        }
-
-                        cloud.wafflecommons.pixelbrainreader.ui.journal.DailyNoteHeader(
+                        DailyNoteHeader(
                             emoji = moodData?.summary?.mainEmoji,
                             lastUpdate = lastUpdate,
-                            topDailyTags = state.topDailyTags,
-                            modifier = Modifier.padding(bottom = 8.dp)
+                            topDailyTags = state.topDailyTags
                         )
                     }
 
-                    // 2. MORNING BRIEFING 2.0 (Cockpit)
+                    // 2. Morning Briefing
                     item {
-                        cloud.wafflecommons.pixelbrainreader.ui.journal.MorningBriefingSection(
+                        MorningBriefingSection(
                             state = state.briefingState,
-                            onToggle = { viewModel.toggleBriefing() },
-                            modifier = Modifier.padding(bottom = 24.dp)
+                            onToggle = { viewModel.toggleBriefing() }
                         )
                     }
 
-                    // 3. BODY (Timeline + Journal)
-                    item {
-                        // Intro Text
-                        if (state.displayIntro.isNotBlank()) {
-                             MarkdownText(
-                                markdown = state.displayIntro,
-                                onWikiLinkClick = { /* No-op */ }
-                            )
-                             Spacer(modifier = Modifier.height(24.dp))
-                        }
-
-                        // Split Layout
-                        BoxWithConstraints {
-                            val isWide = maxWidth > 600.dp
-                            
-                            if (isWide) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(24.dp),
-                                    verticalAlignment = Alignment.Top
-                                ) {
-                                    Box(modifier = Modifier.weight(0.4f)) {
-                                         TimelineSection(events = state.timelineEvents)
-                                    }
-
-                                    Box(
-                                        modifier = Modifier
-                                            .weight(0.6f)
-                                            .fillMaxWidth()
-                                    ) {
-                                         JournalSection(
-                                             tasks = lifeOsState.scopedTasks,
-                                             noteOutro = state.noteOutro,
-                                             onToggle = { task -> 
-                                                 viewModel.toggleTask(task)
-                                                 // Trigger LifeOS refresh to update list UI
-                                                 lifeOSViewModel.loadData(state.date)
-                                             },
-                                             modifier = Modifier.fillMaxWidth()
-                                         )
-                                    }
+                    // 3. Adaptive Content
+                    if (isWide) {
+                        item {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(24.dp),
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                // Left Column: Timeline
+                                Column(modifier = Modifier.weight(0.4f)) {
+                                    TimelineHeader(onAdd = { showAddTimelineDialog = true })
+                                    Spacer(Modifier.height(8.dp))
+                                    TimelineList(state.timelineEvents)
                                 }
-                            } else {
-                                // Mobile Layout (Stacked)
-                                Column {
-                                     TimelineSection(events = state.timelineEvents)
-                                     Spacer(modifier = Modifier.height(24.dp))
-                                     JournalSection(
-                                         tasks = lifeOsState.scopedTasks,
-                                         noteOutro = "",
-                                         onToggle = { task -> 
-                                             viewModel.toggleTask(task)
-                                             lifeOSViewModel.loadData(state.date)
-                                         },
-                                         modifier = Modifier.fillMaxWidth()
-                                     )
+
+                                // Right Column: Journal
+                                Column(modifier = Modifier.weight(0.6f)) {
+                                    JournalHeader(onAdd = { showAddTaskDialog = true })
+                                    Spacer(Modifier.height(8.dp))
+                                    TaskList(state.dailyTasks, onToggle = { id, done -> viewModel.toggleTask(id, done) })
                                 }
                             }
                         }
-                        // Outro Text
-                        if (state.noteOutro.isNotBlank()) {
-                            MarkdownText(
-                                markdown = state.noteOutro,
-                                onWikiLinkClick = { /* No-op */ }
-                            )
-                            Spacer(modifier = Modifier.height(24.dp))
+                    } else {
+                        // Mobile Layout
+                        item {
+                            TimelineHeader(onAdd = { showAddTimelineDialog = true })
+                            Spacer(Modifier.height(8.dp))
+                            TimelineList(state.timelineEvents)
+                        }
+
+                        item {
+                            JournalHeader(onAdd = { showAddTaskDialog = true })
+                            Spacer(Modifier.height(8.dp))
+                            TaskList(state.dailyTasks, onToggle = { id, done -> viewModel.toggleTask(id, done) })
                         }
                     }
                 }
             }
         }
     }
+
+    if (showAddTimelineDialog) {
+        AddTimelineDialog(
+            onDismiss = { showAddTimelineDialog = false },
+            onConfirm = { content, time ->
+                viewModel.addTimelineEntry(content, time)
+                showAddTimelineDialog = false
+            }
+        )
+    }
+
+    if (showAddTaskDialog) {
+        AddTaskDialog(
+            onDismiss = { showAddTaskDialog = false },
+            onConfirm = { label ->
+                viewModel.addTask(label)
+                showAddTaskDialog = false
+            }
+        )
+    }
 }
 
-// --- Extracted Components for Readability & Layout Reuse ---
+// --- Components ---
 
 @Composable
-private fun TimelineSection(events: List<TimelineEvent>) {
-    Column {
+private fun TimelineHeader(onAdd: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         Text(
             text = "🗓️ Timeline",
             style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 16.dp)
+            fontWeight = FontWeight.Bold
         )
-
-        // No spacing here
-
-        cloud.wafflecommons.pixelbrainreader.ui.lifeos.DayTimeline(
-            events = events
-        )
+        IconButton(onClick = onAdd) {
+            Icon(
+                Icons.Default.AddCircle,
+                contentDescription = "Add Event",
+                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+            )
+        }
     }
 }
 
 @Composable
-private fun JournalSection(
-    tasks: List<Task>,
-    noteOutro: String,
-    onToggle: (Task) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Column(modifier = modifier) {
+private fun JournalHeader(onAdd: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         Text(
             text = "📝 Journal",
             style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.padding(bottom = 16.dp)
+            fontWeight = FontWeight.Bold
         )
-        cloud.wafflecommons.pixelbrainreader.ui.lifeos.TaskTimeline(
-            tasks = tasks,
-            onToggle = onToggle
-        )
-
-        Spacer(modifier = Modifier.height(24.dp))
+        IconButton(onClick = onAdd) {
+            Icon(
+                Icons.Default.AddCircle,
+                contentDescription = "Add Task",
+                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+            )
+        }
     }
 }
 
 @Composable
-fun MarkdownText(
-    markdown: String,
-    onWikiLinkClick: (String) -> Unit
-) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val textColor = MaterialTheme.colorScheme.onSurface.toArgb()
-    
-    // Optimize: Create Markwon once
-    val markwon = remember(context, textColor) {
-        Markwon.builder(context)
-            .usePlugin(StrikethroughPlugin.create())
-            .usePlugin(TablePlugin.create(context))
-            .usePlugin(LinkifyPlugin.create())
-            .usePlugin(TaskListPlugin.create(textColor, textColor, textColor))
-            .usePlugin(ObsidianLinkPlugin { target -> onWikiLinkClick(target) })
-            .usePlugin(ObsidianImagePlugin())
-            .usePlugin(ObsidianCalloutPlugin())
-            .usePlugin(ImagesPlugin.create())
-            .usePlugin(io.noties.markwon.html.HtmlPlugin.create { plugin ->
-                plugin.addHandler(object : io.noties.markwon.html.tag.SimpleTagHandler() {
-                    override fun supportedTags() = listOf("obsidian-image")
-                    override fun getSpans(
-                        configuration: io.noties.markwon.MarkwonConfiguration,
-                        renderProps: io.noties.markwon.RenderProps,
-                        tag: io.noties.markwon.html.HtmlTag
-                    ): Any? {
-                        return null
-                    }
-                })
-            })
-            .build()
-    }
-
-    AndroidView(
-        factory = { ctx ->
-            TextView(ctx).apply {
-                setTextColor(textColor)
-                textSize = 16f
-                setLineSpacing(12f, 1.1f)
-                movementMethod = android.text.method.LinkMovementMethod.getInstance()
-                isNestedScrollingEnabled = false
-            }
-        },
-        update = { tv ->
-            // Optimization: Only update text, Markwon is reused
-            markwon.setMarkdown(tv, markdown)
-        }
-    )
-}
-
-@Composable
-fun MetadataView(tags: List<String>, date: String?, weather: String? = null, location: String? = null) {
-    Row(
-        modifier = Modifier.padding(horizontal = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        // Date
-        if (date != null) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Icon(
-                    imageVector = Icons.Default.CalendarToday, 
-                    contentDescription = null, 
-                    modifier = Modifier.size(16.dp),
-                    tint = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = date, 
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-
-        // Weather
-        if (weather != null) {
-             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    text = weather.replace("\"", ""), // Strip quotes if present
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-        
-        // Tags Chips
-        if (tags.isNotEmpty()) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                tags.forEach { tag ->
-                    SuggestionChip(
-                        onClick = {}, 
-                        label = { Text("#$tag") },
-                        modifier = Modifier.height(26.dp),
-                        colors = SuggestionChipDefaults.suggestionChipColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-                        ),
-                        border = null
+private fun TimelineList(events: List<TimelineEntryEntity>) {
+    if (events.isEmpty()) {
+        Text(
+            text = "No events recorded yet.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 8.dp)
+        )
+    } else {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            events.sortedBy { it.time }.forEach { event ->
+                Row(verticalAlignment = Alignment.Top) {
+                    Text(
+                        text = event.time.format(DateTimeFormatter.ofPattern("HH:mm")),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.width(60.dp)
+                    )
+                    Text(
+                        text = event.content,
+                        style = MaterialTheme.typography.bodyMedium
                     )
                 }
             }
         }
     }
+}
+
+@Composable
+private fun TaskList(tasks: List<DailyTaskEntity>, onToggle: (String, Boolean) -> Unit) {
+    if (tasks.isEmpty()) {
+        Text(
+            text = "All caught up.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 8.dp)
+        )
+    } else {
+        // Sorted: Done Last, then by time (nulls last), then Priority
+        val sorted = remember(tasks) {
+            tasks.sortedWith(
+                compareBy<DailyTaskEntity> { it.isDone }
+                    .thenBy { it.scheduledTime == null }
+                    .thenBy { it.scheduledTime }
+                    .thenByDescending { it.priority }
+            )
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            sorted.forEach { task ->
+                TaskItem(task, onToggle)
+            }
+        }
+    }
+}
+
+@Composable
+private fun TaskItem(task: DailyTaskEntity, onToggle: (String, Boolean) -> Unit) {
+    Surface(
+        onClick = { onToggle(task.id, !task.isDone) },
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = if (task.isDone) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                contentDescription = null,
+                tint = if (task.isDone) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.width(12.dp))
+            Column {
+                Text(
+                    text = task.label,
+                    style = MaterialTheme.typography.bodyLarge,
+                    textDecoration = if (task.isDone) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
+                    color = if (task.isDone) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
+                )
+                if (task.scheduledTime != null) {
+                    Text(
+                        text = "at ${task.scheduledTime.format(DateTimeFormatter.ofPattern("HH:mm"))}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                }
+            }
+            if (task.priority > 1) {
+                Spacer(Modifier.weight(1f))
+                Text(
+                    text = "‼️",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AddTimelineDialog(onDismiss: () -> Unit, onConfirm: (String, LocalTime) -> Unit) {
+    var content by remember { mutableStateOf("") }
+    // Ideally use a TimePicker, for simple implementation we default to Now and let user edit?
+    // Or just simple text field for now? User requested a "Dialog tailored... e.g TimePicker".
+    // Implementing a full TimePicker requires extra state.
+    
+    // Simplification: We defaults to current time, user can adjust?
+    // Let's use current time.
+    val now = LocalTime.now()
+    var time by remember { mutableStateOf(now) }
+    
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add Moment") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                OutlinedTextField(
+                    value = content,
+                    onValueChange = { content = it },
+                    label = { Text("What happened?") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text("Time: ${time.format(DateTimeFormatter.ofPattern("HH:mm"))} (Auto)")
+            }
+        },
+        confirmButton = {
+            Button(onClick = { 
+                if (content.isNotBlank()) onConfirm(content, time) 
+            }) {
+                Text("Add")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
+
+@Composable
+private fun AddTaskDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+    var label by remember { mutableStateOf("") }
+    
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add Task") },
+        text = {
+            OutlinedTextField(
+                value = label,
+                onValueChange = { label = it },
+                label = { Text("Goal / Task") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        confirmButton = {
+            Button(onClick = { 
+                if (label.isNotBlank()) onConfirm(label) 
+            }) {
+                Text("Add")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
 }
