@@ -72,7 +72,7 @@ object DatabaseModule {
 
     @Provides
     @Singleton
-    fun provideDailyBufferDao(database: AppDatabase): cloud.wafflecommons.pixelbrainreader.data.local.dao.DailyBufferDao {
-        return database.dailyBufferDao()
+    fun provideDailyDashboardDao(database: AppDatabase): cloud.wafflecommons.pixelbrainreader.data.local.dao.DailyDashboardDao {
+        return database.dailyDashboardDao()
     }
 }

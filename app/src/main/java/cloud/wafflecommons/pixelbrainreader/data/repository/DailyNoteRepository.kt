@@ -28,20 +28,32 @@ class DailyNoteRepository @Inject constructor(
         private const val JOURNAL_ROOT = "10_Journal"
         private const val TEMPLATE_PATH = "99_System/Templates/T_Daily_Journal.md"
         private const val DEFAULT_TEMPLATE = """---
-title: "Journal: {{date}}"
-created: {{date}}
+---
+title: {{date}}
+date: {{date}}
 updated: {{date}}
-type: journal
-status: done
-tags: [journal]
+type: system
+status: active
+tags:
+  - journal
+  - log
+  - daily
+  - system
+summary: "Don't you dare go hollow, my friend."
+links: []
 ---
 
-# Journal {{date}}
+# 📅 {{date}}
 
-## Tasks
-* [ ] 
+*Don't you dare go hollow, my friend.*
 
-## Notes
+## 🗓️ Timeline
+
+## 📝 Journal
+
+## 🧠 Idées / Second Cerveau
+
+## 📑 Notes / Self-care 
 """
     }
 

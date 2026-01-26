@@ -5,24 +5,34 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
-import cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyBufferEntity
+import cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyDashboardEntity
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyTaskEntity
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.TimelineEntryEntity
 import kotlinx.coroutines.flow.Flow
 import java.time.LocalDate
 
 @Dao
-interface DailyBufferDao {
+interface DailyDashboardDao {
 
-    // --- Daily Buffer ---
+    // --- Daily Dashboard ---
     @Insert(onConflict = OnConflictStrategy.IGNORE)
-    suspend fun insertBuffer(buffer: DailyBufferEntity)
+    suspend fun insertDashboard(dashboard: DailyDashboardEntity)
 
-    @Query("SELECT * FROM daily_buffer WHERE date = :date")
-    suspend fun getBuffer(date: LocalDate): DailyBufferEntity?
+    @Query("SELECT * FROM daily_dashboard WHERE date = :date")
+    suspend fun getDashboard(date: LocalDate): DailyDashboardEntity?
 
-    @Query("UPDATE daily_buffer SET mantra = :mantra, lastModified = :timestamp WHERE date = :date")
-    suspend fun updateMantra(date: LocalDate, mantra: String, timestamp: Long = System.currentTimeMillis())
+    // Update scalar fields
+    @Query("UPDATE daily_dashboard SET dailyMantra = :mantra WHERE date = :date")
+    suspend fun updateMantra(date: LocalDate, mantra: String)
+
+    @Query("UPDATE daily_dashboard SET ideasContent = :content WHERE date = :date")
+    suspend fun updateIdeas(date: LocalDate, content: String)
+
+    @Query("UPDATE daily_dashboard SET notesContent = :content WHERE date = :date")
+    suspend fun updateNotes(date: LocalDate, content: String)
+    
+    @Query("UPDATE daily_dashboard SET aiWeatherBriefing = :weather, aiQuoteOfTheDay = :quote, lastAiGenerationTimestamp = :timestamp WHERE date = :date")
+    suspend fun updateAiBriefing(date: LocalDate, weather: String, quote: String, timestamp: Long)
 
     // --- Timeline ---
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -56,16 +66,18 @@ interface DailyBufferDao {
     // --- Transactional Helper ---
     @Transaction
     suspend fun ingestDailyData(
-        buffer: DailyBufferEntity, 
+        dashboard: DailyDashboardEntity, 
         timeline: List<TimelineEntryEntity>, 
         tasks: List<DailyTaskEntity>
     ) {
-        insertBuffer(buffer)
-        // We might want to be careful not to wipe un-synced data, but "ingest" implies
-        // taking authoritative state from file (e.g. at startup or after pull).
-        // For safety, let's clear and replace for that specific day.
-        clearTimeline(buffer.date)
-        clearTasks(buffer.date)
+        insertDashboard(dashboard)
+        // Explicit updates for content that might have changed in file
+        updateMantra(dashboard.date, dashboard.dailyMantra)
+        updateIdeas(dashboard.date, dashboard.ideasContent)
+        updateNotes(dashboard.date, dashboard.notesContent)
+        
+        clearTimeline(dashboard.date)
+        clearTasks(dashboard.date)
         
         timeline.forEach { insertTimelineEntry(it) }
         tasks.forEach { insertTask(it) }
