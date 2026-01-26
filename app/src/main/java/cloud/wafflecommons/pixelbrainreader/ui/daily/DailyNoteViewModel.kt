@@ -5,7 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyTaskEntity
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.TimelineEntryEntity
-import cloud.wafflecommons.pixelbrainreader.data.repository.DailyBufferRepository
+import cloud.wafflecommons.pixelbrainreader.data.repository.DailyDashboardRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.DailyMoodData
 import cloud.wafflecommons.pixelbrainreader.data.repository.FileRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.MoodRepository
@@ -15,6 +15,7 @@ import cloud.wafflecommons.pixelbrainreader.data.repository.NewsRepository
 import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
 import cloud.wafflecommons.pixelbrainreader.data.utils.FrontmatterManager
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -25,8 +26,14 @@ import javax.inject.Inject
 data class DailyNoteState(
     val date: LocalDate = LocalDate.now(),
     val moodData: DailyMoodData? = null,
-    val noteIntro: String = "", // Kept for compatibility, but buffer will manage content
-    val noteOutro: String = "", // Kept for compatibility, but buffer will manage content
+    
+    // Core Dashboard Content (Room)
+    val mantra: String = "",
+    val ideasContent: String = "",
+    val notesContent: String = "",
+    
+    val noteIntro: String = "", // Kept for compatibility
+    val noteOutro: String = "", // Kept for compatibility
     val metadata: Map<String, String> = emptyMap(),
     val weatherData: WeatherData? = null,
     
@@ -60,13 +67,14 @@ data class MorningBriefingUiState(
 )
 
 @HiltViewModel
+@OptIn(FlowPreview::class)
 class DailyNoteViewModel @Inject constructor(
     private val moodRepository: MoodRepository,
     private val newsRepository: NewsRepository,
     private val fileRepository: FileRepository,
     private val weatherRepository: WeatherRepository,
     private val secretManager: SecretManager,
-    private val dailyBufferRepository: DailyBufferRepository, // [NEW] The Engine
+    private val dashboardRepository: DailyDashboardRepository, // [NEW] The Engine
     private val userPrefs: cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository,
     private val dataRefreshBus: cloud.wafflecommons.pixelbrainreader.data.utils.DataRefreshBus,
     private val briefingGenerator: cloud.wafflecommons.pixelbrainreader.data.ai.BriefingGenerator,
@@ -77,11 +85,17 @@ class DailyNoteViewModel @Inject constructor(
     val uiState: StateFlow<DailyNoteState> = _uiState.asStateFlow()
 
     private var currentDate: LocalDate = LocalDate.now()
+    
+    // Debounce for Text Inputs
+    private val _ideasUpdates = MutableStateFlow<String?>(null)
+    private val _notesUpdates = MutableStateFlow<String?>(null)
 
     init {
         // Initial Load
         currentDate = LocalDate.now()
         loadDailyNote(currentDate)
+        
+        setupDebouncers()
         
         // Listen for global refresh
         viewModelScope.launch {
@@ -100,7 +114,7 @@ class DailyNoteViewModel @Inject constructor(
 
             // 1. Ensure Buffer is Ready (Ingest if needed)
             // Check if buffer exists, if not try to ingest from file
-            val bufferExists = dailyBufferRepository.hasBuffer(date)
+            val bufferExists = dashboardRepository.hasBuffer(date)
             if (!bufferExists) {
                 Log.d("DailyNoteVM", "Buffer for $date not found, ingesting from file.")
                 ingestFromFile(date)
@@ -120,16 +134,16 @@ class DailyNoteViewModel @Inject constructor(
         val path = "10_Journal/${date.format(DateTimeFormatter.ISO_DATE)}.md"
         val content = fileRepository.readFile(path)
         if (content != null) {
-            dailyBufferRepository.ingest(date, content)
+            dashboardRepository.ingest(date, content)
         } else {
             // If file doesn't exist, create an empty buffer for the day
-            dailyBufferRepository.ingest(date, "")
+            dashboardRepository.ingest(date, "")
         }
     }
 
     private fun observeRoomData(date: LocalDate) {
-        val timelineFlow = dailyBufferRepository.getLiveTimeline(date)
-        val tasksFlow = dailyBufferRepository.getLiveTasks(date)
+        val timelineFlow = dashboardRepository.getLiveTimeline(date)
+        val tasksFlow = dashboardRepository.getLiveTasks(date)
         
         combine(timelineFlow, tasksFlow) { timeline, tasks ->
             Pair(timeline, tasks)
@@ -150,8 +164,12 @@ class DailyNoteViewModel @Inject constructor(
         
         // Weather & Briefing Logic
         val isExpanded = userPrefs.isBriefingExpanded.firstOrNull() ?: true
+        
+        // AI Policy Integration
+        val (weatherBriefing, quote) = dashboardRepository.getOrGenerateBriefing(date)
+        
         // Briefing loading logic...
-        val briefingState = loadMorningBriefingData(date, null, isExpanded, "")
+        val briefingState = loadMorningBriefingData(date, null, isExpanded, weatherBriefing)
 
         // Tags
         val dailyTags = mood?.entries?.flatMap { it.activities ?: emptyList() }
@@ -162,7 +180,7 @@ class DailyNoteViewModel @Inject constructor(
         _uiState.update {
             it.copy(
                 moodData = mood,
-                briefingState = briefingState,
+                briefingState = briefingState, // Make sure quote is passed?
                 topDailyTags = dailyTags
             )
         }
@@ -172,20 +190,43 @@ class DailyNoteViewModel @Inject constructor(
     
     fun addTimelineEntry(content: String, time: LocalTime) {
         viewModelScope.launch {
-            dailyBufferRepository.addTimelineEntry(currentDate, content, time)
+            dashboardRepository.addTimelineEntry(currentDate, content, time)
         }
     }
 
     fun addTask(label: String) {
         viewModelScope.launch {
-            dailyBufferRepository.addTask(currentDate, label)
+            dashboardRepository.addTask(currentDate, label)
         }
     }
 
     fun toggleTask(taskId: String, isDone: Boolean) {
         viewModelScope.launch {
-            dailyBufferRepository.toggleTask(taskId, isDone, currentDate)
+            dashboardRepository.toggleTask(taskId, isDone) // Date needed? No, ID is PK.
         }
+    }
+
+    // Second Brain (Debounced)
+    fun onIdeasChanged(content: String) {
+        // Optimistic Update
+        _uiState.update { it.copy(ideasContent = content) }
+        _ideasUpdates.value = content
+    }
+
+    fun onNotesChanged(content: String) {
+        _uiState.update { it.copy(notesContent = content) }
+        _notesUpdates.value = content
+    }
+    
+    @OptIn(FlowPreview::class)
+    private fun setupDebouncers() {
+        _ideasUpdates.debounce(1000L).filterNotNull().onEach { 
+            dashboardRepository.updateSecondBrain(currentDate, "IDEAS", it)
+        }.launchIn(viewModelScope)
+
+        _notesUpdates.debounce(1000L).filterNotNull().onEach { 
+            dashboardRepository.updateSecondBrain(currentDate, "NOTES", it)
+        }.launchIn(viewModelScope)
     }
 
     fun triggerEmergencySync() {
@@ -193,7 +234,7 @@ class DailyNoteViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true, userMessage = "Burning & Syncing...") }
             try {
                 // 1. Burn Room -> Disk
-                dailyBufferRepository.burnToDisk(currentDate)
+                dashboardRepository.burnToDisk(currentDate)
                 
                 // 2. Force Push
                 val result = jGitProvider.commitAndForcePush("Manual emergency sync from Dashboard")
@@ -240,26 +281,44 @@ class DailyNoteViewModel @Inject constructor(
     }
 
     // --- Briefing Helpers (Simplified for brevity, logic preserved) ---
+    // --- Briefing Helpers ---
     private suspend fun loadMorningBriefingData(
         date: LocalDate, 
         existingWeather: WeatherData?, 
         isExpanded: Boolean,
         weatherAdvice: String
     ): MorningBriefingUiState {
-        // (Logic as before: Weather, Trend, News, Quote)
-        // Re-using the simplified fetch logic
         val weather = if (date == LocalDate.now()) weatherRepository.getCurrentWeatherAndLocation() else null
         val news = try { newsRepository.getTodayNews() } catch (e: Exception) { emptyList() }
         
-        // Trend dummy for now or fetch real
+        // Mood Trends (Calculated here)
+        val moodTrend = loadMoodTrend(date)
+
         val quote = briefingGenerator.getDailyQuote("Neutral") 
         
         return MorningBriefingUiState(
             weather = weather,
+            weatherAdvice = weatherAdvice,
+            moodTrend = moodTrend,
             news = news,
             quote = quote,
             isExpanded = isExpanded,
             isLoading = false
         )
+    }
+
+    private suspend fun loadMoodTrend(date: LocalDate): List<DailyMoodPoint> {
+        val recentMoods = mutableListOf<DailyMoodPoint>()
+        // Last 7 Days (Today + 6 past days)
+        (6 downTo 0).forEach { offset ->
+            val d = date.minusDays(offset.toLong())
+            val dailyData = moodRepository.getDailyMood(d).firstOrNull()
+            if (dailyData != null && dailyData.entries.isNotEmpty()) {
+                recentMoods.add(DailyMoodPoint(d, dailyData.summary.averageScore.toFloat(), dailyData.summary.mainEmoji))
+            } else {
+                recentMoods.add(DailyMoodPoint(d, 0f, "∅"))
+            }
+        }
+        return recentMoods
     }
 }

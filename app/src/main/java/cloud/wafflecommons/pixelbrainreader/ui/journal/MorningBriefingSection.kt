@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
+import cloud.wafflecommons.pixelbrainreader.ui.components.MoodTrendsCard
 import cloud.wafflecommons.pixelbrainreader.ui.daily.MorningBriefingUiState
 import cloud.wafflecommons.pixelbrainreader.ui.daily.DailyMoodPoint
 
@@ -95,6 +96,7 @@ fun MorningBriefingSection(
                         )
 
                         // 2. Mood KPI (Sparkline)
+                        //MoodTrendsCard(state.moodTrend)
                         MoodSparkline(state.moodTrend)
                         
                         HorizontalDivider(

@@ -1,6 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.data.utils
 
-import cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyBufferEntity
+import cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyDashboardEntity
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyTaskEntity
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.TimelineEntryEntity
 import java.time.format.DateTimeFormatter
@@ -12,32 +12,31 @@ import java.time.format.DateTimeFormatter
 object MarkdownBurner {
 
     fun burn(
-        buffer: DailyBufferEntity,
+        dashboard: DailyDashboardEntity,
         timeline: List<TimelineEntryEntity>,
         tasks: List<DailyTaskEntity>,
-        existingFrontmatter: String = "" // Pass raw frontmatter block if available to preserve it
+        existingFrontmatter: String = "" 
     ): String {
         val sb = StringBuilder()
 
-        // 1. Frontmatter (Preserve or Default)
+        // 1. Frontmatter
         if (existingFrontmatter.isNotBlank()) {
             sb.append(existingFrontmatter)
             if (!existingFrontmatter.endsWith("\n")) sb.append("\n")
         } else {
-            // Minimal fallback if we are creating from scratch without template (unlikely)
             sb.append("---\n")
-            sb.append("date: ${buffer.date}\n")
+            sb.append("date: ${dashboard.date}\n")
             sb.append("---\n")
         }
         sb.append("\n")
 
         // 2. Date Header
-        val headerDate = buffer.date.format(DateTimeFormatter.ISO_DATE)
+        val headerDate = dashboard.date.format(DateTimeFormatter.ISO_DATE)
         sb.append("# $headerDate\n\n")
 
         // 3. Mantra
-        if (buffer.mantra.isNotBlank()) {
-            sb.append("*${buffer.mantra}*\n\n")
+        if (dashboard.dailyMantra.isNotBlank()) {
+            sb.append("*${dashboard.dailyMantra}*\n\n")
         }
 
         // 4. Timeline Section
@@ -54,20 +53,9 @@ object MarkdownBurner {
 
         // 5. Journal / Tasks Section
         sb.append("## 📝 Journal\n\n")
-        
-        // Group tasks by status or priority? 
-        // User Requirement: "Unified Logic... Merge both lists... sorted by LocalTime... null time at bottom"
-        // But here we are writing back to MD. The MD structure separates Timeline and Tasks typically?
-        // Wait, "Constraint: Any task or entry where the time field is null MUST be automatically relegated to a 'General/Unscheduled' section"
-        // The implementation plan implies a single list in UI, but in MD file, we usually keep standard checklist format.
-        // Let's write them as standard markdown checklists.
-        
         if (tasks.isEmpty()) {
             sb.append("*Aucune tâche*\n")
         } else {
-            // Sort for the file: Done last? Or by time? 
-            // Let's sort by time first, then priority, then unscheduled.
-            // Actually, for the *file*, let's keep it clean.
             tasks.sortedWith(compareBy<DailyTaskEntity> { it.isDone }
                 .thenBy { it.scheduledTime == null } // Nulls last
                 .thenBy { it.scheduledTime }
@@ -82,13 +70,20 @@ object MarkdownBurner {
         }
         sb.append("\n")
 
-        // 6. Ideas / Second Brain (Preserve empty section for now, or we need to ingest this too?)
-        // The prompt says: "Frontmatter -> H1 -> Mantra -> Timeline -> Journal -> etc"
-        // We should appending the rest?
-        // Current scope is automating the "Living Buffer". 
-        // Ideally we would have captured "Other Content" during ingest. 
-        // For this iteration, let's append the standard footer section.
+        // 6. Ideas / Second Brain
         sb.append("## 🧠 Idées / Second Cerveau\n\n")
+        if (dashboard.ideasContent.isNotBlank()) {
+            sb.append(dashboard.ideasContent)
+            if (!dashboard.ideasContent.endsWith("\n")) sb.append("\n")
+        }
+        sb.append("\n")
+        
+        // 7. Notes / Self-Care
+        sb.append("## 📑 Notes / Self-care\n\n")
+        if (dashboard.notesContent.isNotBlank()) {
+            sb.append(dashboard.notesContent)
+            if (!dashboard.notesContent.endsWith("\n")) sb.append("\n")
+        }
 
         return sb.toString()
     }
