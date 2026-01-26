@@ -27,15 +27,7 @@ class DailyDashboardRepository @Inject constructor(
     // --- Live Data Access (Separated Sections) ---
     
     fun getDashboard(date: LocalDate): Flow<DailyDashboardEntity?> {
-        return kotlinx.coroutines.flow.flow { 
-            emit(dashboardDao.getDashboard(date))
-            // To make this reactive for content changes, we might need a Flow in DAO for getDashboard.
-            // But since updates are local specific scalar updates, we might rely on UI state or re-fetching.
-            // Actually, "Second Brain" needs to be debounced and not jittery. 
-            // ViewModel will hold the source of truth for text fields.
-            // But for Mantra or AI, we want to see updates.
-            // Let's rely on suspend for initial load for now, as text edits are hot.
-        }
+        return dashboardDao.getLiveDashboard(date)
     }
     
     // We add a Flow accessor for Dashboard to observe changes (like AI completion)
@@ -141,6 +133,14 @@ class DailyDashboardRepository @Inject constructor(
     // --- Ingest & Burn (The Bridge) ---
 
     suspend fun ingest(date: LocalDate, content: String) = withContext(Dispatchers.IO) {
+        // TOTAL ISOLATION SHIELD: 
+        // The dashboard is an "Iron Vault" for Today.
+        // We NEVER import today's file back into Room to avoid "Data Poisoning" (Git Pull overwriting local typing).
+        if (date == LocalDate.now()) {
+            android.util.Log.d("DailyRepo", "SHIELD ACTIVE: Blocking file ingest for TODAY. Room is the exclusive source of truth.")
+            return@withContext
+        }
+        
         val lines = content.lines()
         val timelineEvents = mutableListOf<TimelineEntryEntity>()
         val tasks = mutableListOf<DailyTaskEntity>()

@@ -93,8 +93,14 @@ class IndexingWorker @AssistedInject constructor(
     
     private suspend fun processEmbeddings(files: List<cloud.wafflecommons.pixelbrainreader.data.local.entity.FileEntity>) {
         val vaultRoot = java.io.File(applicationContext.filesDir, "vault")
+        val todayStr = java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ISO_DATE)
+        val todayPath = "10_Journal/$todayStr.md"
         
-        files.filter { it.type == "file" && it.path.endsWith(".md", ignoreCase = true) }.forEach { entity ->
+        files.filter { 
+            it.type == "file" && 
+            it.path.endsWith(".md", ignoreCase = true) &&
+            it.path != todayPath // SHIELD: Skip today's active journal
+        }.forEach { entity ->
             try {
                 // Per-File Transaction
 

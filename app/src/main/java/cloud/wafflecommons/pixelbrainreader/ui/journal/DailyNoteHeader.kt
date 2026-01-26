@@ -48,7 +48,7 @@ fun DailyNoteHeader(
                     text = "Daily Summary",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
+                    color = MaterialTheme.colorScheme.secondary
                 )
                 
                 if (lastUpdate != null) {
