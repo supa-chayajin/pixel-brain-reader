@@ -645,14 +645,6 @@ fun MainScreen(
                                     }
                                 },
                                 detailPane = {
-                                    // Detect Posture
-                                    val feature = windowAdaptiveInfo.windowPosture.hingeList.firstOrNull()
-                                    val foldingFeature = feature as? androidx.window.layout.FoldingFeature
-                                    val isTabletop = foldingFeature != null && 
-                                        foldingFeature.isSeparating && 
-                                        foldingFeature.state == androidx.window.layout.FoldingFeature.State.HALF_OPENED &&
-                                        foldingFeature.orientation == androidx.window.layout.FoldingFeature.Orientation.HORIZONTAL
-
                                     if (uiState.selectedFileName != null) {
                                         FileDetailPane(
                                             content = uiState.unsavedContent
@@ -663,21 +655,12 @@ fun MainScreen(
                                             isRefreshing = uiState.isRefreshing,
                                             onRefresh = { viewModel.refreshCurrentFile() },
                                             isExpandedScreen = isLargeScreen,
-                                            isTabletop = isTabletop, // Pass Posture
                                             isEditing = uiState.isEditing,
                                             hasUnsavedChanges = uiState.hasUnsavedChanges,
                                             onWikiLinkClick = { target -> viewModel.onWikiLinkClick(target) },
                                             onCreateNew = { viewModel.createNewFile() },
                                             moodViewModel = moodViewModel,
-                                            onSave = { viewModel.saveFile() },
-                                            onToggleEdit = { viewModel.toggleEditMode() },
-                                            onDelete = { viewModel.requestDeleteFile() },
-                                            onClose = { 
-                                                viewModel.closeFile()
-                                                if (navigator.canNavigateBack()) {
-                                                    navigator.navigateBack()
-                                                }
-                                            }
+                                            onSave = { viewModel.saveFile() }
                                         )
                                     } else {
                                         cloud.wafflecommons.pixelbrainreader.ui.components.WelcomeScreen()

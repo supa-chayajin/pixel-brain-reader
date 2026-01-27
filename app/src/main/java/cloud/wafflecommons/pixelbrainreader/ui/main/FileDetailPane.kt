@@ -30,7 +30,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsIgnoringVisibility
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.union
@@ -112,16 +114,12 @@ fun FileDetailPane(
     isRefreshing: Boolean,
     onRefresh: () -> Unit,
     isExpandedScreen: Boolean,
-    isTabletop: Boolean = false, // New Param
     isEditing: Boolean,
     onContentChange: (String) -> Unit,
     hasUnsavedChanges: Boolean,
     onWikiLinkClick: (String) -> Unit,
     onCreateNew: () -> Unit = {},
     onSave: () -> Unit = {},
-    onToggleEdit: () -> Unit = {},
-    onDelete: () -> Unit = {},
-    onClose: () -> Unit = {},
     moodViewModel: MoodViewModel = hiltViewModel()
 ) {
     // ... (Shape and Surface logic remains) ...
@@ -217,7 +215,7 @@ fun FileDetailPane(
                         }
                         
                         if (isEditing) {
-                            if (isTabletop) {
+                            if (isExpandedScreen) {
                                 // --- TABLETOP MODE: Split View ---
                                 Column(Modifier.fillMaxSize()) {
                                     // Bottom: Editor
@@ -248,7 +246,7 @@ fun FileDetailPane(
                                     // Bottom: Editor
                                     Column(
                                         modifier = Modifier
-                                            .weight(1f)
+                                            .fillMaxWidth()
                                             .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars))
                                             .verticalScroll(scrollState)
                                     ) {
