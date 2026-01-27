@@ -75,4 +75,10 @@ object DatabaseModule {
     fun provideDailyDashboardDao(database: AppDatabase): cloud.wafflecommons.pixelbrainreader.data.local.dao.DailyDashboardDao {
         return database.dailyDashboardDao()
     }
+
+    @Provides
+    @Singleton
+    fun provideScratchDao(database: AppDatabase): cloud.wafflecommons.pixelbrainreader.data.local.dao.ScratchDao {
+        return database.scratchDao()
+    }
 }

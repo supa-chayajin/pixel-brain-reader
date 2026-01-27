@@ -19,6 +19,7 @@ import javax.inject.Singleton
 @Singleton
 class DailyDashboardRepository @Inject constructor(
     private val dashboardDao: DailyDashboardDao,
+    private val scratchDao: cloud.wafflecommons.pixelbrainreader.data.local.dao.ScratchDao,
     private val fileRepository: FileRepository,
     private val briefingGenerator: BriefingGenerator,
     private val weatherRepository: WeatherRepository
@@ -223,7 +224,10 @@ class DailyDashboardRepository @Inject constructor(
         val currentFileContent = fileRepository.readFile(path) ?: ""
         val frontmatter = if (currentFileContent.isNotEmpty()) FrontmatterManager.extractFrontmatterRaw(currentFileContent) else ""
         
-        val newContent = MarkdownBurner.burn(dashboard, timeline, tasks, frontmatter)
+        // RFC 007: Include active (unpromoted) scraps in the burn
+        val activeScraps = scratchDao.getActiveScrapsSync()
+        
+        val newContent = MarkdownBurner.burn(dashboard, timeline, tasks, activeScraps, frontmatter)
         fileRepository.saveFileLocally(path, newContent)
     }
 }

@@ -27,9 +27,10 @@ import cloud.wafflecommons.pixelbrainreader.data.local.dao.NewsDao
         // V5.0 Cortex Buffer / Autonomous Dashboard
         cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyDashboardEntity::class,
         cloud.wafflecommons.pixelbrainreader.data.local.entity.TimelineEntryEntity::class,
-        cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyTaskEntity::class
+        cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyTaskEntity::class,
+        cloud.wafflecommons.pixelbrainreader.data.local.entity.ScratchNoteEntity::class
     ], 
-    version = 16, 
+    version = 17, 
     exportSchema = false
 )
 @androidx.room.TypeConverters(Converters::class)
@@ -42,6 +43,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun moodDao(): cloud.wafflecommons.pixelbrainreader.data.local.dao.MoodDao
     abstract fun habitDao(): cloud.wafflecommons.pixelbrainreader.data.local.dao.HabitDao
     abstract fun dailyDashboardDao(): cloud.wafflecommons.pixelbrainreader.data.local.dao.DailyDashboardDao
+    abstract fun scratchDao(): cloud.wafflecommons.pixelbrainreader.data.local.dao.ScratchDao
 }
 
 class Converters {

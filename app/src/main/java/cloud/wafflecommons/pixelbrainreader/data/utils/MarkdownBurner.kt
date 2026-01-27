@@ -15,6 +15,7 @@ object MarkdownBurner {
         dashboard: DailyDashboardEntity,
         timeline: List<TimelineEntryEntity>,
         tasks: List<DailyTaskEntity>,
+        scratchNotes: List<cloud.wafflecommons.pixelbrainreader.data.local.entity.ScratchNoteEntity> = emptyList(),
         existingFrontmatter: String = "" 
     ): String {
         val sb = StringBuilder()
@@ -83,6 +84,14 @@ object MarkdownBurner {
         if (dashboard.notesContent.isNotBlank()) {
             sb.append(dashboard.notesContent)
             if (!dashboard.notesContent.endsWith("\n")) sb.append("\n")
+        }
+
+        // 8. Unprocessed Scraps (Optional)
+        if (scratchNotes.isNotEmpty()) {
+            sb.append("\n## 💡 Scraps (Unprocessed)\n\n")
+            scratchNotes.forEach { scrap ->
+                sb.append("- ${scrap.content}\n")
+            }
         }
 
         return sb.toString()

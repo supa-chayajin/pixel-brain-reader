@@ -12,6 +12,7 @@ import cloud.wafflecommons.pixelbrainreader.data.repository.MoodRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.WeatherData
 import cloud.wafflecommons.pixelbrainreader.data.repository.WeatherRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.NewsRepository
+import cloud.wafflecommons.pixelbrainreader.data.repository.ScratchRepository
 import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
 import cloud.wafflecommons.pixelbrainreader.data.utils.FrontmatterManager
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -45,6 +46,7 @@ data class DailyNoteState(
     val isLoading: Boolean = true,
     val briefingState: MorningBriefingUiState = MorningBriefingUiState(),
     val topDailyTags: List<String> = emptyList(),
+    val scratchNotes: List<cloud.wafflecommons.pixelbrainreader.data.local.entity.ScratchNoteEntity> = emptyList(),
     val userMessage: String? = null
 )
 
@@ -75,6 +77,7 @@ class DailyNoteViewModel @Inject constructor(
     private val weatherRepository: WeatherRepository,
     private val secretManager: SecretManager,
     private val dashboardRepository: DailyDashboardRepository, // [NEW] The Engine
+    private val scratchRepository: ScratchRepository,
     private val userPrefs: cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository,
     private val dataRefreshBus: cloud.wafflecommons.pixelbrainreader.data.utils.DataRefreshBus,
     private val briefingGenerator: cloud.wafflecommons.pixelbrainreader.data.ai.BriefingGenerator,
@@ -155,10 +158,11 @@ class DailyNoteViewModel @Inject constructor(
         val dashboardFlow = dashboardRepository.getDashboard(date)
         val timelineFlow = dashboardRepository.getLiveTimeline(date)
         val tasksFlow = dashboardRepository.getLiveTasks(date)
+        val scratchFlow = scratchRepository.getActiveScraps()
         
-        combine(dashboardFlow, timelineFlow, tasksFlow) { dashboard, timeline, tasks ->
-            Triple(dashboard, timeline, tasks)
-        }.onEach { (dashboard, timeline, tasks) ->
+        combine(dashboardFlow, timelineFlow, tasksFlow, scratchFlow) { dashboard, timeline, tasks, scraps ->
+            java.util.concurrent.atomic.AtomicReference(java.util.concurrent.atomic.AtomicReference(Triple(dashboard, timeline, tasks)) to scraps) // Dummy to handle 4 flows combine logic if needed or use combine extension
+            // combine for 4 flows:
             _uiState.update { 
                 it.copy(
                     mantra = dashboard?.dailyMantra ?: "",
@@ -166,6 +170,7 @@ class DailyNoteViewModel @Inject constructor(
                     notesContent = dashboard?.notesContent ?: "",
                     timelineEvents = timeline,
                     dailyTasks = tasks,
+                    scratchNotes = scraps,
                     isLoading = false
                 )
             }
@@ -217,6 +222,35 @@ class DailyNoteViewModel @Inject constructor(
     fun toggleTask(taskId: String, isDone: Boolean) {
         viewModelScope.launch {
             dashboardRepository.toggleTask(taskId, isDone) // Date needed? No, ID is PK.
+        }
+    }
+
+    // --- Scratchpad Actions ---
+    fun saveScrap(content: String, color: Int = 0xFF000000.toInt()) {
+        viewModelScope.launch {
+            scratchRepository.saveScrap(content, color)
+        }
+    }
+
+    fun deleteScrap(scrap: cloud.wafflecommons.pixelbrainreader.data.local.entity.ScratchNoteEntity) {
+        viewModelScope.launch {
+            scratchRepository.deleteScrap(scrap)
+        }
+    }
+
+    fun promoteScrapToIdeas(scrap: cloud.wafflecommons.pixelbrainreader.data.local.entity.ScratchNoteEntity) {
+        viewModelScope.launch {
+            val currentIdeas = _uiState.value.ideasContent
+            val newIdeas = if (currentIdeas.isBlank()) scrap.content else "$currentIdeas\n\n${scrap.content}"
+            
+            // 1. Update Ideas in Dashboard
+            dashboardRepository.updateSecondBrain(currentDate, "IDEAS", newIdeas)
+            
+            // 2. Mark Scrap as Promoted (or Delete based on user preference? User RFC says "archived")
+            // For now, let's delete or mark as promoted. ScratchDao filters isPromoted = 0.
+            scratchRepository.updateScrap(scrap.copy(isPromoted = true))
+            
+            _uiState.update { it.copy(userMessage = "Scrap promoted to Second Brain") }
         }
     }
 

@@ -2,6 +2,7 @@ package cloud.wafflecommons.pixelbrainreader.ui.daily
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -10,16 +11,22 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudUpload
-import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Mood
+import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.NoteAdd
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Upgrade
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -30,6 +37,9 @@ import cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar
 import cloud.wafflecommons.pixelbrainreader.ui.components.MarkdownVisualTransformation
 import cloud.wafflecommons.pixelbrainreader.ui.journal.DailyNoteHeader
 import cloud.wafflecommons.pixelbrainreader.ui.journal.MorningBriefingSection
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
+import cloud.wafflecommons.pixelbrainreader.data.local.entity.ScratchNoteEntity
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import androidx.compose.ui.unit.sp
@@ -50,6 +60,7 @@ fun DailyNoteScreen(
 
     var showAddTimelineDialog by remember { mutableStateOf(false) }
     var showAddTaskDialog by remember { mutableStateOf(false) }
+    var showQuickCaptureSheet by remember { mutableStateOf(false) }
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -69,7 +80,9 @@ fun DailyNoteScreen(
                 navigationIcon = {
                     if (state.isLoading) {
                         CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp).padding(4.dp),
+                            modifier = Modifier
+                                .size(24.dp)
+                                .padding(4.dp),
                             color = MaterialTheme.colorScheme.error,
                             strokeWidth = 2.dp
                         )
@@ -95,11 +108,18 @@ fun DailyNoteScreen(
                         Icon(Icons.Default.Refresh, contentDescription = "Refresh")
                     }
 
-                    IconButton(onClick = {
-                        // Just toggle calendar/refresh? 
-                        // Existing refresh logic
-                    }) {
-                        Icon(Icons.Default.DateRange, contentDescription = "Calendar")
+                    FilledTonalIconButton(
+                        onClick = { showQuickCaptureSheet = true },
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Lightbulb,
+                            contentDescription = "Quick Capture",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
                     }
 
                     // Settings
@@ -185,7 +205,9 @@ fun DailyNoteScreen(
                                  style = MaterialTheme.typography.bodyLarge,
                                  fontWeight = FontWeight.Medium,
                                  fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
-                                 modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                                 modifier = Modifier
+                                     .fillMaxWidth()
+                                     .padding(vertical = 8.dp),
                                  textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                                  color = MaterialTheme.colorScheme.secondary
                              )
@@ -230,7 +252,7 @@ fun DailyNoteScreen(
                         }
                     }
 
-                    // Second Brain on Mobile
+                    // 5. Second Brain Section
                     item {
                         SecondBrainSection(
                             ideas = state.ideasContent,
@@ -238,6 +260,17 @@ fun DailyNoteScreen(
                             onIdeasChange = viewModel::onIdeasChanged,
                             onNotesChange = viewModel::onNotesChanged
                         )
+                    }
+
+                    // 6. Scratchpad (New Module)
+                    if (state.scratchNotes.isNotEmpty()) {
+                        item {
+                            ScratchpadWidget(
+                                scraps = state.scratchNotes,
+                                onDelete = { viewModel.deleteScrap(it) },
+                                onPromote = { viewModel.promoteScrapToIdeas(it) }
+                            )
+                        }
                     }
                 }
             }
@@ -260,6 +293,16 @@ fun DailyNoteScreen(
             onConfirm = { label, time ->
                 viewModel.addTask(label, time)
                 showAddTaskDialog = false
+            }
+        )
+    }
+
+    if (showQuickCaptureSheet) {
+        QuickCaptureSheet(
+            onDismiss = { showQuickCaptureSheet = false },
+            onSave = { content, color ->
+                viewModel.saveScrap(content, color)
+                showQuickCaptureSheet = false
             }
         )
     }
@@ -298,7 +341,9 @@ private fun SecondBrainSection(
             OutlinedTextField(
                 value = ideas,
                 onValueChange = onIdeasChange,
-                modifier = Modifier.fillMaxWidth().height(160.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(160.dp),
                 placeholder = { Text("Capture lightning ideas...", color = textColor.copy(alpha = 0.4f)) },
                 visualTransformation = visualTransformation,
                 textStyle = MaterialTheme.typography.bodyLarge.copy(
@@ -325,7 +370,9 @@ private fun SecondBrainSection(
             OutlinedTextField(
                 value = notes,
                 onValueChange = onNotesChange,
-                modifier = Modifier.fillMaxWidth().height(160.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(160.dp),
                 placeholder = { Text("Reflection, gratitude, logs...", color = textColor.copy(alpha = 0.4f)) },
                 visualTransformation = visualTransformation,
                 textStyle = MaterialTheme.typography.bodyLarge.copy(
@@ -431,7 +478,10 @@ private fun TimelineItem(event: TimelineEntryEntity, isLast: Boolean) {
             Box(
                 modifier = Modifier
                     .size(8.dp)
-                    .background(MaterialTheme.colorScheme.primary, androidx.compose.foundation.shape.CircleShape)
+                    .background(
+                        MaterialTheme.colorScheme.primary,
+                        androidx.compose.foundation.shape.CircleShape
+                    )
             )
             
             // Line
@@ -607,7 +657,9 @@ private fun AddTaskDialog(onDismiss: () -> Unit, onConfirm: (String, LocalTime?)
                 // Time Toggle
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth().clickable { useTime = !useTime }
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { useTime = !useTime }
                 ) {
                     Checkbox(checked = useTime, onCheckedChange = { useTime = it })
                     Spacer(Modifier.width(8.dp))
@@ -636,5 +688,175 @@ private fun AddTaskDialog(onDismiss: () -> Unit, onConfirm: (String, LocalTime?)
             TextButton(onClick = onDismiss) { Text("Cancel") }
         }
     )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun QuickCaptureSheet(
+    onDismiss: () -> Unit,
+    onSave: (String, Int) -> Unit
+) {
+    var content by remember { mutableStateOf("") }
+    val colors = listOf(
+        MaterialTheme.colorScheme.surfaceVariant,
+        Color(0xFFFFB4AB), // Pastel Red
+        Color(0xFFC2E7FF), // Pastel Blue
+        Color(0xFFD3EBCD), // Pastel Green
+        Color(0xFFF3E5F5)  // Pastel Purple
+    )
+    var selectedColor by remember { mutableStateOf(colors[0]) }
+    val focusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        dragHandle = { BottomSheetDefaults.DragHandle() },
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp)
+                .navigationBarsPadding()
+                .imePadding(),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text(
+                text = "Quick Capture",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+
+            OutlinedTextField(
+                value = content,
+                onValueChange = { content = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 120.dp)
+                    .focusRequester(focusRequester),
+                placeholder = { Text("What's on your mind?", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)) },
+                textStyle = MaterialTheme.typography.bodyLarge,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                    unfocusedBorderColor = Color.Transparent,
+                    focusedContainerColor = selectedColor.copy(alpha = 0.1f),
+                    unfocusedContainerColor = selectedColor.copy(alpha = 0.05f)
+                ),
+                shape = RoundedCornerShape(16.dp)
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Color Selectors
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    colors.forEach { color ->
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .background(color, androidx.compose.foundation.shape.CircleShape)
+                                .clickable { selectedColor = color }
+                                .let { if (selectedColor == color) it.border(2.dp, MaterialTheme.colorScheme.primary, androidx.compose.foundation.shape.CircleShape) else it }
+                        )
+                    }
+                }
+
+                Button(
+                    onClick = { if (content.isNotBlank()) onSave(content, selectedColor.toArgb()) },
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Save Scrap")
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(24.dp))
+        }
+
+        LaunchedEffect(Unit) {
+            focusRequester.requestFocus()
+        }
+    }
+}
+
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+private fun ScratchpadWidget(
+    scraps: List<ScratchNoteEntity>,
+    onDelete: (ScratchNoteEntity) -> Unit,
+    onPromote: (ScratchNoteEntity) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(
+            text = "💡 Scratchpad",
+            color = MaterialTheme.colorScheme.secondary,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold
+        )
+        
+        androidx.compose.foundation.lazy.LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(end = 16.dp)
+        ) {
+            items(scraps, key = { it.id }) { scrap ->
+                ScratchItem(scrap, onDelete, onPromote)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ScratchItem(
+    scrap: ScratchNoteEntity,
+    onDelete: (ScratchNoteEntity) -> Unit,
+    onPromote: (ScratchNoteEntity) -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .width(220.dp)
+            .heightIn(min = 100.dp, max = 160.dp),
+        shape = RoundedCornerShape(16.dp),
+        color = Color(scrap.color).copy(alpha = 0.15f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(scrap.color).copy(alpha = 0.3f))
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = scrap.content,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 4,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = { onDelete(scrap) }) {
+                    Icon(
+                        imageVector = Icons.Outlined.Delete,
+                        contentDescription = "Delete",
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    )
+                }
+                IconButton(onClick = { onPromote(scrap) }) {
+                    Icon(
+                        imageVector = Icons.Default.Upgrade,
+                        contentDescription = "Promote to Ideas",
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+        }
+    }
 }
 
