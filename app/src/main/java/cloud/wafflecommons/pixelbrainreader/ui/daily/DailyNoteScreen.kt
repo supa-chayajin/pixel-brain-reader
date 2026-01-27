@@ -162,6 +162,8 @@ fun DailyNoteScreen(
         BoxWithConstraints(
             modifier = Modifier
                 .padding(padding)
+                .consumeWindowInsets(padding)
+                .imePadding()
                 .fillMaxSize()
         ) {
             val isWide = maxWidth > 600.dp
