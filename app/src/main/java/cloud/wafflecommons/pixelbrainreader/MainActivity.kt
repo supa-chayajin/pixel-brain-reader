@@ -42,6 +42,7 @@ class MainActivity : FragmentActivity() {
         isUserLoggedIn = secretManager.getToken() != null
         
         enableEdgeToEdge()
+        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
 
         // Privacy Curtain (SecOps) - Kept as good practice even without bio, but removing Flag Secure might be desired if bio is gone? 
         // User asked to remove Biometric Authentication. Privacy Curtain (FLAG_SECURE) prevents screenshots.

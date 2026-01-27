@@ -23,6 +23,11 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ComposeCortexEditor(
     content: String,
@@ -38,10 +43,18 @@ fun ComposeCortexEditor(
         MarkdownVisualTransformation(textColor, primaryColor, codeBackgroundColor)
     }
 
+    val bringIntoViewRequester = remember { BringIntoViewRequester() }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+
     BasicTextField(
         value = content,
-        onValueChange = onContentChange,
-        modifier = modifier,
+        onValueChange = {
+            onContentChange(it)
+            // Optional: Request bring into view on change, but mostly needed on focus/cursor move
+            // which basic text field handles but bringIntoViewRequester ensures parent scroll
+        },
+        modifier = modifier
+            .bringIntoViewRequester(bringIntoViewRequester),
         textStyle = TextStyle(
             color = textColor,
             fontSize = 16.sp,
@@ -49,8 +62,15 @@ fun ComposeCortexEditor(
             lineHeight = 24.sp
         ),
         cursorBrush = SolidColor(primaryColor),
-        visualTransformation = visualTransformation
+        visualTransformation = visualTransformation,
+        onTextLayout = {
+             // We could trigger bringIntoView here if we had cursor position logic exposed easily
+             // For now, attaching the modifier to the TextField enables the system to find it.
+        }
     )
+    
+    // LaunchedEffect to bring cursor into view when selection changes is tricky without custom TextField state
+    // but the Modifier.bringIntoViewRequester allows parental "scroll to" calls.
 }
 
 /**

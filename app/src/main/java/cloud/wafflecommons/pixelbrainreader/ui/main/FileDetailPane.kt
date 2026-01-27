@@ -27,8 +27,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -214,55 +220,70 @@ fun FileDetailPane(
                             if (isTabletop) {
                                 // --- TABLETOP MODE: Split View ---
                                 Column(Modifier.fillMaxSize()) {
-                                    // Top: Preview
-                                    Box(
-                                        Modifier
-                                            .weight(1f)
-                                            .padding(16.dp)
-                                            .verticalScroll(rememberScrollState())
-                                    ) {
-                                        MarkwonContent(content = displayContent, onWikiLinkClick = onWikiLinkClick)
-                                    }
-                                    
-                                    HorizontalDivider()
-                                    
                                     // Bottom: Editor
-                                    cloud.wafflecommons.pixelbrainreader.ui.components.ComposeCortexEditor(
-                                        content = content,
-                                        onContentChange = onContentChange,
+                                    // Tabletop: Ensure editor is safe from bottom insets/hinge
+                                    val scrollState = rememberScrollState()
+                                    Column(
                                         modifier = Modifier
                                             .weight(1f)
-                                            .padding(16.dp)
-                                            .imePadding()
-                                    )
+                                            .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars))
+                                            .verticalScroll(scrollState)
+                                    ) {
+                                        cloud.wafflecommons.pixelbrainreader.ui.components.ComposeCortexEditor(
+                                            content = content,
+                                            onContentChange = onContentChange,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(16.dp)
+                                        )
+                                        Spacer(Modifier.height(if (isExpandedScreen) 16.dp else 8.dp))
+                                    }
                                 }
                             } else {
-                                // --- STANDARD MODE ---
-                                val scrollState = androidx.compose.runtime.saveable.rememberSaveable(saver = androidx.compose.foundation.ScrollState.Saver) {
-                                    androidx.compose.foundation.ScrollState(initial = 0)
+                                // --- STANDARD MODE: Reactive & Optimized ---
+                                val scrollState = rememberScrollState()
+                                val isFolded = !isExpandedScreen
+
+                                Column(Modifier.fillMaxSize()) {
+                                    // Bottom: Editor
+                                    Column(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars))
+                                            .verticalScroll(scrollState)
+                                    ) {
+                                        cloud.wafflecommons.pixelbrainreader.ui.components.ComposeCortexEditor(
+                                            content = content,
+                                            onContentChange = onContentChange,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                                        )
+
+                                        // Use a MINIMAL fixed buffer purely for visual comfort at the end of a long file.
+                                        // This is NOT for keyboard avoidance.
+                                        Spacer(Modifier.height(if (isFolded) 16.dp else 32.dp))
+                                    }
                                 }
-                                
-                                cloud.wafflecommons.pixelbrainreader.ui.components.ComposeCortexEditor(
-                                    content = content,
-                                    onContentChange = onContentChange,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(16.dp)
-                                        .imePadding()
-                                        .verticalScroll(scrollState)
-                                )
                             }
                         } else {
                             val scrollState = androidx.compose.runtime.saveable.rememberSaveable(saver = androidx.compose.foundation.ScrollState.Saver) {
                                 androidx.compose.foundation.ScrollState(initial = 0)
                             }
                             
-                            Column(
+                            // View Mode also benefits from the clean slate structure for consistency
+                            Box(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .padding(horizontal = 16.dp)
-                                    .verticalScroll(scrollState)
+                                    .navigationBarsPadding()
+                                    .imePadding()
                             ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(horizontal = 16.dp)
+                                        .verticalScroll(scrollState)
+                                ) {
                                 if (isDailyNote && moodState.moodData != null) {
                                     val data = moodState.moodData!!
                                     val topDailyTags = remember(data) { 
@@ -297,13 +318,10 @@ fun FileDetailPane(
                                 Spacer(Modifier.height(8.dp))
 
                                 MarkwonContent(content = displayContent, onWikiLinkClick = onWikiLinkClick)
-                            }
+                            } 
+                            // End View Mode Box
                         }
                     }
-                    else -> {
-                        WelcomeState(onCreateNew = onCreateNew)
-                    }
-                }
 
                 // Floating Save Action Button
                 if (isEditing) {
@@ -311,18 +329,25 @@ fun FileDetailPane(
                         onClick = onSave,
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
-                            .padding(24.dp),
+                            .padding(24.dp)
+                            .imePadding(), // Ensure FAB moves with keyboard too if visible
                         containerColor = MaterialTheme.colorScheme.primaryContainer,
                         contentColor = MaterialTheme.colorScheme.onPrimaryContainer
                     ) {
                         Icon(Icons.Default.Save, contentDescription = "Save Changes")
                     }
-                }
-            } // End Box (FAB Wrapper)
-        }
-    }
-    }
-}
+                } // End FAB block
+            } // End content != null block
+
+            else -> {
+                WelcomeState(onCreateNew = onCreateNew)
+            }
+        } // End when
+    } // End Box (FAB wrapper)
+    } // End PullToRefreshBox
+    } // End Column
+    } // End Surface
+} // End FileDetailPane function
 
 @Composable
 fun WelcomeState(onCreateNew: () -> Unit) {
