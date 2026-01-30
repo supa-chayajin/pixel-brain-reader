@@ -23,6 +23,7 @@ import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -87,7 +88,13 @@ fun DailyNoteScreen(
                             strokeWidth = 2.dp
                         )
                     } else {
-                        IconButton(onClick = { viewModel.triggerEmergencySync() }) {
+                        FilledTonalIconButton(
+                            onClick = { viewModel.triggerEmergencySync() },
+                            colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                contentColor = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        ) {
                             Icon(
                                 imageVector = Icons.Default.CloudUpload,
                                 contentDescription = "Force Push (Iron Vault Override)",
@@ -97,7 +104,6 @@ fun DailyNoteScreen(
                     }
                 },
                 actions = {
-                    // Refresh
                     FilledTonalIconButton(
                         onClick = { viewModel.refreshDailyData() },
                         colors = IconButtonDefaults.filledTonalIconButtonColors(
@@ -108,16 +114,20 @@ fun DailyNoteScreen(
                         Icon(Icons.Default.Refresh, contentDescription = "Refresh")
                     }
 
+                    val context = androidx.compose.ui.platform.LocalContext.current
                     FilledTonalIconButton(
-                        onClick = { showQuickCaptureSheet = true },
+                        onClick = {
+                            val intent = android.content.Intent(context, cloud.wafflecommons.pixelbrainreader.ui.privatevault.PrivateJournalActivity::class.java)
+                            context.startActivity(intent)
+                        },
                         colors = IconButtonDefaults.filledTonalIconButtonColors(
                             containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                             contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Lightbulb,
-                            contentDescription = "Quick Capture",
+                            imageVector = Icons.Default.Lock,
+                            contentDescription = "Private Vault",
                             tint = MaterialTheme.colorScheme.primary
                         )
                     }
@@ -149,12 +159,9 @@ fun DailyNoteScreen(
                 }
 
                 ExtendedFloatingActionButton(
-                    onClick = {
-                        val dateStr = state.date.format(DateTimeFormatter.ISO_DATE)
-                        onEditClicked("10_Journal/$dateStr.md")
-                    },
-                    icon = { Icon(Icons.Default.Edit, null) },
-                    text = { Text("Editor") }
+                    onClick = { showQuickCaptureSheet = true },
+                    icon = { Icon(Icons.Default.Lightbulb, "Quick Capture") },
+                    text = { Text("Scratchpad") }
                 )
             }
         }

@@ -99,9 +99,13 @@ class IndexingWorker @AssistedInject constructor(
         files.filter { 
             it.type == "file" && 
             it.path.endsWith(".md", ignoreCase = true) &&
-            it.path != todayPath // SHIELD: Skip today's active journal
+            it.path != todayPath && // SHIELD: Skip today's active journal
+            !it.path.contains("99_System") && // System Isolation
+            !it.path.contains("99_Private") && // SHIELD: Private Isolation
+            !it.path.endsWith(".enc", ignoreCase = true)
         }.forEach { entity ->
-            try {
+            Log.d("IndexingWorker", "Processing ${entity.path}")
+            /*try {
                 // Per-File Transaction
 
                 
@@ -134,7 +138,7 @@ class IndexingWorker @AssistedInject constructor(
             } catch (e: Exception) {
                 Log.e("IndexingWorker", "Failed to embed ${entity.path}", e)
                 // Continue to next file
-            }
+            }*/
         }
     }
     

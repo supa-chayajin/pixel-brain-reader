@@ -105,18 +105,39 @@ class JGitProvider @Inject constructor(
     /**
      * Commits staged changes.
      */
+    /**
+     * Commits staged changes.
+     * Includes "Force Add" to ensure new files (especially in subdirs) are caught.
+     * Handles Detached HEAD by switching to main if needed.
+     */
     suspend fun commit(message: String): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             Git.open(rootDir).use { git ->
+                // 1. Fix Detached HEAD
+                val repo = git.repository
+                val branch = repo.branch
+                // ObjectId.isId(branch) checks if it's a commit hash (detached) vs a ref name
+                if (org.eclipse.jgit.lib.ObjectId.isId(branch)) {
+                    Log.w("JGitProvider", "Detached HEAD detected ($branch). Checking out 'main'...")
+                    git.checkout().setName("main").call()
+                }
+
+                // 2. Force Add (Stage All)
+                // Add new/modified files
+                git.add().addFilepattern(".").call()
+                // Stage deletions
+                git.add().addFilepattern(".").setUpdate(true).call()
+
+                // 3. Commit
                 val status = git.status().call()
                 if (status.hasUncommittedChanges()) {
-                    git.commit()
+                    val revCommit = git.commit()
                         .setMessage(message)
                         .setAuthor("PixelBrain User", "user@pixelbrain.local")
                         .call()
-                    Log.i("JGitProvider", "Committed: $message")
+                    Log.i("JGitProvider", "Committed: $message (Hash: ${revCommit.name})")
                 } else {
-                    Log.d("JGitProvider", "No changes to commit.")
+                    Log.d("JGitProvider", "No changes to commit after adding.")
                 }
             }
             Result.success(Unit)

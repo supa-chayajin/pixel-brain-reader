@@ -17,20 +17,14 @@ class SecretManager @Inject constructor(
 
     companion object {
         private const val VAULT_FILENAME = "secure_vault"
-        // Legacy file name used in V1.0 - Assumed based on User Request for migration
-        // If the old app used "secure_prefs" (unencrypted), we target that.
-        // Based on V1 analysis, 'TokenManager' used 'secure_prefs', but if it was unencrypted,
-        // we must migrate it to the new Encrypted store (or re-encrypt it).
-        // Here we assume a migration from an unencrypted file named "token_prefs" or similar, 
-        // OR we re-encrypt 'secure_prefs' if it was not actually secure.
-        // For safety, let's look for "token_manager_prefs" which is a common default for manual prefs.
-        private const val LEGACY_PREFS_NAME = "secure_prefs" 
-        
+        private const val LEGACY_PREFS_NAME = "secure_prefs"
+
         private const val KEY_TOKEN = "github_token"
         private const val KEY_REPO_OWNER = "repo_owner"
         private const val KEY_REPO_NAME = "repo_name"
         const val KEY_PROVIDER = "provider_type"
         private const val KEY_GEMINI_API_KEY = "gemini_api_key"
+        private const val KEY_VAULT_PASSWORD = "vault_master_password"
     }
 
     private val masterKey = MasterKey.Builder(context)
@@ -49,7 +43,11 @@ class SecretManager @Inject constructor(
                 // Try again nicely
                 createEncryptedPrefs()
             } catch (retryException: Exception) {
-                Log.e("SecretManager", "Failed to recreate vault after reset. Fallback to unencrypted mode or fatal crash?", retryException)
+                Log.e(
+                    "SecretManager",
+                    "Failed to recreate vault after reset. Fallback to unencrypted mode or fatal crash?",
+                    retryException
+                )
                 // If it fails again, we are in trouble. But usually, deleting the file fixes the "Bad Tag" / "Signature Failed" issue.
                 throw retryException
             }
@@ -78,10 +76,13 @@ class SecretManager @Inject constructor(
     private fun migrateFromLegacy() {
         // We check if the file exists on disk to avoid creating an empty one by accessing it
         val legacyFile = File(context.filesDir.parent, "shared_prefs/$LEGACY_PREFS_NAME.xml")
-        
+
         if (legacyFile.exists()) {
-            Log.i("SecretManager", "Legacy unencrypted credentials found. Initiating migration protocol.")
-            
+            Log.i(
+                "SecretManager",
+                "Legacy unencrypted credentials found. Initiating migration protocol."
+            )
+
             val legacyPrefs = context.getSharedPreferences(LEGACY_PREFS_NAME, Context.MODE_PRIVATE)
             val token = legacyPrefs.getString(KEY_TOKEN, null)
             val owner = legacyPrefs.getString(KEY_REPO_OWNER, null)
@@ -91,7 +92,7 @@ class SecretManager @Inject constructor(
                 saveToken(token)
                 Log.d("SecretManager", "Token migrated to Vault.")
             }
-            
+
             if (!owner.isNullOrEmpty() && !repo.isNullOrEmpty()) {
                 saveRepoInfo(owner, repo)
             }
@@ -146,5 +147,16 @@ class SecretManager @Inject constructor(
 
     fun getGeminiApiKey(): String? {
         return encryptedPrefs.getString(KEY_GEMINI_API_KEY, null)
+    }
+
+    /**
+     * V2.0: Private Vault Password Management
+     */
+    fun saveVaultPassword(password: String) {
+        encryptedPrefs.edit().putString(KEY_VAULT_PASSWORD, password).apply()
+    }
+
+    fun getVaultPassword(): String? {
+        return encryptedPrefs.getString(KEY_VAULT_PASSWORD, null)
     }
 }

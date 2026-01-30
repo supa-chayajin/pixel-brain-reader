@@ -363,7 +363,7 @@ fun MainScreen(
             if (isLargeScreen) {
                 item(
                     selected = currentRoute == Screen.Stats,
-                    onClick = { 
+                    onClick = {
                         navController.navigate(Screen.Stats) {
                             popUpTo(navController.graph.findStartDestination().id) {
                                 saveState = true
@@ -372,7 +372,7 @@ fun MainScreen(
                             restoreState = true
                         }
                     },
-                    icon = { Icon(Icons.Default.Star, contentDescription = "Stats") }, 
+                    icon = { Icon(Icons.Default.Star, contentDescription = "Stats") },
                     label = { Text("Stats") }
                 )
             }
