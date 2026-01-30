@@ -20,11 +20,11 @@ android {
 
     defaultConfig {
         applicationId = "cloud.wafflecommons.pixelbrainreader"
-        minSdk = 35
-        compileSdk = 35
+        minSdk = 36
+        compileSdk = 36
         targetSdkPreview = "36"
         versionCode = 1
-        versionName = "1.0"
+        versionName = "2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
