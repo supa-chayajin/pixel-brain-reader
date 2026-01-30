@@ -52,7 +52,8 @@ class IndexingWorker @AssistedInject constructor(
                         
                         // Ensure the file exists in the files table before inserting embeddings
                         if (fileDao.existsBlocking(relativePath)) {
-                            indexFile(file, relativePath)
+                            // PAUSE Indexing for AI
+                            // indexFile(file, relativePath)
                             count++
                         } else {
                             Log.w("Cortex", "Skipping $relativePath: Not found in database index.")

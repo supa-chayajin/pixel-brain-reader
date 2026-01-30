@@ -37,7 +37,7 @@ object FrontmatterManager {
             // Let's rely on standard decoding.
             yaml.decodeFromString<NoteMetadata>(yamlPayload)
         } catch (e: Exception) {
-            e.printStackTrace()
+            // e.printStackTrace()
             NoteMetadata() // Return empty on parse failure
         }
     }

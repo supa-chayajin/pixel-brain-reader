@@ -138,7 +138,7 @@ class VaultDiscoveryRepository @Inject constructor(
                      metaBlob = gson.toJson(extra)
                  }
              } catch (e: Exception) {
-                 Log.w("VaultDiscovery", "Failed to extract metadata for $path")
+                 // Log.w("VaultDiscovery", "Failed to extract metadata for $path")
              }
          }
          
