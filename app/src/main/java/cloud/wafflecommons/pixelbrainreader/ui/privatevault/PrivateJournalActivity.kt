@@ -262,7 +262,6 @@ fun PrivateVaultScreen(
              // Editor Mode
              // Handle Back Press to close editor first
              BackHandler {
-                 viewModel.saveNote() // Auto-save on back
                  viewModel.closeNote()
              }
              
@@ -272,10 +271,7 @@ fun PrivateVaultScreen(
                  title = state.selectedFile?.name?.removeSuffix(".md.enc") ?: "New Note",
                  onContentChange = { viewModel.onEditorContentChange(it) },
                  onSave = { viewModel.saveNote() },
-                 onClose = { 
-                     viewModel.saveNote() 
-                     viewModel.closeNote() 
-                 },
+                 onClose = { viewModel.closeNote() },
                  onDelete = { viewModel.deleteCurrentNote() }
              )
         } else {
