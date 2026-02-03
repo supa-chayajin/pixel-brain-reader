@@ -14,12 +14,14 @@ import cloud.wafflecommons.pixelbrainreader.data.repository.WeatherData
 import cloud.wafflecommons.pixelbrainreader.data.repository.WeatherRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.NewsRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.ScratchRepository
+import cloud.wafflecommons.pixelbrainreader.data.usecase.SyncHealthDataUseCase
 import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
 import cloud.wafflecommons.pixelbrainreader.data.utils.FrontmatterManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -83,7 +85,8 @@ class DailyNoteViewModel @Inject constructor(
     private val dataRefreshBus: cloud.wafflecommons.pixelbrainreader.data.utils.DataRefreshBus,
     private val dailyBriefingRepository: DailyBriefingRepository, // [NEW] Cache-First Repo
     private val jGitProvider: cloud.wafflecommons.pixelbrainreader.data.remote.JGitProvider,
-    private val gamificationRepository: cloud.wafflecommons.pixelbrainreader.data.gamification.GamificationRepository
+    private val gamificationRepository: cloud.wafflecommons.pixelbrainreader.data.gamification.GamificationRepository,
+    private val syncHealthDataUseCase: SyncHealthDataUseCase
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DailyNoteState())
@@ -112,6 +115,18 @@ class DailyNoteViewModel @Inject constructor(
     private val _notesUpdates = MutableStateFlow<String?>(null)
 
     init {
+        // [NEW] Fire-and-Forget Health Sync (Parallel)
+        // Does not block UI or Briefing.
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // Ensure permissions are handled in UseCase or silently fail if not ready (UseCase handles checks)
+                syncHealthDataUseCase(LocalDate.now())
+            } catch (e: Exception) {
+                // Swallow sync errors to not crash Dashboard
+                Log.e("DailyNoteVM", "Silent Health Sync Failed", e)
+            }
+        }
+
         // Initial Load
         currentDate = LocalDate.now()
         loadDailyNote(currentDate)

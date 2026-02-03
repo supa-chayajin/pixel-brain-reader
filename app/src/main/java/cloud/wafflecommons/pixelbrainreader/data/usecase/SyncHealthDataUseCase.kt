@@ -46,18 +46,22 @@ class SyncHealthDataUseCase @Inject constructor(
         // Steps: From 00:00 to Now (or end of day if past)
         val startOfDay = date.atStartOfDay(ZoneId.systemDefault()).toInstant()
         
-        // If syncing today, take "now". If syncing past day, take "end of day"
-        val now = LocalDateTime.now()
+        // If syncing today, take "now" to capture latest. If syncing past day, take "end of day"
+        val now = java.time.Instant.now()
         val endTimestamp = if (date == LocalDate.now()) {
-            now.atZone(ZoneId.systemDefault()).toInstant()
+            now
         } else {
             date.atTime(LocalTime.MAX).atZone(ZoneId.systemDefault()).toInstant()
         }
 
         val steps = healthConnectManager.readSteps(startOfDay, endTimestamp)
         
+        Log.d("HealthSync", "Synced Steps for $date: $steps")
+
+        // CRITICAL: Force update even if 0 (though usually we want >0). 
+        // Safety first: > 0.
         if (steps > 0) {
-            updateHabitLog(habitId, date, steps.toDouble())
+           habitRepository.updateHabitValue(date, habitId, steps.toDouble())
         }
     }
 
@@ -70,28 +74,11 @@ class SyncHealthDataUseCase @Inject constructor(
 
         val duration = healthConnectManager.readSleepDuration(startWindow, endWindow)
         val hours = duration.toMinutes() / 60.0
+        
+        Log.d("HealthSync", "Synced Sleep for $date: $hours hours")
 
         if (hours > 0) {
-            updateHabitLog(habitId, date, hours)
+            habitRepository.updateHabitValue(date, habitId, hours)
         }
-    }
-
-    private suspend fun updateHabitLog(habitId: String, date: LocalDate, value: Double) {
-        // We need to fetch the habit config to determine status based on target
-        val configs = habitRepository.getHabitConfigs()
-        val habit = configs.find { it.id == habitId } ?: return
-        
-        val isCompleted = habitRepository.calculateCompletion(value, habit.targetValue, habit.type)
-        val status = if (isCompleted) HabitStatus.COMPLETED else HabitStatus.PARTIAL
-
-        val entry = HabitLogEntry(
-            habitId = habitId,
-            date = date.toString(),
-            value = value,
-            status = status
-        )
-        
-        habitRepository.logHabit(date, entry)
-        Log.d("SyncHealth", "Updated habit $habitId with value $value (Status: $status)")
     }
 }
