@@ -190,5 +190,9 @@ dependencies {
     // YAML & Serialization
     implementation(libs.kaml)
     implementation(libs.kotlinx.serialization.json)
+
+    // Charting (Vico)
+    implementation(libs.vico.compose.m3)
+    implementation(libs.vico.core)
 }
 

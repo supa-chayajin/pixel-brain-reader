@@ -14,10 +14,16 @@ import androidx.health.connect.client.time.TimeRangeFilter
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withContext
 import java.time.Duration
 import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 import javax.inject.Inject
 import javax.inject.Singleton
+
+data class HeartRatePoint(val timestamp: Instant, val avgBpm: Double)
 
 @Singleton
 class HealthConnectManager @Inject constructor(
@@ -106,6 +112,80 @@ class HealthConnectManager @Inject constructor(
             response.records
         } catch (e: Exception) {
             Log.e("HealthConnect", "Error reading heart rate", e)
+            emptyList()
+        }
+    }
+
+    suspend fun readDailySteps(start: Instant, end: Instant): Map<LocalDate, Long> = withContext(Dispatchers.IO) {
+        val client = healthConnectClient ?: return@withContext emptyMap()
+        try {
+            val response = client.aggregateGroupByPeriod(
+                androidx.health.connect.client.request.AggregateGroupByPeriodRequest(
+                    metrics = setOf(StepsRecord.COUNT_TOTAL),
+                    timeRangeFilter = TimeRangeFilter.between(start, end),
+                    timeRangeSlicer = java.time.Period.ofDays(1)
+                )
+            )
+            
+            response.associate { result ->
+                // result.startTime is LocalDateTime when grouping by Period
+                val date = result.startTime.toLocalDate()
+                val steps = result.result[StepsRecord.COUNT_TOTAL] ?: 0L
+                date to steps
+            }
+        } catch (e: Exception) {
+            Log.e("HealthConnect", "Error reading daily steps", e)
+            emptyMap()
+        }
+    }
+
+    suspend fun readDailySleep(start: Instant, end: Instant): Map<LocalDate, Duration> = withContext(Dispatchers.IO) {
+        val client = healthConnectClient ?: return@withContext emptyMap()
+        try {
+            val response = client.readRecords(
+                ReadRecordsRequest(
+                    recordType = SleepSessionRecord::class,
+                    timeRangeFilter = TimeRangeFilter.between(start, end)
+                )
+            )
+
+            val map = mutableMapOf<LocalDate, Duration>()
+            
+            response.records.forEach { session ->
+                val date = LocalDate.ofInstant(session.endTime, ZoneId.systemDefault())
+                val duration = Duration.between(session.startTime, session.endTime)
+                val current = map.getOrDefault(date, Duration.ZERO)
+                map[date] = current.plus(duration)
+            }
+            map
+        } catch (e: Exception) {
+            Log.e("HealthConnect", "Error reading daily sleep", e)
+            emptyMap()
+        }
+    }
+
+    suspend fun readHeartRateHistory(start: Instant, end: Instant, bucketSize: Duration): List<HeartRatePoint> = withContext(Dispatchers.IO) {
+        val client = healthConnectClient ?: return@withContext emptyList()
+        try {
+            val response = client.aggregateGroupByDuration(
+                androidx.health.connect.client.request.AggregateGroupByDurationRequest(
+                    metrics = setOf(HeartRateRecord.BPM_AVG),
+                    timeRangeFilter = TimeRangeFilter.between(start, end),
+                    timeRangeSlicer = bucketSize
+                )
+            )
+            
+            response.mapNotNull { result ->
+                val avg = result.result[HeartRateRecord.BPM_AVG]
+                if (avg != null) {
+                    HeartRatePoint(
+                        timestamp = result.startTime, // startTime is Instant for Duration grouping
+                        avgBpm = avg.toDouble()
+                    )
+                } else null
+            }
+        } catch (e: Exception) {
+            Log.e("HealthConnect", "Error reading HR history", e)
             emptyList()
         }
     }
