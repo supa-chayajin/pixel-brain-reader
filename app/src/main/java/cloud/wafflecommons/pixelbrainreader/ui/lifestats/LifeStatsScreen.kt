@@ -1,37 +1,32 @@
 package cloud.wafflecommons.pixelbrainreader.ui.lifestats
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBarDefaults // Added
-import androidx.compose.material3.ExperimentalMaterial3Api // Added
-import androidx.compose.ui.input.nestedscroll.nestedScroll // Added
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
-import cloud.wafflecommons.pixelbrainreader.data.model.LifeStatsLogic
-import cloud.wafflecommons.pixelbrainreader.data.model.RpgAttribute
-
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.patrykandpatrick.vico.compose.axis.horizontal.rememberBottomAxis
+import com.patrykandpatrick.vico.compose.axis.vertical.rememberStartAxis
+import com.patrykandpatrick.vico.compose.chart.Chart
+import com.patrykandpatrick.vico.compose.chart.line.lineChart
+import com.patrykandpatrick.vico.compose.component.shape.shader.verticalGradient
+import com.patrykandpatrick.vico.compose.style.ProvideChartStyle
+import com.patrykandpatrick.vico.core.axis.AxisPosition
+import com.patrykandpatrick.vico.core.axis.formatter.AxisValueFormatter
+import com.patrykandpatrick.vico.core.chart.decoration.ThresholdLine
+import com.patrykandpatrick.vico.core.component.shape.Shapes
+import com.patrykandpatrick.vico.core.component.shape.shader.DynamicShaders
+import com.patrykandpatrick.vico.core.entry.ChartEntryModelProducer
+import com.patrykandpatrick.vico.core.entry.FloatEntry
+import com.patrykandpatrick.vico.core.entry.entryModelOf
+import java.time.format.DateTimeFormatter
+import java.time.format.TextStyle
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,15 +34,16 @@ fun LifeStatsScreen(
     viewModel: LifeStatsViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
-
-    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
+    val scrollState = rememberScrollState()
 
     Scaffold(
-        modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
-            cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
-                title = "Character Sheet",
-                scrollBehavior = scrollBehavior
+            TopAppBar(
+                title = { Text("Life Stats") },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface
+                )
             )
         }
     ) { innerPadding ->
@@ -55,66 +51,207 @@ fun LifeStatsScreen(
             modifier = Modifier
                 .padding(innerPadding)
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scrollState)
                 .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+            verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            
-            if (state.isLoading) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
+            // 1. Sleep History
+            if (state.sleepHistory.isNotEmpty()) {
+                val sleepEntries = state.sleepHistory.mapIndexed { index, metric ->
+                    FloatEntry(index.toFloat(), metric.value.toFloat())
                 }
-            } else {
-                state.character?.let { char ->
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    // Hero Class Name
-                    Text(
-                        text = char.className,
-                        style = MaterialTheme.typography.headlineLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
+                val model = entryModelOf(sleepEntries)
+                
+                DashboardCard(title = "Sleep History (7 Days)") {
+                    Chart(
+                        chart = lineChart(
+                            lines = listOf(
+                                com.patrykandpatrick.vico.compose.chart.line.lineSpec(
+                                    lineColor = Color(0xFF3F51B5), // Indigo
+                                    lineBackgroundShader = verticalGradient(
+                                        colors = arrayOf(Color(0xFF3F51B5).copy(alpha = 0.5f), Color(0xFF3F51B5).copy(alpha = 0f))
+                                    )
+                                )
+                            ),
+                            decorations = listOf(
+                                ThresholdLine(
+                                    thresholdValue = 7f,
+                                    lineComponent = com.patrykandpatrick.vico.core.component.shape.ShapeComponent(
+                                        shape = Shapes.rectShape,
+                                        color = Color.Gray.toArgb(),
+                                        strokeWidthDp = 1f,
+                                        strokeColor = Color.Gray.toArgb()
+                                    ),
+                                    labelComponent = com.patrykandpatrick.vico.core.component.text.textComponent {
+                                        this.color = Color.Gray.toArgb()
+                                        this.textSizeSp = 10f
+                                        this.padding.startDp = 8f
+                                    }
+                                )
+                            )
+                        ),
+                        model = model,
+                        startAxis = rememberStartAxis(
+                            title = "Hours",
+                            valueFormatter = { value, _ -> String.format("%.1fh", value) }
+                        ),
+                        bottomAxis = rememberBottomAxis(
+                            valueFormatter = { value, _ ->
+                                state.sleepHistory.getOrNull(value.toInt())?.date?.dayOfWeek?.getDisplayName(TextStyle.SHORT, Locale.getDefault()) ?: ""
+                            }
+                        ),
+                        modifier = Modifier.height(200.dp)
                     )
-                    
-                    Text(
-                        text = "Level ${char.level}",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    
-                    Spacer(modifier = Modifier.height(32.dp))
-                    
-                    // Radar Chart
-                    // Radar Chart - Responsive
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 24.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        RadarChart(
-                            stats = char.stats,
-                            modifier = Modifier
-                                .fillMaxWidth(0.95f)
-                                .aspectRatio(1f)
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(32.dp))
-                    
-                    // Mood Calendar
-                    cloud.wafflecommons.pixelbrainreader.ui.lifestats.MoodCalendar(
-                        currentMonth = state.currentMonth,
-                        onPrevMonth = { viewModel.onPrevMonth() },
-                        onNextMonth = { viewModel.onNextMonth() },
-                        moods = state.monthlyMoods,
-                        modifier = Modifier.padding(horizontal = 16.dp)
-                    )
-                    
-                    Spacer(modifier = Modifier.height(32.dp))
                 }
             }
+
+            // 2. Steps History
+            if (state.stepHistory.isNotEmpty()) {
+                val stepEntries = state.stepHistory.mapIndexed { index, metric ->
+                     FloatEntry(index.toFloat(), metric.value.toFloat())
+                }
+                val model = entryModelOf(stepEntries)
+
+                DashboardCard(title = "Steps History") {
+                    Chart(
+                        chart = lineChart(
+                            lines = listOf(
+                                com.patrykandpatrick.vico.compose.chart.line.lineSpec(
+                                    lineColor = Color(0xFFFF9800), // Orange
+                                    lineBackgroundShader = verticalGradient(
+                                        colors = arrayOf(Color(0xFFFF9800).copy(alpha = 0.5f), Color(0xFFFF9800).copy(alpha = 0f))
+                                    )
+                                )
+                            ),
+                            decorations = listOf(
+                                ThresholdLine(
+                                    thresholdValue = 7000f,
+                                    lineComponent = com.patrykandpatrick.vico.core.component.shape.ShapeComponent(
+                                        shape = Shapes.rectShape,
+                                        color = Color.Gray.toArgb(),
+                                        strokeWidthDp = 1f,
+                                        strokeColor = Color.Gray.toArgb()
+                                    )
+                                )
+                            )
+                        ),
+                        model = model,
+                        startAxis = rememberStartAxis(title = "Steps"),
+                        bottomAxis = rememberBottomAxis(
+                            valueFormatter = { value, _ ->
+                                state.stepHistory.getOrNull(value.toInt())?.date?.dayOfWeek?.getDisplayName(TextStyle.SHORT, Locale.getDefault()) ?: ""
+                            }
+                        ),
+                        modifier = Modifier.height(200.dp)
+                    )
+                }
+            }
+
+            // 3. Weekly Correlation
+            if (state.weeklyCorrelation.isNotEmpty()) {
+                val hrEntries = state.weeklyCorrelation.mapIndexed { index, point ->
+                    FloatEntry(index.toFloat(), point.avgBpm.toFloat())
+                }
+                val moodEntries = state.weeklyCorrelation.mapIndexed { index, point ->
+                    FloatEntry(index.toFloat(), point.moodScore.toFloat() * 20f) // Scale 1-5 to 20-100 for graph visibility roughly
+                }
+                // Multi-line model
+                val model = entryModelOf(hrEntries, moodEntries)
+
+                DashboardCard(title = "Weekly Correlation (HR vs Mood)") {
+                     Chart(
+                        chart = lineChart(
+                            lines = listOf(
+                                com.patrykandpatrick.vico.compose.chart.line.lineSpec(lineColor = Color.Red),
+                                com.patrykandpatrick.vico.compose.chart.line.lineSpec(lineColor = Color(0xFF9C27B0)) // Purple
+                            )
+                        ),
+                        model = model,
+                        startAxis = rememberStartAxis(title = "BPM / Mood (x20)"),
+                        bottomAxis = rememberBottomAxis(
+                            valueFormatter = { value, _ ->
+                                state.weeklyCorrelation.getOrNull(value.toInt())?.date?.dayOfWeek?.getDisplayName(TextStyle.SHORT, Locale.getDefault()) ?: ""
+                            }
+                        ),
+                        modifier = Modifier.height(200.dp)
+                    )
+                    Text(
+                        "Red: Heart Rate, Purple: Mood",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            // 4. Today's Biometrics
+            if (state.todayCorrelation.isNotEmpty()) {
+                // Map timestamp to hour (0-24)
+                val hrEntries = state.todayCorrelation.mapNotNull { point ->
+                    if (point.bpm != null) {
+                         val hour = point.timestamp.atZone(java.time.ZoneId.systemDefault()).hour + (point.timestamp.atZone(java.time.ZoneId.systemDefault()).minute / 60f)
+                         FloatEntry(hour, point.bpm.toFloat())
+                    } else null
+                }
+                
+                val moodEntries = state.todayCorrelation.mapNotNull { point ->
+                    if (point.moodScore != null) {
+                         val hour = point.timestamp.atZone(java.time.ZoneId.systemDefault()).hour + (point.timestamp.atZone(java.time.ZoneId.systemDefault()).minute / 60f)
+                         FloatEntry(hour, (point.moodScore.toFloat() * 20f)) 
+                    } else null
+                }
+
+                // If lists are empty, Vico might crash or show nothing.
+                if (hrEntries.isNotEmpty() || moodEntries.isNotEmpty()) {
+                     val model = entryModelOf(hrEntries, moodEntries)
+
+                     DashboardCard(title = "Today's Biometrics") {
+                        Chart(
+                            chart = lineChart(
+                                lines = listOf(
+                                    com.patrykandpatrick.vico.compose.chart.line.lineSpec(lineColor = Color.Red),
+                                    com.patrykandpatrick.vico.compose.chart.line.lineSpec(
+                                        lineColor = Color.Transparent, 
+                                        point = com.patrykandpatrick.vico.core.component.shape.ShapeComponent(
+                                                shape = Shapes.pillShape,
+                                                color = Color(0xFF9C27B0).toArgb(),
+                                                strokeWidthDp = 0f
+                                        ),
+                                        // pointSizeDp = 8f // Deprecated/Removed. Handled by ShapeComponent size if possible or Defaults. 
+                                        // For now let's just use defaults or minimal config to pass build.
+                                    )
+                                )
+                            ),
+                            model = model,
+                            startAxis = rememberStartAxis(),
+                            bottomAxis = rememberBottomAxis(title = "Hour (0-24)"),
+                            modifier = Modifier.height(200.dp)
+                        )
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(32.dp))
         }
     }
 }
 
-
+@Composable
+fun DashboardCard(
+    title: String,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            content()
+        }
+    }
+}
