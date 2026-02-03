@@ -62,6 +62,14 @@ fun HabitDashboardScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                // [NEW] Hero Card (Full Width)
+                item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                     cloud.wafflecommons.pixelbrainreader.ui.gamification.HeroCard(
+                         state = state.gamificationState,
+                         modifier = Modifier.padding(16.dp)
+                     )
+                }
+
                 // Iterate over Grouped Habits
                 state.groupedHabits.forEach { (category, habits) ->
                     // Section Header (Full Width)

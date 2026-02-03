@@ -81,11 +81,15 @@ class DailyNoteViewModel @Inject constructor(
     private val userPrefs: cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository,
     private val dataRefreshBus: cloud.wafflecommons.pixelbrainreader.data.utils.DataRefreshBus,
     private val briefingGenerator: cloud.wafflecommons.pixelbrainreader.data.ai.BriefingGenerator,
-    private val jGitProvider: cloud.wafflecommons.pixelbrainreader.data.remote.JGitProvider
+    private val jGitProvider: cloud.wafflecommons.pixelbrainreader.data.remote.JGitProvider,
+    private val gamificationRepository: cloud.wafflecommons.pixelbrainreader.data.gamification.GamificationRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DailyNoteState())
     val uiState: StateFlow<DailyNoteState> = _uiState.asStateFlow()
+    
+    val gamificationState = gamificationRepository.gamificationState
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     private var currentDate: LocalDate = LocalDate.now()
     

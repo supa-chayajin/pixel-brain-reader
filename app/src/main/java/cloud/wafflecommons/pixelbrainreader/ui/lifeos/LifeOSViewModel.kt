@@ -32,17 +32,20 @@ data class HabitWithStats(
 data class LifeOSUiState(
     val habits: List<HabitConfig> = emptyList(),
     val habitsWithStats: List<HabitWithStats> = emptyList(),
-    val groupedHabits: Map<String, List<HabitWithStats>> = emptyMap(), // [NEW] Grouped by Category
+    val groupedHabits: Map<String, List<HabitWithStats>> = emptyMap(),
     val logs: Map<String, List<HabitLogEntry>> = emptyMap(),
     val scopedTasks: List<Task> = emptyList(),
     val selectedDate: LocalDate = LocalDate.now(),
-    val isLoading: Boolean = false
+    val isLoading: Boolean = false,
+    val gamificationState: cloud.wafflecommons.pixelbrainreader.data.gamification.GamificationState = cloud.wafflecommons.pixelbrainreader.data.gamification.GamificationState()
 )
 
 @HiltViewModel
 class LifeOSViewModel @Inject constructor(
     private val habitRepository: HabitRepository,
-    private val taskRepository: TaskRepository
+    private val taskRepository: TaskRepository,
+    private val gamificationRepository: cloud.wafflecommons.pixelbrainreader.data.gamification.GamificationRepository,
+    private val grantXpUseCase: cloud.wafflecommons.pixelbrainreader.domain.gamification.GrantXpUseCase
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(LifeOSUiState())
@@ -50,9 +53,19 @@ class LifeOSViewModel @Inject constructor(
 
     private var loadJob: kotlinx.coroutines.Job? = null
 
+    // One-time events channel for XP toasts (omitted for brevity, handled via log/simple toast logic in UI?)
+    // Let's add a simple XpGainEvent flow
+    private val _xpEvents = MutableSharedFlow<cloud.wafflecommons.pixelbrainreader.data.gamification.XpGainEntry>()
+    val xpEvents = _xpEvents.asSharedFlow()
+
     init {
         // Initial load
         observeData(LocalDate.now())
+        
+        // Gamification auto-load
+        viewModelScope.launch {
+            gamificationRepository.loadState()
+        }
     }
 
     private val _reloadTrigger = MutableSharedFlow<Unit>()
@@ -71,12 +84,14 @@ class LifeOSViewModel @Inject constructor(
             // Reactive Streams
             val configsFlow = habitRepository.getHabitConfigsFlow()
             val logsFlow = habitRepository.getLogsForYearFlow(date.year)
-            // Task repo might not be reactive yet, so we suspend fetch it
-            // Ideal: taskRepository.getScopedTasksFlow(date)
-            // For now, we mix: Observe Habits, Fetch Tasks
-            
-            combine(configsFlow, logsFlow) { configs, logsMap ->
-                  val scopedTasks = taskRepository.getScopedTasks(date) // Ideally reactive too
+            val gamificationFlow = gamificationRepository.gamificationState // Corrected property name
+
+            combine(
+                configsFlow, 
+                logsFlow, 
+                gamificationFlow
+            ) { configs: List<HabitConfig>, logsMap: Map<String, List<HabitLogEntry>>, gamificationState: cloud.wafflecommons.pixelbrainreader.data.gamification.GamificationState ->
+                  val scopedTasks = taskRepository.getScopedTasks(date) // Ideal: reactive
                   
                    // [NEW] 1. Filter by Frequency (Day of Week)
                     val dayMap = mapOf(
@@ -109,7 +124,6 @@ class LifeOSViewModel @Inject constructor(
                          // Streak
                          var streak = 0
                          var checkDate = if (isCompletedToday) date else date.minusDays(1)
-                         // Max 365 days check preventing infinite loop
                          for (i in 0..365) {
                               val d = checkDate.toString()
                               val log = habitLogs.find { it.date == d }
@@ -126,43 +140,27 @@ class LifeOSViewModel @Inject constructor(
                     
                     // Grouping
                     val groupedHabits = habitsWithStats.groupBy { habitStat ->
-                        val regex = Regex("\\(\\+([A-Z]{3})\\)")
-                        val match = regex.find(habitStat.config.description)
-                        val tag = match?.groupValues?.get(1)
-                        when (tag) {
-                             "VIG" -> "Vigor (Physical)"
-                             "MND" -> "Mind (Mental)"
-                             "INT" -> "Intellect (Learning)"
-                             "END" -> "Endurance (Resilience)"
-                             "FTH" -> "Faith (Spiritual)"
-                             "SOC" -> "Social (Connection)"
-                             "CRE" -> "Create (Expression)" 
-                             null -> "General"
-                             else -> "$tag" 
+                        val parser = cloud.wafflecommons.pixelbrainreader.data.gamification.AttributeParser
+                        val attr = parser.parse(habitStat.config.description)
+                        // Group by Attribute Name or Tag if present, else fallback
+                        if (attr != null) {
+                             "${attr.name} Training"
+                        } else {
+                             "General"
                         }
                     }
                     
-                    // Flatten logs for UI convenience if needed
-                    val flatLogs = logsMap.values.flatten().groupBy { it.date } // Map<Date, List<Log>>? No, Map<HabitId, List> in State
-                    // UI State expects: logs: Map<String, List<HabitLogEntry>> (Date -> Entries? OR Habit -> Entries?)
-                    // Previous Impl: logs was from getLogsForYear -> Map<String, List<HabitLogEntry>>??
-                    // getLogsForYear previously returned getLogsForYear(year). wait.
-                    // Previous HabitRepository.getLogsForYear returned Map<String, List<HabitLogEntry>> 
-                    // where String likely was HabitId? NO, let's check code.
-                    // Previous: `gson.fromJson(json, type)` type = `Map<String, List<HabitLogEntry>>`
-                    // Yes, usually keyed by HabitID in JSON.
-                    
-                    Triple(configs, habitsWithStats, groupedHabits)
-            }.collect { (configs, stats, grouped) ->
-                 _uiState.update { 
-                     it.copy(
+                    LifeOSUiState(
                          habits = configs,
-                         habitsWithStats = stats,
-                         groupedHabits = grouped,
-                         scopedTasks = taskRepository.getScopedTasks(date), // refresh tasks on collect
-                         isLoading = false
-                     )
-                 }
+                         habitsWithStats = habitsWithStats,
+                         groupedHabits = groupedHabits,
+                         scopedTasks = scopedTasks,
+                         isLoading = false,
+                         selectedDate = date,
+                         gamificationState = gamificationState // Corrected variable
+                    )
+            }.collect { newState ->
+                 _uiState.value = newState
             }
         }
     }
@@ -172,13 +170,26 @@ class LifeOSViewModel @Inject constructor(
             val date = _uiState.value.selectedDate
             val stats = _uiState.value.habitsWithStats.find { it.config.id == habitId } ?: return@launch
             
-            val newEntry = if (stats.isCompletedToday) {
+            val isCompleting = !stats.isCompletedToday
+            val newEntry = if (!isCompleting) {
                  HabitLogEntry(habitId, date.toString(), 0.0, HabitStatus.SKIPPED)
             } else {
                  HabitLogEntry(habitId, date.toString(), 1.0, HabitStatus.COMPLETED)
             }
             habitRepository.logHabit(date, newEntry)
-            // No manual reload needed, Flow updates
+            
+            // Grant XP only on Completion (not unchecking)
+            // And only if it's TODAY (gamification should probably be real-time/strict?)
+            // We allow backfilling but maybe reduce XP? For now, standard XP for any date logic.
+            if (isCompleting) {
+                grantXpUseCase.execute(
+                    sourceId = habitId,
+                    actionType = cloud.wafflecommons.pixelbrainreader.domain.gamification.XpActionType.HABIT_DONE
+                )
+                // Emit event?
+                // Ideally GrantXpUseCase returns the diff or we observe state.
+                // We'll rely on global state update for UI change.
+            }
         }
     }
 
@@ -186,6 +197,9 @@ class LifeOSViewModel @Inject constructor(
         viewModelScope.launch {
             val date = _uiState.value.selectedDate
             val habitConfig = _uiState.value.habits.find { it.id == habitId } ?: return@launch
+            
+            // Check if becoming complete
+            val wasComplete = isHabitComplete(habitConfig, _uiState.value.logs[habitId]?.find { it.date == date.toString() })
             
             val status = when {
                 newValue >= habitConfig.targetValue -> HabitStatus.COMPLETED
@@ -195,14 +209,33 @@ class LifeOSViewModel @Inject constructor(
             
             val newEntry = HabitLogEntry(habitId, date.toString(), newValue, status)
             habitRepository.logHabit(date, newEntry)
+            
+            // Logic: Award XP if crossing threshold? Or proportional?
+            // Simple: Award on 'COMPLETED' status transition?
+            // Or just allow repeated calls for now (Gameable, but simpler).
+            // Let's stick to "If status becomes COMPLETED"
+            val isNowComplete = status == HabitStatus.COMPLETED
+            if (isNowComplete && !wasComplete) {
+                 grantXpUseCase.execute(
+                    sourceId = habitId,
+                    actionType = cloud.wafflecommons.pixelbrainreader.domain.gamification.XpActionType.HABIT_DONE,
+                    value = newValue
+                )
+            }
         }
     }
 
     fun toggleTask(task: Task) {
         viewModelScope.launch {
             taskRepository.toggleTask(_uiState.value.selectedDate, task)
-            // Task toggle doesn't update Habit Flows so we manually trigger task refresh?
-            // Ideally tasks are also a flow. For now, let's just re-emit state
+            
+            if (!task.isCompleted) { // If it was NOT completed, and we toggle it -> Completed
+                 grantXpUseCase.execute(
+                    sourceId = task.originalText.hashCode().toString(),
+                    actionType = cloud.wafflecommons.pixelbrainreader.domain.gamification.XpActionType.TASK_DONE
+                )
+            }
+            
             val tasks = taskRepository.getScopedTasks(_uiState.value.selectedDate)
              _uiState.update { it.copy(scopedTasks = tasks) }
              _reloadTrigger.emit(Unit)
@@ -215,7 +248,7 @@ class LifeOSViewModel @Inject constructor(
             val newHabit = HabitConfig(
                 id = randomId,
                 title = "New Habit ${randomId.take(4)}",
-                description = "Created via Debug FAB",
+                description = "Created via Debug FAB (+VIG)",
                 frequency = listOf("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN")
             )
             habitRepository.addHabitConfig(newHabit)
