@@ -119,10 +119,15 @@ class HealthConnectManager @Inject constructor(
     suspend fun readDailySteps(start: Instant, end: Instant): Map<LocalDate, Long> = withContext(Dispatchers.IO) {
         val client = healthConnectClient ?: return@withContext emptyMap()
         try {
+            // Fix: Convert to LocalDateTime for Period grouping (Required by HealthConnect SDK)
+            val zone = ZoneId.systemDefault()
+            val localStart = java.time.LocalDateTime.ofInstant(start, zone)
+            val localEnd = java.time.LocalDateTime.ofInstant(end, zone)
+
             val response = client.aggregateGroupByPeriod(
                 androidx.health.connect.client.request.AggregateGroupByPeriodRequest(
                     metrics = setOf(StepsRecord.COUNT_TOTAL),
-                    timeRangeFilter = TimeRangeFilter.between(start, end),
+                    timeRangeFilter = TimeRangeFilter.between(localStart, localEnd),
                     timeRangeSlicer = java.time.Period.ofDays(1)
                 )
             )
