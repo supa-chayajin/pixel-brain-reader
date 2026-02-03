@@ -56,11 +56,8 @@ fun LifeStatsScreen(
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             // 1. Sleep History
-            if (state.sleepHistory.isNotEmpty()) {
-                val sleepEntries = state.sleepHistory.mapIndexed { index, metric ->
-                    FloatEntry(index.toFloat(), metric.value.toFloat())
-                }
-                val model = entryModelOf(sleepEntries)
+            if (state.sleepData.isNotEmpty()) {
+                val model = entryModelOf(state.sleepData)
                 
                 DashboardCard(title = "Sleep History (7 Days)") {
                     Chart(
@@ -97,20 +94,22 @@ fun LifeStatsScreen(
                         ),
                         bottomAxis = rememberBottomAxis(
                             valueFormatter = { value, _ ->
-                                state.sleepHistory.getOrNull(value.toInt())?.date?.dayOfWeek?.getDisplayName(TextStyle.SHORT, Locale.getDefault()) ?: ""
+                                state.sleepLabels[value] ?: ""
                             }
                         ),
                         modifier = Modifier.height(200.dp)
                     )
                 }
+            } else {
+                 // Empty State
+                 DashboardCard(title = "Sleep History") {
+                     Text("No sleep data available yet.")
+                 }
             }
 
             // 2. Steps History
-            if (state.stepHistory.isNotEmpty()) {
-                val stepEntries = state.stepHistory.mapIndexed { index, metric ->
-                     FloatEntry(index.toFloat(), metric.value.toFloat())
-                }
-                val model = entryModelOf(stepEntries)
+            if (state.stepData.isNotEmpty()) {
+                val model = entryModelOf(state.stepData)
 
                 DashboardCard(title = "Steps History") {
                     Chart(
@@ -139,24 +138,23 @@ fun LifeStatsScreen(
                         startAxis = rememberStartAxis(title = "Steps"),
                         bottomAxis = rememberBottomAxis(
                             valueFormatter = { value, _ ->
-                                state.stepHistory.getOrNull(value.toInt())?.date?.dayOfWeek?.getDisplayName(TextStyle.SHORT, Locale.getDefault()) ?: ""
+                                state.stepLabels[value] ?: ""
                             }
                         ),
                         modifier = Modifier.height(200.dp)
                     )
                 }
+            } else {
+                 // Empty State
+                 DashboardCard(title = "Steps History") {
+                     Text("No step data available yet.")
+                 }
             }
 
             // 3. Weekly Correlation
-            if (state.weeklyCorrelation.isNotEmpty()) {
-                val hrEntries = state.weeklyCorrelation.mapIndexed { index, point ->
-                    FloatEntry(index.toFloat(), point.avgBpm.toFloat())
-                }
-                val moodEntries = state.weeklyCorrelation.mapIndexed { index, point ->
-                    FloatEntry(index.toFloat(), point.moodScore.toFloat() * 20f) // Scale 1-5 to 20-100 for graph visibility roughly
-                }
+            if (state.weeklyHrData.isNotEmpty() && state.weeklyMoodData.isNotEmpty()) {
                 // Multi-line model
-                val model = entryModelOf(hrEntries, moodEntries)
+                val model = entryModelOf(state.weeklyHrData, state.weeklyMoodData)
 
                 DashboardCard(title = "Weekly Correlation (HR vs Mood)") {
                      Chart(
@@ -170,7 +168,7 @@ fun LifeStatsScreen(
                         startAxis = rememberStartAxis(title = "BPM / Mood (x20)"),
                         bottomAxis = rememberBottomAxis(
                             valueFormatter = { value, _ ->
-                                state.weeklyCorrelation.getOrNull(value.toInt())?.date?.dayOfWeek?.getDisplayName(TextStyle.SHORT, Locale.getDefault()) ?: ""
+                                state.weeklyLabels[value] ?: ""
                             }
                         ),
                         modifier = Modifier.height(200.dp)
@@ -181,33 +179,29 @@ fun LifeStatsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+            } else {
+                 // Empty State
+                 DashboardCard(title = "Weekly Correlation") {
+                     Text("No correlation data available yet.")
+                 }
             }
 
             // 4. Today's Biometrics
-            if (state.todayCorrelation.isNotEmpty()) {
-                // Map timestamp to hour (0-24)
-                val hrEntries = state.todayCorrelation.mapNotNull { point ->
-                    if (point.bpm != null) {
-                         val hour = point.timestamp.atZone(java.time.ZoneId.systemDefault()).hour + (point.timestamp.atZone(java.time.ZoneId.systemDefault()).minute / 60f)
-                         FloatEntry(hour, point.bpm.toFloat())
-                    } else null
-                }
-                
-                val moodEntries = state.todayCorrelation.mapNotNull { point ->
-                    if (point.moodScore != null) {
-                         val hour = point.timestamp.atZone(java.time.ZoneId.systemDefault()).hour + (point.timestamp.atZone(java.time.ZoneId.systemDefault()).minute / 60f)
-                         FloatEntry(hour, (point.moodScore.toFloat() * 20f)) 
-                    } else null
-                }
+            if (state.todayHrData.isNotEmpty() || state.todayMoodData.isNotEmpty()) {
+                 // For today, we use todayLabels
+                 val model = if (state.todayHrData.isNotEmpty() && state.todayMoodData.isNotEmpty()) {
+                     entryModelOf(state.todayHrData, state.todayMoodData)
+                 } else if (state.todayHrData.isNotEmpty()) {
+                     entryModelOf(state.todayHrData)
+                 } else {
+                     entryModelOf(state.todayMoodData)
+                 }
 
-                // If lists are empty, Vico might crash or show nothing.
-                if (hrEntries.isNotEmpty() || moodEntries.isNotEmpty()) {
-                     val model = entryModelOf(hrEntries, moodEntries)
-
-                     DashboardCard(title = "Today's Biometrics") {
-                        Chart(
-                            chart = lineChart(
-                                lines = listOf(
+                 DashboardCard(title = "Today's Biometrics") {
+                    Chart(
+                        chart = lineChart(
+                            lines = if (state.todayHrData.isNotEmpty() && state.todayMoodData.isNotEmpty()) {
+                                listOf(
                                     com.patrykandpatrick.vico.compose.chart.line.lineSpec(lineColor = Color.Red),
                                     com.patrykandpatrick.vico.compose.chart.line.lineSpec(
                                         lineColor = Color.Transparent, 
@@ -215,19 +209,39 @@ fun LifeStatsScreen(
                                                 shape = Shapes.pillShape,
                                                 color = Color(0xFF9C27B0).toArgb(),
                                                 strokeWidthDp = 0f
-                                        ),
-                                        // pointSizeDp = 8f // Deprecated/Removed. Handled by ShapeComponent size if possible or Defaults. 
-                                        // For now let's just use defaults or minimal config to pass build.
+                                        )
                                     )
                                 )
-                            ),
-                            model = model,
-                            startAxis = rememberStartAxis(),
-                            bottomAxis = rememberBottomAxis(title = "Hour (0-24)"),
-                            modifier = Modifier.height(200.dp)
-                        )
-                    }
+                            } else if (state.todayHrData.isNotEmpty()) {
+                                 listOf(com.patrykandpatrick.vico.compose.chart.line.lineSpec(lineColor = Color.Red))
+                            } else {
+                                 listOf(
+                                     com.patrykandpatrick.vico.compose.chart.line.lineSpec(
+                                        lineColor = Color.Transparent, 
+                                        point = com.patrykandpatrick.vico.core.component.shape.ShapeComponent(
+                                                shape = Shapes.pillShape,
+                                                color = Color(0xFF9C27B0).toArgb(),
+                                                strokeWidthDp = 0f
+                                        )
+                                    )
+                                 )
+                            },
+                        ),
+                        model = model,
+                        startAxis = rememberStartAxis(),
+                        bottomAxis = rememberBottomAxis(
+                            title = "Time",
+                            valueFormatter = { value, _ ->
+                                state.todayLabels[value] ?: ""
+                            }
+                        ),
+                        modifier = Modifier.height(200.dp)
+                    )
                 }
+            } else {
+                 DashboardCard(title = "Today's Biometrics") {
+                     Text("No biometric data for today.")
+                 }
             }
             
             Spacer(modifier = Modifier.height(32.dp))
