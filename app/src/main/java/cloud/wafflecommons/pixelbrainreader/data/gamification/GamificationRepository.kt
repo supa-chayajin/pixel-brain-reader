@@ -52,7 +52,9 @@ class GamificationRepository @Inject constructor(
                     _gamificationState.value = state
                 }
             } catch (e: Exception) {
-                Log.e("Gamification", "Error loading profile", e)
+                if (cloud.wafflecommons.pixelbrainreader.BuildConfig.DEBUG) {
+                    Log.e("Gamification", "Error loading profile", e)
+                }
                 // Keep default
             }
         } else {
@@ -76,7 +78,9 @@ class GamificationRepository @Inject constructor(
             fileRepository.createLocalFolder(systemDir)
             fileRepository.saveFileLocally(profileFile, json)
         } catch (e: Exception) {
-            Log.e("Gamification", "Error saving profile", e)
+            if (cloud.wafflecommons.pixelbrainreader.BuildConfig.DEBUG) {
+                Log.e("Gamification", "Error saving profile", e)
+            }
         }
     }
 }

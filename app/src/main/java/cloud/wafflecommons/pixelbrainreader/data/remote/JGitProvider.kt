@@ -29,6 +29,14 @@ class JGitProvider @Inject constructor(
         get() = File(context.filesDir, "vault")
 
     /**
+     * Ensures critical directories exist to prevent JGit errors.
+     */
+    private fun ensureCriticalDirectories() {
+        if (!rootDir.exists()) rootDir.mkdirs()
+        File(rootDir, "10_Journal/system").mkdirs()
+    }
+
+    /**
      * Set up the repository.
      * Strategies:
      * 1. If repo exists -> Open it.
@@ -93,6 +101,7 @@ class JGitProvider @Inject constructor(
     suspend fun addAll(): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             Git.open(rootDir).use { git ->
+                // Directive: Use git.add().addFilepattern(".").call() effectively acting as a git add .
                 git.add().addFilepattern(".").call()
                 git.add().addFilepattern(".").setUpdate(true).call()
             }
@@ -179,6 +188,8 @@ class JGitProvider @Inject constructor(
         if (!isReady()) return@withContext Result.failure(Exception("Repository not initialized"))
 
         try {
+            ensureCriticalDirectories() // Defensive check before pulling
+
             val token = secretManager.getToken() ?: return@withContext Result.failure(Exception("No API Token found"))
             val provider = UsernamePasswordCredentialsProvider("token", token)
 
