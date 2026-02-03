@@ -58,6 +58,7 @@ fun DailyNoteScreen(
     lifeOSViewModel: cloud.wafflecommons.pixelbrainreader.ui.lifeos.LifeOSViewModel = hiltViewModel() // Legacy
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val gamificationState by viewModel.gamificationState.collectAsStateWithLifecycle()
 
     var showAddTimelineDialog by remember { mutableStateOf(false) }
     var showAddTaskDialog by remember { mutableStateOf(false) }
@@ -196,6 +197,18 @@ fun DailyNoteScreen(
                             lastUpdate = lastUpdate,
                             topDailyTags = state.topDailyTags
                         )
+                    }
+
+                    // 1.5 Hero Card (Gamification)
+                    if (gamificationState != null) {
+                        item {
+                            cloud.wafflecommons.pixelbrainreader.ui.gamification.HeroCard(
+                                state = gamificationState!!,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp)
+                            )
+                        }
                     }
 
                     // 2. Morning Briefing
