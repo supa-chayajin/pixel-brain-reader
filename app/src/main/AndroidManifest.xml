@@ -76,6 +76,13 @@
             android:theme="@style/Theme.PixelBrainReader"
             android:windowSoftInputMode="adjustResize" />
 
+        <activity
+            android:name=".ui.crash.CrashActivity"
+            android:process=":crash"
+            android:exported="false"
+            android:theme="@style/Theme.PixelBrainReader"
+            android:screenOrientation="sensor" />
+
         <provider
             android:name="androidx.startup.InitializationProvider"
             android:authorities="${applicationId}.androidx-startup"

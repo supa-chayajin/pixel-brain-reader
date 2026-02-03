@@ -45,10 +45,12 @@ class HealthConnectManager @Inject constructor(
         if (healthConnectClient == null) return false
         return try {
             val granted = healthConnectClient.permissionController.getGrantedPermissions()
-            Log.d("HealthConnect", "Permissions Requested: ${permissions.size}")
-            Log.d("HealthConnect", "Permissions Granted: ${granted.size} -> $granted")
             val hasAll = granted.containsAll(permissions)
-            Log.d("HealthConnect", "Has All Permissions? $hasAll")
+            if (cloud.wafflecommons.pixelbrainreader.BuildConfig.DEBUG) {
+                Log.d("HealthConnect", "Permissions Requested: ${permissions.size}")
+                Log.d("HealthConnect", "Permissions Granted: ${granted.size} -> $granted")
+                Log.d("HealthConnect", "Has All Permissions? $hasAll")
+            }
             return hasAll
         } catch (e: Exception) {
             Log.e("HealthConnect", "Error checking permissions", e)

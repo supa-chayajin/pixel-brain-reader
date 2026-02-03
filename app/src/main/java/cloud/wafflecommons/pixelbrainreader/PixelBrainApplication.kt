@@ -11,6 +11,16 @@ class PixelBrainApplication : Application(), Configuration.Provider {
 
     @Inject lateinit var workerFactory: HiltWorkerFactory
 
+    override fun onCreate() {
+        super.onCreate()
+        Thread.setDefaultUncaughtExceptionHandler(
+            cloud.wafflecommons.pixelbrainreader.ui.crash.GlobalExceptionHandler(
+                this,
+                Thread.getDefaultUncaughtExceptionHandler()
+            )
+        )
+    }
+
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
