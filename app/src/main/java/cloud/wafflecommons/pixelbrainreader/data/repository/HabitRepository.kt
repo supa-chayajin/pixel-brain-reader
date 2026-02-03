@@ -66,7 +66,8 @@ class HabitRepository @Inject constructor(
         val type: String = "BOOLEAN",
         val targetValue: Double = 0.0,
         val unit: String = "",
-        val color: String = "#FF5722"
+        val color: String = "#FF5722",
+        val autoSource: String? = null
     )
     
     @Serializable
@@ -116,7 +117,8 @@ class HabitRepository @Inject constructor(
                                  targetValue = config.targetValue,
                                  unit = config.unit,
                                  type = config.type,
-                                 color = config.color
+                                 color = config.color,
+                                 autoSource = config.autoSource
                              )
                          )
                      }
@@ -239,7 +241,8 @@ class HabitRepository @Inject constructor(
                         type = config.type.name,
                         targetValue = config.targetValue,
                         unit = config.unit,
-                        color = config.color
+                        color = config.color,
+                        autoSource = config.autoSource
                     )
                 )
                 val json = jsonParser.encodeToString(currentConfigs)
@@ -264,7 +267,8 @@ class HabitRepository @Inject constructor(
             targetValue = domain.targetValue,
             unit = domain.unit,
             type = domain.type.name,
-            color = domain.color
+            color = domain.color,
+            autoSource = domain.autoSource
         )
     }
 
@@ -277,7 +281,8 @@ class HabitRepository @Inject constructor(
             targetValue = entity.targetValue,
             unit = entity.unit,
             type = try { HabitType.valueOf(entity.type) } catch (e: Exception) { HabitType.BOOLEAN },
-            color = entity.color
+            color = entity.color,
+            autoSource = entity.autoSource
         )
     }
 

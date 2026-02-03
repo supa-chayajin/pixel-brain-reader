@@ -16,7 +16,8 @@ data class HabitConfig(
     val color: String = "#FF5722",
     val type: HabitType = HabitType.BOOLEAN,
     val targetValue: Double = 0.0,
-    val unit: String = ""
+    val unit: String = "",
+    val autoSource: String? = null
 )
 
 @Immutable

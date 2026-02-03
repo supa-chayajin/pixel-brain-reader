@@ -13,7 +13,8 @@ data class HabitConfigEntity(
     val targetValue: Double,
     val unit: String,
     val type: String = "BOOLEAN",
-    val color: String = "#FF5722"
+    val color: String = "#FF5722",
+    val autoSource: String? = null
 )
 
 @Entity(tableName = "habit_logs", primaryKeys = ["habitId", "date"])
