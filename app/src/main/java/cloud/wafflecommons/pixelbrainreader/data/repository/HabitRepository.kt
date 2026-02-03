@@ -311,4 +311,22 @@ class HabitRepository @Inject constructor(
             value > 0
         }
     }
+
+    suspend fun updateHabitValue(date: LocalDate, habitId: String, value: Double) {
+        val configs = getHabitConfigs()
+        val habit = configs.find { it.id == habitId } ?: return
+
+        val isCompleted = calculateCompletion(value, habit.targetValue, habit.type)
+        val status = if (isCompleted) HabitStatus.COMPLETED else HabitStatus.PARTIAL
+
+        val entry = HabitLogEntry(
+            habitId = habitId,
+            date = date.toString(),
+            value = value,
+            status = status
+        )
+        
+        logHabit(date, entry)
+        Log.d("HabitRepository", "Updated habit $habitId value to $value (Status: $status)")
+    }
 }
