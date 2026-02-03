@@ -59,6 +59,7 @@ fun DailyNoteScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val gamificationState by viewModel.gamificationState.collectAsStateWithLifecycle()
+    val oracleInsight by viewModel.oracleInsight.collectAsStateWithLifecycle()
 
     var showAddTimelineDialog by remember { mutableStateOf(false) }
     var showAddTaskDialog by remember { mutableStateOf(false) }
@@ -195,7 +196,8 @@ fun DailyNoteScreen(
                         DailyNoteHeader(
                             emoji = moodData?.summary?.mainEmoji,
                             lastUpdate = lastUpdate,
-                            topDailyTags = state.topDailyTags
+                            topDailyTags = state.topDailyTags,
+                            oracleInsight = oracleInsight
                         )
                     }
 

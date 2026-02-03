@@ -10,7 +10,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
+import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -30,6 +32,7 @@ import cloud.wafflecommons.pixelbrainreader.data.model.HabitType
 @Composable
 fun HabitDashboardScreen(
     onNavigateBack: () -> Unit,
+    onNavigateToStats: () -> Unit,
     viewModel: LifeOSViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -46,7 +49,18 @@ fun HabitDashboardScreen(
             cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
                 title = "Habits",
                 subtitle = "${state.habitsWithStats.count { it.isCompletedToday }}/${state.habits.size} done today",
-                scrollBehavior = scrollBehavior
+                scrollBehavior = scrollBehavior,
+                actions = {
+                    FilledTonalIconButton(
+                        onClick = onNavigateToStats,
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.ShowChart, "View Statistics")
+                    }
+                }
             )
         }
     ) { padding ->

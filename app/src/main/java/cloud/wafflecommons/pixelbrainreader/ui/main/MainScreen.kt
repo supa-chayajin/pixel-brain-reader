@@ -207,18 +207,7 @@ fun MainScreen(
         }
     }
 
-    // Auto-Navigation Fallback for Stats (Responsive)
-    LaunchedEffect(isLargeScreen, currentRoute) {
-        if (!isLargeScreen && currentRoute == Screen.Stats) {
-             navController.navigate(Screen.DailyNote) {
-                 popUpTo(navController.graph.findStartDestination().id) {
-                     saveState = true
-                 }
-                 launchSingleTop = true
-                 restoreState = true
-             }
-        }
-    }
+
 
     // Hotfix: Programmatic Navigation (Daily Note)
     LaunchedEffect(uiState.navigationTrigger) {
@@ -780,7 +769,8 @@ fun MainScreen(
             
             composable("habits") {
                 cloud.wafflecommons.pixelbrainreader.ui.lifeos.HabitDashboardScreen(
-                    onNavigateBack = { navController.popBackStack() }
+                    onNavigateBack = { navController.popBackStack() },
+                    onNavigateToStats = { navController.navigate(Screen.Stats) }
                 )
             }
             

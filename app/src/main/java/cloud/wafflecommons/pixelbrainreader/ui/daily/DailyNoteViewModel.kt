@@ -82,7 +82,8 @@ class DailyNoteViewModel @Inject constructor(
     private val dataRefreshBus: cloud.wafflecommons.pixelbrainreader.data.utils.DataRefreshBus,
     private val briefingGenerator: cloud.wafflecommons.pixelbrainreader.data.ai.BriefingGenerator,
     private val jGitProvider: cloud.wafflecommons.pixelbrainreader.data.remote.JGitProvider,
-    private val gamificationRepository: cloud.wafflecommons.pixelbrainreader.data.gamification.GamificationRepository
+    private val gamificationRepository: cloud.wafflecommons.pixelbrainreader.data.gamification.GamificationRepository,
+    private val oracleGenerator: cloud.wafflecommons.pixelbrainreader.data.ai.OracleGenerator
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DailyNoteState())
@@ -90,6 +91,9 @@ class DailyNoteViewModel @Inject constructor(
     
     val gamificationState = gamificationRepository.gamificationState
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+        
+    private val _oracleInsight = MutableStateFlow<String?>(null)
+    val oracleInsight = _oracleInsight.asStateFlow()
 
     private var currentDate: LocalDate = LocalDate.now()
     
@@ -184,6 +188,15 @@ class DailyNoteViewModel @Inject constructor(
     private suspend fun loadAuxiliaryData(date: LocalDate) {
         // Mood
         val mood = moodRepository.getDailyMood(date).firstOrNull()
+        
+        // Oracle Insight (Async)
+        viewModelScope.launch {
+            if (date == LocalDate.now()) {
+                _oracleInsight.value = oracleGenerator.generateDailyInsight()
+            } else {
+                _oracleInsight.value = null // Only for today? Or generate for past? Past info might be static. Let's do only Today for now.
+            }
+        }
         
         // Weather & Briefing Logic
         val isExpanded = userPrefs.isBriefingExpanded.firstOrNull() ?: true
