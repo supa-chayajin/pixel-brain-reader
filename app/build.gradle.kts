@@ -133,6 +133,7 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.androidx.security.crypto)
     implementation(libs.androidx.biometric)
+    implementation(libs.androidx.health.connect.client)
     implementation(libs.androidx.datastore.preferences)
 
     // Images & Markdown

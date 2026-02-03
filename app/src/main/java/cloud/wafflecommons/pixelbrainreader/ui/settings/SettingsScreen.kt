@@ -13,15 +13,26 @@ import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import cloud.wafflecommons.pixelbrainreader.data.repository.AppThemeConfig
 import cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
+import androidx.health.connect.client.HealthConnectClient
+import androidx.health.connect.client.PermissionController
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.material.icons.filled.HealthAndSafety
 import androidx.hilt.navigation.compose.hiltViewModel
+import android.widget.Toast
+import androidx.health.connect.client.records.StepsRecord
+import androidx.health.connect.client.records.SleepSessionRecord
+import androidx.health.connect.client.records.HeartRateRecord
+import androidx.health.connect.client.permission.HealthPermission
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -32,6 +43,29 @@ fun SettingsScreen(
     val uiState by viewModel.uiState.collectAsState()
     val scrollState = rememberScrollState()
     val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
+    
+    // Health Connect Permission Launcher
+    val permissions = remember {
+        setOf(
+            HealthPermission.getReadPermission(StepsRecord::class),
+            HealthPermission.getReadPermission(SleepSessionRecord::class),
+            HealthPermission.getReadPermission(HeartRateRecord::class)
+        )
+    }
+
+    val healthPermissionLauncher = rememberLauncherForActivityResult(
+        PermissionController.createRequestPermissionResultContract()
+    ) { granted ->
+        if (granted.containsAll(permissions)) {
+             Toast.makeText(context, "Permissions Granted!", Toast.LENGTH_SHORT).show()
+             viewModel.checkHealthConnectStatus()
+             viewModel.syncHealthData()
+        } else {
+             Toast.makeText(context, "Permissions Denied or Partial", Toast.LENGTH_SHORT).show()
+             viewModel.checkHealthConnectStatus() // Update UI anyway
+        }
+    }
 
 
     
@@ -60,6 +94,69 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             
+            // 0. Integrations (Health Connect)
+            SettingsSection(
+                title = "Integrations",
+                icon = Icons.Default.HealthAndSafety
+            ) {
+                 val status = uiState.healthConnectStatus
+                 val isConnected = uiState.healthConnectPermissionsGranted
+                 
+                 Card(
+                     colors = CardDefaults.cardColors(
+                         containerColor = if (isConnected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
+                     ),
+                     onClick = {
+                         if (!isConnected) {
+                             if (status == HealthConnectClient.SDK_UNAVAILABLE || status == HealthConnectClient.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED) {
+                                 // Prompt install (simplified)
+                             } else {
+                                 Toast.makeText(context, "Requesting Permissions...", Toast.LENGTH_SHORT).show()
+                                 val perms = setOf(
+                                     HealthPermission.getReadPermission(StepsRecord::class),
+                                     HealthPermission.getReadPermission(SleepSessionRecord::class),
+                                     HealthPermission.getReadPermission(HeartRateRecord::class)
+                                 )
+                                 healthPermissionLauncher.launch(perms)
+                             }
+                         }
+                     }
+                 ) {
+                     Row(
+                         modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                         verticalAlignment = Alignment.CenterVertically,
+                         horizontalArrangement = Arrangement.SpaceBetween
+                     ) {
+                         Column {
+                             Text(
+                                 text = "Health Connect",
+                                 style = MaterialTheme.typography.titleMedium,
+                                 fontWeight = FontWeight.Bold
+                             )
+                             Text(
+                                 text = if (isConnected) "Connected & Syncing Active" else "Sync Steps & Sleep",
+                                 style = MaterialTheme.typography.bodyMedium
+                             )
+                         }
+                         if (!isConnected) {
+                             Button(onClick = { 
+                                 Toast.makeText(context, "Requesting Permissions...", Toast.LENGTH_SHORT).show()
+                                 val perms = setOf(
+                                     HealthPermission.getReadPermission(StepsRecord::class),
+                                     HealthPermission.getReadPermission(SleepSessionRecord::class),
+                                     HealthPermission.getReadPermission(HeartRateRecord::class)
+                                 )
+                                 healthPermissionLauncher.launch(perms)
+                             }) {
+                                 Text("Connect")
+                             }
+                         } else {
+                             Icon(imageVector = Icons.Default.CheckCircle, contentDescription = "Connected")
+                         }
+                     }
+                 }
+            }
+
             // 1. Intelligence Section
             SettingsSection(
                 title = "Intelligence",

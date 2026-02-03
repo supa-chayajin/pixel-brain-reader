@@ -1,6 +1,7 @@
 package cloud.wafflecommons.pixelbrainreader.ui.settings
 
 import android.content.Context
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cloud.wafflecommons.pixelbrainreader.data.repository.AppThemeConfig
@@ -25,7 +26,9 @@ class SettingsViewModel @Inject constructor(
     private val userPrefs: UserPreferencesRepository,
     private val secretManager: SecretManager,
     private val vectorSearchEngine: cloud.wafflecommons.pixelbrainreader.data.ai.VectorSearchEngine,
-    private val geminiRagManager: cloud.wafflecommons.pixelbrainreader.data.ai.GeminiRagManager
+    private val geminiRagManager: cloud.wafflecommons.pixelbrainreader.data.ai.GeminiRagManager,
+    private val healthConnectManager: cloud.wafflecommons.pixelbrainreader.data.health.HealthConnectManager,
+    private val syncHealthDataUseCase: cloud.wafflecommons.pixelbrainreader.data.usecase.SyncHealthDataUseCase
 ) : ViewModel() {
 
     data class SettingsUiState(
@@ -38,7 +41,10 @@ class SettingsViewModel @Inject constructor(
         // AI Config (Advanced/Internal)
         val embeddingModel: String = "universal_sentence_encoder.tflite",
         val availableEmbeddingModels: List<String> = emptyList(),
-        val llmModelName: String = "gemini-2.5-flash-lite"
+        val llmModelName: String = "gemini-2.5-flash-lite",
+        // Health Connect
+        val healthConnectStatus: Int = 0, // 0=Unknown, 1=Available, 2=NotInstalled, 3=NoPermissions, 4=Connected
+        val healthConnectPermissionsGranted: Boolean = false
     )
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -47,6 +53,8 @@ class SettingsViewModel @Inject constructor(
     init {
         loadRepoInfo()
         scanAssetsForModels()
+        checkHealthConnectStatus()
+
         
         userPrefs.listPaneWidth.onEach { width ->
             _uiState.value = _uiState.value.copy(paneWidth = width)
@@ -115,5 +123,27 @@ class SettingsViewModel @Inject constructor(
             repoOwner = owner,
             repoName = repo
         )
+    }
+
+    fun checkHealthConnectStatus() {
+        viewModelScope.launch {
+            val sdkStatus = healthConnectManager.getSdkStatus()
+            val hasPermissions = healthConnectManager.checkPermissions()
+            
+            Log.d("HealthConnect", "ViewModel Check -> SDK Status: $sdkStatus, Permissions: $hasPermissions")
+            
+            _uiState.value = _uiState.value.copy(
+                healthConnectStatus = sdkStatus,
+                healthConnectPermissionsGranted = hasPermissions
+            )
+        }
+    }
+    
+    fun getHealthPermissions() = healthConnectManager.getRequiredPermissions()
+    
+    fun syncHealthData() {
+        viewModelScope.launch {
+             syncHealthDataUseCase()
+        }
     }
 }

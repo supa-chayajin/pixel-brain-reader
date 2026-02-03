@@ -28,6 +28,7 @@ coroutinesPlayServices = "1.7.3"
 mlkitGenai = "1.0.0-alpha1"
 mlkitGenaiBeta = "1.0.0-beta1"
 googleAiClient = "0.9.0"
+connectClient = "1.1.0"
 
 
 [libraries]
@@ -101,6 +102,7 @@ google-ai-client = { group = "com.google.ai.client.generativeai", name = "genera
 jgit = { group = "org.eclipse.jgit", name = "org.eclipse.jgit", version = "6.8.0.202311291450-r" }
 kaml = { group = "com.charleskorn.kaml", name = "kaml", version = "0.60.0" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version = "1.6.3" }
+androidx-health-connect-client = { group = "androidx.health.connect", name = "connect-client", version.ref = "connectClient" }
 
 
 [plugins]
