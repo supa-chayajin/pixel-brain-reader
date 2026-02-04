@@ -21,7 +21,9 @@ class DailyNoteRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val fileRepository: FileRepository,
     private val fileDao: FileDao,
-    private val fileContentDao: FileContentDao
+    private val fileContentDao: FileContentDao,
+    private val gratitudeDao: cloud.wafflecommons.pixelbrainreader.data.local.dao.GratitudeDao,
+    private val grantXpUseCase: cloud.wafflecommons.pixelbrainreader.data.usecase.GrantXpUseCase
 ) {
 
     companion object {
@@ -260,5 +262,24 @@ links: []
             }
             throw e
         }
+    }
+
+    /**
+     * RFC-009: Gratitude Express
+     * Adds a gratitude entry and rewards the user.
+     */
+    suspend fun addGratitude(date: LocalDate, text: String) = withContext(Dispatchers.IO) {
+        val entity = cloud.wafflecommons.pixelbrainreader.data.local.entity.GratitudeEntity(
+            date = date.format(DateTimeFormatter.ISO_DATE),
+            content = text
+        )
+        gratitudeDao.insertGratitude(entity)
+        
+        // Gamification Hook: +50 XP
+        grantXpUseCase(50)
+    }
+
+    fun getGratitudesStream(date: LocalDate): kotlinx.coroutines.flow.Flow<List<cloud.wafflecommons.pixelbrainreader.data.local.entity.GratitudeEntity>> {
+        return gratitudeDao.getGratitudesForDate(date.format(DateTimeFormatter.ISO_DATE))
     }
 }

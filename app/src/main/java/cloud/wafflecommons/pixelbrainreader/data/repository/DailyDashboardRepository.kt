@@ -22,7 +22,8 @@ class DailyDashboardRepository @Inject constructor(
     private val scratchDao: cloud.wafflecommons.pixelbrainreader.data.local.dao.ScratchDao,
     private val fileRepository: FileRepository,
     private val briefingGenerator: BriefingGenerator,
-    private val weatherRepository: WeatherRepository
+    private val weatherRepository: WeatherRepository,
+    private val gratitudeDao: cloud.wafflecommons.pixelbrainreader.data.local.dao.GratitudeDao
 ) {
 
     // --- Live Data Access (Separated Sections) ---
@@ -227,7 +228,10 @@ class DailyDashboardRepository @Inject constructor(
         // RFC 007: Include active (unpromoted) scraps in the burn
         val activeScraps = scratchDao.getActiveScrapsSync()
         
-        val newContent = MarkdownBurner.burn(dashboard, timeline, tasks, activeScraps, frontmatter)
+        // RFC 009: Gratitude Express
+        val gratitudes = gratitudeDao.getGratitudesForDateOneShot(date.format(DateTimeFormatter.ISO_DATE))
+        
+        val newContent = MarkdownBurner.burn(dashboard, timeline, tasks, activeScraps, gratitudes, frontmatter)
         fileRepository.saveFileLocally(path, newContent)
     }
 }

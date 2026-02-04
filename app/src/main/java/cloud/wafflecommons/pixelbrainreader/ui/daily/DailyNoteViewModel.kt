@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyTaskEntity
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.TimelineEntryEntity
+import cloud.wafflecommons.pixelbrainreader.data.local.entity.GratitudeEntity
 import cloud.wafflecommons.pixelbrainreader.data.repository.DailyDashboardRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.DailyBriefingRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.DailyMoodData
@@ -86,7 +87,8 @@ class DailyNoteViewModel @Inject constructor(
     private val dailyBriefingRepository: DailyBriefingRepository, // [NEW] Cache-First Repo
     private val jGitProvider: cloud.wafflecommons.pixelbrainreader.data.remote.JGitProvider,
     private val gamificationRepository: cloud.wafflecommons.pixelbrainreader.data.gamification.GamificationRepository,
-    private val syncHealthDataUseCase: SyncHealthDataUseCase
+    private val syncHealthDataUseCase: SyncHealthDataUseCase,
+    private val dailyNoteRepository: cloud.wafflecommons.pixelbrainreader.data.repository.DailyNoteRepository // [NEW] For Gratitude
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DailyNoteState())
@@ -107,6 +109,15 @@ class DailyNoteViewModel @Inject constructor(
     val oracleInsight: StateFlow<String?> = _dailyBriefingData
         .map { it?.oracleInsight }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    // RFC-009: Gratitude Express Flow
+    val gratitudes: StateFlow<List<GratitudeEntity>> = _selectedDate.flatMapLatest { date ->
+        dailyNoteRepository.getGratitudesStream(date)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // [NEW] Persisted UI State
+    val isOracleExpanded = userPrefs.isOracleExpanded
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
 
     private var currentDate: LocalDate = LocalDate.now()
     
@@ -277,6 +288,13 @@ class DailyNoteViewModel @Inject constructor(
         }
     }
 
+    // RFC-009: Gratitude Express Action
+    fun addGratitude(text: String) {
+        viewModelScope.launch {
+            dailyNoteRepository.addGratitude(currentDate, text)
+        }
+    }
+
     // --- Scratchpad Actions ---
     fun saveScrap(content: String, color: Int = 0xFF000000.toInt()) {
         viewModelScope.launch {
@@ -377,6 +395,13 @@ class DailyNoteViewModel @Inject constructor(
             _uiState.update { 
                 it.copy(briefingState = it.briefingState.copy(isExpanded = !it.briefingState.isExpanded)) 
             }
+        }
+    }
+
+    fun toggleOracleExpanded() {
+        viewModelScope.launch {
+            val current = isOracleExpanded.value
+            userPrefs.setOracleExpanded(!current)
         }
     }
 
