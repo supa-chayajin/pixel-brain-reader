@@ -8,7 +8,8 @@ import javax.inject.Inject
 
 class GrantXpUseCase @Inject constructor(
     private val gamificationRepository: GamificationRepository,
-    private val uiEffectManager: UiEffectManager
+    private val uiEffectManager: UiEffectManager,
+    private val widgetUpdateManager: cloud.wafflecommons.pixelbrainreader.widget.ui.WidgetUpdateManager
 ) {
     suspend operator fun invoke(amount: Int) {
         gamificationRepository.updateState { currentState ->
@@ -34,6 +35,9 @@ class GrantXpUseCase @Inject constructor(
                  )
                  uiEffectManager.tryTriggerEffect(GlobalEffect.Confetti(ConfettiType.LEVEL_UP))
             }
+            
+            // Trigger Widget Update
+            widgetUpdateManager.triggerUpdate()
             
             currentState.copy(profile = newProfile)
         }

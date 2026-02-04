@@ -48,6 +48,7 @@ class MainViewModel @Inject constructor(
     private val userPrefs: UserPreferencesRepository,
     private val geminiRagManager: cloud.wafflecommons.pixelbrainreader.data.ai.GeminiRagManager,
     private val dataRefreshBus: cloud.wafflecommons.pixelbrainreader.data.utils.DataRefreshBus,
+    private val widgetSnapshotManager: cloud.wafflecommons.pixelbrainreader.widget.manager.WidgetSnapshotManager,
     private val uiEffectManager: cloud.wafflecommons.pixelbrainreader.ui.utils.UiEffectManager,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
@@ -152,6 +153,11 @@ class MainViewModel @Inject constructor(
 
         // Trigger Startup Sync
         performInitialSync()
+
+        // Refresh Widget Snapshot on App Open
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            widgetSnapshotManager.updateSnapshot()
+        }
     }
 
     /**
@@ -246,7 +252,11 @@ class MainViewModel @Inject constructor(
                     
                     // Trigger Bus
                     Log.i("Cortex", "Git Pull Success. Triggering Global UI Refresh.")
+                    Log.i("Cortex", "Git Pull Success. Triggering Global UI Refresh.")
                     dataRefreshBus.triggerRefresh()
+                    
+                    // Update Widget Snapshot
+                    widgetSnapshotManager.updateSnapshot()
 
                     // CRITICAL: Reload Local Files
                     loadFolder(_uiState.value.currentPath)

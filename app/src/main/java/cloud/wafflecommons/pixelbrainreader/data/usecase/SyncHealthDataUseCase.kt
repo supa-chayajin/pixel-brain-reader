@@ -15,7 +15,8 @@ import javax.inject.Inject
 
 class SyncHealthDataUseCase @Inject constructor(
     private val healthConnectManager: HealthConnectManager,
-    private val habitRepository: HabitRepository
+    private val habitRepository: HabitRepository,
+    private val widgetUpdateManager: cloud.wafflecommons.pixelbrainreader.widget.ui.WidgetUpdateManager
 ) {
 
     suspend operator fun invoke(date: LocalDate = LocalDate.now()) = withContext(Dispatchers.IO) {

@@ -63,6 +63,21 @@ class GamificationRepository @Inject constructor(
         }
     }
 
+    suspend fun getStateSnapshot(): GamificationState = withContext(Dispatchers.IO) {
+        val file = fileRepository.getLocalFile(profileFile)
+        if (file.exists()) {
+            try {
+                val content = file.readText()
+                if (content.isNotBlank()) {
+                    return@withContext jsonParser.decodeFromString<GamificationState>(content)
+                }
+            } catch (e: Exception) {
+                 Log.e("Gamification", "Error reading snapshot", e)
+            }
+        }
+        return@withContext GamificationState() // Fallback
+    }
+
     suspend fun updateState(transform: (GamificationState) -> GamificationState) = mutex.withLock {
         withContext(Dispatchers.IO) {
             val current = _gamificationState.value

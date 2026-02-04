@@ -79,7 +79,8 @@ class MoodRepository @Inject constructor(
     private val fileRepository: FileRepository,
     private val moodDao: cloud.wafflecommons.pixelbrainreader.data.local.dao.MoodDao,
     private val database: cloud.wafflecommons.pixelbrainreader.data.local.AppDatabase,
-    private val secretManager: SecretManager
+    private val secretManager: SecretManager,
+    private val widgetUpdateManager: cloud.wafflecommons.pixelbrainreader.widget.ui.WidgetUpdateManager
 ) {
     private val moodDir = "10_Journal/data/health/mood"
     
@@ -230,6 +231,9 @@ class MoodRepository @Inject constructor(
                 fileRepository.pushDirtyFiles(owner, repo, "feat(health): update mood $date")
             }
         } catch (e: Exception) {}
+        
+        // Trigger Widget Update
+        widgetUpdateManager.triggerUpdate()
     }
 
     // --- Mappers ---

@@ -114,6 +114,7 @@ dependencies {
     // Hilt
     implementation(libs.hilt.android)
     implementation(libs.androidx.room.ktx)
+    implementation(libs.androidx.compose.remote.creation.core)
     ksp(libs.androidx.room.compiler)
     ksp(libs.hilt.compiler)
     implementation(libs.androidx.hilt.navigation.compose)
@@ -194,6 +195,7 @@ dependencies {
     // Charting (Vico)
     implementation(libs.vico.compose.m3)
     implementation(libs.vico.core)
+    implementation(libs.vico.views)
 
     // Sensory Polish
     implementation(libs.konfetti.compose)
