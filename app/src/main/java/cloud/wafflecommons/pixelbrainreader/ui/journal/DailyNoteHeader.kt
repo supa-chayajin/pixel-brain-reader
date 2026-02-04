@@ -1,12 +1,18 @@
 package cloud.wafflecommons.pixelbrainreader.ui.journal
 
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -14,10 +20,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cloud.wafflecommons.pixelbrainreader.data.repository.WeatherData
-import androidx.compose.material3.SuggestionChip
-import androidx.compose.material3.SuggestionChipDefaults
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -107,43 +109,73 @@ fun DailyNoteHeader(
 
 @Composable
 fun OracleCard(insight: String) {
-    Row(
+    var isExpanded by remember { mutableStateOf(true) }
+
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .background(
-                color = Color(0xFF3F51B5).copy(alpha = 0.1f), // Deep Purple / Indigo tint
-                shape = RoundedCornerShape(8.dp)
+                color = Color(0xFF3F51B5).copy(alpha = 0.05f), // Softer tint
+                shape = RoundedCornerShape(12.dp)
             )
             .border(
                 width = 1.dp,
-                color = Color(0xFF3F51B5).copy(alpha = 0.3f), // Indigo border
-                shape = RoundedCornerShape(8.dp)
+                color = Color(0xFF3F51B5).copy(alpha = 0.2f),
+                shape = RoundedCornerShape(12.dp)
             )
-            .padding(12.dp),
-        verticalAlignment = Alignment.Top
+            .padding(12.dp)
     ) {
+        // Header Row (Clickable)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null 
+                ) { isExpanded = !isExpanded },
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.AutoAwesome,
+                    contentDescription = "Oracle",
+                    tint = Color(0xFF3F51B5),
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Conseil de l'Oracle",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = Color(0xFF3F51B5),
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            
+            IconButton(
+                onClick = { isExpanded = !isExpanded },
+                modifier = Modifier.size(24.dp)
+            ) {
+                Icon(
+                    imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = if (isExpanded) "Collapse" else "Expand",
+                    tint = Color(0xFF3F51B5)
+                )
+            }
+        }
 
-        Icon(
-            imageVector = Icons.Default.AutoAwesome, // Fixed import
-            contentDescription = "Oracle",
-            tint = Color(0xFF3F51B5), // Indigo
-            modifier = Modifier.size(24.dp).padding(top = 2.dp)
-        )
-        Spacer(modifier = Modifier.width(12.dp))
-        Column {
-            Text(
-                text = "Oracle Insight",
-                style = MaterialTheme.typography.labelMedium,
-                color = Color(0xFF3F51B5),
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = insight,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.9f),
-                fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
-            )
+        // Animated Content
+        AnimatedVisibility(visible = isExpanded) {
+            Column {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = insight,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                    lineHeight = 20.sp
+                )
+            }
         }
     }
 }
