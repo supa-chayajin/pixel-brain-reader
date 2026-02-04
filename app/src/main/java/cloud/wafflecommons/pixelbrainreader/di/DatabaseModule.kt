@@ -84,6 +84,12 @@ object DatabaseModule {
 
     @Provides
     @Singleton
+    fun provideGratitudeDao(database: AppDatabase): cloud.wafflecommons.pixelbrainreader.data.local.dao.GratitudeDao {
+        return database.gratitudeDao()
+    }
+
+    @Provides
+    @Singleton
     fun provideDailyBriefingDao(database: AppDatabase): cloud.wafflecommons.pixelbrainreader.data.local.dao.DailyBriefingDao {
         return database.dailyBriefingDao()
     }

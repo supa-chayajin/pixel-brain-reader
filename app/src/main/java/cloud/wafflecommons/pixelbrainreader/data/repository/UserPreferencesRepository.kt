@@ -113,6 +113,19 @@ class UserPreferencesRepository @Inject constructor(
             preferences[KEY_BRIEFING_EXPANDED] = expanded
         }
     }
+
+    private val KEY_ORACLE_EXPANDED = androidx.datastore.preferences.core.booleanPreferencesKey("oracle_expanded_state")
+
+    val isOracleExpanded: Flow<Boolean> = context.dataStore.data
+        .map { preferences ->
+            preferences[KEY_ORACLE_EXPANDED] ?: true // Default to Expanded
+        }
+
+    suspend fun setOracleExpanded(expanded: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_ORACLE_EXPANDED] = expanded
+        }
+    }
     // --- Sync Metadata ---
     private val KEY_LAST_INDEX_TIME = androidx.datastore.preferences.core.longPreferencesKey("last_index_timestamp")
 

@@ -28,6 +28,8 @@ fun DailyNoteHeader(
     lastUpdate: String?,
     topDailyTags: List<String>,
     oracleInsight: String? = null,
+    isOracleExpanded: Boolean = true,
+    onToggleOracle: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -101,16 +103,22 @@ fun DailyNoteHeader(
                 Spacer(modifier = Modifier.height(20.dp))
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                 Spacer(modifier = Modifier.height(16.dp))
-                OracleCard(insight = oracleInsight)
+                OracleCard(
+                    insight = oracleInsight,
+                    isExpanded = isOracleExpanded,
+                    onToggle = onToggleOracle
+                )
             }
         }
     }
 }
 
 @Composable
-fun OracleCard(insight: String) {
-    var isExpanded by remember { mutableStateOf(true) }
-
+fun OracleCard(
+    insight: String,
+    isExpanded: Boolean,
+    onToggle: () -> Unit
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -131,8 +139,9 @@ fun OracleCard(insight: String) {
                 .fillMaxWidth()
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
-                    indication = null 
-                ) { isExpanded = !isExpanded },
+                    indication = null,
+                    onClick = onToggle
+                ),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
@@ -153,7 +162,7 @@ fun OracleCard(insight: String) {
             }
             
             IconButton(
-                onClick = { isExpanded = !isExpanded },
+                onClick = onToggle,
                 modifier = Modifier.size(24.dp)
             ) {
                 Icon(

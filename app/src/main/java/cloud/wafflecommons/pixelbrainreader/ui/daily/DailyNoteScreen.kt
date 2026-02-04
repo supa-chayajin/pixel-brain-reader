@@ -60,6 +60,8 @@ fun DailyNoteScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val gamificationState by viewModel.gamificationState.collectAsStateWithLifecycle()
     val oracleInsight by viewModel.oracleInsight.collectAsStateWithLifecycle()
+    val gratitudes by viewModel.gratitudes.collectAsStateWithLifecycle() // RFC-009
+    val isOracleExpanded by viewModel.isOracleExpanded.collectAsStateWithLifecycle()
 
     var showAddTimelineDialog by remember { mutableStateOf(false) }
     var showAddTaskDialog by remember { mutableStateOf(false) }
@@ -192,11 +194,13 @@ fun DailyNoteScreen(
                         cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 0) {
                             val moodData = state.moodData
                             val lastUpdate = remember(moodData) { moodData?.entries?.firstOrNull()?.time }
-                            DailyNoteHeader(
+                                DailyNoteHeader(
                                 emoji = moodData?.summary?.mainEmoji,
                                 lastUpdate = lastUpdate,
                                 topDailyTags = state.topDailyTags,
-                                oracleInsight = oracleInsight
+                                oracleInsight = oracleInsight,
+                                isOracleExpanded = isOracleExpanded,
+                                onToggleOracle = viewModel::toggleOracleExpanded
                             )
                         }
                     }
@@ -244,10 +248,21 @@ fun DailyNoteScreen(
                          }
                     }
 
-                    // 4. Adaptive Content (Two Columns vs Single Column)
+                    // 4. Gratitude Express (RFC-009)
+                    item {
+                        cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 4) {
+                            GratitudeSection(
+                                gratitudes = gratitudes,
+                                onAddGratitude = viewModel::addGratitude,
+                                modifier = Modifier.padding(bottom = 16.dp)
+                            )
+                        }
+                    }
+
+                    // 5. Adaptive Content (Two Columns vs Single Column)
                     if (isWide) {
                         item {
-                            cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 4) {
+                            cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 5) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(24.dp),
@@ -271,26 +286,36 @@ fun DailyNoteScreen(
                         }
                     } else {
                         // Mobile Layout: Sequential
+                        // 5. Timeline Header (Static)
                         item {
-                            cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 4) {
-                                TimelineHeader(onAdd = { showAddTimelineDialog = true })
-                                Spacer(Modifier.height(8.dp))
+                            TimelineHeader(onAdd = { showAddTimelineDialog = true })
+                            Spacer(Modifier.height(8.dp))
+                        }
+                        
+                        // 5b. Timeline List (Animated)
+                        item {
+                            cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 5) {
                                 TimelineList(state.timelineEvents)
                             }
                         }
 
+                        // 6. Journal Header (Static)
                         item {
-                            cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 5) {
-                                JournalHeader(onAdd = { showAddTaskDialog = true })
-                                Spacer(Modifier.height(8.dp))
+                            JournalHeader(onAdd = { showAddTaskDialog = true })
+                            Spacer(Modifier.height(8.dp))
+                        }
+
+                        // 6b. Journal List (Animated)
+                        item {
+                            cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 6) {
                                 TaskList(state.dailyTasks, onToggle = { id, done -> viewModel.toggleTask(id, done) })
                             }
                         }
                     }
 
-                    // 5. Second Brain Section
+                    // 6. Second Brain Section
                     item {
-                        cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 6) {
+                        cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 7) {
                             SecondBrainSection(
                                 ideas = state.ideasContent,
                                 notes = state.notesContent,
@@ -300,10 +325,10 @@ fun DailyNoteScreen(
                         }
                     }
 
-                    // 6. Scratchpad (New Module)
+                    // 7. Scratchpad (New Module)
                     if (state.scratchNotes.isNotEmpty()) {
                         item {
-                            cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 7) {
+                            cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 8) {
                                 ScratchpadWidget(
                                     scraps = state.scratchNotes,
                                     onDelete = { viewModel.deleteScrap(it) },
@@ -431,9 +456,9 @@ private fun SecondBrainSection(
 }
 
 @Composable
-private fun TimelineHeader(onAdd: () -> Unit) {
+private fun TimelineHeader(onAdd: () -> Unit, modifier: Modifier = Modifier) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth().padding(horizontal = 4.dp), /* Added padding just in case */
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -441,7 +466,8 @@ private fun TimelineHeader(onAdd: () -> Unit) {
             text = "🗓️ Timeline",
             color = MaterialTheme.colorScheme.secondary,
             style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.weight(1f) // Fix for Folded Mode
         )
         IconButton(onClick = onAdd) {
             Icon(
@@ -454,17 +480,18 @@ private fun TimelineHeader(onAdd: () -> Unit) {
 }
 
 @Composable
-private fun JournalHeader(onAdd: () -> Unit) {
+private fun JournalHeader(onAdd: () -> Unit, modifier: Modifier = Modifier) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth().padding(horizontal = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = "📝 Journal",
+            text = "📝 Tasks",
             color = MaterialTheme.colorScheme.secondary,
             style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.weight(1f) // Fix for Folded Mode
         )
         IconButton(onClick = onAdd) {
             Icon(

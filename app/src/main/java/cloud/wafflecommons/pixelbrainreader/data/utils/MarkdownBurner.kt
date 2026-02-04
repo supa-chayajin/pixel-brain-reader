@@ -16,6 +16,7 @@ object MarkdownBurner {
         timeline: List<TimelineEntryEntity>,
         tasks: List<DailyTaskEntity>,
         scratchNotes: List<cloud.wafflecommons.pixelbrainreader.data.local.entity.ScratchNoteEntity> = emptyList(),
+        gratitudes: List<cloud.wafflecommons.pixelbrainreader.data.local.entity.GratitudeEntity> = emptyList(),
         existingFrontmatter: String = "" 
     ): String {
         val sb = StringBuilder()
@@ -91,6 +92,14 @@ object MarkdownBurner {
             sb.append("\n## 💡 Scraps (Unprocessed)\n\n")
             scratchNotes.forEach { scrap ->
                 sb.append("- ${scrap.content}\n")
+            }
+        }
+
+        // 9. Gratitude Express (RFC-009)
+        if (gratitudes.isNotEmpty()) {
+            sb.append("\n## 🌟 Gratitude\n\n")
+            gratitudes.forEach { entry ->
+                sb.append("- [x] ${entry.content}\n")
             }
         }
 
