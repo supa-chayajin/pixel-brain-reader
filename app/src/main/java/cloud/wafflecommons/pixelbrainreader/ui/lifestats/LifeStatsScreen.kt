@@ -31,6 +31,7 @@ import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LifeStatsScreen(
+    onNavigateBack: () -> Unit,
     viewModel: LifeStatsViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -38,13 +39,7 @@ fun LifeStatsScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Life Stats") },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface
-                )
-            )
+            cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(title = "Statistiques de Vie")
         }
     ) { innerPadding ->
         Column(

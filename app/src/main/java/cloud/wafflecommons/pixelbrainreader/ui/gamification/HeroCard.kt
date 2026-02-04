@@ -30,9 +30,9 @@ fun HeroCard(
 ) {
     Card(
         modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
         shape = RoundedCornerShape(16.dp)
-        // elevation
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
@@ -48,15 +48,14 @@ fun HeroCard(
                         color = MaterialTheme.colorScheme.surfaceContainerHigh, 
                         shape = RoundedCornerShape(8.dp)
                     )
-                    .border(2.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp)), // Fixed: import added
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp)),
                 contentAlignment = Alignment.Center
             ) {
                  Image(
                      painter = painterResource(id = heroDrawable),
                      contentDescription = "Hero Avatar",
-                     modifier = Modifier.size(64.dp), // Slightly smaller than box
+                     modifier = Modifier.size(64.dp),
                      contentScale = ContentScale.Fit
-                     // filterQuality = FilterQuality.None // Removed: Not supported in current Compose version
                  )
             }
             
@@ -68,7 +67,7 @@ fun HeroCard(
                     text = "Lvl ${state.profile.level} ${state.profile.characterClass.name.lowercase().capitalize()}",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -79,12 +78,12 @@ fun HeroCard(
                     progress = { progress },
                     modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
                     color = Color(0xFFFFD700), // Gold
-                    trackColor = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha=0.2f),
+                    trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha=0.1f),
                 )
                 Text(
                     text = "${state.profile.currentXp.toInt()} / ${state.profile.xpToNextLevel.toInt()} XP",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha=0.7f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.align(Alignment.End)
                 )
             }
@@ -93,10 +92,6 @@ fun HeroCard(
             
             // Attributes Compact Grid
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                // Show top 3 attributes or specific ones? 
-                // Showing all might be too much. Let's show non-zero or specific set.
-                // For now, hardcode the main ones or the ones with highest value.
-                // Let's just list VIG, MND, SOC as per previous design but with Icons.
                 AttributeRow(Attribute.VIG, state.attributes[Attribute.VIG] ?: 0)
                 AttributeRow(Attribute.MND, state.attributes[Attribute.MND] ?: 0)
                 AttributeRow(Attribute.SOC, state.attributes[Attribute.SOC] ?: 0)
@@ -104,6 +99,7 @@ fun HeroCard(
         }
     }
 }
+
 
 @Composable
 fun AttributeRow(attr: Attribute, value: Int) {
@@ -113,14 +109,13 @@ fun AttributeRow(attr: Attribute, value: Int) {
             contentDescription = attr.name,
             modifier = Modifier.size(20.dp),
             contentScale = ContentScale.Fit
-            // filterQuality = FilterQuality.None // Removed
         )
         Spacer(Modifier.width(4.dp))
         Text(
             text = value.toString(),
             style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onPrimaryContainer
+            color = MaterialTheme.colorScheme.onSurface
         )
     }
 }

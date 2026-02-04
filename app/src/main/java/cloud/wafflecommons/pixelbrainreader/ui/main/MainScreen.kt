@@ -775,7 +775,9 @@ fun MainScreen(
             }
             
             composable(Screen.Stats) {
-                 cloud.wafflecommons.pixelbrainreader.ui.lifestats.LifeStatsScreen()
+                 cloud.wafflecommons.pixelbrainreader.ui.lifestats.LifeStatsScreen(
+                     onNavigateBack = { navController.popBackStack() }
+                 )
             }
         }
     }
