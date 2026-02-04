@@ -45,7 +45,8 @@ data class LifeStatsUiState(
 
 @HiltViewModel
 class LifeStatsViewModel @Inject constructor(
-    private val getLifeStatsDashboardUseCase: GetLifeStatsDashboardUseCase
+    private val getLifeStatsDashboardUseCase: GetLifeStatsDashboardUseCase,
+    private val uiEffectManager: cloud.wafflecommons.pixelbrainreader.ui.utils.UiEffectManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(LifeStatsUiState())
@@ -118,6 +119,23 @@ class LifeStatsViewModel @Inject constructor(
                     }
                 }
 
+                // 5. Check Goals & Trigger Effects
+                val lastSleep = stats.sleepHistory.lastOrNull()?.value ?: 0.0
+                val lastSteps = stats.stepHistory.lastOrNull()?.value ?: 0
+                
+                if (lastSleep >= 7.0 || lastSteps >= 7000) {
+                    // Trigger only if not already triggered? 
+                    // For now, triggering on refresh might be annoying if it happens every time.
+                    // Ideally check if "just achieved". 
+                    // But assuming this screen is viewed to "check stats", a little celebration is fine.
+                    // Using tryTriggerEffect to avoid spamming if multiple calls happen.
+                     uiEffectManager.tryTriggerEffect(
+                         cloud.wafflecommons.pixelbrainreader.ui.utils.GlobalEffect.Confetti(
+                             cloud.wafflecommons.pixelbrainreader.ui.utils.ConfettiType.GOAL_REACHED
+                         )
+                     )
+                }
+
                 _uiState.value = LifeStatsUiState(
                     sleepData = sleepEntries,
                     sleepLabels = sleepLabels,
@@ -132,7 +150,6 @@ class LifeStatsViewModel @Inject constructor(
                 )
             } catch (e: Exception) {
                 e.printStackTrace()
-                // Handle error safely (could add error state to UI)
             }
         }
     }

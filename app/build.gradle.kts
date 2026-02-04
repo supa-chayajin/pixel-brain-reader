@@ -194,5 +194,8 @@ dependencies {
     // Charting (Vico)
     implementation(libs.vico.compose.m3)
     implementation(libs.vico.core)
+
+    // Sensory Polish
+    implementation(libs.konfetti.compose)
 }
 

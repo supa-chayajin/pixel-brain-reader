@@ -48,6 +48,7 @@ class MainViewModel @Inject constructor(
     private val userPrefs: UserPreferencesRepository,
     private val geminiRagManager: cloud.wafflecommons.pixelbrainreader.data.ai.GeminiRagManager,
     private val dataRefreshBus: cloud.wafflecommons.pixelbrainreader.data.utils.DataRefreshBus,
+    private val uiEffectManager: cloud.wafflecommons.pixelbrainreader.ui.utils.UiEffectManager,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
     // Expose Theme Preference
@@ -57,6 +58,9 @@ class MainViewModel @Inject constructor(
             started = SharingStarted.WhileSubscribed(5_000),
             initialValue = AppThemeConfig.FOLLOW_SYSTEM
         )
+
+    // Global Effects (One-shot)
+    val globalEffects = uiEffectManager.effects
 
     
     // UI State

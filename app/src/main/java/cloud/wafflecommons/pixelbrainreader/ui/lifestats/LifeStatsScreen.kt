@@ -50,6 +50,29 @@ fun LifeStatsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
+            // 0. Quick Stats (Animated)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                val lastSteps = state.stepData.lastOrNull()?.y?.toInt() ?: 0
+                val lastSleep = state.sleepData.lastOrNull()?.y?.toInt() ?: 0
+                
+                StatisticCard(
+                    title = "Recent Steps",
+                    value = lastSteps,
+                    unit = "steps",
+                    modifier = Modifier.weight(1f)
+                )
+                
+                StatisticCard(
+                    title = "Last Sleep",
+                    value = lastSleep,
+                    unit = "h",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
             // 1. Sleep History
             if (state.sleepData.isNotEmpty()) {
                 val model = entryModelOf(state.sleepData)

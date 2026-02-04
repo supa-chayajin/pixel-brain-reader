@@ -73,6 +73,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.adaptive.WindowAdaptiveInfo
 import androidx.compose.material3.adaptive.currentWindowAdaptiveInfo
 import androidx.compose.material3.adaptive.layout.ListDetailPaneScaffold
@@ -96,11 +97,16 @@ import androidx.window.core.layout.WindowWidthSizeClass
 import androidx.window.layout.FoldingFeature
 import kotlinx.coroutines.launch
 
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.FilledTonalIconButton
+import nl.dionsegijn.konfetti.compose.KonfettiView
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import java.util.concurrent.TimeUnit
+import nl.dionsegijn.konfetti.compose.KonfettiView
+import nl.dionsegijn.konfetti.core.Party
+import nl.dionsegijn.konfetti.core.Position
+import nl.dionsegijn.konfetti.core.emitter.Emitter
 
 object Screen {
     const val Home = "home"
@@ -126,6 +132,88 @@ fun MainScreen(
     // context is used for Toasts and Activity control. Ensure single declaration.
     val context = androidx.compose.ui.platform.LocalContext.current
     
+    // --- Global Sensory Polish (RFC-008) ---
+    // Inject via Hilt manually if not provided in constructor, or use EntryPoint. 
+    // Since MainScreen is a Composable, better to inject in ViewModel or pass it.
+    // However, MainScreen is the root. We can get it from MainViewModel if we inject it there?
+    // Or just ask Hilt to provide it if we change signature. 
+    // Let's assume we can add it to signature.
+    
+    // But changing signature breaks preview/callers if any. 
+    // It is called from MainActivity. 
+    // Let's add it to signature with default value if possible, or better:
+    // Observe it from MainViewModel which should inject it.
+    
+    // Let's modify MainViewModel to expose the effects or just inject it here.
+    // Changing MainScreen signature:
+    // viewModel: MainViewModel = hiltViewModel(),
+    // moodViewModel: ...
+    // uiEffectManager: cloud.wafflecommons.pixelbrainreader.ui.utils.UiEffectManager = hiltViewModel() // No, it's not a VM.
+    
+    // We should inject it in MainViewModel and expose it, OR use an EntryPoint.
+    // Simpler: Inject in MainViewModel, expose `effects` flow.
+    // Let's modify MainViewModel first or assume it has it.
+    // The instructions said "Inject UiEffectManager (via MainViewModel or direct inject)".
+    // I will inject it here using a temporary Hilt EntryPoint workaround or just add to MainViewModel.
+    // Adding to MainViewModel is cleanest.
+    
+    // Wait, I can't modify MainViewModel in this `replace_file_content`.
+    // I will use a local variable for now or modify the code logic to assume MainViewModel exposes it.
+    // Actually, let's look at `MainViewModel`.
+    
+    // PROPOSAL: I will modify `MainViewModel` to inject `UiEffectManager` and expose `globalEffects`.
+    // For this step, I will prepare `MainScreen` to consume it from `viewModel.globalEffects`.
+    
+    var partyState by remember { mutableStateOf<List<nl.dionsegijn.konfetti.core.Party>>(emptyList()) }
+    
+    LaunchedEffect(viewModel) {
+         viewModel.globalEffects.collect { effect ->
+             when(effect) {
+                 is cloud.wafflecommons.pixelbrainreader.ui.utils.GlobalEffect.Confetti -> {
+                     partyState = when(effect.type) {
+                         cloud.wafflecommons.pixelbrainreader.ui.utils.ConfettiType.LEVEL_UP -> {
+                             // Reset after 3s
+                             scope.launch { 
+                                 kotlinx.coroutines.delay(3000)
+                                 partyState = emptyList() 
+                             }
+                             listOf(
+                                 nl.dionsegijn.konfetti.core.Party(
+                                     speed = 0f,
+                                     maxSpeed = 30f,
+                                     damping = 0.9f,
+                                     spread = 360,
+                                     colors = listOf(0xfce18a, 0xff726d, 0xf4306d, 0xb48def),
+                                     emitter = nl.dionsegijn.konfetti.core.emitter.Emitter(duration = 100, TimeUnit.MILLISECONDS).max(100),
+                                     position = nl.dionsegijn.konfetti.core.Position.Relative(0.5, 0.3)
+                                 )
+                             )
+                         }
+                         cloud.wafflecommons.pixelbrainreader.ui.utils.ConfettiType.GOAL_REACHED -> {
+                              // Reset after 4s (duration 2000 + buffer)
+                             scope.launch { 
+                                 kotlinx.coroutines.delay(4000)
+                                 partyState = emptyList() 
+                             }
+                              listOf(
+                                 nl.dionsegijn.konfetti.core.Party(
+                                     speed = 10f,
+                                     maxSpeed = 30f,
+                                     damping = 0.9f,
+                                     spread = 360,
+                                     colors = listOf(0xfce18a, 0xff726d, 0xf4306d, 0xb48def),
+                                     emitter = nl.dionsegijn.konfetti.core.emitter.Emitter(duration = 2000, TimeUnit.MILLISECONDS).max(200),
+                                     position = nl.dionsegijn.konfetti.core.Position.Relative(0.5, 0.5) // Center
+                                 )
+                             )
+                         }
+                         else -> emptyList()
+                     }
+                 }
+             }
+         }
+    }
+
     LaunchedEffect(viewModel.uiEvent) {
         viewModel.uiEvent.collect { event ->
             when(event) {
@@ -367,7 +455,8 @@ fun MainScreen(
             }
         }
     ) {
-        androidx.navigation.compose.NavHost(
+        Box(modifier = Modifier.fillMaxSize()) {
+            androidx.navigation.compose.NavHost(
             navController = navController,
             startDestination = Screen.DailyNote,
             modifier = Modifier.fillMaxSize()
@@ -706,7 +795,8 @@ fun MainScreen(
                 SettingsScreen(
                     onBack = { navController.popBackStack() }
                 )
-            }
+                    }
+
 
             composable(Screen.MoodTracker) {
                 MoodHistoryScreen()
@@ -780,6 +870,15 @@ fun MainScreen(
                  )
             }
         }
+
+        // --- Global Effects Overlay ---
+        if (partyState.isNotEmpty()) {
+                KonfettiView(
+                parties = partyState,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+    }
     }
 }
 
