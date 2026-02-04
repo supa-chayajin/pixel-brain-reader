@@ -30,6 +30,7 @@ mlkitGenaiBeta = "1.0.0-beta1"
 googleAiClient = "0.9.0"
 connectClient = "1.1.0"
 vico = "1.13.0"
+remoteCreationCore = "1.0.0-alpha03"
 
 
 [libraries]
@@ -106,7 +107,9 @@ kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 androidx-health-connect-client = { group = "androidx.health.connect", name = "connect-client", version.ref = "connectClient" }
 vico-compose-m3 = { group = "com.patrykandpatrick.vico", name = "compose-m3", version.ref = "vico" }
 vico-core = { group = "com.patrykandpatrick.vico", name = "core", version.ref = "vico" }
+vico-views = { group = "com.patrykandpatrick.vico", name = "views", version.ref = "vico" }
 konfetti-compose = { group = "nl.dionsegijn", name = "konfetti-compose", version = "2.0.4" }
+androidx-compose-remote-creation-core = { group = "androidx.compose.remote", name = "remote-creation-core", version.ref = "remoteCreationCore" }
 
 
 [plugins]

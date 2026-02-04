@@ -95,16 +95,17 @@
         </provider>
 
         <!-- Mood Tracker Widget -->
+        <!-- Companion Widget (Pixel Dashboard) -->
         <receiver
-            android:name=".widget.MoodWidgetReceiver"
-            android:exported="false"
-            android:label="Mood Tracker">
+            android:name=".widget.ui.CompanionWidgetReceiver"
+            android:exported="true"
+            android:label="Pixel Dashboard">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/mood_widget_info" />
+                android:resource="@xml/companion_widget_info" />
         </receiver>
     </application>
 
