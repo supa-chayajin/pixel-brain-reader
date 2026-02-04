@@ -106,6 +106,7 @@ kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 androidx-health-connect-client = { group = "androidx.health.connect", name = "connect-client", version.ref = "connectClient" }
 vico-compose-m3 = { group = "com.patrykandpatrick.vico", name = "compose-m3", version.ref = "vico" }
 vico-core = { group = "com.patrykandpatrick.vico", name = "core", version.ref = "vico" }
+konfetti-compose = { group = "nl.dionsegijn", name = "konfetti-compose", version = "2.0.4" }
 
 
 [plugins]

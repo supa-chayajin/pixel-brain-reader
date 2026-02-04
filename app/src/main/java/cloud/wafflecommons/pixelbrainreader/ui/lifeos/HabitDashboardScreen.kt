@@ -78,42 +78,40 @@ fun HabitDashboardScreen(
             ) {
                 // [NEW] Hero Card (Full Width)
                 item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
-                     cloud.wafflecommons.pixelbrainreader.ui.gamification.HeroCard(
-                         state = state.gamificationState,
-                         modifier = Modifier.padding(16.dp)
-                     )
+                     cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 0) {
+                         cloud.wafflecommons.pixelbrainreader.ui.gamification.HeroCard(
+                             state = state.gamificationState,
+                             modifier = Modifier.padding(16.dp)
+                         )
+                     }
                 }
 
                 // Iterate over Grouped Habits
                 state.groupedHabits.forEach { (category, habits) ->
                     // Section Header (Full Width)
                     item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
-                        Text(
-                            text = category,
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier
-                                .padding(horizontal = 16.dp)
-                                .padding(top = 16.dp, bottom = 8.dp)
-                        )
+                        cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 0) {
+                            Text(
+                                text = category,
+                                style = MaterialTheme.typography.titleLarge,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier
+                                    .padding(horizontal = 16.dp)
+                                    .padding(top = 16.dp, bottom = 8.dp)
+                            )
+                        }
                     }
 
                     // Habits in Category (Grid Layout)
                     items(habits.size) { index ->
                         val habitStats = habits[index]
-                        // Need to wrap in Box for padding if not using contentPadding? 
-                        // Grid handles spacing via vertical/horizontalArrangement.
-                        // But we want to ensure edge padding matches. 
-                        // LazyVerticalGrid contentPadding applies to the whole container.
-                        // Let's rely on standard grid behavior but keeping the card internal padding logic.
-                        // Since we aren't using the Box wrapper from before, let's verify visual.
-                        // The user asked for Arrangement.spacedBy(12.dp).
-                        // I will add horizontal content padding to the Grid itself to align edges.
-                        HabitCard(
-                            habit = habitStats,
-                            onToggle = { viewModel.toggleHabit(habitStats.config.id) },
-                            onUpdateValue = { newVal -> viewModel.updateHabitValue(habitStats.config.id, newVal) }
-                        )
+                        cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = index + 1) {
+                            HabitCard(
+                                habit = habitStats,
+                                onToggle = { viewModel.toggleHabit(habitStats.config.id) },
+                                onUpdateValue = { newVal -> viewModel.updateHabitValue(habitStats.config.id, newVal) }
+                            )
+                        }
                     }
                 }
                 

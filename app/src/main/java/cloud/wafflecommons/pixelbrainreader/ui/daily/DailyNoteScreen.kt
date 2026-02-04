@@ -178,9 +178,7 @@ fun DailyNoteScreen(
             val isWide = maxWidth > 600.dp
 
             if (state.isLoading && state.timelineEvents.isEmpty() && state.dailyTasks.isEmpty()) {
-                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                     CircularProgressIndicator()
-                 }
+                 DailyNoteSkeleton()
             } else {
                 LazyColumn(
                     modifier = Modifier
@@ -191,109 +189,127 @@ fun DailyNoteScreen(
                 ) {
                     // 1. Header & Stats
                     item {
-                        val moodData = state.moodData
-                        val lastUpdate = remember(moodData) { moodData?.entries?.firstOrNull()?.time }
-                        DailyNoteHeader(
-                            emoji = moodData?.summary?.mainEmoji,
-                            lastUpdate = lastUpdate,
-                            topDailyTags = state.topDailyTags,
-                            oracleInsight = oracleInsight
-                        )
+                        cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 0) {
+                            val moodData = state.moodData
+                            val lastUpdate = remember(moodData) { moodData?.entries?.firstOrNull()?.time }
+                            DailyNoteHeader(
+                                emoji = moodData?.summary?.mainEmoji,
+                                lastUpdate = lastUpdate,
+                                topDailyTags = state.topDailyTags,
+                                oracleInsight = oracleInsight
+                            )
+                        }
                     }
 
                     // 1.5 Hero Card (Gamification)
                     if (gamificationState != null) {
                         item {
-                            cloud.wafflecommons.pixelbrainreader.ui.gamification.HeroCard(
-                                state = gamificationState!!,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 8.dp)
-                            )
+                            cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 1) {
+                                cloud.wafflecommons.pixelbrainreader.ui.gamification.HeroCard(
+                                    state = gamificationState!!,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 8.dp)
+                                )
+                            }
                         }
                     }
 
                     // 2. Morning Briefing
                     item {
-                        MorningBriefingSection(
-                            state = state.briefingState,
-                            onToggle = { viewModel.toggleBriefing() }
-                        )
+                        cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 2) {
+                            MorningBriefingSection(
+                                state = state.briefingState,
+                                onToggle = { viewModel.toggleBriefing() }
+                            )
+                        }
                     }
                     
                     // 3. Mantra
                     if (state.mantra.isNotBlank()) {
                          item {
-                             Text(
-                                 text = state.mantra,
-                                 style = MaterialTheme.typography.bodyLarge,
-                                 fontWeight = FontWeight.Medium,
-                                 fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
-                                 modifier = Modifier
-                                     .fillMaxWidth()
-                                     .padding(vertical = 8.dp),
-                                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                                 color = MaterialTheme.colorScheme.secondary
-                             )
+                             cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 3) {
+                                 Text(
+                                     text = state.mantra,
+                                     style = MaterialTheme.typography.bodyLarge,
+                                     fontWeight = FontWeight.Medium,
+                                     fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                                     modifier = Modifier
+                                         .fillMaxWidth()
+                                         .padding(vertical = 8.dp),
+                                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                     color = MaterialTheme.colorScheme.secondary
+                                 )
+                             }
                          }
                     }
 
                     // 4. Adaptive Content (Two Columns vs Single Column)
                     if (isWide) {
                         item {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(24.dp),
-                                verticalAlignment = Alignment.Top
-                            ) {
-                                // Left Column: Timeline
-                                Column(modifier = Modifier.weight(0.4f)) {
-                                    TimelineHeader(onAdd = { showAddTimelineDialog = true })
-                                    Spacer(Modifier.height(8.dp))
-                                    TimelineList(state.timelineEvents)
-                                }
+                            cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 4) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(24.dp),
+                                    verticalAlignment = Alignment.Top
+                                ) {
+                                    // Left Column: Timeline
+                                    Column(modifier = Modifier.weight(0.4f)) {
+                                        TimelineHeader(onAdd = { showAddTimelineDialog = true })
+                                        Spacer(Modifier.height(8.dp))
+                                        TimelineList(state.timelineEvents)
+                                    }
 
-                                // Right Column: Journal + Second Brain
-                                Column(modifier = Modifier.weight(0.6f)) {
-                                    JournalHeader(onAdd = { showAddTaskDialog = true })
-                                    Spacer(Modifier.height(8.dp))
-                                    TaskList(state.dailyTasks, onToggle = { id, done -> viewModel.toggleTask(id, done) })
+                                    // Right Column: Journal + Second Brain
+                                    Column(modifier = Modifier.weight(0.6f)) {
+                                        JournalHeader(onAdd = { showAddTaskDialog = true })
+                                        Spacer(Modifier.height(8.dp))
+                                        TaskList(state.dailyTasks, onToggle = { id, done -> viewModel.toggleTask(id, done) })
+                                    }
                                 }
                             }
                         }
                     } else {
                         // Mobile Layout: Sequential
                         item {
-                            TimelineHeader(onAdd = { showAddTimelineDialog = true })
-                            Spacer(Modifier.height(8.dp))
-                            TimelineList(state.timelineEvents)
+                            cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 4) {
+                                TimelineHeader(onAdd = { showAddTimelineDialog = true })
+                                Spacer(Modifier.height(8.dp))
+                                TimelineList(state.timelineEvents)
+                            }
                         }
 
                         item {
-                            JournalHeader(onAdd = { showAddTaskDialog = true })
-                            Spacer(Modifier.height(8.dp))
-                            TaskList(state.dailyTasks, onToggle = { id, done -> viewModel.toggleTask(id, done) })
+                            cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 5) {
+                                JournalHeader(onAdd = { showAddTaskDialog = true })
+                                Spacer(Modifier.height(8.dp))
+                                TaskList(state.dailyTasks, onToggle = { id, done -> viewModel.toggleTask(id, done) })
+                            }
                         }
                     }
 
                     // 5. Second Brain Section
                     item {
-                        SecondBrainSection(
-                            ideas = state.ideasContent,
-                            notes = state.notesContent,
-                            onIdeasChange = viewModel::onIdeasChanged,
-                            onNotesChange = viewModel::onNotesChanged
-                        )
+                        cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 6) {
+                            SecondBrainSection(
+                                ideas = state.ideasContent,
+                                notes = state.notesContent,
+                                onIdeasChange = viewModel::onIdeasChanged,
+                                onNotesChange = viewModel::onNotesChanged
+                            )
+                        }
                     }
 
                     // 6. Scratchpad (New Module)
                     if (state.scratchNotes.isNotEmpty()) {
                         item {
-                            ScratchpadWidget(
-                                scraps = state.scratchNotes,
-                                onDelete = { viewModel.deleteScrap(it) },
-                                onPromote = { viewModel.promoteScrapToIdeas(it) }
-                            )
+                            cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 7) {
+                                ScratchpadWidget(
+                                    scraps = state.scratchNotes,
+                                    onDelete = { viewModel.deleteScrap(it) },
+                                    onPromote = { viewModel.promoteScrapToIdeas(it) }
+                                )
+                            }
                         }
                     }
                 }
@@ -685,7 +701,10 @@ private fun AddTaskDialog(onDismiss: () -> Unit, onConfirm: (String, LocalTime?)
                         .fillMaxWidth()
                         .clickable { useTime = !useTime }
                 ) {
-                    Checkbox(checked = useTime, onCheckedChange = { useTime = it })
+                    cloud.wafflecommons.pixelbrainreader.ui.components.CortexBouncyCheckbox(
+                        checked = useTime, 
+                        onCheckedChange = { useTime = it }
+                    )
                     Spacer(Modifier.width(8.dp))
                     Text("Scheduled Time?")
                 }

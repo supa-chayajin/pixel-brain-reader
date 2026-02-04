@@ -32,7 +32,7 @@ data class DailyNoteState(
     val moodData: DailyMoodData? = null,
     
     // Core Dashboard Content (Room)
-    val mantra: String = "",
+    val mantra: String = "Stay safe friend, and don't your dare go hollow!",
     val ideasContent: String = "",
     val notesContent: String = "",
     

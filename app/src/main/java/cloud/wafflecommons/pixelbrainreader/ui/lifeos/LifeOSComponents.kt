@@ -87,7 +87,7 @@ fun TaskTimelineItem(task: Task, onToggle: (Task) -> Unit) {
                 modifier = Modifier.padding(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Checkbox(
+                cloud.wafflecommons.pixelbrainreader.ui.components.CortexBouncyCheckbox(
                     checked = task.isCompleted, 
                     onCheckedChange = { onToggle(task) },
                     modifier = Modifier.size(20.dp)
@@ -159,11 +159,17 @@ fun HabitCard(
         ) {
             // Top Section: Info (Icon + Text)
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // Icon (Visual)
-                Icon(
-                    imageVector = if (isDone) Icons.Default.Check else Icons.Default.RadioButtonUnchecked, 
-                    contentDescription = null,
-                    tint = themeColor,
+                // Checkbox (Visual & Interactive)
+                cloud.wafflecommons.pixelbrainreader.ui.components.CortexBouncyCheckbox(
+                    checked = isDone,
+                    onCheckedChange = { 
+                        // Only toggle if not measurable (measurable needs dialog)
+                        if (config.type != HabitType.MEASURABLE) {
+                            onToggle() 
+                        } else {
+                            showDialog = true
+                        }
+                    },
                     modifier = Modifier.size(24.dp)
                 )
                 Spacer(Modifier.width(8.dp))
