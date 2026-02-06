@@ -5,10 +5,13 @@
 -->
 <data-extraction-rules>
     <cloud-backup>
-        <!-- TODO: Use <include> and <exclude> to control what is backed up.
-        <include .../>
-        <exclude .../>
-        -->
+        <!-- Exclude Git Metadata and potential lock files -->
+        <exclude domain="file" path="vault/.git" />
+        <exclude domain="file" path="vault/.git/index.lock" />
+        <exclude domain="file" path="vault/.git/HEAD.lock" />
+        <exclude domain="file" path="vault/.git/config.lock" />
+        <exclude domain="file" path="vault/.git/refs/heads/master.lock" />
+        <exclude domain="file" path="vault/.git/refs/heads/main.lock" />
     </cloud-backup>
     <!--
     <device-transfer>

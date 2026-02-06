@@ -177,12 +177,13 @@ fun OracleCard(
         AnimatedVisibility(visible = isExpanded) {
             Column {
                 Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = insight,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
-                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
-                    lineHeight = 20.sp
+                cloud.wafflecommons.pixelbrainreader.ui.components.ComposeCortexEditor(
+                    content = insight,
+                    onContentChange = {},
+                    readOnly = true,
+                    enabled = false, // Prevents keyboard from appearing
+                    useMonospace = true,
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
         }

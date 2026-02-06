@@ -25,8 +25,33 @@ class JGitProvider @Inject constructor(
     private val secretManager: SecretManager
 ) {
 
+    init {
+        cleanStaleLocks()
+    }
+
     private val rootDir: File
         get() = File(context.filesDir, "vault")
+
+    /**
+     * Removes stale '.lock' files left over from crashes or restore operations.
+     */
+    private fun cleanStaleLocks() {
+        val gitDir = File(rootDir, ".git")
+        if (!gitDir.exists()) return
+
+        try {
+            gitDir.walkBottomUp()
+                .filter { it.isFile && it.name.endsWith(".lock") }
+                .forEach { lockFile ->
+                    val deleted = lockFile.delete()
+                    if (deleted) {
+                        Log.w("JGitProvider", "Cleaned stale lock file: ${lockFile.absolutePath}")
+                    }
+                }
+        } catch (e: Exception) {
+            Log.e("JGitProvider", "Failed to clean stale locks", e)
+        }
+    }
 
     /**
      * Ensures critical directories exist to prevent JGit errors.

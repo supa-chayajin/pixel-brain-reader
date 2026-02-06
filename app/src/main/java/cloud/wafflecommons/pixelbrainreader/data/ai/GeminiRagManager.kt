@@ -47,7 +47,7 @@ class GeminiRagManager @Inject constructor(
         }
     }
 
-    suspend fun generateResponse(userMessage: String, useRAG: Boolean = true): Flow<String> = flow {
+    suspend fun generateResponse(userMessage: String, useRAG: Boolean = false): Flow<String> = flow {
         // 1. Initial State
         emit("Thinking...")
         
