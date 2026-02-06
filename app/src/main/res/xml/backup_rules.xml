@@ -6,8 +6,11 @@
    See https://developer.android.com/about/versions/12/backup-restore
 -->
 <full-backup-content>
-    <!--
-   <include domain="sharedpref" path="."/>
-   <exclude domain="sharedpref" path="device.xml"/>
--->
+    <!-- Exclude Git Metadata and potential lock files to prevent restoring stale locks -->
+    <exclude domain="file" path="vault/.git" />
+    <exclude domain="file" path="vault/.git/index.lock" />
+    <exclude domain="file" path="vault/.git/HEAD.lock" />
+    <exclude domain="file" path="vault/.git/config.lock" />
+    <exclude domain="file" path="vault/.git/refs/heads/master.lock" />
+    <exclude domain="file" path="vault/.git/refs/heads/main.lock" />
 </full-backup-content>
