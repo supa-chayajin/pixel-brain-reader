@@ -93,4 +93,10 @@ object DatabaseModule {
     fun provideDailyBriefingDao(database: AppDatabase): cloud.wafflecommons.pixelbrainreader.data.local.dao.DailyBriefingDao {
         return database.dailyBriefingDao()
     }
+    
+    @Provides
+    @Singleton
+    fun provideTaskDao(database: AppDatabase): cloud.wafflecommons.pixelbrainreader.data.local.dao.TaskDao {
+        return database.taskDao()
+    }
 }

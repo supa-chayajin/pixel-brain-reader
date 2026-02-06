@@ -5,7 +5,7 @@ import androidx.lifecycle.viewModelScope
 import cloud.wafflecommons.pixelbrainreader.data.model.HabitConfig
 import cloud.wafflecommons.pixelbrainreader.data.model.HabitLogEntry
 import cloud.wafflecommons.pixelbrainreader.data.model.HabitStatus
-import cloud.wafflecommons.pixelbrainreader.data.model.Task
+import cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyTaskEntity
 import cloud.wafflecommons.pixelbrainreader.data.repository.HabitRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.TaskRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -34,7 +34,7 @@ data class LifeOSUiState(
     val habitsWithStats: List<HabitWithStats> = emptyList(),
     val groupedHabits: Map<String, List<HabitWithStats>> = emptyMap(),
     val logs: Map<String, List<HabitLogEntry>> = emptyMap(),
-    val scopedTasks: List<Task> = emptyList(),
+    val scopedTasks: List<DailyTaskEntity> = emptyList(),
     val selectedDate: LocalDate = LocalDate.now(),
     val isLoading: Boolean = false,
     val gamificationState: cloud.wafflecommons.pixelbrainreader.data.gamification.GamificationState = cloud.wafflecommons.pixelbrainreader.data.gamification.GamificationState()
@@ -91,7 +91,7 @@ class LifeOSViewModel @Inject constructor(
                 logsFlow, 
                 gamificationFlow
             ) { configs: List<HabitConfig>, logsMap: Map<String, List<HabitLogEntry>>, gamificationState: cloud.wafflecommons.pixelbrainreader.data.gamification.GamificationState ->
-                  val scopedTasks = taskRepository.getScopedTasks(date) // Ideal: reactive
+                  val scopedTasks = taskRepository.getTasks(date) // Ideal: reactive
                   
                    // [NEW] 1. Filter by Frequency (Day of Week)
                     val dayMap = mapOf(
@@ -225,18 +225,19 @@ class LifeOSViewModel @Inject constructor(
         }
     }
 
-    fun toggleTask(task: Task) {
+    fun toggleTask(task: DailyTaskEntity) {
         viewModelScope.launch {
-            taskRepository.toggleTask(_uiState.value.selectedDate, task)
+            val isDone = !task.isDone
+            taskRepository.toggleTask(task.id, isDone)
             
-            if (!task.isCompleted) { // If it was NOT completed, and we toggle it -> Completed
+            if (isDone) { // If completing
                  grantXpUseCase.execute(
-                    sourceId = task.originalText.hashCode().toString(),
+                    sourceId = task.id,
                     actionType = cloud.wafflecommons.pixelbrainreader.domain.gamification.XpActionType.TASK_DONE
                 )
             }
             
-            val tasks = taskRepository.getScopedTasks(_uiState.value.selectedDate)
+            val tasks = taskRepository.getTasks(_uiState.value.selectedDate)
              _uiState.update { it.copy(scopedTasks = tasks) }
              _reloadTrigger.emit(Unit)
         }

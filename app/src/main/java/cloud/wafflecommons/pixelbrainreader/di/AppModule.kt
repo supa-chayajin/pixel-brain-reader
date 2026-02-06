@@ -18,12 +18,5 @@ object AppModule {
 
 
 
-    @Provides
-    @Singleton
-    fun provideTaskRepository(
-        fileRepository: cloud.wafflecommons.pixelbrainreader.data.repository.FileRepository,
-        secretManager: cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
-    ): cloud.wafflecommons.pixelbrainreader.data.repository.TaskRepository {
-        return cloud.wafflecommons.pixelbrainreader.data.repository.TaskRepository(fileRepository, secretManager)
-    }
+
 }

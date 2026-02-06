@@ -48,6 +48,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun scratchDao(): cloud.wafflecommons.pixelbrainreader.data.local.dao.ScratchDao
     abstract fun dailyBriefingDao(): cloud.wafflecommons.pixelbrainreader.data.local.dao.DailyBriefingDao
     abstract fun gratitudeDao(): cloud.wafflecommons.pixelbrainreader.data.local.dao.GratitudeDao
+    abstract fun taskDao(): cloud.wafflecommons.pixelbrainreader.data.local.dao.TaskDao
 }
 
 class Converters {

@@ -54,16 +54,16 @@ interface DailyDashboardDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTask(task: DailyTaskEntity)
 
-    @Query("SELECT * FROM daily_tasks WHERE date = :date ORDER BY isDone ASC, scheduledTime ASC NULLS LAST, priority DESC")
+    @Query("SELECT * FROM daily_tasks WHERE scheduledDate = :date ORDER BY isDone ASC, scheduledTime ASC NULLS LAST, priority DESC")
     fun getLiveTasks(date: LocalDate): Flow<List<DailyTaskEntity>>
 
-    @Query("SELECT * FROM daily_tasks WHERE date = :date ORDER BY isDone ASC, scheduledTime ASC NULLS LAST, priority DESC")
+    @Query("SELECT * FROM daily_tasks WHERE scheduledDate = :date ORDER BY isDone ASC, scheduledTime ASC NULLS LAST, priority DESC")
     suspend fun getTasksSnapshot(date: LocalDate): List<DailyTaskEntity>
 
     @Query("UPDATE daily_tasks SET isDone = :isDone WHERE id = :taskId")
     suspend fun updateTaskStatus(taskId: String, isDone: Boolean)
 
-    @Query("DELETE FROM daily_tasks WHERE date = :date")
+    @Query("DELETE FROM daily_tasks WHERE scheduledDate = :date")
     suspend fun clearTasks(date: LocalDate)
 
     // --- Transactional Helper ---

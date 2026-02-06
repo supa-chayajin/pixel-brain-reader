@@ -89,11 +89,12 @@ class MoodViewModel @Inject constructor(
     private val _uiEvent = kotlinx.coroutines.flow.MutableSharedFlow<cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent>()
     val uiEvent = _uiEvent.asSharedFlow()
 
-    fun addMoodEntry(score: Int, activities: List<String>, note: String) {
+    fun addMoodEntry(score: Int, activities: List<String>, note: String, customTimestamp: LocalDateTime? = null) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             try {
-                val now = LocalDateTime.now()
+                val timestamp = customTimestamp ?: LocalDateTime.now()
+                
                 // Auto-map score to label for simplicity
                 val label = when(score) {
                     1 -> "😫"
@@ -105,13 +106,14 @@ class MoodViewModel @Inject constructor(
                 }
 
                 val entry = MoodEntry(
-                    time = now.format(DateTimeFormatter.ofPattern("HH:mm")),
+                    time = timestamp.format(DateTimeFormatter.ofPattern("HH:mm")),
                     score = score,
                     label = label,
                     activities = activities,
                     note = note.ifBlank { null }
                 )
-                moodRepository.addEntry(_uiState.value.selectedDate, entry)
+                // Use the date from the timestamp, not necessarily the selected UI date
+                moodRepository.addEntry(timestamp.toLocalDate(), entry)
                 _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Mood Saved & Synced ✅"))
                 _uiState.update { it.copy(isLoading = false) }
             } catch (e: Exception) {

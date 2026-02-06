@@ -37,7 +37,7 @@ class LifeStatsRepository @Inject constructor(
         var tasksCompleted = 0
         for (i in 0..6) {
             val date = today.minusDays(i.toLong())
-            tasksCompleted += taskRepository.getScopedTasks(date).count { it.isCompleted }
+            tasksCompleted += taskRepository.getTasks(date).count { it.isDone }
         }
 
         // Mood (Last 7 days average)
