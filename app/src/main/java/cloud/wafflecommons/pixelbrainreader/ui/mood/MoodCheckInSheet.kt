@@ -99,6 +99,55 @@ fun MoodCheckInSheet(
                 fontWeight = FontWeight.Bold
             )
 
+            // --- Date/Time Selector ---
+            var selectedDateTime by remember { mutableStateOf(java.time.LocalDateTime.now()) }
+            val context = androidx.compose.ui.platform.LocalContext.current
+            
+            val timeFormatter = java.time.format.DateTimeFormatter.ofPattern("dd MMM, HH:mm")
+            
+            Surface(
+                onClick = {
+                    val datePickerDialog = android.app.DatePickerDialog(
+                        context,
+                        { _, year, month, dayOfMonth ->
+                             val newDate = java.time.LocalDate.of(year, month + 1, dayOfMonth)
+                             
+                             val timePickerDialog = android.app.TimePickerDialog(
+                                 context,
+                                 { _, hourOfDay, minute ->
+                                     val newTime = java.time.LocalTime.of(hourOfDay, minute)
+                                     selectedDateTime = java.time.LocalDateTime.of(newDate, newTime)
+                                 },
+                                 selectedDateTime.hour,
+                                 selectedDateTime.minute,
+                                 true // is24Hour
+                             )
+                             timePickerDialog.show()
+                        },
+                        selectedDateTime.year,
+                        selectedDateTime.monthValue - 1,
+                        selectedDateTime.dayOfMonth
+                    )
+                    datePickerDialog.show()
+                },
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                modifier = Modifier.padding(bottom = 8.dp)
+            ) {
+                Row(
+                    Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Outlined.Schedule, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Text(
+                        text = if (java.time.Duration.between(selectedDateTime, java.time.LocalDateTime.now()).toMinutes() < 1) "Maintenant" else selectedDateTime.format(timeFormatter),
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+
             MoodSelector(
                 selectedMood = selectedMood,
                 onMoodSelected = { selectedMood = it },
@@ -167,7 +216,7 @@ fun MoodCheckInSheet(
 
             Button(
                 onClick = {
-                    viewModel.addMoodEntry(selectedMood, selectedActivities.toList(), noteText)
+                    viewModel.addMoodEntry(selectedMood, selectedActivities.toList(), noteText, selectedDateTime)
                     onDismiss()
                 },
                 modifier = Modifier

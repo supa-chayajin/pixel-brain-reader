@@ -9,7 +9,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import cloud.wafflecommons.pixelbrainreader.data.model.Task
+import cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyTaskEntity
 import java.time.format.DateTimeFormatter
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
@@ -39,8 +39,8 @@ import cloud.wafflecommons.pixelbrainreader.data.model.TimelineEvent
 
 @Composable
 fun TaskTimeline(
-    tasks: List<Task>,
-    onToggle: (Task) -> Unit,
+    tasks: List<DailyTaskEntity>,
+    onToggle: (DailyTaskEntity) -> Unit,
     modifier: Modifier = Modifier
 ) {
     if (tasks.isEmpty()) {
@@ -61,7 +61,7 @@ fun TaskTimeline(
 }
 
 @Composable
-fun TaskTimelineItem(task: Task, onToggle: (Task) -> Unit) {
+fun TaskTimelineItem(task: DailyTaskEntity, onToggle: (DailyTaskEntity) -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -70,7 +70,7 @@ fun TaskTimelineItem(task: Task, onToggle: (Task) -> Unit) {
     ) {
         // Time
         Text(
-            text = task.time?.format(DateTimeFormatter.ofPattern("HH:mm")) ?: "Any",
+            text = task.scheduledTime?.format(DateTimeFormatter.ofPattern("HH:mm")) ?: "Any",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.width(48.dp)
@@ -79,7 +79,7 @@ fun TaskTimelineItem(task: Task, onToggle: (Task) -> Unit) {
         // Card
         Card(
             colors = CardDefaults.cardColors(
-                containerColor = if (task.isCompleted) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surfaceContainer
+                containerColor = if (task.isDone) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surfaceContainer
             ),
             modifier = Modifier.weight(1f)
         ) {
@@ -88,15 +88,15 @@ fun TaskTimelineItem(task: Task, onToggle: (Task) -> Unit) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 cloud.wafflecommons.pixelbrainreader.ui.components.CortexBouncyCheckbox(
-                    checked = task.isCompleted, 
+                    checked = task.isDone, 
                     onCheckedChange = { onToggle(task) },
                     modifier = Modifier.size(20.dp)
                 )
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(
-                    text = task.cleanText,
+                    text = task.label,
                     style = MaterialTheme.typography.bodyMedium,
-                    textDecoration = if (task.isCompleted) TextDecoration.LineThrough else null
+                    textDecoration = if (task.isDone) TextDecoration.LineThrough else null
                 )
             }
         }

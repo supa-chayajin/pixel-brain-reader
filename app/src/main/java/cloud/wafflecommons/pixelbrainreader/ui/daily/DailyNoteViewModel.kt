@@ -88,7 +88,8 @@ class DailyNoteViewModel @Inject constructor(
     private val jGitProvider: cloud.wafflecommons.pixelbrainreader.data.remote.JGitProvider,
     private val gamificationRepository: cloud.wafflecommons.pixelbrainreader.data.gamification.GamificationRepository,
     private val syncHealthDataUseCase: SyncHealthDataUseCase,
-    private val dailyNoteRepository: cloud.wafflecommons.pixelbrainreader.data.repository.DailyNoteRepository // [NEW] For Gratitude
+    private val dailyNoteRepository: cloud.wafflecommons.pixelbrainreader.data.repository.DailyNoteRepository, // [NEW] For Gratitude
+    private val taskRepository: cloud.wafflecommons.pixelbrainreader.data.repository.TaskRepository // [NEW] Database-First Tasks
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DailyNoteState())
@@ -276,15 +277,16 @@ class DailyNoteViewModel @Inject constructor(
         }
     }
 
-    fun addTask(label: String, scheduledTime: LocalTime? = null) {
+    fun addTask(label: String, targetDate: LocalDate = currentDate, scheduledTime: LocalTime? = null) {
         viewModelScope.launch {
-            dashboardRepository.addTask(currentDate, label, scheduledTime)
+            // Use Database-First Repository
+            taskRepository.addTask(label, targetDate, scheduledTime)
         }
     }
 
     fun toggleTask(taskId: String, isDone: Boolean) {
         viewModelScope.launch {
-            dashboardRepository.toggleTask(taskId, isDone) // Date needed? No, ID is PK.
+            taskRepository.toggleTask(taskId, isDone)
         }
     }
 
@@ -412,7 +414,7 @@ class DailyNoteViewModel @Inject constructor(
         existingWeather: WeatherData?, 
         isExpanded: Boolean
     ): MorningBriefingUiState {
-        val weather = if (date == LocalDate.now()) weatherRepository.getCurrentWeatherAndLocation() else null
+        val weather = weatherRepository.getCurrentWeatherAndLocation()
         val news = try { newsRepository.getTodayNews() } catch (e: Exception) { emptyList() }
         
         // Mood Trends (Calculated here)
@@ -430,7 +432,7 @@ class DailyNoteViewModel @Inject constructor(
             // weatherAdvice handled by Flow from Repository
             moodTrend = moodTrend,
             news = news,
-            quote = "Carpe Diem", // Placeholder as BriefingGenerator removed from VM
+            quote = "Stay safe my friend, and don't you dare go hollow!", // Placeholder as BriefingGenerator removed from VM
             isExpanded = isExpanded,
             isLoading = false
         )

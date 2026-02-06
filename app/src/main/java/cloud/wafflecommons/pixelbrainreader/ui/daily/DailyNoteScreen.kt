@@ -355,8 +355,8 @@ fun DailyNoteScreen(
     if (showAddTaskDialog) {
         AddTaskDialog(
             onDismiss = { showAddTaskDialog = false },
-            onConfirm = { label, time ->
-                viewModel.addTask(label, time)
+            onConfirm = { label, date, time ->
+                viewModel.addTask(label, date, time)
                 showAddTaskDialog = false
             }
         )
@@ -698,10 +698,14 @@ private fun AddTimelineDialog(onDismiss: () -> Unit, onConfirm: (String, LocalTi
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AddTaskDialog(onDismiss: () -> Unit, onConfirm: (String, LocalTime?) -> Unit) {
+private fun AddTaskDialog(onDismiss: () -> Unit, onConfirm: (String, java.time.LocalDate, LocalTime?) -> Unit) {
     var label by remember { mutableStateOf("") }
     var useTime by remember { mutableStateOf(false) }
+    var selectedDate by remember { mutableStateOf(java.time.LocalDate.now()) }
     
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val dateFormatter = java.time.format.DateTimeFormatter.ofPattern("EEE, MMM dd")
+
     val timePickerState = rememberTimePickerState(
         initialHour = LocalTime.now().hour,
         initialMinute = LocalTime.now().minute,
@@ -721,6 +725,29 @@ private fun AddTaskDialog(onDismiss: () -> Unit, onConfirm: (String, LocalTime?)
                     modifier = Modifier.fillMaxWidth()
                 )
                 
+                // Date Picker
+                Row(
+                    verticalAlignment = Alignment.CenterVertically, 
+                    modifier = Modifier.fillMaxWidth().clickable {
+                        android.app.DatePickerDialog(
+                            context,
+                            { _, y, m, d -> selectedDate = java.time.LocalDate.of(y, m + 1, d) },
+                            selectedDate.year,
+                            selectedDate.monthValue - 1,
+                            selectedDate.dayOfMonth
+                        ).show()
+                    }
+                ) {
+                    Icon(Icons.Default.AddCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = if (selectedDate == java.time.LocalDate.now()) "Today" else selectedDate.format(dateFormatter),
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+
                 // Time Toggle
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -748,7 +775,7 @@ private fun AddTaskDialog(onDismiss: () -> Unit, onConfirm: (String, LocalTime?)
             Button(onClick = { 
                 if (label.isNotBlank()) {
                      val time = if (useTime) LocalTime.of(timePickerState.hour, timePickerState.minute) else null
-                     onConfirm(label, time)
+                     onConfirm(label, selectedDate, time)
                 } 
             }) {
                 Text("Add")

@@ -12,23 +12,15 @@ import java.util.UUID
  */
 @Entity(
     tableName = "daily_tasks",
-    foreignKeys = [
-        ForeignKey(
-            entity = DailyDashboardEntity::class,
-            parentColumns = ["date"],
-            childColumns = ["date"],
-            onDelete = ForeignKey.CASCADE
-        )
-    ],
-    indices = [androidx.room.Index(value = ["date"])]
+    indices = [androidx.room.Index(value = ["scheduledDate"])]
 )
 data class DailyTaskEntity(
     @PrimaryKey
     val id: String = UUID.randomUUID().toString(),
-    val date: LocalDate,
+    val scheduledDate: String, // ISO-8601 "YYYY-MM-DD"
     val label: String,
-    val scheduledTime: LocalTime? = null, // "14:00 Call"
+    val scheduledTime: String? = null, // "14:00" stored as string for simplicity in this refactor
     val isDone: Boolean = false,
-    val priority: Int = 1, // 1=Normal, 2=High, 3=Critical
-    val section: String = "Journal" // "Journal", "Ideas", etc.
+    val priority: Int = 1,
+    val section: String = "Journal"
 )

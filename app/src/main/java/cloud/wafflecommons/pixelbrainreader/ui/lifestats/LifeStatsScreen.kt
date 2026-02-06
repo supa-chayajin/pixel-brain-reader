@@ -24,7 +24,14 @@ import com.patrykandpatrick.vico.core.component.shape.shader.DynamicShaders
 import com.patrykandpatrick.vico.core.entry.ChartEntryModelProducer
 import com.patrykandpatrick.vico.core.entry.FloatEntry
 import com.patrykandpatrick.vico.core.entry.entryModelOf
-import java.time.format.DateTimeFormatter
+import com.patrykandpatrick.vico.core.marker.Marker
+import com.patrykandpatrick.vico.core.component.text.textComponent
+import com.patrykandpatrick.vico.core.component.shape.ShapeComponent
+
+import com.patrykandpatrick.vico.core.component.marker.MarkerComponent
+import android.graphics.Typeface
+import com.patrykandpatrick.vico.core.dimensions.MutableDimensions
+import com.patrykandpatrick.vico.core.context.MeasureContext
 import java.time.format.TextStyle
 import java.util.Locale
 
@@ -184,6 +191,7 @@ fun LifeStatsScreen(
                         ),
                         model = model,
                         startAxis = rememberStartAxis(title = "BPM / Mood (x20)"),
+                        marker = rememberEmojiMarker(),
                         bottomAxis = rememberBottomAxis(
                             valueFormatter = { value, _ ->
                                 state.weeklyLabels[value] ?: ""
@@ -247,6 +255,7 @@ fun LifeStatsScreen(
                         ),
                         model = model,
                         startAxis = rememberStartAxis(),
+                        marker = rememberEmojiMarker(),
                         bottomAxis = rememberBottomAxis(
                             title = "Time",
                             valueFormatter = { value, _ ->
@@ -284,6 +293,43 @@ fun DashboardCard(
             )
             Spacer(modifier = Modifier.height(16.dp))
             content()
+        }
+    }
+}
+
+@Composable
+fun rememberEmojiMarker(): Marker {
+    val label = textComponent {
+        color = Color.Black.toArgb()
+        textSizeSp = 24f 
+        typeface = Typeface.DEFAULT
+    }
+
+    val indicator = ShapeComponent(
+        shape = Shapes.pillShape,
+        color = Color(0xFF9C27B0).toArgb() 
+    )
+
+    return remember(label, indicator) {
+        object : MarkerComponent(label, indicator, null) {
+            init {
+                labelFormatter = com.patrykandpatrick.vico.core.marker.MarkerLabelFormatter { markedEntries, _ ->
+                    val entry = markedEntries.firstOrNull()?.entry
+                    val y = entry?.y ?: 0f
+                    if (y >= 1f && y <= 5f) {
+                         when(Math.round(y)) {
+                            1 -> "😫"
+                            2 -> "😞"
+                            3 -> "😐"
+                            4 -> "🙂"
+                            5 -> "🤩"
+                            else -> String.format("%.1f", y)
+                        }
+                    } else {
+                        String.format("%.0f", y) 
+                    }
+                }
+            }
         }
     }
 }

@@ -118,7 +118,12 @@ class DailyDashboardRepository @Inject constructor(
 
     suspend fun addTask(date: LocalDate, label: String, time: LocalTime? = null, priority: Int = 1) = withContext(Dispatchers.IO) {
         ensureDashboard(date)
-        val task = DailyTaskEntity(date = date, label = label, scheduledTime = time, priority = priority)
+        val task = DailyTaskEntity(
+            scheduledDate = date.format(DateTimeFormatter.ISO_LOCAL_DATE), 
+            label = label, 
+            scheduledTime = time?.format(DateTimeFormatter.ofPattern("HH:mm")), 
+            priority = priority
+        )
         dashboardDao.insertTask(task)
     }
 
@@ -193,11 +198,11 @@ class DailyDashboardRepository @Inject constructor(
                         }
                         
                         tasks.add(DailyTaskEntity(
-                            date = date, 
+                            scheduledDate = date.format(DateTimeFormatter.ISO_LOCAL_DATE), 
                             label = finalLabel, 
                             isDone = isDone, 
                             priority = priority, 
-                            scheduledTime = scheduledTime
+                            scheduledTime = scheduledTime?.format(DateTimeFormatter.ofPattern("HH:mm"))
                         ))
                     }
                 }
