@@ -8,6 +8,7 @@ import cloud.wafflecommons.pixelbrainreader.data.model.HabitStatus
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyTaskEntity
 import cloud.wafflecommons.pixelbrainreader.data.repository.HabitRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.TaskRepository
+import cloud.wafflecommons.pixelbrainreader.data.remote.JGitProvider
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,7 +16,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import javax.inject.Inject
@@ -45,11 +49,21 @@ class LifeOSViewModel @Inject constructor(
     private val habitRepository: HabitRepository,
     private val taskRepository: TaskRepository,
     private val gamificationRepository: cloud.wafflecommons.pixelbrainreader.data.gamification.GamificationRepository,
-    private val grantXpUseCase: cloud.wafflecommons.pixelbrainreader.domain.gamification.GrantXpUseCase
+    private val grantXpUseCase: cloud.wafflecommons.pixelbrainreader.domain.gamification.GrantXpUseCase,
+    private val automateHabitsUseCase: cloud.wafflecommons.pixelbrainreader.domain.gamification.AutomateHabitsUseCase,
+    private val jGitProvider: JGitProvider
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(LifeOSUiState())
     val uiState: StateFlow<LifeOSUiState> = _uiState.asStateFlow()
+
+    val todayHabits: StateFlow<List<HabitWithStats>> = _uiState
+        .map { state -> state.habitsWithStats.filter { it.isScheduledToday } }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
 
     private var loadJob: kotlinx.coroutines.Job? = null
 
@@ -58,18 +72,43 @@ class LifeOSViewModel @Inject constructor(
     private val _xpEvents = MutableSharedFlow<cloud.wafflecommons.pixelbrainreader.data.gamification.XpGainEntry>()
     val xpEvents = _xpEvents.asSharedFlow()
 
+    private val _isSyncing = MutableStateFlow(false)
+    val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
+
     init {
-        // Initial load
-        observeData(LocalDate.now())
-        
-        // Gamification auto-load
-        viewModelScope.launch {
+        // Auto-Initialization & Gamification Auto-load
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            habitRepository.initialize()
+            // Bug 4 Fix: Health Connect Automation Trigger
+            try {
+                automateHabitsUseCase(LocalDate.now())
+            } catch (e: Exception) {
+                android.util.Log.e("LifeOSViewModel", "Failed to run habit automation", e)
+            }
             gamificationRepository.loadState()
         }
+        
+        // Initial load
+        observeData(LocalDate.now())
     }
 
     private val _reloadTrigger = MutableSharedFlow<Unit>()
     val reloadTrigger = _reloadTrigger.asSharedFlow()
+
+    fun forceSync() {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            _isSyncing.value = true
+            try {
+                jGitProvider.pull()
+                jGitProvider.push()
+                _reloadTrigger.emit(Unit)
+            } catch (e: Exception) {
+                android.util.Log.e("LifeOSViewModel", "Force sync failed", e)
+            } finally {
+                _isSyncing.value = false
+            }
+        }
+    }
 
     fun loadData(date: LocalDate) {
          if (date == _uiState.value.selectedDate && loadJob?.isActive == true) return
@@ -139,7 +178,8 @@ class LifeOSViewModel @Inject constructor(
                     }
                     
                     // Grouping
-                    val groupedHabits = habitsWithStats.groupBy { habitStat ->
+                    val todayHabitsList = habitsWithStats.filter { it.isScheduledToday }
+                    val groupedHabits = todayHabitsList.groupBy { habitStat ->
                         val parser = cloud.wafflecommons.pixelbrainreader.data.gamification.AttributeParser
                         val attr = parser.parse(habitStat.config.description)
                         // Group by Attribute Name or Tag if present, else fallback

@@ -2,9 +2,16 @@ package cloud.wafflecommons.pixelbrainreader.data.local.entity
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import androidx.room.Index
 import cloud.wafflecommons.pixelbrainreader.data.remote.model.GithubFileDto
 
-@Entity(tableName = "files")
+@Entity(
+    tableName = "files",
+    indices = [
+        Index(value = ["type", "isDirty"]),
+        Index(value = ["localModifiedTimestamp"])
+    ]
+)
 data class FileEntity(
     @PrimaryKey val path: String, // Path is unique to the file structure
     val name: String,

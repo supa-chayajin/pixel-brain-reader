@@ -50,6 +50,7 @@ class MainViewModel @Inject constructor(
     private val dataRefreshBus: cloud.wafflecommons.pixelbrainreader.data.utils.DataRefreshBus,
     private val widgetSnapshotManager: cloud.wafflecommons.pixelbrainreader.widget.manager.WidgetSnapshotManager,
     private val uiEffectManager: cloud.wafflecommons.pixelbrainreader.ui.utils.UiEffectManager,
+    private val gamificationRepository: cloud.wafflecommons.pixelbrainreader.data.gamification.GamificationRepository,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
     // Expose Theme Preference
@@ -419,10 +420,37 @@ class MainViewModel @Inject constructor(
     }
 
     fun onContentChanged(newContent: String) {
+        // Detect newly checked off Markdown Tasks
+        val oldContent = _uiState.value.unsavedContent ?: _uiState.value.selectedFileContent ?: ""
+        detectAndProcessTaskCompletion(oldContent, newContent)
+
         _uiState.value = _uiState.value.copy(
             unsavedContent = newContent,
             hasUnsavedChanges = true
         )
+    }
+
+    private fun detectAndProcessTaskCompletion(oldContent: String, newContent: String) {
+        val oldLines = oldContent.lines()
+        val newLines = newContent.lines()
+        
+        for (newLine in newLines) {
+            val trimmed = newLine.trimStart()
+            if (trimmed.startsWith("- [x]", ignoreCase = true)) {
+                val uncheckedVersion1 = newLine.replaceFirst("- [x]", "- [ ]", ignoreCase = true)
+                val uncheckedVersion2 = newLine.replaceFirst("- [X]", "- [ ]") 
+                
+                // If the old content had the unchecked version, but didn't have the checked version
+                if ((oldLines.contains(uncheckedVersion1) || oldLines.contains(uncheckedVersion2)) && !oldLines.contains(newLine)) {
+                    // Task was just checked off! Process XP.
+                    viewModelScope.launch {
+                        gamificationRepository.processTaskCompletion(newLine)
+                        // Show subtle feedback
+                        _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Quest Completed! ✨"))
+                    }
+                }
+            }
+        }
     }
 
     fun refreshCurrentFile() {

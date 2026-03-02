@@ -14,6 +14,11 @@ import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material3.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,10 +41,10 @@ fun HabitDashboardScreen(
     viewModel: LifeOSViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val todayHabits by viewModel.todayHabits.collectAsStateWithLifecycle()
+    val isSyncing by viewModel.isSyncing.collectAsStateWithLifecycle()
 
-    LaunchedEffect(Unit) {
-        viewModel.loadData(java.time.LocalDate.now())
-    }
+    val pullToRefreshState = rememberPullToRefreshState()
 
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
@@ -48,7 +53,7 @@ fun HabitDashboardScreen(
         topBar = {
             cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
                 title = "Habits",
-                subtitle = "${state.habitsWithStats.count { it.isCompletedToday }}/${state.habits.size} done today",
+                subtitle = "${todayHabits.count { it.isCompletedToday }}/${todayHabits.size} done today",
                 scrollBehavior = scrollBehavior,
                 actions = {
                     FilledTonalIconButton(
@@ -64,15 +69,33 @@ fun HabitDashboardScreen(
             )
         }
     ) { padding ->
-        if (state.habits.isEmpty()) {
-            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Text("No habits configured. Tap + to add one.")
-            }
-        } else {
-            androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
-                columns = androidx.compose.foundation.lazy.grid.GridCells.Adaptive(minSize = 155.dp),
-                modifier = Modifier.padding(padding),
-                contentPadding = PaddingValues(bottom = 80.dp),
+        PullToRefreshBox(
+            isRefreshing = isSyncing,
+            onRefresh = { viewModel.forceSync() },
+            state = pullToRefreshState,
+            modifier = Modifier.fillMaxSize().padding(padding)
+        ) {
+            if (state.isLoading) {
+                Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator()
+                        Spacer(Modifier.height(16.dp))
+                        Text("Loading habits from Vault...")
+                    }
+                }
+            } else if (state.habits.isEmpty()) {
+                Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), contentAlignment = Alignment.Center) {
+                    Text(
+                        text = "No habits configured.\nGo to Settings > Life OS Automations to set them up.",
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            } else {
+                androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+                    columns = androidx.compose.foundation.lazy.grid.GridCells.Adaptive(minSize = 155.dp),
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 80.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
@@ -86,39 +109,47 @@ fun HabitDashboardScreen(
                      }
                 }
 
-                // Iterate over Grouped Habits
-                state.groupedHabits.forEach { (category, habits) ->
-                    // Section Header (Full Width)
+                if (todayHabits.isEmpty()) {
                     item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
-                        cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 0) {
-                            Text(
-                                text = category,
-                                style = MaterialTheme.typography.titleLarge,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier
-                                    .padding(horizontal = 16.dp)
-                                    .padding(top = 16.dp, bottom = 8.dp)
-                            )
+                        Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                            Text("No habits scheduled for today. Enjoy your rest!", textAlign = TextAlign.Center)
                         }
                     }
+                } else {
+                    // Iterate over Grouped Habits
+                    state.groupedHabits.forEach { (category, habits) ->
+                        // Section Header (Full Width)
+                        item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                            cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 0) {
+                                Text(
+                                    text = category,
+                                    style = MaterialTheme.typography.titleLarge,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier
+                                        .padding(horizontal = 16.dp)
+                                        .padding(top = 16.dp, bottom = 8.dp)
+                                )
+                            }
+                        }
 
-                    // Habits in Category (Grid Layout)
-                    items(habits.size) { index ->
-                        val habitStats = habits[index]
-                        cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = index + 1) {
-                            HabitCard(
-                                habit = habitStats,
-                                onToggle = { viewModel.toggleHabit(habitStats.config.id) },
-                                onUpdateValue = { newVal -> viewModel.updateHabitValue(habitStats.config.id, newVal) }
-                            )
+                        // Habits in Category (Grid Layout)
+                        items(habits.size) { index ->
+                            val habitStats = habits[index]
+                            cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = index + 1) {
+                                HabitCard(
+                                    habit = habitStats,
+                                    onToggle = { viewModel.toggleHabit(habitStats.config.id) },
+                                    onUpdateValue = { newVal -> viewModel.updateHabitValue(habitStats.config.id, newVal) }
+                                )
+                            }
                         }
                     }
-                }
-                
-            }
-        }
-    }
-}
+                } // End of else
+            } // End of LazyVerticalGrid
+            } // End of else block
+        } // End of PullToRefreshBox
+    } // End of Scaffold content
+} // End of HabitDashboardScreen
 
 @Composable
 fun HabitStreakRow(habit: HabitWithStats) {

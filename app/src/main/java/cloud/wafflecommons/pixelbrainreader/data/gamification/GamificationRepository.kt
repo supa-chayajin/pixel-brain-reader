@@ -16,9 +16,17 @@ import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
+import cloud.wafflecommons.pixelbrainreader.data.gamification.Attribute
+import cloud.wafflecommons.pixelbrainreader.data.local.preferences.GamificationPreferences
+import cloud.wafflecommons.pixelbrainreader.domain.gamification.GrantXpUseCase
+import dagger.Lazy
+import kotlinx.coroutines.flow.first
+
 @Singleton
 class GamificationRepository @Inject constructor(
-    private val fileRepository: FileRepository
+    private val fileRepository: FileRepository,
+    private val gamificationPreferences: GamificationPreferences,
+    private val lazyGrantXpUseCase: Lazy<GrantXpUseCase>
 ) {
     private val _gamificationState = MutableStateFlow(GamificationState())
     val gamificationState: Flow<GamificationState> = _gamificationState.asStateFlow()
@@ -97,5 +105,55 @@ class GamificationRepository @Inject constructor(
                 Log.e("Gamification", "Error saving profile", e)
             }
         }
+    }
+
+    suspend fun processTaskCompletion(taskContent: String) {
+        val tags = extractTags(taskContent)
+        val tagMappings = gamificationPreferences.tagToStatMappingFlow.first()
+
+        tags.forEach { tag ->
+            val attribute = tagMappings[tag] ?: Attribute.VIG // Default to VIGOR if not found
+
+            updateState { state ->
+                val newAttributes = state.attributes.toMutableMap()
+                val currentAttrVal = newAttributes[attribute] ?: 0
+                newAttributes[attribute] = currentAttrVal + 1
+
+                val currentProfile = state.profile
+                var newXp = currentProfile.currentXp + 20.0 // 20 XP for task
+                var newLevel = currentProfile.level
+                var newXpTarget = currentProfile.xpToNextLevel
+
+                if (newXp >= newXpTarget) {
+                    newXp -= newXpTarget
+                    newLevel++
+                    newXpTarget = cloud.wafflecommons.pixelbrainreader.data.gamification.XpCalculator.getXpForNextLevel(newLevel)
+                }
+
+                val newProfile = currentProfile.copy(
+                    level = newLevel,
+                    currentXp = newXp,
+                    xpToNextLevel = newXpTarget
+                )
+
+                val historyEntry = cloud.wafflecommons.pixelbrainreader.data.gamification.XpGainEntry(
+                    timestamp = System.currentTimeMillis(),
+                    amount = 20.0,
+                    source = "Task Completed: $tag",
+                    attribute = attribute
+                )
+
+                state.copy(
+                    profile = newProfile,
+                    attributes = newAttributes,
+                    history = (state.history + historyEntry).takeLast(50)
+                )
+            }
+        }
+    }
+
+    private fun extractTags(content: String): List<String> {
+        val regex = Regex("#\\w+")
+        return regex.findAll(content).map { it.value }.toList()
     }
 }

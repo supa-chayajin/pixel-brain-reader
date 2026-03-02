@@ -118,6 +118,64 @@ class GrantXpUseCase @Inject constructor(
             )
         }
     }
+
+    suspend fun executeCustom(
+        attribute: Attribute,
+        xpBase: Double,
+        sourceId: String
+    ) {
+        if (xpBase < 0) return
+
+        gamificationRepository.updateState { state ->
+            val newAttributes = state.attributes.toMutableMap()
+            val currentAttrVal = newAttributes[attribute] ?: 0
+            newAttributes[attribute] = currentAttrVal + 1 // Custom stat bonus
+
+            val currentProfile = state.profile
+            var newXp = currentProfile.currentXp + xpBase
+            var newLevel = currentProfile.level
+            var newXpTarget = currentProfile.xpToNextLevel
+
+            if (newXp >= newXpTarget) {
+                newXp -= newXpTarget
+                newLevel++
+                newXpTarget = XpCalculator.getXpForNextLevel(newLevel)
+            }
+
+            val bestAttr = newAttributes.maxByOrNull { it.value }?.key
+            val newClass = when(bestAttr) {
+                Attribute.VIG -> CharacterClass.WARRIOR
+                Attribute.MND -> CharacterClass.MAGE
+                Attribute.INT -> CharacterClass.MAGE 
+                Attribute.FTH -> CharacterClass.CLERIC
+                Attribute.SOC -> CharacterClass.BARD
+                Attribute.CRE -> CharacterClass.BARD
+                else -> if (newLevel > 1) CharacterClass.WARRIOR else CharacterClass.PEASANT
+            }
+
+            val newProfile = currentProfile.copy(
+                level = newLevel,
+                currentXp = newXp,
+                xpToNextLevel = newXpTarget,
+                characterClass = newClass,
+                avatarResName = getAvatarForClass(newClass)
+            )
+
+            val historyEntry = XpGainEntry(
+                timestamp = System.currentTimeMillis(),
+                amount = xpBase,
+                source = sourceId,
+                attribute = attribute
+            )
+
+            state.copy(
+                profile = newProfile,
+                attributes = newAttributes,
+                history = (state.history + historyEntry).takeLast(50)
+            )
+        }
+    }
+
     
     private fun getAvatarForClass(cls: CharacterClass): String {
         return when(cls) {

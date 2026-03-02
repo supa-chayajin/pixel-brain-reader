@@ -33,6 +33,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
@@ -128,6 +129,31 @@ fun MorningBriefingSection(
                              modifier = Modifier.padding(vertical = 12.dp),
                              color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
                          )
+
+                        // [NEW] Oracle Insight
+                        if (state.oracleInsight != null) {
+                            Column(Modifier.padding(bottom = 12.dp)) {
+                                Text(
+                                    text = "✨ The Oracle",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.padding(bottom = 8.dp)
+                                )
+                                Text(
+                                    text = state.oracleInsight,
+                                    style = MaterialTheme.typography.bodyLarge.copy(
+                                        fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
+                                        fontWeight = FontWeight.Medium,
+                                        lineHeight = 24.sp
+                                    ),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            HorizontalDivider(
+                                modifier = Modifier.padding(vertical = 12.dp),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
+                            )
+                        }
 
                         // 5. Neural Briefing (News Cards)
                         if (state.news.isNotEmpty()) {
@@ -446,7 +472,7 @@ private fun MoodSparkline(trend: List<cloud.wafflecommons.pixelbrainreader.ui.da
 
 @Composable
 private fun BriefingSkeleton() {
-    Column {
+    Column(modifier = Modifier.padding(top = 16.dp)) {
         SkeletonBox(width = 200.dp, height = 24.dp) // Simulated Weather
         Spacer(modifier = Modifier.height(16.dp))
         SkeletonBox(width = 120.dp, height = 16.dp) // Label
@@ -454,6 +480,15 @@ private fun BriefingSkeleton() {
         SkeletonBox(width = 280.dp, height = 40.dp) // Sparkline
         Spacer(modifier = Modifier.height(16.dp))
         SkeletonBox(width = 250.dp, height = 16.dp) // Quote
+        
+        Spacer(modifier = Modifier.height(24.dp))
+        Text(
+            text = "✨ Génération de l'Oracle en cours...",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        SkeletonBox(width = 300.dp, height = 60.dp)
     }
 }
 

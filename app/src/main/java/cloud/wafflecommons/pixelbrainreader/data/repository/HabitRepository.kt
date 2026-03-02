@@ -5,6 +5,7 @@ import cloud.wafflecommons.pixelbrainreader.data.model.HabitConfig
 import cloud.wafflecommons.pixelbrainreader.data.model.HabitLogEntry
 import cloud.wafflecommons.pixelbrainreader.data.model.HabitStatus
 import cloud.wafflecommons.pixelbrainreader.data.model.HabitType
+import androidx.room.withTransaction
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.HabitDao
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.HabitConfigEntity
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.HabitLogEntity
@@ -22,6 +23,10 @@ import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import javax.inject.Inject
 import javax.inject.Singleton
+import com.google.gson.Gson
+import com.google.gson.GsonBuilder
+import com.google.gson.JsonSyntaxException
+import com.google.gson.reflect.TypeToken
 
 @Singleton
 class HabitRepository @Inject constructor(
@@ -36,9 +41,19 @@ class HabitRepository @Inject constructor(
         encodeDefaults = true 
         prettyPrint = true
     }
+    private val gson: Gson = GsonBuilder().setPrettyPrinting().create()
     private val habitMutex = Mutex()
     private val habitsDir = "10_Journal/data/habits"
-    private val configFile = "$habitsDir/config.json"
+    private val configFile = "10_Journal/data/habits/config.json"
+
+    // --- Auto-Initialization ---
+    
+    suspend fun initialize() = withContext(Dispatchers.IO) {
+        val configs = habitDao.getAllConfigs()
+        if (configs.isEmpty()) {
+            importConfigFromJson()
+        }
+    }
 
     // --- SSOT: DB Flows ---
 
@@ -67,7 +82,11 @@ class HabitRepository @Inject constructor(
         val targetValue: Double = 0.0,
         val unit: String = "",
         val color: String = "#FF5722",
-        val autoSource: String? = null
+        val icon: String = "check_circle",
+        val autoSource: String? = null,
+        val createdDate: String = "",
+        val archived: Boolean = false,
+        val sortOrder: Int = 0
     )
     
     @Serializable
@@ -88,45 +107,12 @@ class HabitRepository @Inject constructor(
         }
         
         // Atomic Transaction for Data Consistency
-        database.runInTransaction {
+        database.withTransaction {
             try {
-                // Step A: Check Config Existence First (Defensive)
-                val configFileObj = java.io.File(root, "config.json")
-                Log.d("PBR_SYNC", "Checking for config at: ${configFileObj.absolutePath}")
-                
-                if (!configFileObj.exists()) {
-                     Log.e("PBR_SYNC", "CRITICAL: config.json missing in ${root.absolutePath}. Aborting sync to preserve data.")
-                     return@runInTransaction
-                }
-                
-                // Step B: Clear State (Only safe now)
-                habitDao.deleteAllConfigsBlocking()
-                habitDao.deleteAllLogsBlocking()
-                
-                // Step C: Sync Config
-                val configContent = configFileObj.readText()
-                if (configContent.isNotBlank()) {
-                     val configs: List<HabitConfigDto> = jsonParser.decodeFromString(configContent)
-                     configs.forEach { config ->
-                         habitDao.insertConfigBlocking(
-                             HabitConfigEntity(
-                                 id = config.id,
-                                 title = config.title,
-                                 description = config.description,
-                                 frequency = config.frequency.joinToString(","),
-                                 targetValue = config.targetValue,
-                                 unit = config.unit,
-                                 type = config.type,
-                                 color = config.color,
-                                 autoSource = config.autoSource
-                             )
-                         )
-                     }
-                     Log.d("PBR_SYNC", "Parsed ${configs.size} definitions from config.json")
-                }
+                // Call the new import function
+                importConfigFromJson()
 
-                // Step C: Sync Logs (Targeting current year log file primarily, or all?)
-                // Prompt: "Parse log_2026.json" (or Year). We'll walk all log_*.json to be safe/complete.
+                // Sync Logs
                 var logsCount = 0
                 root.walk().filter { it.isFile && it.name.startsWith("log_") && it.name.endsWith(".json") }.forEach { file ->
                     try {
@@ -159,6 +145,78 @@ class HabitRepository @Inject constructor(
                 Log.e("HabitSync", "Transaction Failed", e)
                 throw e // Rollback
             }
+        }
+    }
+
+    suspend fun importConfigFromJson() = withContext(Dispatchers.IO) {
+        try {
+            val content = fileRepository.readFile(configFile)
+            if (content.isNullOrBlank()) return@withContext
+
+            val type = object : TypeToken<List<HabitConfigDto>>() {}.type
+            val configs: List<HabitConfigDto> = gson.fromJson(content, type)
+
+            database.withTransaction {
+                habitDao.deleteAllConfigsBlocking()
+                configs.forEach { config ->
+                    habitDao.insertConfigBlocking(
+                        HabitConfigEntity(
+                            id = config.id,
+                            title = config.title,
+                            description = config.description,
+                            frequency = config.frequency,
+                            targetValue = config.targetValue,
+                            unit = config.unit,
+                            type = config.type,
+                            color = config.color,
+                            icon = config.icon,
+                            autoSource = config.autoSource,
+                            createdDate = config.createdDate,
+                            archived = config.archived,
+                            sortOrder = config.sortOrder
+                        )
+                    )
+                }
+            }
+            Log.d("HabitRepository", "Successfully imported configs from JSON.")
+        } catch (e: JsonSyntaxException) {
+            Log.e("HabitRepository", "JSON Syntax Error in habit config", e)
+        } catch (e: Exception) {
+            Log.e("HabitRepository", "Error importing config", e)
+        }
+    }
+
+    suspend fun exportConfigToJson() = withContext(Dispatchers.IO) {
+        try {
+            fileRepository.createLocalFolder(habitsDir)
+
+            val entities = habitDao.getAllConfigs()
+            val activeEntities = entities.filter { !it.archived }
+            
+            val dtos = activeEntities.map { entity ->
+                HabitConfigDto(
+                    id = entity.id,
+                    title = entity.title,
+                    description = entity.description,
+                    frequency = entity.frequency,
+                    type = entity.type,
+                    targetValue = entity.targetValue,
+                    unit = entity.unit,
+                    color = entity.color,
+                    icon = entity.icon,
+                    autoSource = entity.autoSource,
+                    createdDate = entity.createdDate,
+                    archived = entity.archived,
+                    sortOrder = entity.sortOrder
+                )
+            }
+
+            val jsonOutput = gson.toJson(dtos)
+            fileRepository.saveFileLocally(configFile, jsonOutput)
+            Log.d("HabitRepository", "Exported configs to JSON successfully")
+
+        } catch (e: Exception) {
+            Log.e("HabitRepository", "Error exporting config to JSON", e)
         }
     }
 
@@ -223,36 +281,9 @@ class HabitRepository @Inject constructor(
 
     suspend fun addHabitConfig(config: HabitConfig) = habitMutex.withLock {
         withContext(Dispatchers.IO) {
-            // Read Config File
-            val currentContent = fileRepository.readFile(configFile)
-            val currentConfigs: MutableList<HabitConfigDto> = try {
-                 if (currentContent != null && currentContent.isNotBlank()) {
-                    jsonParser.decodeFromString(currentContent)
-                 } else mutableListOf()
-            } catch(e: Exception) { mutableListOf() }
-            
-            if (currentConfigs.none { it.id == config.id }) {
-                currentConfigs.add(
-                    HabitConfigDto(
-                        id = config.id,
-                        title = config.title,
-                        description = config.description,
-                        frequency = config.frequency,
-                        type = config.type.name,
-                        targetValue = config.targetValue,
-                        unit = config.unit,
-                        color = config.color,
-                        autoSource = config.autoSource
-                    )
-                )
-                val json = jsonParser.encodeToString(currentConfigs)
-                
-                fileRepository.createLocalFolder(habitsDir)
-                fileRepository.saveFileLocally(configFile, json)
-                
-                // Update DB
-                habitDao.insertConfig(mapConfigToEntity(config))
-            }
+            val entity = mapConfigToEntity(config)
+            habitDao.insertConfig(entity)
+            exportConfigToJson() // Instantly sync changes to JSON vault
         }
     }
 
@@ -263,12 +294,16 @@ class HabitRepository @Inject constructor(
             id = domain.id,
             title = domain.title,
             description = domain.description,
-            frequency = domain.frequency.joinToString(","),
+            frequency = domain.frequency, // List<String> natively supported with converters
             targetValue = domain.targetValue,
             unit = domain.unit,
             type = domain.type.name,
             color = domain.color,
-            autoSource = domain.autoSource
+            icon = domain.icon,
+            autoSource = domain.autoSource,
+            createdDate = domain.createdDate,
+            archived = domain.archived,
+            sortOrder = domain.sortOrder
         )
     }
 
@@ -277,12 +312,16 @@ class HabitRepository @Inject constructor(
             id = entity.id,
             title = entity.title,
             description = entity.description,
-            frequency = if (entity.frequency.isBlank()) emptyList() else entity.frequency.split(","),
+            frequency = entity.frequency, // List<String>
             targetValue = entity.targetValue,
             unit = entity.unit,
             type = try { HabitType.valueOf(entity.type) } catch (e: Exception) { HabitType.BOOLEAN },
             color = entity.color,
-            autoSource = entity.autoSource
+            icon = entity.icon,
+            autoSource = entity.autoSource,
+            createdDate = entity.createdDate,
+            archived = entity.archived,
+            sortOrder = entity.sortOrder
         )
     }
 

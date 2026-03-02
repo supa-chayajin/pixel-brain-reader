@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.HabitConfigEntity
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.HabitLogEntity
 import kotlinx.coroutines.flow.Flow
@@ -42,4 +43,19 @@ interface HabitDao {
     
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertLogsBlocking(logs: List<HabitLogEntity>)
+
+    // --- Transactions (Reactivity Safety) ---
+    // Emitting a flow relies on db signals. A transaction groups those signals so the flow only emits once.
+    // This prevents deleting all and then inserting from triggering an empty list state in the UI.
+    @Transaction
+    suspend fun replaceAllConfigs(configs: List<HabitConfigEntity>) {
+        deleteAllConfigsBlocking()
+        configs.forEach { insertConfigBlocking(it) }
+    }
+
+    @Transaction
+    suspend fun replaceAllLogs(logs: List<HabitLogEntity>) {
+        deleteAllLogsBlocking()
+        insertLogsBlocking(logs)
+    }
 }

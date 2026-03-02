@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import cloud.wafflecommons.pixelbrainreader.data.health.DailyHealthMetrics
 import cloud.wafflecommons.pixelbrainreader.data.repository.WeatherData
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -27,6 +28,7 @@ fun DailyNoteHeader(
     emoji: String?,
     lastUpdate: String?,
     topDailyTags: List<String>,
+    healthMetrics: DailyHealthMetrics? = null,
     oracleInsight: String? = null,
     isOracleExpanded: Boolean = true,
     onToggleOracle: () -> Unit = {},
@@ -93,6 +95,44 @@ fun DailyNoteHeader(
                                     modifier = Modifier.height(26.dp)
                                 )
                             }
+                        }
+                    }
+                }
+            }
+
+            AnimatedVisibility(visible = healthMetrics != null) {
+                Column {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (healthMetrics != null) {
+                            Text(
+                                text = "👟 ${String.format("%,d", healthMetrics.steps)} steps",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            
+                            Text(
+                                text = "•",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+
+                            val hours = healthMetrics.sleepDurationMinutes / 60
+                            val minutes = healthMetrics.sleepDurationMinutes % 60
+                            Text(
+                                text = "🌙 ${hours}h ${minutes}m",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.SemiBold
+                            )
                         }
                     }
                 }
