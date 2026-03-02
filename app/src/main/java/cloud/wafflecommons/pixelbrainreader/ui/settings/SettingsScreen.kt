@@ -12,9 +12,12 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Psychology
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.*
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,9 +41,11 @@ import androidx.health.connect.client.permission.HealthPermission
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
+    onNavigateToHabitConfig: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val moodEmojiMapping by viewModel.moodEmojiMapping.collectAsState()
     val scrollState = rememberScrollState()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
@@ -68,6 +73,7 @@ fun SettingsScreen(
     }
 
 
+    val coroutineScope = rememberCoroutineScope()
     
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -202,6 +208,63 @@ fun SettingsScreen(
                                     }
                                 )
                             }
+                        )
+                    }
+                }
+            }
+
+            // 3. Life OS & Gamification
+            SettingsSection(
+                title = "Life OS Automations",
+                icon = Icons.AutoMirrored.Filled.List
+            ) {
+                ListItem(
+                    modifier = Modifier.clickable { onNavigateToHabitConfig() },
+                    headlineContent = { Text("Manage Habits & Automations") },
+                    leadingContent = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) }
+                )
+                
+                Spacer(Modifier.height(8.dp))
+                
+                OutlinedButton(
+                    onClick = {
+                        viewModel.forceSyncHabits {
+                            coroutineScope.launch {
+                                snackbarHostState.showSnackbar("Habits synchronized with Vault configuration")
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Sync, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Force Sync Habits from Vault JSON", color = MaterialTheme.colorScheme.error)
+                }
+
+                Spacer(Modifier.height(16.dp))
+
+                // Mood Emoji Mapping
+                Text("Mood Emoji Configuration", style = MaterialTheme.typography.titleSmall)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    (1..5).forEach { score ->
+                        val currentEmoji = moodEmojiMapping[score] ?: ""
+                        OutlinedTextField(
+                            value = currentEmoji,
+                            onValueChange = { newVal ->
+                                // Limit to 2 characters to generally restrict to one emoji/cluster
+                                if (newVal.length <= 2) {
+                                    viewModel.updateMoodEmoji(score, newVal)
+                                }
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(horizontal = 4.dp),
+                            singleLine = true,
+                            label = { Text("$score") },
+                            textStyle = androidx.compose.ui.text.TextStyle(textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                         )
                     }
                 }

@@ -26,6 +26,7 @@ import cloud.wafflecommons.pixelbrainreader.R
 @Composable
 fun HeroCard(
     state: GamificationState,
+    isHealthSynergyActive: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -95,6 +96,31 @@ fun HeroCard(
                 AttributeRow(Attribute.VIG, state.attributes[Attribute.VIG] ?: 0)
                 AttributeRow(Attribute.MND, state.attributes[Attribute.MND] ?: 0)
                 AttributeRow(Attribute.SOC, state.attributes[Attribute.SOC] ?: 0)
+            }
+        }
+        
+        // Active Buffs Section
+        if (isHealthSynergyActive) {
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = androidx.compose.material.icons.Icons.Default.Face,
+                    contentDescription = "Buff Active",
+                    tint = Color(0xFF4CAF50),
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Endurance Buff Active (+50 XP)",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color(0xFF4CAF50),
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
     }

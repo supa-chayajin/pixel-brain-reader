@@ -44,6 +44,11 @@ import cloud.wafflecommons.pixelbrainreader.data.local.entity.ScratchNoteEntity
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import androidx.compose.ui.unit.sp
+import cloud.wafflecommons.pixelbrainreader.ui.components.CortexExpandableFAB
+import cloud.wafflecommons.pixelbrainreader.ui.components.FabActionItem
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.interaction.MutableInteractionSource
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,6 +71,7 @@ fun DailyNoteScreen(
     var showAddTimelineDialog by remember { mutableStateOf(false) }
     var showAddTaskDialog by remember { mutableStateOf(false) }
     var showQuickCaptureSheet by remember { mutableStateOf(false) }
+    var fabExpanded by remember { mutableStateOf(false) }
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -150,34 +156,41 @@ fun DailyNoteScreen(
             )
         },
         floatingActionButton = {
-            Column(
-                horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                SmallFloatingActionButton(
-                    onClick = onCheckInClicked,
-                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer
-                ) {
-                    Icon(Icons.Default.Mood, contentDescription = "Mood")
+            val fabItems = listOf(
+                FabActionItem(icon = Icons.Default.Mood, label = "Mood Check-in") {
+                    fabExpanded = false
+                    onCheckInClicked()
+                },
+                FabActionItem(icon = Icons.Default.AddCircle, label = "Timeline Item") {
+                    fabExpanded = false
+                    showAddTimelineDialog = true
+                },
+                FabActionItem(icon = Icons.Default.CheckCircle, label = "Fast Task") {
+                    fabExpanded = false
+                    showAddTaskDialog = true
+                },
+                FabActionItem(icon = Icons.Default.Lightbulb, label = "Scratchpad") {
+                    fabExpanded = false
+                    showQuickCaptureSheet = true
                 }
+            )
 
-                ExtendedFloatingActionButton(
-                    onClick = { showQuickCaptureSheet = true },
-                    icon = { Icon(Icons.Default.Lightbulb, "Quick Capture") },
-                    text = { Text("Scratchpad") }
-                )
-            }
+            CortexExpandableFAB(
+                expanded = fabExpanded,
+                onExpandedChange = { fabExpanded = it },
+                items = fabItems
+            )
         }
     ) { padding ->
-        BoxWithConstraints(
-            modifier = Modifier
-                .padding(padding)
-                .consumeWindowInsets(padding)
-                .imePadding()
-                .fillMaxSize()
-        ) {
-            val isWide = maxWidth > 600.dp
+        Box(modifier = Modifier.fillMaxSize()) {
+            BoxWithConstraints(
+                modifier = Modifier
+                    .padding(padding)
+                    .consumeWindowInsets(padding)
+                    .imePadding()
+                    .fillMaxSize()
+            ) {
+                val isWide = maxWidth > 600.dp
 
             if (state.isLoading && state.timelineEvents.isEmpty() && state.dailyTasks.isEmpty()) {
                  DailyNoteSkeleton()
@@ -198,6 +211,7 @@ fun DailyNoteScreen(
                                 emoji = moodData?.summary?.mainEmoji,
                                 lastUpdate = lastUpdate,
                                 topDailyTags = state.topDailyTags,
+                                healthMetrics = state.healthMetrics,
                                 oracleInsight = oracleInsight,
                                 isOracleExpanded = isOracleExpanded,
                                 onToggleOracle = viewModel::toggleOracleExpanded
@@ -211,6 +225,7 @@ fun DailyNoteScreen(
                             cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 1) {
                                 cloud.wafflecommons.pixelbrainreader.ui.gamification.HeroCard(
                                     state = gamificationState!!,
+                                    isHealthSynergyActive = false, // Handled via LifeStatsScreen if placed there, or we can pipe from LifeStatsViewModel
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(vertical = 8.dp)
@@ -270,14 +285,14 @@ fun DailyNoteScreen(
                                 ) {
                                     // Left Column: Timeline
                                     Column(modifier = Modifier.weight(0.4f)) {
-                                        TimelineHeader(onAdd = { showAddTimelineDialog = true })
+                                        TimelineHeader()
                                         Spacer(Modifier.height(8.dp))
                                         TimelineList(state.timelineEvents)
                                     }
 
                                     // Right Column: Journal + Second Brain
                                     Column(modifier = Modifier.weight(0.6f)) {
-                                        JournalHeader(onAdd = { showAddTaskDialog = true })
+                                        JournalHeader()
                                         Spacer(Modifier.height(8.dp))
                                         TaskList(state.dailyTasks, onToggle = { id, done -> viewModel.toggleTask(id, done) })
                                     }
@@ -285,10 +300,9 @@ fun DailyNoteScreen(
                             }
                         }
                     } else {
-                        // Mobile Layout: Sequential
                         // 5. Timeline Header (Static)
                         item {
-                            TimelineHeader(onAdd = { showAddTimelineDialog = true })
+                            TimelineHeader()
                             Spacer(Modifier.height(8.dp))
                         }
                         
@@ -301,7 +315,7 @@ fun DailyNoteScreen(
 
                         // 6. Journal Header (Static)
                         item {
-                            JournalHeader(onAdd = { showAddTaskDialog = true })
+                            JournalHeader()
                             Spacer(Modifier.height(8.dp))
                         }
 
@@ -339,7 +353,26 @@ fun DailyNoteScreen(
                     }
                 }
             }
+            
+            // Backdrop Overlay
+            AnimatedVisibility(
+                visible = fabExpanded,
+                enter = fadeIn(),
+                exit = fadeOut(),
+                modifier = Modifier.padding(padding)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.4f))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) { fabExpanded = false }
+                )
+            }
         }
+    }
     }
 
     if (showAddTimelineDialog) {
@@ -456,7 +489,7 @@ private fun SecondBrainSection(
 }
 
 @Composable
-private fun TimelineHeader(onAdd: () -> Unit, modifier: Modifier = Modifier) {
+private fun TimelineHeader(modifier: Modifier = Modifier) {
     Row(
         modifier = modifier.fillMaxWidth().padding(horizontal = 4.dp), /* Added padding just in case */
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -469,18 +502,11 @@ private fun TimelineHeader(onAdd: () -> Unit, modifier: Modifier = Modifier) {
             fontWeight = FontWeight.Bold,
             modifier = Modifier.weight(1f) // Fix for Folded Mode
         )
-        IconButton(onClick = onAdd) {
-            Icon(
-                Icons.Default.AddCircle,
-                contentDescription = "Add Event",
-                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
-            )
-        }
     }
 }
 
 @Composable
-private fun JournalHeader(onAdd: () -> Unit, modifier: Modifier = Modifier) {
+private fun JournalHeader(modifier: Modifier = Modifier) {
     Row(
         modifier = modifier.fillMaxWidth().padding(horizontal = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -493,13 +519,6 @@ private fun JournalHeader(onAdd: () -> Unit, modifier: Modifier = Modifier) {
             fontWeight = FontWeight.Bold,
             modifier = Modifier.weight(1f) // Fix for Folded Mode
         )
-        IconButton(onClick = onAdd) {
-            Icon(
-                Icons.Default.AddCircle,
-                contentDescription = "Add Task",
-                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
-            )
-        }
     }
 }
 

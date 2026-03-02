@@ -793,9 +793,16 @@ fun MainScreen(
 
             composable(Screen.Settings) {
                 SettingsScreen(
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
+                    onNavigateToHabitConfig = { navController.navigate("habit_config") }
                 )
-                    }
+            }
+
+            composable("habit_config") {
+                cloud.wafflecommons.pixelbrainreader.ui.settings.HabitConfigScreen(
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
 
 
             composable(Screen.MoodTracker) {

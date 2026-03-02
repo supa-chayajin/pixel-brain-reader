@@ -24,7 +24,7 @@ object DatabaseModule {
             "pixel_brain_db"
         )
         // .openHelperFactory(...) // Logic for SQLCipher Phase A
-        .fallbackToDestructiveMigration(true) // Default for development, Refined for Prod
+        .fallbackToDestructiveMigration() // Default for development, Refined for Prod
         .build()
     }
 

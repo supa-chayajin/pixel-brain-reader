@@ -17,6 +17,9 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
+import cloud.wafflecommons.pixelbrainreader.data.local.preferences.GamificationPreferences
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -28,7 +31,9 @@ class SettingsViewModel @Inject constructor(
     private val vectorSearchEngine: cloud.wafflecommons.pixelbrainreader.data.ai.VectorSearchEngine,
     private val geminiRagManager: cloud.wafflecommons.pixelbrainreader.data.ai.GeminiRagManager,
     private val healthConnectManager: cloud.wafflecommons.pixelbrainreader.data.health.HealthConnectManager,
-    private val syncHealthDataUseCase: cloud.wafflecommons.pixelbrainreader.data.usecase.SyncHealthDataUseCase
+    private val syncHealthDataUseCase: cloud.wafflecommons.pixelbrainreader.data.usecase.SyncHealthDataUseCase,
+    private val habitRepository: cloud.wafflecommons.pixelbrainreader.data.repository.HabitRepository,
+    private val gamificationPrefs: GamificationPreferences
 ) : ViewModel() {
 
     data class SettingsUiState(
@@ -49,6 +54,13 @@ class SettingsViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
+
+    val moodEmojiMapping: StateFlow<Map<Int, String>> = gamificationPrefs.moodEmojiMappingFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = mapOf(1 to "😭", 2 to "😕", 3 to "😐", 4 to "🙂", 5 to "🤩")
+        )
 
     init {
         loadRepoInfo()
@@ -144,6 +156,23 @@ class SettingsViewModel @Inject constructor(
     fun syncHealthData() {
         viewModelScope.launch {
              syncHealthDataUseCase()
+        }
+    }
+
+    fun forceSyncHabits(onComplete: () -> Unit) {
+        viewModelScope.launch {
+            habitRepository.importConfigFromJson()
+            onComplete()
+        }
+    }
+
+    fun updateMoodEmoji(score: Int, emoji: String) {
+        if (emoji.isBlank()) return
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val currentMap = moodEmojiMapping.value.toMutableMap()
+            // Just take the first character/grapheme cluster if possible, but for simplicity assuming a single emoji string
+            currentMap[score] = emoji.trim()
+            gamificationPrefs.setMoodEmojiMapping(currentMap)
         }
     }
 }

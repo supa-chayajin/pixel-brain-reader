@@ -31,7 +31,8 @@ data class MoodState(
 
 @HiltViewModel
 class MoodViewModel @Inject constructor(
-    private val moodRepository: MoodRepository
+    private val moodRepository: MoodRepository,
+    private val noteRepository: cloud.wafflecommons.pixelbrainreader.data.repository.NoteRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(MoodState())
@@ -112,8 +113,26 @@ class MoodViewModel @Inject constructor(
                     activities = activities,
                     note = note.ifBlank { null }
                 )
-                // Use the date from the timestamp, not necessarily the selected UI date
-                moodRepository.addEntry(timestamp.toLocalDate(), entry)
+                val targetDate = timestamp.toLocalDate()
+                
+                // 1. Insert into Room Database (SSOT for fast queries)
+                moodRepository.addEntry(targetDate, entry)
+                
+                // 2. Dual-Sync: Write to Markdown Frontmatter
+                try {
+                    val path = "10_Journal/diary/${targetDate.format(DateTimeFormatter.ISO_LOCAL_DATE)}.md"
+                    noteRepository.updateNoteMetadata(
+                        path = path,
+                        updates = mapOf(
+                            "mood_score" to score,
+                            "mood_emoji" to label
+                        )
+                    )
+                } catch (e: Exception) {
+                    Log.e("MoodViewModel", "Failed to sync mood to markdown frontmatter", e)
+                    // We don't throw here, DB entry was successful.
+                }
+
                 _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Mood Saved & Synced ✅"))
                 _uiState.update { it.copy(isLoading = false) }
             } catch (e: Exception) {

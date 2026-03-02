@@ -31,6 +31,7 @@ googleAiClient = "0.9.0"
 connectClient = "1.1.0"
 vico = "1.13.0"
 remoteCreationCore = "1.0.0-alpha03"
+healthConnect = "1.1.0-alpha07"
 
 
 [libraries]
@@ -110,7 +111,7 @@ vico-core = { group = "com.patrykandpatrick.vico", name = "core", version.ref = 
 vico-views = { group = "com.patrykandpatrick.vico", name = "views", version.ref = "vico" }
 konfetti-compose = { group = "nl.dionsegijn", name = "konfetti-compose", version = "2.0.4" }
 androidx-compose-remote-creation-core = { group = "androidx.compose.remote", name = "remote-creation-core", version.ref = "remoteCreationCore" }
-
+androidx-health-connect = { group = "androidx.health.connect", name = "connect-client", version.ref = "healthConnect" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

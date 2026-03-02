@@ -35,7 +35,7 @@ import cloud.wafflecommons.pixelbrainreader.data.local.dao.NewsDao
     version = 19, // Incremented version
     exportSchema = false
 )
-@androidx.room.TypeConverters(Converters::class)
+@androidx.room.TypeConverters(RoomTypeConverters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun fileDao(): FileDao
     abstract fun metadataDao(): SyncMetadataDao
@@ -49,41 +49,4 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun dailyBriefingDao(): cloud.wafflecommons.pixelbrainreader.data.local.dao.DailyBriefingDao
     abstract fun gratitudeDao(): cloud.wafflecommons.pixelbrainreader.data.local.dao.GratitudeDao
     abstract fun taskDao(): cloud.wafflecommons.pixelbrainreader.data.local.dao.TaskDao
-}
-
-class Converters {
-    private val formatter = java.time.format.DateTimeFormatter.ISO_LOCAL_DATE
-    private val timeFormatter = java.time.format.DateTimeFormatter.ISO_LOCAL_TIME
-
-    @androidx.room.TypeConverter
-    fun fromLocalDate(value: java.time.LocalDate?): String? {
-        return value?.format(formatter)
-    }
-
-    @androidx.room.TypeConverter
-    fun toLocalDate(value: String?): java.time.LocalDate? {
-        return if (value.isNullOrEmpty()) null else java.time.LocalDate.parse(value, formatter)
-    }
-
-    @androidx.room.TypeConverter
-    fun fromLocalTime(value: java.time.LocalTime?): String? {
-        return value?.format(timeFormatter)
-    }
-
-    @androidx.room.TypeConverter
-    fun toLocalTime(value: String?): java.time.LocalTime? {
-        return if (value.isNullOrEmpty()) null else java.time.LocalTime.parse(value, timeFormatter)
-    }
-
-    @androidx.room.TypeConverter
-    fun fromFloatList(value: List<Float>?): String? {
-        if (value == null) return null
-        return value.joinToString(",")
-    }
-
-    @androidx.room.TypeConverter
-    fun toFloatList(value: String?): List<Float>? {
-        if (value == null || value.isEmpty()) return null
-        return value.split(",").mapNotNull { it.toFloatOrNull() }
-    }
 }

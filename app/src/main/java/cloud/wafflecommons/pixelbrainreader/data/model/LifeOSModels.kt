@@ -17,7 +17,10 @@ data class HabitConfig(
     val type: HabitType = HabitType.BOOLEAN,
     val targetValue: Double = 0.0,
     val unit: String = "",
-    val autoSource: String? = null
+    val autoSource: String? = null,
+    val createdDate: String = "",
+    val archived: Boolean = false,
+    val sortOrder: Int = 0
 )
 
 @Immutable

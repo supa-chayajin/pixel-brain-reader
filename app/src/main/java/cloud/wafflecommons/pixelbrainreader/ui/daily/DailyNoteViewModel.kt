@@ -23,6 +23,7 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
+import java.io.File
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -31,6 +32,7 @@ import javax.inject.Inject
 data class DailyNoteState(
     val date: LocalDate = LocalDate.now(),
     val moodData: DailyMoodData? = null,
+    val healthMetrics: cloud.wafflecommons.pixelbrainreader.data.health.DailyHealthMetrics? = null,
     
     // Core Dashboard Content (Room)
     val mantra: String = "Stay safe friend, and don't your dare go hollow!",
@@ -68,6 +70,7 @@ data class MorningBriefingUiState(
     val quoteAuthor: String = "",
     val weatherAdvice: String = "",
     val news: List<cloud.wafflecommons.pixelbrainreader.data.local.entity.NewsArticleEntity> = emptyList(),
+    val oracleInsight: String? = null,
     val isExpanded: Boolean = true,
     val isLoading: Boolean = true
 )
@@ -81,6 +84,7 @@ class DailyNoteViewModel @Inject constructor(
     private val weatherRepository: WeatherRepository,
     private val secretManager: SecretManager,
     private val dashboardRepository: DailyDashboardRepository,
+    @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context,
     private val scratchRepository: ScratchRepository,
     private val userPrefs: cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository,
     private val dataRefreshBus: cloud.wafflecommons.pixelbrainreader.data.utils.DataRefreshBus,
@@ -170,6 +174,7 @@ class DailyNoteViewModel @Inject constructor(
                          current.copy(
                              briefingState = current.briefingState.copy(
                                  weatherAdvice = model.briefing,
+                                 oracleInsight = model.oracleInsight,
                                  isLoading = false
                              )
                          )
@@ -260,9 +265,20 @@ class DailyNoteViewModel @Inject constructor(
             ?.eachCount()?.entries?.sortedByDescending { it.value }?.take(5)?.map { it.key } 
             ?: emptyList()
 
+        // Health Metrics Load 
+        val metricsFile = File(context.filesDir, "10_Journal/data/health/metrics/$date.json")
+        val healthMetrics = if (metricsFile.exists()) {
+            try {
+                com.google.gson.Gson().fromJson(metricsFile.readText(), cloud.wafflecommons.pixelbrainreader.data.health.DailyHealthMetrics::class.java)
+            } catch (e: Exception) {
+                null
+            }
+        } else null
+
         _uiState.update {
             it.copy(
                 moodData = mood,
+                healthMetrics = healthMetrics,
                 briefingState = briefingState, 
                 topDailyTags = dailyTags
             )
