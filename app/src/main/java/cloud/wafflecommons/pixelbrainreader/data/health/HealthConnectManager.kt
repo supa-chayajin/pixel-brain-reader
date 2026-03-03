@@ -107,6 +107,7 @@ class HealthConnectManager @Inject constructor(
             val nutritionRequest = ReadRecordsRequest(NutritionRecord::class, dailyFilter)
             val nutritionResponse = healthConnectClient.readRecords(nutritionRequest)
             caloriesConsumed = nutritionResponse.records.sumOf { it.energy?.inKilocalories ?: 0.0 }
+            Log.d("HealthConnectManager", "Nutrition Sync: Found ${nutritionResponse.records.size} records. Total calories: $caloriesConsumed kcal")
         } catch (e: Exception) {
             Log.e("HealthConnectManager", "Failed to read nutrition", e)
         }

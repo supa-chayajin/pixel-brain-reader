@@ -52,7 +52,9 @@ class AutomateHabitsUseCase @Inject constructor(
             }
 
             if (extractedValue > 0) {
-                Log.d("AutomateHabitsUseCase", "Automating habit ${habit.id} with value $extractedValue")
+                // The underlying habitRepository.updateHabitValue handles checking extractedValue >= targetValue
+                // if the type is MEASURABLE. We simply pass the raw aggregated progress here.
+                Log.d("AutomateHabitsUseCase", "Automating habit ${habit.id} with value $extractedValue, target: ${habit.targetValue}")
                 habitRepository.updateHabitValue(date, habit.id, extractedValue)
             }
         }
