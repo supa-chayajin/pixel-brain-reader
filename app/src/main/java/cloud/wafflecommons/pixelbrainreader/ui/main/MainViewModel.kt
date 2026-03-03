@@ -405,7 +405,12 @@ class MainViewModel @Inject constructor(
                          }
                      } catch (e: Exception) { }
                  }
-                 _uiState.value = _uiState.value.copy(selectedFileContent = content)
+                 // Atomic UI Update Shield
+                 // If the user is actively editing, DO NOT overwrite their memory state 
+                 // with the delayed disk read, as it will cause a cursor jump.
+                 if (!_uiState.value.isEditing) {
+                     _uiState.value = _uiState.value.copy(selectedFileContent = content)
+                 }
             }
             .launchIn(viewModelScope)
     }
@@ -507,12 +512,13 @@ class MainViewModel @Inject constructor(
                 val result = repository.saveAndSync(path, contentToSave, owner, repo)
                 
                 if (result.isSuccess) {
-                     // 2. Atomic UI Reset (Clear Dirty State)
+                     // 2. Atomic UI Reset (Clear Dirty State but retain Edit Mode)
                     _uiState.value = _uiState.value.copy(
-                        isEditing = false,
-                        unsavedContent = null,
                         hasUnsavedChanges = false,
-                        selectedFileContent = contentToSave // Update view immediately
+                        // We do NOT clear `unsavedContent` or `isEditing` here if they are still editing.
+                        // The memory state remains the Source of Truth while the editor is open.
+                        // However, if they are NOT editing (e.g., they hit Save manually from somewhere else), we update it.
+                        selectedFileContent = if (!_uiState.value.isEditing) contentToSave else _uiState.value.selectedFileContent
                     )
                     _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Saved & Synced ✅"))
                 } else {
