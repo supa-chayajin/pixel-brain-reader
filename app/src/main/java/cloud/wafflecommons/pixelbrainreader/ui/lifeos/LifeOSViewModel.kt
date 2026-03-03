@@ -18,9 +18,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import java.time.LocalDate
 import javax.inject.Inject
 
@@ -54,18 +56,94 @@ class LifeOSViewModel @Inject constructor(
     private val jGitProvider: JGitProvider
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(LifeOSUiState())
-    val uiState: StateFlow<LifeOSUiState> = _uiState.asStateFlow()
+    private val selectedDateFlow = MutableStateFlow(LocalDate.now())
 
-    val todayHabits: StateFlow<List<HabitWithStats>> = _uiState
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val uiState: StateFlow<LifeOSUiState> = selectedDateFlow.flatMapLatest { date ->
+        combine(
+            habitRepository.getHabitConfigsFlow(),
+            habitRepository.getLogsForYearFlow(date.year),
+            gamificationRepository.gamificationState,
+            taskRepository.getTasksFlow(date)
+        ) { configs, logsMap, gamificationState, scopedTasks ->
+            val dayMap = mapOf(
+                java.time.DayOfWeek.MONDAY to "MON",
+                java.time.DayOfWeek.TUESDAY to "TUE",
+                java.time.DayOfWeek.WEDNESDAY to "WED",
+                java.time.DayOfWeek.THURSDAY to "THU",
+                java.time.DayOfWeek.FRIDAY to "FRI",
+                java.time.DayOfWeek.SATURDAY to "SAT",
+                java.time.DayOfWeek.SUNDAY to "SUN"
+            )
+            val todayKey = dayMap[date.dayOfWeek] ?: "MON"
+            
+            val habitsWithStats = configs.map { habit ->
+                 val habitLogs = logsMap[habit.id] ?: emptyList()
+                 
+                 val cleanFreq = habit.frequency.map { it.trim().uppercase() }
+                 val isScheduledToday = cleanFreq.isEmpty() || cleanFreq.contains(todayKey)
+                 
+                 val todayLog = habitLogs.find { it.date == date.toString() }
+                 val isCompletedToday = isHabitComplete(habit, todayLog)
+                 val currentValue = todayLog?.value ?: 0.0
+                 
+                 val history = (0..6).map { i ->
+                    val checkDate = date.minusDays(i.toLong()).toString()
+                    val log = habitLogs.find { it.date == checkDate }
+                    isHabitComplete(habit, log)
+                 }.reversed()
+                 
+                 // Streak
+                 var streak = 0
+                 var checkDate = if (isCompletedToday) date else date.minusDays(1)
+                 for (i in 0..365) {
+                      val d = checkDate.toString()
+                      val log = habitLogs.find { it.date == d }
+                      if (isHabitComplete(habit, log)) {
+                          streak++
+                          checkDate = checkDate.minusDays(1)
+                      } else {
+                          break
+                      }
+                 }
+                 
+                 HabitWithStats(habit, isCompletedToday, currentValue, streak, history, isScheduledToday)
+            }
+            
+            val todayHabitsList = habitsWithStats.filter { it.isScheduledToday }
+            val groupedHabits = todayHabitsList.groupBy { habitStat ->
+                val parser = cloud.wafflecommons.pixelbrainreader.data.gamification.AttributeParser
+                val attr = parser.parse(habitStat.config.description)
+                if (attr != null) {
+                     "${attr.name} Training"
+                } else {
+                     "General"
+                }
+            }
+            
+            LifeOSUiState(
+                 habits = configs,
+                 habitsWithStats = habitsWithStats,
+                 groupedHabits = groupedHabits,
+                 scopedTasks = scopedTasks,
+                 isLoading = false,
+                 selectedDate = date,
+                 gamificationState = gamificationState ?: cloud.wafflecommons.pixelbrainreader.data.gamification.GamificationState()
+            )
+        }
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = LifeOSUiState(isLoading = true)
+    )
+
+    val todayHabits: StateFlow<List<HabitWithStats>> = uiState
         .map { state -> state.habitsWithStats.filter { it.isScheduledToday } }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = emptyList()
         )
-
-    private var loadJob: kotlinx.coroutines.Job? = null
 
     // One-time events channel for XP toasts (omitted for brevity, handled via log/simple toast logic in UI?)
     // Let's add a simple XpGainEvent flow
@@ -76,10 +154,8 @@ class LifeOSViewModel @Inject constructor(
     val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
 
     init {
-        // Auto-Initialization & Gamification Auto-load
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             habitRepository.initialize()
-            // Bug 4 Fix: Health Connect Automation Trigger
             try {
                 automateHabitsUseCase(LocalDate.now())
             } catch (e: Exception) {
@@ -87,9 +163,6 @@ class LifeOSViewModel @Inject constructor(
             }
             gamificationRepository.loadState()
         }
-        
-        // Initial load
-        observeData(LocalDate.now())
     }
 
     private val _reloadTrigger = MutableSharedFlow<Unit>()
@@ -111,104 +184,13 @@ class LifeOSViewModel @Inject constructor(
     }
 
     fun loadData(date: LocalDate) {
-         if (date == _uiState.value.selectedDate && loadJob?.isActive == true) return
-         observeData(date)
-    }
-
-    private fun observeData(date: LocalDate) {
-        loadJob?.cancel()
-        loadJob = viewModelScope.launch {
-             _uiState.update { it.copy(isLoading = true, selectedDate = date) }
-
-            // Reactive Streams
-            val configsFlow = habitRepository.getHabitConfigsFlow()
-            val logsFlow = habitRepository.getLogsForYearFlow(date.year)
-            val gamificationFlow = gamificationRepository.gamificationState // Corrected property name
-
-            combine(
-                configsFlow, 
-                logsFlow, 
-                gamificationFlow
-            ) { configs: List<HabitConfig>, logsMap: Map<String, List<HabitLogEntry>>, gamificationState: cloud.wafflecommons.pixelbrainreader.data.gamification.GamificationState ->
-                  val scopedTasks = taskRepository.getTasks(date) // Ideal: reactive
-                  
-                   // [NEW] 1. Filter by Frequency (Day of Week)
-                    val dayMap = mapOf(
-                        java.time.DayOfWeek.MONDAY to "MON",
-                        java.time.DayOfWeek.TUESDAY to "TUE",
-                        java.time.DayOfWeek.WEDNESDAY to "WED",
-                        java.time.DayOfWeek.THURSDAY to "THU",
-                        java.time.DayOfWeek.FRIDAY to "FRI",
-                        java.time.DayOfWeek.SATURDAY to "SAT",
-                        java.time.DayOfWeek.SUNDAY to "SUN"
-                    )
-                    val todayKey = dayMap[date.dayOfWeek] ?: "MON"
-                    
-                    val habitsWithStats = configs.map { habit ->
-                         val habitLogs = logsMap[habit.id] ?: emptyList()
-                         
-                         val cleanFreq = habit.frequency.map { it.trim().uppercase() }
-                         val isScheduledToday = cleanFreq.isEmpty() || cleanFreq.contains(todayKey)
-                         
-                         val todayLog = habitLogs.find { it.date == date.toString() }
-                         val isCompletedToday = isHabitComplete(habit, todayLog)
-                         val currentValue = todayLog?.value ?: 0.0
-                         
-                         val history = (0..6).map { i ->
-                            val checkDate = date.minusDays(i.toLong()).toString()
-                            val log = habitLogs.find { it.date == checkDate }
-                            isHabitComplete(habit, log)
-                         }.reversed()
-                         
-                         // Streak
-                         var streak = 0
-                         var checkDate = if (isCompletedToday) date else date.minusDays(1)
-                         for (i in 0..365) {
-                              val d = checkDate.toString()
-                              val log = habitLogs.find { it.date == d }
-                              if (isHabitComplete(habit, log)) {
-                                  streak++
-                                  checkDate = checkDate.minusDays(1)
-                              } else {
-                                  break
-                              }
-                         }
-                         
-                         HabitWithStats(habit, isCompletedToday, currentValue, streak, history, isScheduledToday)
-                    }
-                    
-                    // Grouping
-                    val todayHabitsList = habitsWithStats.filter { it.isScheduledToday }
-                    val groupedHabits = todayHabitsList.groupBy { habitStat ->
-                        val parser = cloud.wafflecommons.pixelbrainreader.data.gamification.AttributeParser
-                        val attr = parser.parse(habitStat.config.description)
-                        // Group by Attribute Name or Tag if present, else fallback
-                        if (attr != null) {
-                             "${attr.name} Training"
-                        } else {
-                             "General"
-                        }
-                    }
-                    
-                    LifeOSUiState(
-                         habits = configs,
-                         habitsWithStats = habitsWithStats,
-                         groupedHabits = groupedHabits,
-                         scopedTasks = scopedTasks,
-                         isLoading = false,
-                         selectedDate = date,
-                         gamificationState = gamificationState // Corrected variable
-                    )
-            }.collect { newState ->
-                 _uiState.value = newState
-            }
-        }
+         selectedDateFlow.value = date
     }
 
     fun toggleHabit(habitId: String) {
         viewModelScope.launch {
-            val date = _uiState.value.selectedDate
-            val stats = _uiState.value.habitsWithStats.find { it.config.id == habitId } ?: return@launch
+            val date = uiState.value.selectedDate
+            val stats = uiState.value.habitsWithStats.find { it.config.id == habitId } ?: return@launch
             
             val isCompleting = !stats.isCompletedToday
             val newEntry = if (!isCompleting) {
@@ -235,11 +217,11 @@ class LifeOSViewModel @Inject constructor(
 
     fun updateHabitValue(habitId: String, newValue: Double) {
         viewModelScope.launch {
-            val date = _uiState.value.selectedDate
-            val habitConfig = _uiState.value.habits.find { it.id == habitId } ?: return@launch
+            val date = uiState.value.selectedDate
+            val habitConfig = uiState.value.habits.find { it.id == habitId } ?: return@launch
             
             // Check if becoming complete
-            val wasComplete = isHabitComplete(habitConfig, _uiState.value.logs[habitId]?.find { it.date == date.toString() })
+            val wasComplete = isHabitComplete(habitConfig, uiState.value.logs[habitId]?.find { it.date == date.toString() })
             
             val status = when {
                 newValue >= habitConfig.targetValue -> HabitStatus.COMPLETED
@@ -270,16 +252,14 @@ class LifeOSViewModel @Inject constructor(
             val isDone = !task.isDone
             taskRepository.toggleTask(task.id, isDone)
             
-            if (isDone) { // If completing
+            if (isDone) {
                  grantXpUseCase.execute(
                     sourceId = task.id,
                     actionType = cloud.wafflecommons.pixelbrainreader.domain.gamification.XpActionType.TASK_DONE
                 )
             }
-            
-            val tasks = taskRepository.getTasks(_uiState.value.selectedDate)
-             _uiState.update { it.copy(scopedTasks = tasks) }
-             _reloadTrigger.emit(Unit)
+            // Real-time flow will naturally pick up the edit.
+            _reloadTrigger.emit(Unit)
         }
     }
 

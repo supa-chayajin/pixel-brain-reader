@@ -26,6 +26,9 @@ interface HabitDao {
     @Query("SELECT * FROM habit_logs WHERE date LIKE :year || '%'")
     fun getLogsForYearFlow(year: String): Flow<List<HabitLogEntity>>
 
+    @Query("SELECT * FROM habit_configs WHERE archived = 0 AND frequency LIKE '%' || :dayKey || '%'")
+    fun getActiveConfigsForDayFlow(dayKey: String): Flow<List<HabitConfigEntity>>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertLog(log: HabitLogEntity)
     
