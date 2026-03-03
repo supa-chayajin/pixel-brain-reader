@@ -213,12 +213,28 @@ class DailyNoteViewModel @Inject constructor(
         
         combine(dashboardFlow, timelineFlow, tasksFlow, scratchFlow) { dashboard, timeline, tasks, scraps ->
             java.util.concurrent.atomic.AtomicReference(java.util.concurrent.atomic.AtomicReference(Triple(dashboard, timeline, tasks)) to scraps) // Dummy to handle 4 flows combine logic if needed or use combine extension
-            // combine for 4 flows:
+            // Shield ideas and notes from being overwritten by delayed disk emissions
+            // if the user is actively typing (uncommitted changes exist in the buffer).
+            val currentIdeasUpdates = _ideasUpdates.value
+            val currentNotesUpdates = _notesUpdates.value
+            
+            val shieldedIdeas = if (currentIdeasUpdates != null && currentIdeasUpdates != dashboard?.ideasContent) {
+                currentIdeasUpdates // Memory is ahead
+            } else {
+                dashboard?.ideasContent ?: "" // Disk caught up
+            }
+
+            val shieldedNotes = if (currentNotesUpdates != null && currentNotesUpdates != dashboard?.notesContent) {
+                currentNotesUpdates
+            } else {
+                dashboard?.notesContent ?: ""
+            }
+
             _uiState.update { 
                 it.copy(
                     mantra = dashboard?.dailyMantra ?: "",
-                    ideasContent = dashboard?.ideasContent ?: "",
-                    notesContent = dashboard?.notesContent ?: "",
+                    ideasContent = shieldedIdeas,
+                    notesContent = shieldedNotes,
                     timelineEvents = timeline,
                     dailyTasks = tasks,
                     scratchNotes = scraps,
