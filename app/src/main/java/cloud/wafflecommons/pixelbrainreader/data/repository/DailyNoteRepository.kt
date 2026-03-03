@@ -282,4 +282,35 @@ links: []
     fun getGratitudesStream(date: LocalDate): kotlinx.coroutines.flow.Flow<List<cloud.wafflecommons.pixelbrainreader.data.local.entity.GratitudeEntity>> {
         return gratitudeDao.getGratitudesForDate(date.format(DateTimeFormatter.ISO_DATE))
     }
+
+    /**
+     * Example: Updating Daily Note health metrics via AST parsing.
+     * Integrates FrontmatterManager to safely read, modify, and rewrite YAML without touching the body.
+     */
+    suspend fun updateHealthMetrics(date: LocalDate, sleepScore: Int, readiness: Int) = withContext(Dispatchers.IO) {
+        val fileName = date.format(DateTimeFormatter.ISO_DATE) + ".md"
+        val targetPath = "$JOURNAL_ROOT/$fileName"
+        
+        // 1. Read existing content from disk
+        val currentContent = getDailyNoteContent(date) ?: return@withContext
+        
+        // 2. Extract AST and Body
+        val (yamlAst, markdownBody) = cloud.wafflecommons.pixelbrainreader.data.utils.FrontmatterManager.extractFrontmatterAndBody(currentContent)
+        
+        // 3. Define Type-Safe Updates
+        val updates = mapOf(
+            "sleep_score" to sleepScore,
+            "readiness_score" to readiness,
+            "tags" to listOf("health_synced") // Smart-appends to existing array
+        )
+        
+        // 4. Modify AST in memory
+        cloud.wafflecommons.pixelbrainreader.data.utils.FrontmatterManager.upsertProperties(yamlAst, updates)
+        
+        // 5. Serialize cleanly back to Obsidian format
+        val newFileContent = cloud.wafflecommons.pixelbrainreader.data.utils.FrontmatterManager.buildFileContent(yamlAst, markdownBody)
+        
+        // 6. Write to disk
+        fileRepository.saveFileLocally(targetPath, newFileContent)
+    }
 }

@@ -190,6 +190,7 @@ dependencies {
     implementation("com.prof18.rssparser:rssparser:6.0.8")
 
     // YAML & Serialization
+    implementation("org.yaml:snakeyaml:2.2")
     implementation(libs.kaml)
     implementation(libs.kotlinx.serialization.json)
 
