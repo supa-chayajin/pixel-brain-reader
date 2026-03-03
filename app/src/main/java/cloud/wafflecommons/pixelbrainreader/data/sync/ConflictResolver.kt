@@ -1,87 +1,51 @@
 package cloud.wafflecommons.pixelbrainreader.data.sync
 
+import android.content.Context
 import android.util.Log
+import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
-import java.io.File
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
-/**
- * Handles conflict resolution for JGit operations.
- * Supports basic 3-way merge for text and simple strategies for JSON.
- */
 @Singleton
-class ConflictResolver @Inject constructor() {
+class ConflictResolver @Inject constructor(
+    @ApplicationContext private val context: Context
+) {
+
+    private val rootDir: File
+        get() = File(context.filesDir, "vault")
 
     /**
-     * Attempts to resolve a conflict between local and remote content.
+     * Secures a backup of the local file before JGit overwrites it.
      */
-    fun resolve(
-        path: String,
-        localContent: String,
-        remoteContent: String,
-        baseContent: String = "" // Common ancestor if available
-    ): ResolutionResult {
-        Log.i("ConflictResolver", "Resolving conflict for $path")
+    suspend fun secureLocalBackup(conflictingRelativePath: String): File? = withContext(Dispatchers.IO) {
+        try {
+            val originalFile = File(rootDir, conflictingRelativePath)
+            if (!originalFile.exists() || !originalFile.canRead()) {
+                Log.w("ConflictResolver", "Original file does not exist or is unreadable: $conflictingRelativePath")
+                return@withContext null
+            }
 
-        if (path.endsWith(".md", ignoreCase = true) || path.endsWith(".txt", ignoreCase = true)) {
-            return resolveTextConflict(path, localContent, remoteContent, baseContent)
-        }
-        
-        // Default Strategy: Keep Local (Safety) but save Remote as conflict file
-        return ResolutionResult.Conflict(
-            resolvedContent = localContent,
-            conflictFiles = listOf(
-                ConflictFile(
-                    path = generateConflictPath(path, "remote"),
-                    content = remoteContent
-                )
-            )
-        )
-    }
-
-    private fun resolveTextConflict(
-        path: String,
-        local: String,
-        remote: String,
-        base: String
-    ): ResolutionResult {
-        // Very simple robust check: If local == remote, no conflict
-        if (local == remote) return ResolutionResult.Resolved(local)
-        
-        // TODO: Implement actual diff-match-patch or JGit MergeAlgorithm here for fine-grained merge.
-        // For now, we prefer "No Data Loss" -> Create conflict file logic.
-        
-        // Construct a "merged" file with markers (Git style)
-        val merged = StringBuilder()
-        merged.append("<<<<<<< HEAD (Local)\n")
-        merged.append(local)
-        merged.append("\n=======\n")
-        merged.append(remote)
-        merged.append("\n>>>>>>> REMOTE\n")
-        
-        return ResolutionResult.Resolved(merged.toString())
-    }
-
-    private fun generateConflictPath(originalPath: String, suffix: String): String {
-        val extension = originalPath.substringAfterLast('.', "")
-        val name = originalPath.substringBeforeLast('.')
-        val timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"))
-        return if (extension.isNotEmpty()) {
-            "$name.conflicted.$suffix.$timestamp.$extension"
-        } else {
-            "$name.conflicted.$suffix.$timestamp"
+            val baseName = originalFile.nameWithoutExtension
+            val extension = originalFile.extension.let { if (it.isNotEmpty()) ".$it" else "" }
+            
+            val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+            val backupFileName = "${baseName}_sync_conflict_${timestamp}${extension}"
+            
+            val backupFile = File(originalFile.parentFile, backupFileName)
+            
+            originalFile.copyTo(backupFile, overwrite = true)
+            Log.i("ConflictResolver", "Successfully backed up conflicting file to: ${backupFile.name}")
+            
+            return@withContext backupFile
+        } catch (e: Exception) {
+            Log.e("ConflictResolver", "Failed to secure local backup for: $conflictingRelativePath", e)
+            return@withContext null
         }
     }
-
-    sealed class ResolutionResult {
-        data class Resolved(val content: String) : ResolutionResult()
-        data class Conflict(
-            val resolvedContent: String, // Usually local content
-            val conflictFiles: List<ConflictFile>
-        ) : ResolutionResult()
-    }
-
-    data class ConflictFile(val path: String, val content: String)
 }

@@ -3,17 +3,25 @@ package cloud.wafflecommons.pixelbrainreader.data.remote
 import android.content.Context
 import android.util.Log
 import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
+import cloud.wafflecommons.pixelbrainreader.data.sync.ConflictResolver
 import dagger.hilt.android.qualifiers.ApplicationContext
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.api.errors.RefNotAdvertisedException
 import org.eclipse.jgit.lib.TextProgressMonitor
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider
+import org.eclipse.jgit.api.CheckoutCommand
 import java.io.File
 import java.io.Writer
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+
+sealed class SyncResult {
+    object Success : SyncResult()
+    data class ResolvedWithConflicts(val backedUpFilesCount: Int) : SyncResult()
+    data class Error(val exception: Exception) : SyncResult()
+}
 
 /**
  * Local-First Git Provider using Eclipse JGit.
@@ -22,7 +30,8 @@ import kotlinx.coroutines.withContext
 @Singleton
 class JGitProvider @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val secretManager: SecretManager
+    private val secretManager: SecretManager,
+    private val conflictResolver: ConflictResolver
 ) {
 
     init {
@@ -207,34 +216,60 @@ class JGitProvider @Inject constructor(
     }
 
     /**
-     * Pulls from remote (Rebase).
+     * Pulls from remote. Handles conflict interceptions safely without destroying the AST.
      */
-    suspend fun pull(remoteName: String = "origin"): Result<Unit> = withContext(Dispatchers.IO) {
-        if (!isReady()) return@withContext Result.failure(Exception("Repository not initialized"))
+    suspend fun pull(remoteName: String = "origin"): SyncResult = withContext(Dispatchers.IO) {
+        if (!isReady()) return@withContext SyncResult.Error(Exception("Repository not initialized"))
 
         try {
             ensureCriticalDirectories() // Defensive check before pulling
 
-            val token = secretManager.getToken() ?: return@withContext Result.failure(Exception("No API Token found"))
+            val token = secretManager.getToken() ?: return@withContext SyncResult.Error(Exception("No API Token found"))
             val provider = UsernamePasswordCredentialsProvider("token", token)
 
             Git.open(rootDir).use { git ->
-                git.pull()
+                val pullResult = git.pull()
                     .setRemote(remoteName)
-                    .setRebase(true) // Rebase Strategy
+                    .setRebase(false) // Standard merge to predictably expose conflicts
                     .setCredentialsProvider(provider)
                     .setProgressMonitor(AndroidLogProgressMonitor())
                     .call()
+                    
+                val mergeResult = pullResult.mergeResult
+                if (mergeResult != null && (mergeResult.mergeStatus == org.eclipse.jgit.api.MergeResult.MergeStatus.CONFLICTING || mergeResult.mergeStatus == org.eclipse.jgit.api.MergeResult.MergeStatus.FAILED)) {
+                    val conflicts = mergeResult.conflicts?.keys ?: emptySet()
+                    if (conflicts.isNotEmpty()) {
+                        Log.w("JGitProvider", "Merge Conflicts Detected: ${conflicts.size} files. Moving to defensive interception.")
+                        
+                        var backedUpCount = 0
+                        
+                        for (relativePath in conflicts) {
+                            // Phase A: Secure Local Backup
+                            val backup = conflictResolver.secureLocalBackup(relativePath)
+                            if (backup != null) backedUpCount++
+                            
+                            // Phase B: Force Checkout (THEIRS) - Ruthlessly overwrite local file with remote to keep the AST pristine
+                            git.checkout().addPath(relativePath).setStage(CheckoutCommand.Stage.THEIRS).call()
+                            
+                            // Phase C: Index Resolution - Force add the fixed file to the git index so JGit knows the conflict is resolved
+                            git.add().addFilepattern(relativePath).call()
+                        }
+                        
+                        // Final Auto-Commit to lock in the resolutions
+                        git.commit().setMessage("Auto-resolved sync conflicts via side-by-side backup").call()
+                        return@withContext SyncResult.ResolvedWithConflicts(backedUpCount)
+                    }
+                }
             }
             Log.i("JGitProvider", "Pull Successful")
-            Result.success(Unit)
+            return@withContext SyncResult.Success
         } catch (e: Exception) {
              if (e is RefNotAdvertisedException) {
                  Log.w("JGitProvider", "Pull skipped: Ref not advertised (Empty repo?)")
-                 Result.success(Unit)
+                 return@withContext SyncResult.Success
              } else {
                  Log.e("JGitProvider", "Pull Failed", e)
-                 Result.failure(e)
+                 return@withContext SyncResult.Error(e)
              }
         }
     }

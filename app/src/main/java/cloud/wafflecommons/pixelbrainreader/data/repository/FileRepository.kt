@@ -67,6 +67,13 @@ class FileRepository @Inject constructor(
          
          // 3. Pull
          val pullResult = jGitProvider.pull()
+         if (pullResult is cloud.wafflecommons.pixelbrainreader.data.remote.SyncResult.ResolvedWithConflicts) {
+             Log.w("FileRepository", "Sync completed, but ${pullResult.backedUpFilesCount} conflicts were defensively backed up.")
+             // Eventual UI notification hook could go here
+         } else if (pullResult is cloud.wafflecommons.pixelbrainreader.data.remote.SyncResult.Error) {
+             Log.e("FileRepository", "Pull failed during sync", pullResult.exception)
+             return Result.failure(pullResult.exception)
+         }
          
          // 4. Push
          val pushResult = jGitProvider.push()
@@ -133,7 +140,11 @@ class FileRepository @Inject constructor(
     suspend fun refreshFileContent(path: String, downloadUrl: String): Result<Unit> {
         val res = jGitProvider.pull()
         vaultDiscoveryRepository.reindexAll()
-        return res
+        return if (res is cloud.wafflecommons.pixelbrainreader.data.remote.SyncResult.Error) {
+            Result.failure(res.exception)
+        } else {
+            Result.success(Unit)
+        }
     }
 
     suspend fun renameAndSync(oldPath: String, newPath: String, owner: String?, repo: String?): Result<Unit> {
