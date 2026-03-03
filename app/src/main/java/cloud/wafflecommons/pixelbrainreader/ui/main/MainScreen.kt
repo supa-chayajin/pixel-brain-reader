@@ -553,36 +553,8 @@ fun MainScreen(
                                     }
                                 } else {
                                     // VIEW MODE ACTIONS
-                                    
-                                    // 1. Search Trigger
-                                    FilledTonalIconButton(
-                                        onClick = { isSearching = true },
-                                        colors = IconButtonDefaults.filledTonalIconButtonColors(
-                                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    ) {
-                                        Icon(Icons.Default.Search, "Search")
-                                    }
-
-                                    // 2. Existing Actions
+                                    // 1. Existing Actions
                                     if (uiState.selectedFileName != null) {
-                                        // Save
-                                        FilledTonalIconButton(
-                                            onClick = { viewModel.saveFile() },
-                                            enabled = uiState.hasUnsavedChanges,
-                                            colors = IconButtonDefaults.filledTonalIconButtonColors(
-                                                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Filled.Save,
-                                                contentDescription = "Save",
-                                                tint = if (uiState.hasUnsavedChanges) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
-                                            )
-                                        }
-                                        
                                         // Edit/View Toggle
                                         FilledTonalIconButton(
                                             onClick = { viewModel.toggleEditMode() },
@@ -645,6 +617,17 @@ fun MainScreen(
                                         }
 
                                     } else {
+                                        // Search Trigger
+                                        FilledTonalIconButton(
+                                            onClick = { isSearching = true },
+                                            colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        ) {
+                                            Icon(Icons.Default.Search, "Search")
+                                        }
+
                                         // Browser Actions
                                         FilledTonalIconButton(
                                             onClick = { viewModel.openCreateFileDialog() },

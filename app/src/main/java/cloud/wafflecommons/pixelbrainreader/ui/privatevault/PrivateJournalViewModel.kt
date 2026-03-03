@@ -7,10 +7,16 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.launch
 import java.io.File
 import javax.inject.Inject
 
+@OptIn(FlowPreview::class)
 @HiltViewModel
 class PrivateJournalViewModel @Inject constructor(
     private val repository: PrivateNoteRepository,
@@ -30,11 +36,24 @@ class PrivateJournalViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(VaultState())
     val uiState = _uiState.asStateFlow()
 
+    private val _autoSaveTriggerFlow = MutableStateFlow<String?>(null)
+
     init {
         // Attempt to load existing notes if already unlocked (e.g. process death restoration)
         if (!_uiState.value.isLocked) {
             refreshFiles()
         }
+
+        // Auto-Save Pipeline
+        _autoSaveTriggerFlow
+            .debounce(1500L) // Wait for 1.5 seconds of typing pause
+            .distinctUntilChanged()
+            .onEach { content ->
+                if (content != null && _uiState.value.selectedFile != null && !_uiState.value.isLocked) {
+                    saveNote()
+                }
+            }
+            .launchIn(viewModelScope)
     }
 
     // REMOVED onAuthSuccess - It created invalid state (Unlocked UI but No Password)
@@ -185,6 +204,17 @@ class PrivateJournalViewModel @Inject constructor(
     
     fun onEditorContentChange(text: String) {
         _uiState.value = _uiState.value.copy(editorContent = text)
+        _autoSaveTriggerFlow.value = text
+    }
+    
+    /**
+     * Flushes the buffer to disk aggressively bypassing the debounce.
+     * Hooks natively into Android lifecycle events (onPause/onStop).
+     */
+    fun forceSaveImmediate() {
+        if (_uiState.value.selectedFile != null && !_uiState.value.isLocked) {
+            saveNote()
+        }
     }
     
     fun saveNote() {

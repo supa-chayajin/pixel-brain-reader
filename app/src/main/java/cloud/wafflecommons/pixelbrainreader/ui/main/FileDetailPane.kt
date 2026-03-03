@@ -105,6 +105,10 @@ import io.noties.markwon.ext.tables.TablePlugin
 import io.noties.markwon.ext.tasklist.TaskListPlugin
 import io.noties.markwon.linkify.LinkifyPlugin
 
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.compose.runtime.DisposableEffect
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun FileDetailPane(
@@ -123,6 +127,21 @@ fun FileDetailPane(
     moodViewModel: MoodViewModel = hiltViewModel()
 ) {
     // ... (Shape and Surface logic remains) ...
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_PAUSE || event == Lifecycle.Event.ON_STOP) {
+                if (hasUnsavedChanges) {
+                    onSave() // Flushes auto-save immediately before death/background
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     val shape = if (isExpandedScreen) {
         RoundedCornerShape(24.dp)
@@ -321,20 +340,6 @@ fun FileDetailPane(
                         }
                     }
 
-                // Floating Save Action Button
-                if (isEditing) {
-                    FloatingActionButton(
-                        onClick = onSave,
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .padding(24.dp)
-                            .imePadding(), // Ensure FAB moves with keyboard too if visible
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                    ) {
-                        Icon(Icons.Default.Save, contentDescription = "Save Changes")
-                    }
-                } // End FAB block
             } // End content != null block
 
             else -> {
