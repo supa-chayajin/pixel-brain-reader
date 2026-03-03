@@ -163,6 +163,8 @@ class DailyNoteViewModel @Inject constructor(
                 }
             }
         }
+        
+        setupDebouncers()
     }
 
 
@@ -365,6 +367,19 @@ class DailyNoteViewModel @Inject constructor(
             } catch (e: Exception) {
                 _uiState.update { it.copy(isLoading = false, userMessage = "Error: ${e.message}") }
             }
+        }
+    }
+
+    /**
+     * Immediately pushes pending updates to the Room database.
+     * Hooks natively into Android lifecycle events (onPause/onStop).
+     */
+    fun forceSaveImmediate() {
+        _ideasUpdates.value?.let { 
+            viewModelScope.launch { dashboardRepository.updateSecondBrain(currentDate, "IDEAS", it) }
+        }
+        _notesUpdates.value?.let {
+            viewModelScope.launch { dashboardRepository.updateSecondBrain(currentDate, "NOTES", it) }
         }
     }
 

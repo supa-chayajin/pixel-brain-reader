@@ -27,6 +27,9 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -270,9 +273,8 @@ fun PrivateVaultScreen(
                  content = state.editorContent,
                  title = state.selectedFile?.name?.removeSuffix(".md.enc") ?: "New Note",
                  onContentChange = { viewModel.onEditorContentChange(it) },
-                 onSave = { viewModel.saveNote() },
                  onClose = { viewModel.closeNote() },
-                 onDelete = { viewModel.deleteCurrentNote() }
+                 onForceSave = { viewModel.forceSaveImmediate() }
              )
         } else {
              // List Mode
@@ -410,10 +412,22 @@ fun PrivateEditor(
     content: String,
     title: String,
     onContentChange: (String) -> Unit,
-    onSave: () -> Unit,
     onClose: () -> Unit,
-    onDelete: () -> Unit
+    onForceSave: () -> Unit
 ) {
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_PAUSE || event == Lifecycle.Event.ON_STOP) {
+                onForceSave()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -427,14 +441,6 @@ fun PrivateEditor(
                 navigationIcon = {
                     IconButton(onClick = onClose) {
                          Icon(Icons.Default.Close, "Close")
-                    }
-                },
-                actions = {
-                    IconButton(onClick = onDelete) {
-                        Icon(Icons.Default.Delete, "Delete", tint = MaterialTheme.colorScheme.error)
-                    }
-                    IconButton(onClick = onSave) {
-                        Icon(Icons.Default.Save, "Save", tint = MaterialTheme.colorScheme.primary)
                     }
                 }
             )

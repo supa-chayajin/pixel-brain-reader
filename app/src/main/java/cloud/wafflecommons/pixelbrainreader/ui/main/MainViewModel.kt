@@ -38,7 +38,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.FlowPreview
 
+@OptIn(FlowPreview::class)
 @HiltViewModel
 class MainViewModel @Inject constructor(
     private val repository: FileRepository,
@@ -117,6 +120,9 @@ class MainViewModel @Inject constructor(
 
     private var isInitialSyncDone = false
 
+    // Auto-Save Trigger Flow
+    private val _autoSaveTriggerFlow = MutableStateFlow<String?>(null)
+
     init {
         // Initial load of root folder (Database Only)
         loadFolder("")
@@ -158,6 +164,17 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             widgetSnapshotManager.updateSnapshot()
         }
+
+        // Auto-Save Pipeline
+        _autoSaveTriggerFlow
+            .debounce(1500L) // Wait for 1.5 seconds of typing pause
+            .distinctUntilChanged()
+            .onEach { content ->
+                if (content != null && _uiState.value.hasUnsavedChanges) {
+                    saveFile()
+                }
+            }
+            .launchIn(viewModelScope)
     }
 
     /**
@@ -421,6 +438,9 @@ class MainViewModel @Inject constructor(
             unsavedContent = newContent,
             hasUnsavedChanges = true
         )
+        
+        // Trigger the debounced auto-save sequence
+        _autoSaveTriggerFlow.value = newContent
     }
 
     private fun detectAndProcessTaskCompletion(oldContent: String, newContent: String) {
@@ -532,6 +552,16 @@ class MainViewModel @Inject constructor(
                 _uiState.value = _uiState.value.copy(error = "Push Failed: ${result.exceptionOrNull()?.message}")
             }
             _uiState.value = _uiState.value.copy(isSyncing = false)
+        }
+    }
+
+    /**
+     * Flushes the buffer to disk aggressively bypassing the debounce.
+     * Hooks natively into Android lifecycle events (onPause/onStop).
+     */
+    fun forceSaveImmediate() {
+        if (_uiState.value.hasUnsavedChanges) {
+            saveFile()
         }
     }
 
