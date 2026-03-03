@@ -87,7 +87,6 @@ class DailyNoteViewModel @Inject constructor(
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context,
     private val scratchRepository: ScratchRepository,
     private val userPrefs: cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository,
-    private val dataRefreshBus: cloud.wafflecommons.pixelbrainreader.data.utils.DataRefreshBus,
     private val dailyBriefingRepository: DailyBriefingRepository, // [NEW] Cache-First Repo
     private val jGitProvider: cloud.wafflecommons.pixelbrainreader.data.remote.JGitProvider,
     private val gamificationRepository: cloud.wafflecommons.pixelbrainreader.data.gamification.GamificationRepository,
@@ -147,26 +146,8 @@ class DailyNoteViewModel @Inject constructor(
         currentDate = LocalDate.now()
         loadDailyNote(currentDate)
         
-        setupDebouncers()
-        
-        // Listen for global refresh
-        viewModelScope.launch {
-            dataRefreshBus.refreshEvent.collect {
-                Log.d("DailyNoteVM", "Data refresh event received.")
-                // SYNC SHIELD: On Git Pull, DO NOT overwrite if we are working on the current day's buffer.
-                // We only ingest if the buffer is MISSING.
-                val bufferExists = dashboardRepository.hasBuffer(currentDate)
-                if (!bufferExists) {
-                     Log.d("DailyNoteVM", "Buffer missing, ingesting from file safely.")
-                     ingestFromFile(currentDate)
-                } else {
-                     Log.d("DailyNoteVM", "Buffer exists. SYNC SHIELD ACTIVE. Ignoring external file changes for today to protect local work.")
-                     // Optional: notification to user? "External changes detected but ignored to protect your work."
-                }
-            }
-        }
-        
-        // [NEW] Sink Cached Briefing into UI State
+        // The UI now strictly reacts to Room Database flows. 
+        // Sync operations are expected to push data to Room, automatically reflecting here.
         viewModelScope.launch {
             _dailyBriefingData.collect { model ->
                 if (model != null) {

@@ -47,7 +47,6 @@ class MainViewModel @Inject constructor(
     private val secretManager: SecretManager,
     private val userPrefs: UserPreferencesRepository,
     private val geminiRagManager: cloud.wafflecommons.pixelbrainreader.data.ai.GeminiRagManager,
-    private val dataRefreshBus: cloud.wafflecommons.pixelbrainreader.data.utils.DataRefreshBus,
     private val widgetSnapshotManager: cloud.wafflecommons.pixelbrainreader.widget.manager.WidgetSnapshotManager,
     private val uiEffectManager: cloud.wafflecommons.pixelbrainreader.ui.utils.UiEffectManager,
     private val gamificationRepository: cloud.wafflecommons.pixelbrainreader.data.gamification.GamificationRepository,
@@ -249,14 +248,8 @@ class MainViewModel @Inject constructor(
                 val result = repository.syncRepository(owner, repo)
                 
                 if (result.isSuccess) {
-                    _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Synced with Remote ✅"))
-                    
-                    // Trigger Bus
-                    Log.i("Cortex", "Git Pull Success. Triggering Global UI Refresh.")
-                    Log.i("Cortex", "Git Pull Success. Triggering Global UI Refresh.")
-                    dataRefreshBus.triggerRefresh()
-                    
-                    // Update Widget Snapshot
+                    // Log removal of legacy refresh bus usage.
+                    Log.i("Cortex", "Git Pull Success. Local Room DB should naturally react.")
                     widgetSnapshotManager.updateSnapshot()
 
                     // CRITICAL: Reload Local Files
