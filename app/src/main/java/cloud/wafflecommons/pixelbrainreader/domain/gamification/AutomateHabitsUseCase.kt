@@ -44,8 +44,9 @@ class AutomateHabitsUseCase @Inject constructor(
             val extractedValue: Double = when (habit.autoSource) {
                 "health_connect_steps" -> metrics.steps.toDouble()
                 "health_connect_sleep" -> metrics.sleepDurationMinutes / 60.0
-                "health_connect_hydration" -> metrics.hydration
+                "health_connect_hydration" -> metrics.waterConsumedMl
                 "health_connect_nutrition" -> metrics.caloriesConsumed
+                "health_connect_mindfulness" -> metrics.mindfulnessMinutes.toDouble()
                 "health_connect_weight" -> metrics.weight
                 else -> 0.0
             }

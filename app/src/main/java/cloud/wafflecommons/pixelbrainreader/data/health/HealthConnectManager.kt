@@ -7,6 +7,9 @@ import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.StepsRecord
+import androidx.health.connect.client.records.HydrationRecord
+import androidx.health.connect.client.records.NutritionRecord
+import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.request.AggregateRequest
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
@@ -28,8 +31,9 @@ data class DailyHealthMetrics(
     val steps: Long,
     val sleepDurationMinutes: Long,
     val averageHeartRate: Int,
-    val hydration: Double = 0.0,
+    val waterConsumedMl: Double = 0.0,
     val caloriesConsumed: Double = 0.0,
+    val mindfulnessMinutes: Long = 0L,
     val weight: Double = 0.0
 )
 
@@ -87,18 +91,60 @@ class HealthConnectManager @Inject constructor(
         }
         val averageHeartRate = if (heartRateCount > 0) (totalBpm / heartRateCount).toInt() else 0
 
+        // Read Hydration
+        var waterConsumedMl = 0.0
+        try {
+            val hydrationRequest = ReadRecordsRequest(HydrationRecord::class, dailyFilter)
+            val hydrationResponse = healthConnectClient.readRecords(hydrationRequest)
+            waterConsumedMl = hydrationResponse.records.sumOf { it.volume.inMilliliters }
+        } catch (e: Exception) {
+            Log.e("HealthConnectManager", "Failed to read hydration", e)
+        }
+
+        // Read Nutrition
+        var caloriesConsumed = 0.0
+        try {
+            val nutritionRequest = ReadRecordsRequest(NutritionRecord::class, dailyFilter)
+            val nutritionResponse = healthConnectClient.readRecords(nutritionRequest)
+            caloriesConsumed = nutritionResponse.records.sumOf { it.energy?.inKilocalories ?: 0.0 }
+        } catch (e: Exception) {
+            Log.e("HealthConnectManager", "Failed to read nutrition", e)
+        }
+
+        // Read Mindfulness / Exercise
+        var mindfulnessMinutes = 0L
+        try {
+            val exerciseRequest = ReadRecordsRequest(ExerciseSessionRecord::class, dailyFilter)
+            val exerciseResponse = healthConnectClient.readRecords(exerciseRequest)
+            // Filter for mindfulness/meditation/yoga types if available, otherwise just grab them if user considers all exercise as such.
+            // Using standard EXERCISE_TYPE_YOGA or similar, or just general if that's what's available. For now, filter for Yoga/Meditation
+            mindfulnessMinutes = exerciseResponse.records.filter { 
+                it.exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_YOGA
+            }.sumOf {
+                Duration.between(it.startTime, it.endTime).toMinutes()
+            }
+        } catch (e: Exception) {
+            Log.e("HealthConnectManager", "Failed to read mindfulness/exercise", e)
+        }
+
         DailyHealthMetrics(
             date = date.toString(),
             steps = totalSteps,
             sleepDurationMinutes = sleepDurationMinutes,
-            averageHeartRate = averageHeartRate
+            averageHeartRate = averageHeartRate,
+            waterConsumedMl = waterConsumedMl,
+            caloriesConsumed = caloriesConsumed,
+            mindfulnessMinutes = mindfulnessMinutes
         )
     }
 
     private val permissions = setOf(
         HealthPermission.getReadPermission(StepsRecord::class),
         HealthPermission.getReadPermission(SleepSessionRecord::class),
-        HealthPermission.getReadPermission(HeartRateRecord::class)
+        HealthPermission.getReadPermission(HeartRateRecord::class),
+        HealthPermission.getReadPermission(HydrationRecord::class),
+        HealthPermission.getReadPermission(NutritionRecord::class),
+        HealthPermission.getReadPermission(ExerciseSessionRecord::class)
     )
 
     fun getSdkStatus(): Int {
@@ -138,7 +184,7 @@ class HealthConnectManager @Inject constructor(
         try {
             val response = healthConnectClient.readRecords(
                 ReadRecordsRequest(
-                    recordType = SleepSessionRecord::class,
+                    SleepSessionRecord::class,
                     timeRangeFilter = TimeRangeFilter.between(start, end)
                 )
             )
@@ -155,7 +201,7 @@ class HealthConnectManager @Inject constructor(
         try {
             val response = healthConnectClient.readRecords(
                 ReadRecordsRequest(
-                    recordType = HeartRateRecord::class,
+                    HeartRateRecord::class,
                     timeRangeFilter = TimeRangeFilter.between(start, end)
                 )
             )
@@ -192,7 +238,7 @@ class HealthConnectManager @Inject constructor(
         try {
             val response = healthConnectClient.readRecords(
                 ReadRecordsRequest(
-                    recordType = SleepSessionRecord::class,
+                    SleepSessionRecord::class,
                     timeRangeFilter = TimeRangeFilter.between(start, end)
                 )
             )
