@@ -272,6 +272,7 @@ fun PrivateVaultScreen(
                  file = state.selectedFile,
                  content = state.editorContent,
                  title = state.selectedFile?.name?.removeSuffix(".md.enc") ?: "New Note",
+                 saveState = viewModel.saveState.collectAsState().value,
                  onContentChange = { viewModel.onEditorContentChange(it) },
                  onClose = { viewModel.closeNote() },
                  onForceSave = { viewModel.forceSaveImmediate() }
@@ -411,6 +412,7 @@ fun PrivateEditor(
     file: File?,
     content: String,
     title: String,
+    saveState: cloud.wafflecommons.pixelbrainreader.ui.components.SaveState,
     onContentChange: (String) -> Unit,
     onClose: () -> Unit,
     onForceSave: () -> Unit
@@ -442,6 +444,12 @@ fun PrivateEditor(
                     IconButton(onClick = onClose) {
                          Icon(Icons.Default.Close, "Close")
                     }
+                },
+                actions = {
+                    cloud.wafflecommons.pixelbrainreader.ui.components.SaveStatusIndicator(
+                        state = saveState,
+                        modifier = Modifier.padding(end = 16.dp)
+                    )
                 }
             )
         },

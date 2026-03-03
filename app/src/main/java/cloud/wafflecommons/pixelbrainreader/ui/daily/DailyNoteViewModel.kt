@@ -128,6 +128,9 @@ class DailyNoteViewModel @Inject constructor(
     // Debounce for Text Inputs
     private val _ideasUpdates = MutableStateFlow<String?>(null)
     private val _notesUpdates = MutableStateFlow<String?>(null)
+    
+    private val _saveState = MutableStateFlow(cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.IDLE)
+    val saveState: StateFlow<cloud.wafflecommons.pixelbrainreader.ui.components.SaveState> = _saveState.asStateFlow()
 
     init {
         // [NEW] Fire-and-Forget Health Sync (Parallel)
@@ -345,22 +348,48 @@ class DailyNoteViewModel @Inject constructor(
     fun onIdeasChanged(content: String) {
         // Optimistic Update
         _uiState.update { it.copy(ideasContent = content) }
+        _saveState.value = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.UNSAVED
         _ideasUpdates.value = content
     }
 
     fun onNotesChanged(content: String) {
         _uiState.update { it.copy(notesContent = content) }
+        _saveState.value = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.UNSAVED
         _notesUpdates.value = content
     }
     
     @OptIn(FlowPreview::class)
     private fun setupDebouncers() {
-        _ideasUpdates.debounce(300L).filterNotNull().onEach { 
-            dashboardRepository.updateSecondBrain(currentDate, "IDEAS", it)
+        _ideasUpdates.debounce(1500L).filterNotNull().distinctUntilChanged().onEach { 
+            _saveState.value = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.SAVING
+            try {
+                dashboardRepository.updateSecondBrain(currentDate, "IDEAS", it)
+                _saveState.value = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.SAVED
+                viewModelScope.launch {
+                    kotlinx.coroutines.delay(2500L)
+                    if (_saveState.value == cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.SAVED) {
+                        _saveState.value = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.IDLE
+                    }
+                }
+            } catch (e: Exception) {
+                _saveState.value = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.ERROR
+            }
         }.launchIn(viewModelScope)
 
-        _notesUpdates.debounce(300L).filterNotNull().onEach { 
-            dashboardRepository.updateSecondBrain(currentDate, "NOTES", it)
+        _notesUpdates.debounce(1500L).filterNotNull().distinctUntilChanged().onEach { 
+            _saveState.value = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.SAVING
+            try {
+                dashboardRepository.updateSecondBrain(currentDate, "NOTES", it)
+                _saveState.value = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.SAVED
+                viewModelScope.launch {
+                    kotlinx.coroutines.delay(2500L)
+                    if (_saveState.value == cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.SAVED) {
+                        _saveState.value = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.IDLE
+                    }
+                }
+            } catch (e: Exception) {
+                _saveState.value = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.ERROR
+            }
         }.launchIn(viewModelScope)
     }
 

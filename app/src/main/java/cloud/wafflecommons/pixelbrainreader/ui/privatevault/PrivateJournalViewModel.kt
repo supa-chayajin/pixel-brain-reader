@@ -38,6 +38,9 @@ class PrivateJournalViewModel @Inject constructor(
 
     private val _autoSaveTriggerFlow = MutableStateFlow<String?>(null)
 
+    private val _saveState = MutableStateFlow(cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.IDLE)
+    val saveState = _saveState.asStateFlow()
+
     init {
         // Attempt to load existing notes if already unlocked (e.g. process death restoration)
         if (!_uiState.value.isLocked) {
@@ -204,6 +207,7 @@ class PrivateJournalViewModel @Inject constructor(
     
     fun onEditorContentChange(text: String) {
         _uiState.value = _uiState.value.copy(editorContent = text)
+        _saveState.value = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.UNSAVED
         _autoSaveTriggerFlow.value = text
     }
     
@@ -227,12 +231,21 @@ class PrivateJournalViewModel @Inject constructor(
              return
         }
         
-        viewModelScope.launch {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            _saveState.value = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.SAVING
             try {
                 repository.createNote(file.name, content, pwd) // Overwrite
                 refreshFiles()
+                _saveState.value = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.SAVED
+                launch {
+                    kotlinx.coroutines.delay(2500L)
+                    if (_saveState.value == cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.SAVED) {
+                        _saveState.value = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.IDLE
+                    }
+                }
             } catch (e: Exception) {
                _uiState.value = _uiState.value.copy(errorMessage = "Save Failed: ${e.message}")
+               _saveState.value = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.ERROR
             }
         }
     }
