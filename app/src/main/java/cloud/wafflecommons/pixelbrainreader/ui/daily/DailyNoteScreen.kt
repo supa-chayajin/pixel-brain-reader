@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCircle
+import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Edit
@@ -90,33 +91,29 @@ fun DailyNoteScreen(
                 title = "Cortex",
                 subtitle = state.date.format(DateTimeFormatter.ofPattern("MMM dd, yyyy")),
                 navigationIcon = {
-                    if (state.isLoading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier
-                                .size(24.dp)
-                                .padding(4.dp),
-                            color = MaterialTheme.colorScheme.error,
-                            strokeWidth = 2.dp
+                    FilledTonalIconButton(
+                        onClick = { viewModel.compileDay() },
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                            contentColor = MaterialTheme.colorScheme.primary
                         )
-                    } else {
-                        FilledTonalIconButton(
-                            onClick = { viewModel.triggerEmergencySync() },
-                            colors = IconButtonDefaults.filledTonalIconButtonColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                                contentColor = MaterialTheme.colorScheme.onErrorContainer
-                            )
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.CloudUpload,
-                                contentDescription = "Force Push (Iron Vault Override)",
-                                tint = MaterialTheme.colorScheme.error
-                            )
-                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Archive,
+                            contentDescription = "Compile/Burn Day"
+                        )
+                    }
+
+                    if (state.isLoading) {
+                        cloud.wafflecommons.pixelbrainreader.ui.components.SaveStatusIndicator(
+                            state = saveState,
+                            modifier = Modifier.padding(horizontal = 4.dp)
+                        )
                     }
                 },
                 actions = {
                     FilledTonalIconButton(
-                        onClick = { viewModel.refreshDailyData() },
+                        onClick = { lifeOSViewModel.forceSyncEverything() },
                         colors = IconButtonDefaults.filledTonalIconButtonColors(
                             containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                             contentColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -142,12 +139,6 @@ fun DailyNoteScreen(
                             tint = MaterialTheme.colorScheme.primary
                         )
                     }
-
-                    // Settings
-                    cloud.wafflecommons.pixelbrainreader.ui.components.SaveStatusIndicator(
-                        state = saveState,
-                        modifier = Modifier.padding(horizontal = 4.dp)
-                    )
                     
                     FilledTonalIconButton(
                         onClick = onNavigateToSettings,

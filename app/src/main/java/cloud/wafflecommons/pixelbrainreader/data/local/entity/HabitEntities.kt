@@ -3,8 +3,10 @@ package cloud.wafflecommons.pixelbrainreader.data.local.entity
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import androidx.room.Index
+import androidx.compose.runtime.Immutable
 import cloud.wafflecommons.pixelbrainreader.data.model.HabitStatus
 
+@Immutable
 @Entity(
     tableName = "habit_configs",
     indices = [
@@ -27,6 +29,7 @@ data class HabitConfigEntity(
     val sortOrder: Int = 0
 )
 
+@Immutable
 @Entity(
     tableName = "habit_logs", 
     primaryKeys = ["habitId", "date"],

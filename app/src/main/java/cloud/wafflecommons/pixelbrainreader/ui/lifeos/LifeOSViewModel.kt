@@ -165,18 +165,18 @@ class LifeOSViewModel @Inject constructor(
         }
     }
 
-    private val _reloadTrigger = MutableSharedFlow<Unit>()
-    val reloadTrigger = _reloadTrigger.asSharedFlow()
-
-    fun forceSync() {
+    fun forceSyncEverything() {
+        if (_isSyncing.value) return
+        _isSyncing.value = true
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            _isSyncing.value = true
             try {
+                // 1. Health Connect Sync
+                automateHabitsUseCase(LocalDate.now())
+                
+                // 2. Git Fetch & Merge (Pull)
                 jGitProvider.pull()
-                jGitProvider.push()
-                _reloadTrigger.emit(Unit)
             } catch (e: Exception) {
-                android.util.Log.e("LifeOSViewModel", "Force sync failed", e)
+                android.util.Log.e("LifeOSViewModel", "Emergency sync failed", e)
             } finally {
                 _isSyncing.value = false
             }
@@ -258,8 +258,6 @@ class LifeOSViewModel @Inject constructor(
                     actionType = cloud.wafflecommons.pixelbrainreader.domain.gamification.XpActionType.TASK_DONE
                 )
             }
-            // Real-time flow will naturally pick up the edit.
-            _reloadTrigger.emit(Unit)
         }
     }
 

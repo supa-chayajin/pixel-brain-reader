@@ -32,7 +32,21 @@ connectClient = "1.1.0"
 vico = "1.13.0"
 remoteCreationCore = "1.0.0-alpha03"
 healthConnect = "1.1.0-alpha07"
-
+window = "1.2.0"
+hiltNavigationCompose = "1.2.0"
+workManager = "2.9.0"
+hiltWork = "1.2.0"
+playServicesLocation = "21.0.1"
+jsoup = "1.17.2"
+flexmark = "0.64.8"
+markwonHtml = "4.6.2"
+mediaPipeText = "0.10.14"
+coroutinesGuava = "1.10.2"
+glance = "1.1.0"
+mockk = "1.13.8"
+coroutinesTest = "1.7.3"
+rssParser = "6.0.8"
+snakeyaml = "2.2"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -112,7 +126,38 @@ vico-views = { group = "com.patrykandpatrick.vico", name = "views", version.ref 
 konfetti-compose = { group = "nl.dionsegijn", name = "konfetti-compose", version = "2.0.4" }
 androidx-compose-remote-creation-core = { group = "androidx.compose.remote", name = "remote-creation-core", version.ref = "remoteCreationCore" }
 androidx-health-connect = { group = "androidx.health.connect", name = "connect-client", version.ref = "healthConnect" }
+androidx-window = { group = "androidx.window", name = "window", version.ref = "window" }
 
+# WorkManager & Hilt Work
+androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "workManager" }
+androidx-hilt-work = { group = "androidx.hilt", name = "hilt-work", version.ref = "hiltWork" }
+androidx-hilt-compiler = { group = "androidx.hilt", name = "hilt-compiler", version.ref = "hiltWork" }
+
+# Location
+play-services-location = { group = "com.google.android.gms", name = "play-services-location", version.ref = "playServicesLocation" }
+
+# HTML Parsing & Conversion
+jsoup = { group = "org.jsoup", name = "jsoup", version.ref = "jsoup" }
+flexmark-html2md-converter = { group = "com.vladsch.flexmark", name = "flexmark-html2md-converter", version.ref = "flexmark" }
+markwon-html = { group = "io.noties.markwon", name = "html", version.ref = "markwonHtml" }
+
+# AI Core & MediaPipe
+mediapipe-tasks-text = { group = "com.google.mediapipe", name = "tasks-text", version.ref = "mediaPipeText" }
+kotlinx-coroutines-guava = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-guava", version.ref = "coroutinesGuava" }
+
+# Jetpack Glance
+androidx-glance-appwidget = { group = "androidx.glance", name = "glance-appwidget", version.ref = "glance" }
+androidx-glance-material3 = { group = "androidx.glance", name = "glance-material3", version.ref = "glance" }
+
+# Test
+mockk = { group = "io.mockk", name = "mockk", version.ref = "mockk" }
+kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutinesTest" }
+
+# RSS Parser
+rssparser = { group = "com.prof18.rssparser", name = "rssparser", version.ref = "rssParser" }
+
+# YAML
+snakeyaml = { group = "org.yaml", name = "snakeyaml", version.ref = "snakeyaml" }
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 jetbrains-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }

@@ -682,7 +682,7 @@ fun MainScreen(
                                                     onFolderClick = { path -> viewModel.loadFolder(path) },
                                                     onNavigateUp = { viewModel.navigateUp() },
                                                     onMenuClick = { },
-                                                    onRefresh = { viewModel.refresh() },
+                                                    onRefresh = { viewModel.refreshCurrentFolder() },
                                                     onCreateFile = { viewModel.openCreateFileDialog() },
                                                     onRenameFile = { newName, file -> viewModel.renameFile(newName, file) },
                                                     onMoveFile = { file, folder -> viewModel.moveFile(file, folder) },
@@ -829,8 +829,7 @@ fun MainScreen(
                 
                 LaunchedEffect(isSyncing) {
                      if (!isSyncing) { 
-                         // Sync Finished.
-                         dailyViewModel.refresh()
+                         // Sync Finished. Room Flow naturally updates UI.
                          moodViewModel.refreshData() 
                      }
                 }
