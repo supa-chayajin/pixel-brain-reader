@@ -294,12 +294,7 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    /**
-     * User Action: Pull-to-Refresh.
-     */
-    fun refresh() {
-       refreshCurrentFolder()
-    }
+
 
     fun onSearchQueryChanged(query: String) {
         _uiState.value = _uiState.value.copy(searchQuery = query)

@@ -24,7 +24,7 @@ android {
         compileSdk = 36
         targetSdkPreview = "36"
         versionCode = 4
-        versionName = "4.0.0"
+        versionName = "4.5.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -106,7 +106,7 @@ dependencies {
     implementation(libs.androidx.material3.adaptive.layout)
     implementation(libs.androidx.material3.adaptive.navigation)
     implementation(libs.androidx.material3.adaptive.navigation.suite)
-    implementation("androidx.window:window:1.2.0")
+    implementation(libs.androidx.window)
 
     // Navigation
     implementation(libs.androidx.navigation.compose)
@@ -120,9 +120,9 @@ dependencies {
     implementation(libs.androidx.hilt.navigation.compose)
     
     // WorkManager & Hilt Work
-    implementation("androidx.work:work-runtime-ktx:2.9.0")
-    implementation("androidx.hilt:hilt-work:1.2.0")
-    ksp("androidx.hilt:hilt-compiler:1.2.0")
+    implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.androidx.hilt.work)
+    ksp(libs.androidx.hilt.compiler)
 
     // Network
     implementation(libs.retrofit)
@@ -154,26 +154,26 @@ dependencies {
     implementation(libs.jgit)
 
     // Location
-    implementation("com.google.android.gms:play-services-location:21.0.1")
+    implementation(libs.play.services.location)
 
     // HTML Parsing & Conversion (Phase B: Universal Collector)
-    implementation("org.jsoup:jsoup:1.17.2")
-    implementation("com.vladsch.flexmark:flexmark-html2md-converter:0.64.8")
-    implementation("io.noties.markwon:html:4.6.2")
+    implementation(libs.jsoup)
+    implementation(libs.flexmark.html2md.converter)
+    implementation(libs.markwon.html)
 
     // AI Core & MediaPipe (V4.0: Neural Vault)
     implementation(libs.kotlinx.coroutines.play.services)
-    implementation("com.google.ai.client.generativeai:generativeai:0.9.0")
-    implementation("com.google.mediapipe:tasks-text:0.10.14")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-guava:1.10.2")
+    implementation(libs.google.ai.client)
+    implementation(libs.mediapipe.tasks.text)
+    implementation(libs.kotlinx.coroutines.guava)
     implementation(libs.mlkit.genai.prompt)
     implementation(libs.mlkit.genai.proofreading)
     implementation(libs.mlkit.genai.rewriting)
     implementation(libs.mlkit.genai.summarization)
 
     // Home Screen Widget (Jetpack Glance)
-    implementation("androidx.glance:glance-appwidget:1.1.0")
-    implementation("androidx.glance:glance-material3:1.1.0")
+    implementation(libs.androidx.glance.appwidget)
+    implementation(libs.androidx.glance.material3)
 
     // Test
     testImplementation(libs.junit)
@@ -183,14 +183,14 @@ dependencies {
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
-    testImplementation("io.mockk:mockk:1.13.8")
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
+    testImplementation(libs.mockk)
+    testImplementation(libs.kotlinx.coroutines.test)
 
     // RSS Parser
-    implementation("com.prof18.rssparser:rssparser:6.0.8")
+    implementation(libs.rssparser)
 
     // YAML & Serialization
-    implementation("org.yaml:snakeyaml:2.2")
+    implementation(libs.snakeyaml)
     implementation(libs.kaml)
     implementation(libs.kotlinx.serialization.json)
 

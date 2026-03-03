@@ -2,11 +2,13 @@ package cloud.wafflecommons.pixelbrainreader.data.model
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import androidx.compose.runtime.Immutable
 
 /**
  * Structured representation of Obsidian Note Frontmatter.
  * Uses Kaml for decoding.
  */
+@Immutable
 @Serializable
 data class NoteMetadata(
     // Standard Obsidian/Common properties

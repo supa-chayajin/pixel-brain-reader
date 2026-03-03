@@ -71,7 +71,7 @@ fun HabitDashboardScreen(
     ) { padding ->
         PullToRefreshBox(
             isRefreshing = isSyncing,
-            onRefresh = { viewModel.forceSync() },
+            onRefresh = { viewModel.forceSyncEverything() },
             state = pullToRefreshState,
             modifier = Modifier.fillMaxSize().padding(padding)
         ) {

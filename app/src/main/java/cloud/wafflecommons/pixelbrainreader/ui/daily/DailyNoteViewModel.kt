@@ -393,32 +393,6 @@ class DailyNoteViewModel @Inject constructor(
         }.launchIn(viewModelScope)
     }
 
-    fun triggerEmergencySync() {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, userMessage = "Burning & Syncing...") }
-            try {
-                // 1. Burn Room -> Disk
-                dashboardRepository.burnToDisk(currentDate)
-                
-                // 2. Force Push
-                val result = jGitProvider.commitAndForcePush("Manual emergency sync from Dashboard")
-                
-                if (result.isSuccess) {
-                    _uiState.update { it.copy(isLoading = false, userMessage = "Vault forced to remote successfully.") }
-                } else {
-                    val error = result.exceptionOrNull()?.message ?: "Unknown"
-                    _uiState.update { it.copy(isLoading = false, userMessage = "Sync Failed: $error") }
-                }
-            } catch (e: Exception) {
-                _uiState.update { it.copy(isLoading = false, userMessage = "Error: ${e.message}") }
-            }
-        }
-    }
-
-    /**
-     * Immediately pushes pending updates to the Room database.
-     * Hooks natively into Android lifecycle events (onPause/onStop).
-     */
     fun forceSaveImmediate() {
         _ideasUpdates.value?.let { 
             viewModelScope.launch { dashboardRepository.updateSecondBrain(currentDate, "IDEAS", it) }
@@ -427,24 +401,21 @@ class DailyNoteViewModel @Inject constructor(
             viewModelScope.launch { dashboardRepository.updateSecondBrain(currentDate, "NOTES", it) }
         }
     }
-
-    fun refreshDailyData() {
-        // Re-ingest from file? Or just refresh stats?
-        // Usually User wants to re-load from disk if they edited externally.
-        viewModelScope.launch {
-             _uiState.update { it.copy(isLoading = true) }
-             ingestFromFile(currentDate)
-             loadAuxiliaryData(currentDate)
-             _uiState.update { it.copy(isLoading = false) }
-        }
-    }
-
-    fun refresh() {
-        refreshDailyData()
-    }
     
     fun clearUserMessage() {
         _uiState.update { it.copy(userMessage = null) }
+    }
+    
+    fun compileDay() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                dashboardRepository.burnToDisk(currentDate)
+                _uiState.update { it.copy(userMessage = "Journée exportée et clôturée avec succès") }
+            } catch (e: Exception) {
+                Log.e("DailyNoteViewModel", "Manual burn failed", e)
+                _uiState.update { it.copy(userMessage = "Erreur lors de l'exportation") }
+            }
+        }
     }
     
     fun toggleBriefing() {
