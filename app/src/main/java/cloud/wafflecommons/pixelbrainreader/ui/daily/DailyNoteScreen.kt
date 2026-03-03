@@ -63,6 +63,7 @@ fun DailyNoteScreen(
     lifeOSViewModel: cloud.wafflecommons.pixelbrainreader.ui.lifeos.LifeOSViewModel = hiltViewModel() // Legacy
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val saveState by viewModel.saveState.collectAsStateWithLifecycle()
     val gamificationState by viewModel.gamificationState.collectAsStateWithLifecycle()
     val oracleInsight by viewModel.oracleInsight.collectAsStateWithLifecycle()
     val gratitudes by viewModel.gratitudes.collectAsStateWithLifecycle() // RFC-009
@@ -143,6 +144,11 @@ fun DailyNoteScreen(
                     }
 
                     // Settings
+                    cloud.wafflecommons.pixelbrainreader.ui.components.SaveStatusIndicator(
+                        state = saveState,
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    )
+                    
                     FilledTonalIconButton(
                         onClick = onNavigateToSettings,
                         colors = IconButtonDefaults.filledTonalIconButtonColors(

@@ -718,6 +718,7 @@ fun MainScreen(
                                             isExpandedScreen = isLargeScreen,
                                             isEditing = uiState.isEditing,
                                             hasUnsavedChanges = uiState.hasUnsavedChanges,
+                                            saveState = uiState.saveState,
                                             onWikiLinkClick = { target -> viewModel.onWikiLinkClick(target) },
                                             onCreateNew = { viewModel.createNewFile() },
                                             moodViewModel = moodViewModel,

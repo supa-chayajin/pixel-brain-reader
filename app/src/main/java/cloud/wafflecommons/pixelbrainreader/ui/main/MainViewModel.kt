@@ -90,6 +90,7 @@ class MainViewModel @Inject constructor(
         val isIndexing: Boolean = false, // Brain Optimization Indicator
 
         val hasUnsavedChanges: Boolean = false,
+        val saveState: cloud.wafflecommons.pixelbrainreader.ui.components.SaveState = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.IDLE,
         val importState: ImportState? = null,
         val analysisResult: String? = null, // [NEW] AI Analysis Result
         
@@ -441,7 +442,8 @@ class MainViewModel @Inject constructor(
 
         _uiState.value = _uiState.value.copy(
             unsavedContent = newContent,
-            hasUnsavedChanges = true
+            hasUnsavedChanges = true,
+            saveState = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.UNSAVED
         )
         
         // Trigger the debounced auto-save sequence
@@ -507,7 +509,7 @@ class MainViewModel @Inject constructor(
                 // 1. Save & Sync Orchestration
                 val (owner, repo) = secretManager.getRepoInfo()
                 
-                _uiState.value = _uiState.value.copy(isSyncing = true)
+                _uiState.value = _uiState.value.copy(isSyncing = true, saveState = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.SAVING)
                 
                 val result = repository.saveAndSync(path, contentToSave, owner, repo)
                 
@@ -515,11 +517,19 @@ class MainViewModel @Inject constructor(
                      // 2. Atomic UI Reset (Clear Dirty State but retain Edit Mode)
                     _uiState.value = _uiState.value.copy(
                         hasUnsavedChanges = false,
+                        saveState = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.SAVED,
                         // We do NOT clear `unsavedContent` or `isEditing` here if they are still editing.
                         // The memory state remains the Source of Truth while the editor is open.
                         // However, if they are NOT editing (e.g., they hit Save manually from somewhere else), we update it.
                         selectedFileContent = if (!_uiState.value.isEditing) contentToSave else _uiState.value.selectedFileContent
                     )
+                    
+                    launch {
+                        kotlinx.coroutines.delay(2500L)
+                        if (_uiState.value.saveState == cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.SAVED) {
+                            _uiState.value = _uiState.value.copy(saveState = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.IDLE)
+                        }
+                    }
                     _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Saved & Synced ✅"))
                 } else {
                     val msg = result.exceptionOrNull()?.message ?: "Unknown"
@@ -532,6 +542,7 @@ class MainViewModel @Inject constructor(
                         isEditing = false,
                         unsavedContent = null,
                         hasUnsavedChanges = false,
+                        saveState = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.ERROR,
                         selectedFileContent = contentToSave,
                         error = "Sync Warning: $msg"
                     )
@@ -542,7 +553,7 @@ class MainViewModel @Inject constructor(
 
             } catch (e: Exception) {
                  _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Save Failed ❌: ${e.message}"))
-                 _uiState.value = _uiState.value.copy(isSyncing = false)
+                 _uiState.value = _uiState.value.copy(isSyncing = false, saveState = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.ERROR)
             }
         }
     }

@@ -120,6 +120,7 @@ fun FileDetailPane(
     isExpandedScreen: Boolean,
     isEditing: Boolean,
     onContentChange: (String) -> Unit,
+    saveState: cloud.wafflecommons.pixelbrainreader.ui.components.SaveState,
     hasUnsavedChanges: Boolean,
     onWikiLinkClick: (String) -> Unit,
     onCreateNew: () -> Unit = {},
@@ -178,18 +179,12 @@ fun FileDetailPane(
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
-                            
-                            if (hasUnsavedChanges) {
-                                Spacer(Modifier.width(8.dp))
-                                Box(
-                                    modifier = Modifier
-                                        .size(8.dp)
-                                        .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.error)
-                                )
-                            }
                         }
                         Spacer(Modifier.weight(1f))
+                        cloud.wafflecommons.pixelbrainreader.ui.components.SaveStatusIndicator(
+                            state = saveState,
+                            modifier = Modifier.padding(end = 8.dp)
+                        )
                     }
                 }
             }
