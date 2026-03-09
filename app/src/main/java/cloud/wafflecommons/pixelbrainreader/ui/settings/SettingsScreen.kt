@@ -33,6 +33,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.material.icons.filled.HealthAndSafety
 import androidx.hilt.navigation.compose.hiltViewModel
 import android.widget.Toast
+import androidx.compose.material.icons.rounded.CleaningServices
+import androidx.compose.material.icons.rounded.DateRange
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.HeartRateRecord
@@ -223,14 +225,13 @@ fun SettingsScreen(
                 ListItem(
                     modifier = Modifier.clickable { onNavigateToHabitConfig() },
                     headlineContent = { Text("Manage Habits & Automations") },
-                    leadingContent = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) }
+                    leadingContent = { Icon(Icons.Rounded.DateRange, contentDescription = null) }
                 )
                 
                 ListItem(
                     modifier = Modifier.clickable { onNavigateToHomeConfig() },
-                    headlineContent = { Text("Ma Maison & Tâches") },
-                    supportingContent = { Text("Gérez vos pièces et vos cycles de nettoyage") },
-                    leadingContent = { Icon(Icons.Rounded.HomeWork, contentDescription = null) }
+                    headlineContent = { Text("Manage House & Chores") },
+                    leadingContent = { Icon(Icons.Rounded.CleaningServices, contentDescription = null) }
                 )
                 
                 Spacer(Modifier.height(8.dp))

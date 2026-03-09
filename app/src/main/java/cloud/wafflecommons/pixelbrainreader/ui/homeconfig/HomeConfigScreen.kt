@@ -50,7 +50,7 @@ fun HomeConfigScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Configuration de la maison") },
+                title = { Text("Home Configuration") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
@@ -82,7 +82,7 @@ fun HomeConfigScreen(
         ) {
             item {
                 Text(
-                    text = "Mes Pièces",
+                    text = "My Rooms",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(16.dp),
@@ -99,7 +99,7 @@ fun HomeConfigScreen(
                         InputChip(
                             selected = false,
                             onClick = { showCreateRoomDialog = true },
-                            label = { Text("Ajouter") },
+                            label = { Text("Add") },
                             leadingIcon = { Icon(Icons.Rounded.Add, "Add", Modifier.size(18.dp)) }
                         )
                     }
@@ -117,7 +117,7 @@ fun HomeConfigScreen(
                                 ) {
                                     Icon(
                                         Icons.Rounded.Delete, 
-                                        contentDescription = "Supprimer",
+                                        contentDescription = "Delete",
                                         tint = MaterialTheme.colorScheme.error,
                                         modifier = Modifier.size(14.dp)
                                     )
@@ -129,7 +129,7 @@ fun HomeConfigScreen(
                 
                 if (rooms.isEmpty()) {
                     Text(
-                        text = "Aucune pièce configurée. Ajoutez une pièce pour commencer.",
+                        text = "No rooms configured. Add a room to get started.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 16.dp)
@@ -194,12 +194,12 @@ fun HomeConfigScreen(
                 showRoomDialog = null
                 showCreateRoomDialog = false 
             },
-            title = { Text(if (isEdit) "Modifier la pièce" else "Nouvelle pièce") },
+            title = { Text(if (isEdit) "Edit Room" else "New Room") },
             text = {
                 OutlinedTextField(
                     value = nameInput,
                     onValueChange = { nameInput = it },
-                    label = { Text("Nom de la pièce") },
+                    label = { Text("Room Name") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -339,7 +339,7 @@ fun HomeConfigScreen(
                         label = { Text("Room") },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .menuAnchor(),
+                            .menuAnchor(androidx.compose.material3.MenuAnchorType.PrimaryNotEditable),
                         colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
                     )
 

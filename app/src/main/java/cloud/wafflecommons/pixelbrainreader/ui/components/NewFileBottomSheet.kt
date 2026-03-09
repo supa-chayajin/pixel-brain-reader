@@ -6,7 +6,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Description
-import androidx.compose.material.icons.outlined.NoteAdd
+import androidx.compose.material.icons.automirrored.outlined.NoteAdd
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -81,7 +81,7 @@ fun NewFileBottomSheet(
                     TemplateListItem(
                         displayName = "No Template (Blank)",
                         isSelected = selectedTemplate == null,
-                        icon = Icons.Outlined.NoteAdd,
+                        icon = Icons.AutoMirrored.Outlined.NoteAdd,
                         onClick = { selectedTemplate = null }
                     )
                 }

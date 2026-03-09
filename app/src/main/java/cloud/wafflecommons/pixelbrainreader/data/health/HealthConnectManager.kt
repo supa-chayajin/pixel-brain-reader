@@ -61,29 +61,44 @@ class HealthConnectManager @Inject constructor(
         val sleepEnd = date.atTime(18, 0).atZone(zoneId).toInstant()
         val sleepFilter = TimeRangeFilter.between(sleepStart, sleepEnd)
 
-        // Read Steps
-        val stepsRequest = ReadRecordsRequest(StepsRecord::class, timeRangeFilter)
-        val stepsResponse = healthConnectClient.readRecords(stepsRequest)
-        val totalSteps = stepsResponse.records.sumOf { it.count }
-
-        // Read Sleep
-        val sleepRequest = ReadRecordsRequest(SleepSessionRecord::class, sleepFilter)
-        val sleepResponse = healthConnectClient.readRecords(sleepRequest)
-        
-        // Filter for sleep sessions that ended on the target date
-        val totalSleepMillis = sleepResponse.records.filter { 
-            it.endTime.atZone(zoneId).toLocalDate() == date 
-        }.sumOf {
-            it.endTime.toEpochMilli() - it.startTime.toEpochMilli()
+        // 1. Professional Aggregation (Deduplicated by platform)
+        val aggregateResponse = try {
+            healthConnectClient.aggregate(
+                AggregateRequest(
+                    metrics = setOf(
+                        StepsRecord.COUNT_TOTAL,
+                        HydrationRecord.VOLUME_TOTAL,
+                        NutritionRecord.ENERGY_TOTAL
+                    ),
+                    timeRangeFilter = timeRangeFilter
+                )
+            )
+        } catch (e: Exception) {
+            Log.e("HealthConnectManager", "failed to aggregate metrics", e)
+            null
         }
+
+        val totalSteps = aggregateResponse?.get(StepsRecord.COUNT_TOTAL) ?: 0L
+        val waterConsumedMl = aggregateResponse?.get(HydrationRecord.VOLUME_TOTAL)?.inMilliliters ?: 0.0
+        val caloriesConsumed = aggregateResponse?.get(NutritionRecord.ENERGY_TOTAL)?.inKilocalories ?: 0.0
+
+        // 2. Read Sleep Sessions (Still involves some manual logic for overlaps)
+        val sleepRequest = ReadRecordsRequest(SleepSessionRecord::class, sleepFilter)
+        val sleepResponse = try { healthConnectClient.readRecords(sleepRequest) } catch (e: Exception) { null }
+        
+        val totalSleepMillis = sleepResponse?.records?.filter { 
+            it.endTime.atZone(zoneId).toLocalDate() == date 
+        }?.sumOf {
+            it.endTime.toEpochMilli() - it.startTime.toEpochMilli()
+        } ?: 0L
         val sleepDurationMinutes = totalSleepMillis / (1000 * 60)
 
-        // Read Heart Rate
+        // 3. Read Heart Rate Samples
         val heartRateRequest = ReadRecordsRequest(HeartRateRecord::class, timeRangeFilter)
-        val heartRateResponse = healthConnectClient.readRecords(heartRateRequest)
+        val heartRateResponse = try { healthConnectClient.readRecords(heartRateRequest) } catch (e: Exception) { null }
         var totalBpm = 0L
         var heartRateCount = 0
-        heartRateResponse.records.forEach { record ->
+        heartRateResponse?.records?.forEach { record ->
             record.samples.forEach { sample ->
                 totalBpm += sample.beatsPerMinute
                 heartRateCount++
@@ -91,34 +106,11 @@ class HealthConnectManager @Inject constructor(
         }
         val averageHeartRate = if (heartRateCount > 0) (totalBpm / heartRateCount).toInt() else 0
 
-        // Read Hydration
-        var waterConsumedMl = 0.0
-        try {
-            val hydrationRequest = ReadRecordsRequest(HydrationRecord::class, timeRangeFilter)
-            val hydrationResponse = healthConnectClient.readRecords(hydrationRequest)
-            waterConsumedMl = hydrationResponse.records.sumOf { it.volume.inMilliliters }
-        } catch (e: Exception) {
-            Log.e("HealthConnectManager", "Failed to read hydration", e)
-        }
-
-        // Read Nutrition
-        var caloriesConsumed = 0.0
-        try {
-            val nutritionRequest = ReadRecordsRequest(NutritionRecord::class, timeRangeFilter)
-            val nutritionResponse = healthConnectClient.readRecords(nutritionRequest)
-            caloriesConsumed = nutritionResponse.records.sumOf { it.energy?.inKilocalories ?: 0.0 }
-            Log.d("HealthConnectManager", "Nutrition Sync: Found ${nutritionResponse.records.size} records. Total calories: $caloriesConsumed kcal")
-        } catch (e: Exception) {
-            Log.e("HealthConnectManager", "Failed to read nutrition", e)
-        }
-
-        // Read Mindfulness / Exercise
+        // 4. Read Mindfulness / Exercise
         var mindfulnessMinutes = 0L
         try {
             val exerciseRequest = ReadRecordsRequest(ExerciseSessionRecord::class, timeRangeFilter)
             val exerciseResponse = healthConnectClient.readRecords(exerciseRequest)
-            // Filter for mindfulness/meditation/yoga types if available, otherwise just grab them if user considers all exercise as such.
-            // Using standard EXERCISE_TYPE_YOGA or similar, or just general if that's what's available. For now, filter for Yoga/Meditation
             mindfulnessMinutes = exerciseResponse.records.filter { 
                 it.exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_YOGA
             }.sumOf {

@@ -14,7 +14,7 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.foundation.horizontalScroll
@@ -89,7 +89,7 @@ fun MorningBriefingSection(
                 } else {
                     Column(modifier = Modifier.padding(top = 16.dp)) {
                         // 1. Logistic Weather
-                        WeatherAdviceBlock(state.weather, state.weatherAdvice)
+                        WeatherAdviceBlock(state.weather)
                         
                         HorizontalDivider(
                             modifier = Modifier.padding(vertical = 12.dp),
@@ -125,38 +125,13 @@ fun MorningBriefingSection(
                             }
                         }
                         
-                         HorizontalDivider(
+                         /*HorizontalDivider(
                              modifier = Modifier.padding(vertical = 12.dp),
                              color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
-                         )
-
-                        // [NEW] Oracle Insight
-                        if (state.oracleInsight != null) {
-                            Column(Modifier.padding(bottom = 12.dp)) {
-                                Text(
-                                    text = "✨ The Oracle",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.padding(bottom = 8.dp)
-                                )
-                                Text(
-                                    text = state.oracleInsight,
-                                    style = MaterialTheme.typography.bodyLarge.copy(
-                                        fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
-                                        fontWeight = FontWeight.Medium,
-                                        lineHeight = 24.sp
-                                    ),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            HorizontalDivider(
-                                modifier = Modifier.padding(vertical = 12.dp),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
-                            )
-                        }
+                         )*/
 
                         // 5. Neural Briefing (News Cards)
-                        if (state.news.isNotEmpty()) {
+                        /*if (state.news.isNotEmpty()) {
                             Text(
                                 text = "Veille",
                                 style = MaterialTheme.typography.labelSmall,
@@ -195,7 +170,7 @@ fun MorningBriefingSection(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                 fontStyle = FontStyle.Italic
                             )
-                        }
+                        }*/
                     }
                 }
             }
@@ -243,7 +218,7 @@ private fun NewsCard(article: cloud.wafflecommons.pixelbrainreader.data.local.en
                      contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
                  ) {
                      Icon(
-                         imageVector = Icons.Default.OpenInNew,
+                         imageVector = Icons.AutoMirrored.Filled.OpenInNew,
                          contentDescription = null,
                          modifier = Modifier.size(18.dp)
                      )
@@ -283,10 +258,8 @@ private fun NewsCard(article: cloud.wafflecommons.pixelbrainreader.data.local.en
 
 @Composable
 private fun WeatherAdviceBlock(
-    weather: cloud.wafflecommons.pixelbrainreader.data.repository.WeatherData?,
-    advice: String?
+    weather: cloud.wafflecommons.pixelbrainreader.data.repository.WeatherData?
 ) {
-    Log.d("WeatherAdviceBlock", "advice: $advice")
     Row(verticalAlignment = Alignment.CenterVertically) {
         if (weather != null) {
             Text(
@@ -296,13 +269,11 @@ private fun WeatherAdviceBlock(
             )
             Column {
                 Text(
-                    text = "${weather.temperature} • ${weather.location ?: "Unknown"}",
+                    text = "${weather.temperature}",
                     style = MaterialTheme.typography.titleSmall,
                 )
-                // Real Advice from AI/Frontmatter
-                val displayAdvice = if (!advice.isNullOrBlank()) advice else "Météo du jour"
                 Text(
-                    text = "💡 $displayAdvice",
+                    text = "💡 ${weather.location ?: "Unknown"}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

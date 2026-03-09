@@ -34,8 +34,9 @@ fun ChoreDashboardScreen(
 
     var showAddSheet by remember { mutableStateOf(false) }
 
-    // Adaptive: 1 column on phones, 2 columns on tablets, 3 columns on expanded folds/large tablets
+    // Adaptive: More granular columns for foldables/large tablets
     val columns = when {
+        configuration.screenWidthDp > 1200 -> 4
         configuration.screenWidthDp > 840 -> 3
         configuration.screenWidthDp > 600 -> 2
         else -> 1
@@ -45,7 +46,7 @@ fun ChoreDashboardScreen(
         topBar = {
             @OptIn(ExperimentalMaterial3Api::class)
             TopAppBar(
-                title = { Text("Home OS", fontWeight = FontWeight.Bold) },
+                title = { Text("Home & Chores", fontWeight = FontWeight.Black) },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background
                 )
@@ -54,8 +55,10 @@ fun ChoreDashboardScreen(
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = { showAddSheet = true },
-                icon = { Icon(Icons.Rounded.Add, contentDescription = "Add Chore") },
-                text = { Text("Add Chore") }
+                icon = { Icon(Icons.Rounded.Add, contentDescription = "Ajouter") },
+                text = { Text("New chore") },
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
             )
         }
     ) { padding ->
@@ -65,9 +68,10 @@ fun ChoreDashboardScreen(
                 onAddClick = { showAddSheet = true }
             )
         } else {
+            val horizontalPadding = if (configuration.screenWidthDp > 840) 32.dp else 16.dp
             LazyVerticalStaggeredGrid(
                 columns = StaggeredGridCells.Fixed(columns),
-                contentPadding = PaddingValues(16.dp),
+                contentPadding = PaddingValues(horizontal = horizontalPadding, vertical = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalItemSpacing = 16.dp,
                 modifier = Modifier
@@ -83,7 +87,10 @@ fun ChoreDashboardScreen(
                         item {
                             Card(
                                 colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)
+                                ),
+                                border = CardDefaults.outlinedCardBorder().copy(
+                                    brush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                                 ),
                                 modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
                             ) {
@@ -98,7 +105,7 @@ fun ChoreDashboardScreen(
                                     )
                                     Spacer(Modifier.width(12.dp))
                                     Text(
-                                        text = "Tout est propre !",
+                                        text = "Everything is clean!",
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -132,23 +139,29 @@ fun ChoreDashboardScreen(
 @Composable
 fun RoomHeader(roomName: String, urgentCount: Int) {
     Row(
-        verticalAlignment = Alignment.CenterVertically,
+        verticalAlignment = Alignment.Bottom,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 16.dp, bottom = 8.dp)
+            .padding(top = 24.dp, bottom = 4.dp)
     ) {
         Text(
             text = roomName,
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.ExtraBold,
+            color = MaterialTheme.colorScheme.onBackground
         )
+        Spacer(modifier = Modifier.width(12.dp))
         if (urgentCount > 0) {
-            Spacer(modifier = Modifier.width(8.dp))
-            Badge(containerColor = MaterialTheme.colorScheme.error) {
+            Surface(
+                color = MaterialTheme.colorScheme.errorContainer,
+                shape = MaterialTheme.shapes.extraSmall
+            ) {
                 Text(
-                    text = "$urgentCount Urgent",
-                    modifier = Modifier.padding(horizontal = 4.dp)
+                    text = "$urgentCount URGENT",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                 )
             }
         }
@@ -173,7 +186,7 @@ fun ChoreCard(chore: ChoreUiModel, onDoItClick: () -> Unit) {
 
     Card(
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         modifier = Modifier.fillMaxWidth()
@@ -182,30 +195,44 @@ fun ChoreCard(chore: ChoreUiModel, onDoItClick: () -> Unit) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.Top
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = chore.entity.name,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = chore.entity.name,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Surface(
+                            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f),
+                            shape = MaterialTheme.shapes.extraSmall
+                        ) {
+                            Text(
+                                text = "+${chore.entity.baseEffort} XP",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Black,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                            )
+                        }
+                    }
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Last done ${chore.daysElapsed} days ago • Every ${chore.entity.frequencyDays}d",
+                        text = "Done ${chore.daysElapsed} days ago • Every ${chore.entity.frequencyDays}d",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 IconButton(
                     onClick = onDoItClick,
-                    enabled = targetProgress > 0.1f // Very simple throttle if it's too clean
+                    enabled = targetProgress > 0.1f 
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.CheckCircle,
-                        contentDescription = "Do It",
-                        tint = if (targetProgress > 0.1f) barColor else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                        modifier = Modifier.size(36.dp)
+                        contentDescription = "Done",
+                        tint = if (targetProgress > 0.1f) barColor else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
+                        modifier = Modifier.size(32.dp)
                     )
                 }
             }
@@ -242,33 +269,38 @@ fun EmptyChoreState(
     onAddClick: () -> Unit
 ) {
     Column(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize().padding(32.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Icon(
             imageVector = Icons.Rounded.CleaningServices,
             contentDescription = null,
-            modifier = Modifier.size(120.dp),
-            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+            modifier = Modifier.size(96.dp),
+            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
         )
         Spacer(modifier = Modifier.height(24.dp))
         Text(
-            text = "Your household is pristine.",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold
+            text = "Your home is sparkling.",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Black,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
         )
         Text(
-            text = "Configure chores to start earning XP for physical labor.",
+            text = "Configure chores to start earning XP.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             modifier = Modifier.padding(top = 8.dp)
         )
-        Spacer(modifier = Modifier.height(24.dp))
-        Button(onClick = onAddClick) {
+        Spacer(modifier = Modifier.height(32.dp))
+        Button(
+            onClick = onAddClick,
+            shape = MaterialTheme.shapes.medium
+        ) {
             Icon(Icons.Rounded.Add, contentDescription = null)
             Spacer(modifier = Modifier.width(8.dp))
-            Text("Create First Chore")
+            Text("Create chore")
         }
     }
 }
