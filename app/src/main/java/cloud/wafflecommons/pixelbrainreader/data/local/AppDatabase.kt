@@ -13,6 +13,8 @@ import cloud.wafflecommons.pixelbrainreader.data.local.entity.EmbeddingEntity
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.EmbeddingDao
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.NewsArticleEntity
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.NewsDao
+import cloud.wafflecommons.pixelbrainreader.data.local.dao.ChoreDao
+import cloud.wafflecommons.pixelbrainreader.data.local.entity.ChoreEntity
 
 @Database(
     entities = [
@@ -30,9 +32,11 @@ import cloud.wafflecommons.pixelbrainreader.data.local.dao.NewsDao
         cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyTaskEntity::class,
         cloud.wafflecommons.pixelbrainreader.data.local.entity.ScratchNoteEntity::class,
         cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyBriefingEntity::class,
-        cloud.wafflecommons.pixelbrainreader.data.local.entity.GratitudeEntity::class // RFC-009
+        cloud.wafflecommons.pixelbrainreader.data.local.entity.GratitudeEntity::class, // RFC-009
+        cloud.wafflecommons.pixelbrainreader.data.local.entity.HomeRoomEntity::class, // V4.6.1 Home Config
+        ChoreEntity::class // V4.6 Home OS
     ], 
-    version = 19, // Incremented version
+    version = 21, // Version 21 for HomeRoomEntity and roomId FK
     exportSchema = false
 )
 @androidx.room.TypeConverters(RoomTypeConverters::class)
@@ -49,4 +53,6 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun dailyBriefingDao(): cloud.wafflecommons.pixelbrainreader.data.local.dao.DailyBriefingDao
     abstract fun gratitudeDao(): cloud.wafflecommons.pixelbrainreader.data.local.dao.GratitudeDao
     abstract fun taskDao(): cloud.wafflecommons.pixelbrainreader.data.local.dao.TaskDao
+    abstract fun choreDao(): ChoreDao
+    abstract fun homeRoomDao(): cloud.wafflecommons.pixelbrainreader.data.local.dao.HomeRoomDao
 }

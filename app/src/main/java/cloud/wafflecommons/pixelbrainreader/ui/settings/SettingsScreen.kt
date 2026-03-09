@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.rounded.HomeWork
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.*
 import kotlinx.coroutines.launch
@@ -42,6 +43,7 @@ import androidx.health.connect.client.permission.HealthPermission
 fun SettingsScreen(
     onBack: () -> Unit,
     onNavigateToHabitConfig: () -> Unit = {},
+    onNavigateToHomeConfig: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -222,6 +224,13 @@ fun SettingsScreen(
                     modifier = Modifier.clickable { onNavigateToHabitConfig() },
                     headlineContent = { Text("Manage Habits & Automations") },
                     leadingContent = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) }
+                )
+                
+                ListItem(
+                    modifier = Modifier.clickable { onNavigateToHomeConfig() },
+                    headlineContent = { Text("Ma Maison & Tâches") },
+                    supportingContent = { Text("Gérez vos pièces et vos cycles de nettoyage") },
+                    leadingContent = { Icon(Icons.Rounded.HomeWork, contentDescription = null) }
                 )
                 
                 Spacer(Modifier.height(8.dp))

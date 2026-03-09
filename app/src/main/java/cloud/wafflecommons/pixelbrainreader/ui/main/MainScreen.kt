@@ -48,6 +48,7 @@ import androidx.compose.material.icons.filled.Today
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SearchOff
+import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material.icons.filled.Mood
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.TextField
@@ -111,11 +112,13 @@ import nl.dionsegijn.konfetti.core.emitter.Emitter
 object Screen {
     const val Home = "home"
     const val Chat = "chat"
-    const val MoodTracker = "mood"
+    const val HomeOS = "home_os"
     const val Settings = "settings"
     const val Import = "import"
     const val DailyNote = "daily_note"
+    const val MoodTracker = "mood"
     const val Stats = "stats"
+    const val ROUTE_HOME_CONFIG = "home_config"
 }
 
 @OptIn(ExperimentalMaterial3AdaptiveApi::class, ExperimentalMaterial3Api::class)
@@ -422,9 +425,9 @@ fun MainScreen(
                 label = { Text("Habits") }
             )
             item(
-                selected = currentRoute == Screen.MoodTracker,
+                selected = currentRoute == Screen.HomeOS,
                 onClick = { 
-                    navController.navigate(Screen.MoodTracker) {
+                    navController.navigate(Screen.HomeOS) {
                         popUpTo(navController.graph.findStartDestination().id) {
                             saveState = true
                         }
@@ -432,12 +435,26 @@ fun MainScreen(
                         restoreState = true
                     }
                 },
-                icon = { Icon(Icons.Default.Mood, contentDescription = "Mood") },
-                label = { Text("Mood") }
+                icon = { Icon(Icons.Filled.CleaningServices, contentDescription = "Home OS") },
+                label = { Text("Home OS") }
             )
 
             
             if (isLargeScreen) {
+                item(
+                    selected = currentRoute == Screen.MoodTracker,
+                    onClick = {
+                        navController.navigate(Screen.MoodTracker) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                    icon = { Icon(Icons.Default.Mood, contentDescription = "Mood") },
+                    label = { Text("Mood") }
+                )
                 item(
                     selected = currentRoute == Screen.Stats,
                     onClick = {
@@ -778,7 +795,8 @@ fun MainScreen(
             composable(Screen.Settings) {
                 SettingsScreen(
                     onBack = { navController.popBackStack() },
-                    onNavigateToHabitConfig = { navController.navigate("habit_config") }
+                    onNavigateToHabitConfig = { navController.navigate("habit_config") },
+                    onNavigateToHomeConfig = { navController.navigate(Screen.ROUTE_HOME_CONFIG) }
                 )
             }
 
@@ -789,8 +807,8 @@ fun MainScreen(
             }
 
 
-            composable(Screen.MoodTracker) {
-                MoodHistoryScreen()
+            composable(Screen.HomeOS) {
+                cloud.wafflecommons.pixelbrainreader.ui.homeos.ChoreDashboardScreen()
             }
 
             composable(Screen.Import) {
@@ -858,6 +876,13 @@ fun MainScreen(
                  cloud.wafflecommons.pixelbrainreader.ui.lifestats.LifeStatsScreen(
                      onNavigateBack = { navController.popBackStack() }
                  )
+            }
+            
+
+            composable(Screen.ROUTE_HOME_CONFIG) {
+                cloud.wafflecommons.pixelbrainreader.ui.homeconfig.HomeConfigScreen(
+                    onNavigateBack = { navController.popBackStack() }
+                )
             }
         }
 
