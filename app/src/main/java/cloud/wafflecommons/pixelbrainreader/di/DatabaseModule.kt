@@ -99,4 +99,16 @@ object DatabaseModule {
     fun provideTaskDao(database: AppDatabase): cloud.wafflecommons.pixelbrainreader.data.local.dao.TaskDao {
         return database.taskDao()
     }
+
+    @Provides
+    @Singleton
+    fun provideChoreDao(database: AppDatabase): cloud.wafflecommons.pixelbrainreader.data.local.dao.ChoreDao {
+        return database.choreDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideHomeRoomDao(database: AppDatabase): cloud.wafflecommons.pixelbrainreader.data.local.dao.HomeRoomDao {
+        return database.homeRoomDao()
+    }
 }
