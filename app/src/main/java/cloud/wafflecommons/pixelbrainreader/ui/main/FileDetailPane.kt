@@ -207,7 +207,7 @@ fun FileDetailPane(
                         
                         // Load mood data if it's a daily note
                         androidx.compose.runtime.LaunchedEffect(fileName) {
-                            if (isDailyNote && fileName != null) {
+                            if (isDailyNote) {
                                 try {
                                     val dateStr = fileName.substringBefore(".md")
                                     val date = LocalDate.parse(dateStr)

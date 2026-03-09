@@ -68,15 +68,13 @@ data class MorningBriefingUiState(
     val topTags: List<String> = emptyList(),
     val quote: String = "",
     val quoteAuthor: String = "",
-    val weatherAdvice: String = "",
-    val news: List<cloud.wafflecommons.pixelbrainreader.data.local.entity.NewsArticleEntity> = emptyList(),
     val oracleInsight: String? = null,
     val isExpanded: Boolean = true,
     val isLoading: Boolean = true
 )
 
 @HiltViewModel
-@OptIn(FlowPreview::class)
+@OptIn(FlowPreview::class, kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class DailyNoteViewModel @Inject constructor(
     private val moodRepository: MoodRepository,
     private val newsRepository: NewsRepository,
@@ -174,7 +172,7 @@ class DailyNoteViewModel @Inject constructor(
                     _uiState.update { current ->
                          current.copy(
                              briefingState = current.briefingState.copy(
-                                 weatherAdvice = model.briefing,
+                                 // weatherAdvice = model.briefing,
                                  oracleInsight = model.oracleInsight,
                                  isLoading = false
                              )
@@ -468,7 +466,7 @@ class DailyNoteViewModel @Inject constructor(
         isExpanded: Boolean
     ): MorningBriefingUiState {
         val weather = weatherRepository.getCurrentWeatherAndLocation()
-        val news = try { newsRepository.getTodayNews() } catch (e: Exception) { emptyList() }
+        // val news = try { newsRepository.getTodayNews() } catch (e: Exception) { emptyList() }
         
         // Mood Trends (Calculated here)
         val moodTrend = loadMoodTrend(date)
@@ -484,7 +482,7 @@ class DailyNoteViewModel @Inject constructor(
             weather = weather,
             // weatherAdvice handled by Flow from Repository
             moodTrend = moodTrend,
-            news = news,
+            // news = news,
             quote = "Stay safe my friend, and don't you dare go hollow!", // Placeholder as BriefingGenerator removed from VM
             isExpanded = isExpanded,
             isLoading = false

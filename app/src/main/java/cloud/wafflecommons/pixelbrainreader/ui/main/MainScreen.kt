@@ -26,29 +26,28 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.NavGraph.Companion.findStartDestination
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.CloseFullscreen
-import androidx.compose.material.icons.filled.Dashboard
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.OpenInFull
-import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.CloseFullscreen
+import androidx.compose.material.icons.rounded.Dashboard
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.Menu
+import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.OpenInFull
+import androidx.compose.material.icons.rounded.Save
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.outlined.Dashboard
-import androidx.compose.material.icons.outlined.Description
-import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.rounded.Visibility
+import androidx.compose.material.icons.rounded.Description
+import androidx.compose.material.icons.rounded.Settings
 
-import androidx.compose.material.icons.outlined.Psychology
-import androidx.compose.material.icons.filled.Today
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.rounded.Psychology
+import androidx.compose.material.icons.rounded.Today
+import androidx.compose.material.icons.rounded.DateRange
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.filled.SearchOff
-import androidx.compose.material.icons.filled.CleaningServices
+import androidx.compose.material.icons.rounded.CleaningServices
 import androidx.compose.material.icons.filled.Mood
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.TextField
@@ -347,20 +346,20 @@ fun MainScreen(
     if (uiState.showDeleteConfirmation) {
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { viewModel.dismissDeleteConfirmation() },
-            title = { Text("Supprimer ce fichier ?") },
-            text = { Text("Cette action est irréversible et supprimera le fichier du coffre-fort et du dépôt Git.") },
-            icon = { Icon(Icons.Default.Delete, contentDescription = null) },
+            title = { Text("Delete this file?") },
+            text = { Text("This action cannot be undone and will delete the file from the Vault and Git repository.") },
+            icon = { Icon(Icons.Rounded.Delete, contentDescription = null) },
             confirmButton = {
                 androidx.compose.material3.TextButton(
                     onClick = { viewModel.confirmDeleteFile() },
                     colors = androidx.compose.material3.ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 ) {
-                    Text("Supprimer")
+                    Text("Delete")
                 }
             },
             dismissButton = {
                 androidx.compose.material3.TextButton(onClick = { viewModel.dismissDeleteConfirmation() }) {
-                    Text("Annuler")
+                    Text("Cancel")
                 }
             }
         )
@@ -379,7 +378,7 @@ fun MainScreen(
                         restoreState = true
                     }
                 },
-                icon = { Icon(Icons.Default.Dashboard, contentDescription = "Home") },
+                icon = { Icon(Icons.Rounded.Dashboard, contentDescription = "Home") },
                 label = { Text("Repo") }
             )
             item(
@@ -393,7 +392,7 @@ fun MainScreen(
                         restoreState = true
                     }
                 },
-                icon = { Icon(Icons.Outlined.Psychology, contentDescription = "Brain") },
+                icon = { Icon(Icons.Rounded.Psychology, contentDescription = "Brain") },
                 label = { Text("Chat") }
             )
             item(
@@ -407,7 +406,7 @@ fun MainScreen(
                         restoreState = true
                      }
                  },
-                 icon = { Icon(Icons.Default.Today, contentDescription = "Today") },
+                 icon = { Icon(Icons.Rounded.Today, contentDescription = "Today") },
                  label = { Text("Daily") }
             )
             item(
@@ -421,7 +420,7 @@ fun MainScreen(
                         restoreState = true
                     }
                 },
-                icon = { Icon(Icons.Default.DateRange, contentDescription = "Habits") },
+                icon = { Icon(Icons.Rounded.DateRange, contentDescription = "Habits") },
                 label = { Text("Habits") }
             )
             item(
@@ -435,8 +434,8 @@ fun MainScreen(
                         restoreState = true
                     }
                 },
-                icon = { Icon(Icons.Filled.CleaningServices, contentDescription = "Home OS") },
-                label = { Text("Home OS") }
+                icon = { Icon(Icons.Rounded.CleaningServices, contentDescription = "Chores") },
+                label = { Text("Chores") }
             )
 
             
@@ -581,7 +580,7 @@ fun MainScreen(
                                             )
                                         ) {
                                             Icon(
-                                                imageVector = if (uiState.isEditing) Icons.Filled.Visibility else Icons.Filled.Edit,
+                                                imageVector = if (uiState.isEditing) Icons.Rounded.Visibility else Icons.Rounded.Edit,
                                                 contentDescription = if (uiState.isEditing) "View" else "Edit"
                                             )
                                         }
@@ -595,7 +594,7 @@ fun MainScreen(
                                             )
                                         ) {
                                             Icon(
-                                                imageVector = Icons.Default.Delete,
+                                                imageVector = Icons.Rounded.Delete,
                                                 contentDescription = "Delete File",
                                                 tint = MaterialTheme.colorScheme.error
                                             )
@@ -611,7 +610,7 @@ fun MainScreen(
                                                 )
                                             ) {
                                                 Icon(
-                                                    imageVector = if (uiState.isFocusMode) Icons.Filled.CloseFullscreen else Icons.Filled.OpenInFull,
+                                                    imageVector = if (uiState.isFocusMode) Icons.Rounded.CloseFullscreen else Icons.Rounded.OpenInFull,
                                                     contentDescription = "Focus Mode"
                                                 )
                                             }
@@ -630,7 +629,7 @@ fun MainScreen(
                                                 contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         ) {
-                                            Icon(Icons.Filled.Close, "Close")
+                                            Icon(Icons.Rounded.Close, "Close")
                                         }
 
                                     } else {
@@ -642,7 +641,7 @@ fun MainScreen(
                                                 contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         ) {
-                                            Icon(Icons.Default.Search, "Search")
+                                            Icon(Icons.Rounded.Search, "Search")
                                         }
 
                                         // Browser Actions
@@ -653,7 +652,7 @@ fun MainScreen(
                                                 contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         ) {
-                                            Icon(Icons.Default.Add, "New File")
+                                            Icon(Icons.Rounded.Add, "New File")
                                         }
                                     }
                                 }

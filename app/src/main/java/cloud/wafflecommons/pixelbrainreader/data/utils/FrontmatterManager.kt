@@ -75,6 +75,7 @@ object FrontmatterManager {
         val (ast, body) = extractFrontmatterAndBody(content)
         
         // Filter out nulls for upsert
+        @Suppress("UNCHECKED_CAST")
         val cleanUpdates = updates.filterValues { it != null } as Map<String, Any>
         upsertProperties(ast, cleanUpdates)
         
