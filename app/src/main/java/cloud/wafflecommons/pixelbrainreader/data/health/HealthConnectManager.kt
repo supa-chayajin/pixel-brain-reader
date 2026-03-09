@@ -54,7 +54,7 @@ class HealthConnectManager @Inject constructor(
         // Daily filter: 00:00 to 23:59 of current date
         val startOfDay = date.atStartOfDay(zoneId).toInstant()
         val endOfDay = date.plusDays(1).atStartOfDay(zoneId).toInstant()
-        val dailyFilter = TimeRangeFilter.between(startOfDay, endOfDay)
+        val timeRangeFilter = TimeRangeFilter.between(startOfDay, endOfDay)
 
         // Sleep filter: 18:00 previous day to 18:00 current day
         val sleepStart = date.minusDays(1).atTime(18, 0).atZone(zoneId).toInstant()
@@ -62,7 +62,7 @@ class HealthConnectManager @Inject constructor(
         val sleepFilter = TimeRangeFilter.between(sleepStart, sleepEnd)
 
         // Read Steps
-        val stepsRequest = ReadRecordsRequest(StepsRecord::class, dailyFilter)
+        val stepsRequest = ReadRecordsRequest(StepsRecord::class, timeRangeFilter)
         val stepsResponse = healthConnectClient.readRecords(stepsRequest)
         val totalSteps = stepsResponse.records.sumOf { it.count }
 
@@ -79,7 +79,7 @@ class HealthConnectManager @Inject constructor(
         val sleepDurationMinutes = totalSleepMillis / (1000 * 60)
 
         // Read Heart Rate
-        val heartRateRequest = ReadRecordsRequest(HeartRateRecord::class, dailyFilter)
+        val heartRateRequest = ReadRecordsRequest(HeartRateRecord::class, timeRangeFilter)
         val heartRateResponse = healthConnectClient.readRecords(heartRateRequest)
         var totalBpm = 0L
         var heartRateCount = 0
@@ -94,7 +94,7 @@ class HealthConnectManager @Inject constructor(
         // Read Hydration
         var waterConsumedMl = 0.0
         try {
-            val hydrationRequest = ReadRecordsRequest(HydrationRecord::class, dailyFilter)
+            val hydrationRequest = ReadRecordsRequest(HydrationRecord::class, timeRangeFilter)
             val hydrationResponse = healthConnectClient.readRecords(hydrationRequest)
             waterConsumedMl = hydrationResponse.records.sumOf { it.volume.inMilliliters }
         } catch (e: Exception) {
@@ -104,7 +104,7 @@ class HealthConnectManager @Inject constructor(
         // Read Nutrition
         var caloriesConsumed = 0.0
         try {
-            val nutritionRequest = ReadRecordsRequest(NutritionRecord::class, dailyFilter)
+            val nutritionRequest = ReadRecordsRequest(NutritionRecord::class, timeRangeFilter)
             val nutritionResponse = healthConnectClient.readRecords(nutritionRequest)
             caloriesConsumed = nutritionResponse.records.sumOf { it.energy?.inKilocalories ?: 0.0 }
             Log.d("HealthConnectManager", "Nutrition Sync: Found ${nutritionResponse.records.size} records. Total calories: $caloriesConsumed kcal")
@@ -115,7 +115,7 @@ class HealthConnectManager @Inject constructor(
         // Read Mindfulness / Exercise
         var mindfulnessMinutes = 0L
         try {
-            val exerciseRequest = ReadRecordsRequest(ExerciseSessionRecord::class, dailyFilter)
+            val exerciseRequest = ReadRecordsRequest(ExerciseSessionRecord::class, timeRangeFilter)
             val exerciseResponse = healthConnectClient.readRecords(exerciseRequest)
             // Filter for mindfulness/meditation/yoga types if available, otherwise just grab them if user considers all exercise as such.
             // Using standard EXERCISE_TYPE_YOGA or similar, or just general if that's what's available. For now, filter for Yoga/Meditation
