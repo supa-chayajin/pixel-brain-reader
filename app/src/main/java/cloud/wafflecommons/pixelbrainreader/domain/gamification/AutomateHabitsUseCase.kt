@@ -42,19 +42,24 @@ class AutomateHabitsUseCase @Inject constructor(
 
         activeHabitsForDay.forEach { habit ->
             val extractedValue: Double = when (habit.autoSource) {
+                // IMPORTANT: Health Connect metrics returns the ABSOLUTE daily total.
+                // We MUST set this value, NOT add to it, to ensure Idempotency during repeated syncs.
                 "health_connect_steps" -> metrics.steps.toDouble()
                 "health_connect_sleep" -> metrics.sleepDurationMinutes / 60.0
                 "health_connect_hydration" -> metrics.waterConsumedMl
-                "health_connect_nutrition" -> metrics.caloriesConsumed
                 "health_connect_mindfulness" -> metrics.mindfulnessMinutes.toDouble()
                 "health_connect_weight" -> metrics.weight
+                
+                // [FIX Phase 5] "Prise de Masse" Nutrition Mapping
+                "health_connect_nutrition" -> metrics.caloriesConsumed
+                
                 else -> 0.0
             }
 
             if (extractedValue > 0) {
-                // The underlying habitRepository.updateHabitValue handles checking extractedValue >= targetValue
-                // if the type is MEASURABLE. We simply pass the raw aggregated progress here.
-                Log.d("AutomateHabitsUseCase", "Automating habit ${habit.id} with value $extractedValue, target: ${habit.targetValue}")
+                // The underlying habitRepository.updateHabitValue strictly creates a NEW HabitLogEntry and replaces it by Date.
+                // This guarantees `progress = extractedValue` and perfectly fixes the accumulation duplicate bug.
+                Log.d("AutomateHabitsUseCase", "Automating habit ${habit.id} with absolute value $extractedValue, target: ${habit.targetValue}")
                 habitRepository.updateHabitValue(date, habit.id, extractedValue)
             }
         }

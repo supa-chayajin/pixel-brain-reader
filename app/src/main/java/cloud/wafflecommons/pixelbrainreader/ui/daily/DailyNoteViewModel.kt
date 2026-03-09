@@ -119,6 +119,23 @@ class DailyNoteViewModel @Inject constructor(
         dailyNoteRepository.getGratitudesStream(date)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    // [MODIFIED] Blueprint Reactivity refactor. Eliminate imperative load for aux data.
+    private val _currentDayMood: StateFlow<DailyMoodData?> = _selectedDate
+        .flatMapLatest { date ->
+           // Fallback to flow equivalent if repository supports it, otherwise emit singular
+           moodRepository.getDailyMood(date)
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    private val _healthMetrics = _selectedDate.map { date ->
+        val metricsFile = File(context.filesDir, "10_Journal/data/health/metrics/$date.json")
+        if (metricsFile.exists()) {
+             try {
+                com.google.gson.Gson().fromJson(metricsFile.readText(), cloud.wafflecommons.pixelbrainreader.data.health.DailyHealthMetrics::class.java)
+             } catch (e: Exception) { null }
+        } else null
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
     // [NEW] Persisted UI State
     val isOracleExpanded = userPrefs.isOracleExpanded
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
@@ -214,8 +231,25 @@ class DailyNoteViewModel @Inject constructor(
         val tasksFlow = dashboardRepository.getLiveTasks(date)
         val scratchFlow = scratchRepository.getActiveScraps()
         
-        combine(dashboardFlow, timelineFlow, tasksFlow, scratchFlow) { dashboard, timeline, tasks, scraps ->
-            java.util.concurrent.atomic.AtomicReference(java.util.concurrent.atomic.AtomicReference(Triple(dashboard, timeline, tasks)) to scraps) // Dummy to handle 4 flows combine logic if needed or use combine extension
+        // Wait on the new blueprint variables natively
+        combine(
+            dashboardFlow, 
+            timelineFlow, 
+            tasksFlow, 
+            scratchFlow,
+            _currentDayMood,
+            _healthMetrics,
+            userPrefs.isBriefingExpanded.map { it ?: true } // Expand flow
+        ) { args ->
+            // Use varargs combine trick since we have 7 flows
+            val dashboard = args[0] as? cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyDashboardEntity
+            @Suppress("UNCHECKED_CAST") val timeline = args[1] as? List<TimelineEntryEntity> ?: emptyList()
+            @Suppress("UNCHECKED_CAST") val tasks = args[2] as? List<DailyTaskEntity> ?: emptyList()
+            @Suppress("UNCHECKED_CAST") val scraps = args[3] as? List<cloud.wafflecommons.pixelbrainreader.data.local.entity.ScratchNoteEntity> ?: emptyList()
+            val moodData = args[4] as? DailyMoodData
+            val healthMetrics = args[5] as? cloud.wafflecommons.pixelbrainreader.data.health.DailyHealthMetrics
+            val isExpanded = args[6] as? Boolean ?: true
+
             // Shield ideas and notes from being overwritten by delayed disk emissions
             // if the user is actively typing (uncommitted changes exist in the buffer).
             val currentIdeasUpdates = _ideasUpdates.value
@@ -233,6 +267,15 @@ class DailyNoteViewModel @Inject constructor(
                 dashboard?.notesContent ?: ""
             }
 
+            // Tags calculations
+            val dailyTags = moodData?.entries?.flatMap { it.activities ?: emptyList() }
+                ?.groupingBy { it }
+                ?.eachCount()?.entries?.sortedByDescending { it.value }?.take(5)?.map { it.key } 
+                ?: emptyList()
+            
+            // Briefing State updating
+            val currentBriefing = _uiState.value.briefingState.copy(isExpanded = isExpanded)
+
             _uiState.update { 
                 it.copy(
                     mantra = dashboard?.dailyMantra ?: "",
@@ -241,6 +284,10 @@ class DailyNoteViewModel @Inject constructor(
                     timelineEvents = timeline,
                     dailyTasks = tasks,
                     scratchNotes = scraps,
+                    moodData = moodData,
+                    healthMetrics = healthMetrics,
+                    topDailyTags = dailyTags,
+                    briefingState = currentBriefing, // Retain loaded details
                     isLoading = false
                 )
             }
@@ -248,8 +295,7 @@ class DailyNoteViewModel @Inject constructor(
     }
 
     private suspend fun loadAuxiliaryData(date: LocalDate) {
-        // Mood
-        val mood = moodRepository.getDailyMood(date).firstOrNull()
+        // [REMOVED] Imperative overrides for _uiState.update(...) replaced by combine in observeRoomData.
         
         // Oracle Insight (Async)
 
@@ -261,29 +307,8 @@ class DailyNoteViewModel @Inject constructor(
         // We still load "Non-AI" briefing data here (Mood/News).
         val briefingState = loadMorningBriefingData(date, null, isExpanded)
 
-        // Tags
-        val dailyTags = mood?.entries?.flatMap { it.activities ?: emptyList() }
-            ?.groupingBy { it }
-            ?.eachCount()?.entries?.sortedByDescending { it.value }?.take(5)?.map { it.key } 
-            ?: emptyList()
-
-        // Health Metrics Load 
-        val metricsFile = File(context.filesDir, "10_Journal/data/health/metrics/$date.json")
-        val healthMetrics = if (metricsFile.exists()) {
-            try {
-                com.google.gson.Gson().fromJson(metricsFile.readText(), cloud.wafflecommons.pixelbrainreader.data.health.DailyHealthMetrics::class.java)
-            } catch (e: Exception) {
-                null
-            }
-        } else null
-
-        _uiState.update {
-            it.copy(
-                moodData = mood,
-                healthMetrics = healthMetrics,
-                briefingState = briefingState, 
-                topDailyTags = dailyTags
-            )
+        _uiState.update { current ->
+              current.copy(briefingState = briefingState) // Only overlay the ones we fetched synchronously (Network mostly)
         }
     }
 
