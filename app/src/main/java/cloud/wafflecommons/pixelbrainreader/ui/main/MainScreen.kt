@@ -871,6 +871,10 @@ fun MainScreen(
                 )
             }
             
+            composable(Screen.MoodTracker) {
+                cloud.wafflecommons.pixelbrainreader.ui.mood.MoodHistoryScreen()
+            }
+            
             composable(Screen.Stats) {
                  cloud.wafflecommons.pixelbrainreader.ui.lifestats.LifeStatsScreen(
                      onNavigateBack = { navController.popBackStack() }
