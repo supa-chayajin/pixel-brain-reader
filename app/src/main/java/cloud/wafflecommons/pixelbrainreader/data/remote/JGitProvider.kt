@@ -146,6 +146,34 @@ class JGitProvider @Inject constructor(
     }
 
     /**
+     * Removes a file from the git index.
+     */
+    suspend fun removeFile(relativePath: String): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            Git.open(rootDir).use { git ->
+                git.rm().addFilepattern(relativePath).setCached(true).call()
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Adds a specific file to the git index.
+     */
+    suspend fun addFile(relativePath: String): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            Git.open(rootDir).use { git ->
+                git.add().addFilepattern(relativePath).call()
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
      * Commits staged changes.
      */
     /**

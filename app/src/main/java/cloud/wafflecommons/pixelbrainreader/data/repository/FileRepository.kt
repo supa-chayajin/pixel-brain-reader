@@ -105,10 +105,13 @@ class FileRepository @Inject constructor(
          val root = java.io.File(context.filesDir, "vault")
          val old = java.io.File(root, oldPath)
          val new = java.io.File(root, newPath)
+         
+         jGitProvider.removeFile(oldPath)
          if(old.renameTo(new)) {
-             jGitProvider.addAll()
-             jGitProvider.commit("Rename $oldPath to $newPath")
+             // Reindex updates Room Database
              vaultDiscoveryRepository.reindexAll()
+             jGitProvider.addFile(newPath)
+             jGitProvider.commit("Rename $oldPath to $newPath")
          }
     }
     

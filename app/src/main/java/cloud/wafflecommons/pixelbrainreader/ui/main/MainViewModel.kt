@@ -39,6 +39,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.FlowPreview
 
 @OptIn(FlowPreview::class, kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -53,6 +54,7 @@ class MainViewModel @Inject constructor(
     private val widgetSnapshotManager: cloud.wafflecommons.pixelbrainreader.widget.manager.WidgetSnapshotManager,
     private val uiEffectManager: cloud.wafflecommons.pixelbrainreader.ui.utils.UiEffectManager,
     private val gamificationRepository: cloud.wafflecommons.pixelbrainreader.data.gamification.GamificationRepository,
+    private val jGitProvider: cloud.wafflecommons.pixelbrainreader.data.remote.JGitProvider,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
     // Expose Theme Preference
@@ -178,56 +180,38 @@ class MainViewModel @Inject constructor(
             .launchIn(viewModelScope)
     }
 
-    /**
-     * Called by Activity on Cold Start (savedInstanceState == null).
-     * Ensures we only sync once per app session start.
-     */
-    /**
-     * Called by Activity on Cold Start (savedInstanceState == null).
-     * Ensures we only sync once per app session start.
-     * NOW BLOCKING: Shows loading screen until sync completes.
-     */
     fun performInitialSync() {
         if (isInitialSyncDone) return
         isInitialSyncDone = true
         
         val (owner, repo) = secretManager.getRepoInfo()
         if (owner == null || repo == null) {
-            // No credentials, just stop loading
              _uiState.value = _uiState.value.copy(isLoading = false)
             return
         }
 
-        viewModelScope.launch {
-             // BLOCKING UI: Show Full Screen Loader
-             _uiState.value = _uiState.value.copy(isLoading = true, isSyncing = true)
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+             _uiState.update { it.copy(isLoading = true, isSyncing = true) }
              
              try {
-                 // Full Mirror Sync
-                 val result = repository.syncRepository(owner, repo)
+                 // Immediate Background Pull using JGitProvider
+                 val syncResult = jGitProvider.pull()
                  
-                 if (result.isSuccess) {
+                 if (syncResult is cloud.wafflecommons.pixelbrainreader.data.remote.SyncResult.Success || syncResult is cloud.wafflecommons.pixelbrainreader.data.remote.SyncResult.ResolvedWithConflicts) {
                      _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Sync Complete ✅"))
-                     // Reload DB/Cache to ensure freshness
                      loadFolder(_uiState.value.currentPath)
-                     
-                     // Trigger Brain Optimization
                      triggerBrainOptimization()
                  } else {
-                     val msg = result.exceptionOrNull()?.message ?: "Unknown"
-                     Log.w("MainViewModel", "Initial Sync failed: $msg")
+                     val errorMsg = (syncResult as? cloud.wafflecommons.pixelbrainreader.data.remote.SyncResult.Error)?.exception?.message ?: "Unknown Error"
+                     Log.w("MainViewModel", "Initial Sync failed: $errorMsg")
                      _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Sync Failed ❌: Using local cache"))
                  }
              } catch (e: Exception) {
                  Log.e("MainViewModel", "Sync Error", e)
                  _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Sync Error ⚠️: ${e.message}"))
              } finally {
-                 // Always trigger Brain Optimization (Local Indexing) regardless of Network Sync status
-                 // Critical for Offline-First functionality
                  triggerBrainOptimization()
-                 
-                 // Release UI
-                 _uiState.value = _uiState.value.copy(isLoading = false, isSyncing = false)
+                 _uiState.update { it.copy(isLoading = false, isSyncing = false) }
              }
         }
     }
