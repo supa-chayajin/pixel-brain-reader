@@ -57,22 +57,18 @@ fun MoodCheckInSheet(
                 ActivityItem("Gaming", Icons.Outlined.SportsEsports),
                 ActivityItem("Chilling", Icons.Outlined.BeachAccess),
                 ActivityItem("Smoking", Icons.Outlined.SmokingRooms),
-                ActivityItem("Music", Icons.Outlined.MusicNote),
-                ActivityItem("Movie", Icons.Outlined.Movie),
-                ActivityItem("TV", Icons.Outlined.Tv),
-                ActivityItem("Cinema", Icons.Outlined.Theaters)
+                ActivityItem("Working", Icons.Outlined.WorkHistory)
             )),
             ActivityCategory("Social & Vibe", listOf(
                 ActivityItem("Solo", Icons.Outlined.Person),
                 ActivityItem("Family", Icons.Outlined.FamilyRestroom),
-                ActivityItem("Friends", Icons.Outlined.Groups),
-                ActivityItem("Relaxing", Icons.Outlined.SelfImprovement)
+                ActivityItem("Friends", Icons.Outlined.Groups)
             )),
             ActivityCategory("Location", listOf(
-                ActivityItem("House", Icons.Outlined.Home),
-                ActivityItem("Office", Icons.Outlined.Work),
-                ActivityItem("Outside", Icons.Outlined.NaturePeople),
-                ActivityItem("Balcony", Icons.Outlined.Balcony)
+                ActivityItem("Home", Icons.Outlined.Home),
+                ActivityItem("CDS", Icons.Outlined.Work),
+                ActivityItem("Out", Icons.Outlined.NaturePeople),
+                ActivityItem("Work", Icons.Outlined.HomeWork)
             ))
         )
     }

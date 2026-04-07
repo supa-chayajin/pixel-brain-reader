@@ -42,6 +42,11 @@ class TaskRepository @Inject constructor(
         return taskDao.getTasksForDate(date.format(DateTimeFormatter.ISO_LOCAL_DATE))
     }
 
+    fun getTasksInRangeFlow(start: LocalDate, end: LocalDate): kotlinx.coroutines.flow.Flow<List<DailyTaskEntity>> {
+        return taskDao.getTasksInRange(start.format(DateTimeFormatter.ISO_LOCAL_DATE), end.format(DateTimeFormatter.ISO_LOCAL_DATE))
+    }
+
+
     suspend fun deleteTask(taskId: String) = withContext(Dispatchers.IO) {
         taskDao.deleteTask(taskId)
     }

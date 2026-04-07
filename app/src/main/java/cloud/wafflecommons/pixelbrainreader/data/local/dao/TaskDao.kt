@@ -13,6 +13,11 @@ interface TaskDao {
     @Query("SELECT * FROM daily_tasks WHERE scheduledDate = :date ORDER BY isDone ASC, priority DESC")
     suspend fun getTasksSnapshot(date: String): List<DailyTaskEntity>
 
+    @Query("SELECT * FROM daily_tasks WHERE scheduledDate BETWEEN :startDate AND :endDate")
+    fun getTasksInRange(startDate: String, endDate: String): Flow<List<DailyTaskEntity>>
+
+
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTask(task: DailyTaskEntity)
 

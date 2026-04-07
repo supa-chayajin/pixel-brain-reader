@@ -33,7 +33,9 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.combine
+
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -41,6 +43,8 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.channels.BufferOverflow
+
 
 @OptIn(FlowPreview::class, kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 @HiltViewModel
@@ -57,128 +61,155 @@ class MainViewModel @Inject constructor(
     private val jGitProvider: cloud.wafflecommons.pixelbrainreader.data.remote.JGitProvider,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
+    private val _currentPath = MutableStateFlow("")
+
+
+    private val _searchQuery = MutableStateFlow("")
+    private val _selectedFilePath = MutableStateFlow<String?>(null)
+    private val _selectedFileName = MutableStateFlow<String?>(null)
+    private val _isEditing = MutableStateFlow(false)
+    private val _unsavedContent = MutableStateFlow<String?>(null)
+    private val _isLoading = MutableStateFlow(false)
+    private val _isRefreshing = MutableStateFlow(false)
+    private val _isSyncing = MutableStateFlow(false)
+    private val _saveState = MutableStateFlow(cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.IDLE)
+    private val _userMessage = MutableStateFlow<String?>(null)
+    private val _error = MutableStateFlow<String?>(null)
+    private val _importState = MutableStateFlow<ImportState?>(null)
+    private val _isFocusMode = MutableStateFlow(false)
+    private val _isExitPending = MutableStateFlow(false)
+    private val _showDeleteConfirmation = MutableStateFlow(false)
+
+    private val _isIndexing = MutableStateFlow(false)
+    private val _analysisResult = MutableStateFlow<String?>(null)
+    private val _availableMoveDestinations = MutableStateFlow<List<String>>(emptyList())
+    private val _moveDialogCurrentPath = MutableStateFlow("")
+    private val _availableTemplates = MutableStateFlow<List<String>>(emptyList())
+    private val _showCreateFileDialog = MutableStateFlow(false)
+    private val _navigationTrigger = MutableStateFlow<String?>(null)
+
     // Expose Theme Preference
     val themeConfig: StateFlow<AppThemeConfig> = userPrefs.themeConfig
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5_000),
-            initialValue = AppThemeConfig.FOLLOW_SYSTEM
-        )
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AppThemeConfig.FOLLOW_SYSTEM)
 
     // Global Effects (One-shot)
     val globalEffects = uiEffectManager.effects
 
-    
-    // UI State
-    private val _uiState = MutableStateFlow(UiState(isLoading = true))
-    val uiState: StateFlow<UiState> = _uiState.asStateFlow()
-    
-    // Add isRefreshing state
-    data class UiState(
-        val searchQuery: String = "", // Search/Filter Query
-        val currentPath: String = "",
-        val files: List<GithubFileDto> = emptyList(),
-        val selectedFileContent: String? = null,
-        val unsavedContent: String? = null, // The Draft
-        val selectedFileName: String? = null,
-        val selectedFilePath: String? = null, // CRITICAL FIX: Store full path explicitly
-        val isLoading: Boolean = false, // Full screen loader (Init only)
-        val isRefreshing: Boolean = false, // Pull-to-refresh
-        val error: String? = null,
-        val userMessage: String? = null, // Success/Info messages
-        val isFocusMode: Boolean = false,
-        val isEditing: Boolean = false, // Edit Mode
-        val isSyncing: Boolean = false,
-        val isIndexing: Boolean = false, // Brain Optimization Indicator
+    // Reactive File List
+    private val _filesFlow = combine(_currentPath, _searchQuery) { path, query ->
+        if (query.isBlank()) repository.getFiles(path)
+        else repository.searchFiles(query)
+    }.flatMapLatest { it }
 
-        val hasUnsavedChanges: Boolean = false,
-        val saveState: cloud.wafflecommons.pixelbrainreader.ui.components.SaveState = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.IDLE,
-        val importState: ImportState? = null,
-        val analysisResult: String? = null, // [NEW] AI Analysis Result
-        
-        val listPaneWidth: Float = 360f, // Default width
+    // Reactive File Content
+    private val _selectedFileContent = _selectedFilePath.flatMapLatest { path ->
+        if (path == null) flowOf(null)
+        else repository.getFileContentFlow(path)
+    }
 
-        // Derived property for Move Dialog
-        val folders: List<String> = emptyList(), // Legacy - to be replaced by availableMoveDestinations
-        val availableMoveDestinations: List<String> = emptyList(), // Filtered list for Move Dialog
-        val moveDialogCurrentPath: String = "", // Current path in Move Dialog
-        val isExitPending: Boolean = false, // Signal to close the activity
-        
-        // Templates
-        val availableTemplates: List<String> = emptyList(),
-        val showCreateFileDialog: Boolean = false,
-        
-        // Navigation Signal (One-shot)
-        val navigationTrigger: String? = null,
-        
-        // Confirmation Dialogs
-        val showDeleteConfirmation: Boolean = false
-    )
+    // --- The Unified Reactive State ---
+    val uiState: StateFlow<UiState> = combine(
+        _currentPath, _searchQuery, _selectedFilePath, _selectedFileName,
+        _isEditing, _unsavedContent, _isLoading, _isRefreshing, _isSyncing,
+        _saveState, _userMessage, _error, _importState, _isFocusMode,
+        _isExitPending, _showDeleteConfirmation, userPrefs.listPaneWidth,
+        _filesFlow, _selectedFileContent, _isIndexing, _analysisResult,
+        _availableMoveDestinations, _moveDialogCurrentPath, _availableTemplates,
+        _showCreateFileDialog, _navigationTrigger
+    ) { args ->
+        @Suppress("UNCHECKED_CAST")
+        val path = args[0] as String
+        val query = args[1] as String
+        val selectedPath = args[2] as? String
+        val selectedName = args[3] as? String
+        val isEditing = args[4] as Boolean
+        val unsavedContent = args[5] as? String
+        val isLoading = args[6] as Boolean
+        val isRefreshing = args[7] as Boolean
+        val isSyncing = args[8] as Boolean
+        val saveState = args[9] as cloud.wafflecommons.pixelbrainreader.ui.components.SaveState
+        val userMsg = args[10] as? String
+        val errorMsg = args[11] as? String
+        val importState = args[12] as? ImportState
+        val isFocusMode = args[13] as Boolean
+        val isExitPending = args[14] as Boolean
+        val showDelete = args[15] as Boolean
+        val width = args[16] as Float
+        val files = args[17] as List<FileEntity>
+        val dbContent = args[18] as? String
+        val isIndexing = args[19] as Boolean
+        val analysis = args[20] as? String
+        val moveDests = args[21] as List<String>
+        val movePath = args[22] as String
+        val templates = args[23] as List<String>
+        val showCreate = args[24] as Boolean
+        val navTrigger = args[25] as? String
 
-    data class ImportState(val title: String, val content: String)
+        val dtos = files
+            .map { it.toDto() }
+            .filter { !it.name.startsWith(".") }
+            .sortedWith(compareBy({ it.type != "dir" }, { it.name }))
 
-    private var filesObservationJob: Job? = null
-    private var contentObservationJob: Job? = null
-    private var updatesObservationJob: Job? = null
+        val foldersList = files
+            .filter { it.type == "dir" }
+            .map { it.path }
+            .distinct()
+            .sorted()
+
+        UiState(
+            searchQuery = query,
+            currentPath = path,
+            files = dtos,
+            selectedFileContent = dbContent,
+            unsavedContent = unsavedContent,
+            selectedFileName = selectedName,
+            selectedFilePath = selectedPath,
+            isLoading = isLoading,
+            isRefreshing = isRefreshing,
+            isSyncing = isSyncing,
+            isIndexing = isIndexing,
+            saveState = saveState,
+            userMessage = userMsg,
+            error = errorMsg,
+            importState = importState,
+            isFocusMode = isFocusMode,
+            isEditing = isEditing,
+            listPaneWidth = width,
+            folders = foldersList,
+            analysisResult = analysis,
+            availableMoveDestinations = moveDests,
+            moveDialogCurrentPath = movePath,
+            isExitPending = isExitPending,
+            showDeleteConfirmation = showDelete,
+            availableTemplates = templates,
+            showCreateFileDialog = showCreate,
+            navigationTrigger = navTrigger
+        )
+
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), UiState(isLoading = true))
+
 
     private var isInitialSyncDone = false
-
-    // Auto-Save Trigger Flow
     private val _autoSaveTriggerFlow = MutableStateFlow<String?>(null)
 
     init {
-        // Initial load of root folder (Database Only)
-        loadFolder("")
-        
-        // Observe Preferences
-        userPrefs.listPaneWidth
-            .onEach { width ->
-                _uiState.value = _uiState.value.copy(listPaneWidth = width)
-            }
-            .launchIn(viewModelScope)
-
-        // Reactive File Updates (Debounced Refresh)
-        updatesObservationJob = repository.fileUpdates
-            .onEach { path: String ->
-               // Smart Refresh: Only if relevant to current view
-               val current = _uiState.value.currentPath
-               // Simple logic: If inside current folder or is subfolder?
-               // For now, just trigger db refresh if path starts with currentPath (or currentPath is root)
-               if (current.isEmpty() || path.startsWith(current)) {
-                   // Debounce is hard in onEach without operator.
-                   // But since `observeDatabase` is a Flow observation, it should auto-update if DB changes!
-                   // The `FileRepository.saveFileLocally` updates DB.
-                   // So `fileDao.getFiles` flow receives update automatically.
-                   // DO WE NEED MANUAL REFRESH?
-                   // No, `getFilesFlow` is reactive (Room).
-                   // BUT `contentObservationJob` uses `getFileContentFlow`.
-                   // `UiState.selectedFilePath` determines what we are watching.
-                   
-                   // Log for debug
-                   Log.d("MainViewModel", "File update received: $path. DB Flow should auto-update.")
-               }
-            }
-            .launchIn(viewModelScope)
-
-        // Trigger Startup Sync
         performInitialSync()
 
-        // Refresh Widget Snapshot on App Open
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             widgetSnapshotManager.updateSnapshot()
         }
 
-        // Auto-Save Pipeline
         _autoSaveTriggerFlow
-            .debounce(1500L) // Wait for 1.5 seconds of typing pause
+            .debounce(1500L)
             .distinctUntilChanged()
             .onEach { content ->
-                if (content != null && _uiState.value.hasUnsavedChanges) {
+                if (content != null && uiState.value.hasUnsavedChanges) {
                     saveFile()
                 }
             }
             .launchIn(viewModelScope)
     }
+
 
     fun performInitialSync() {
         if (isInitialSyncDone) return
@@ -186,12 +217,14 @@ class MainViewModel @Inject constructor(
         
         val (owner, repo) = secretManager.getRepoInfo()
         if (owner == null || repo == null) {
-             _uiState.value = _uiState.value.copy(isLoading = false)
+             _isLoading.value = false
             return
         }
 
+
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-             _uiState.update { it.copy(isLoading = true, isSyncing = true) }
+             _isLoading.value = true
+             _isSyncing.value = true
              
              try {
                  // Immediate Background Pull using JGitProvider
@@ -199,7 +232,7 @@ class MainViewModel @Inject constructor(
                  
                  if (syncResult is cloud.wafflecommons.pixelbrainreader.data.remote.SyncResult.Success || syncResult is cloud.wafflecommons.pixelbrainreader.data.remote.SyncResult.ResolvedWithConflicts) {
                      _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Sync Complete ✅"))
-                     loadFolder(_uiState.value.currentPath)
+                     loadFolder(_currentPath.value)
                      triggerBrainOptimization()
                  } else {
                      val errorMsg = (syncResult as? cloud.wafflecommons.pixelbrainreader.data.remote.SyncResult.Error)?.exception?.message ?: "Unknown Error"
@@ -211,30 +244,22 @@ class MainViewModel @Inject constructor(
                  _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Sync Error ⚠️: ${e.message}"))
              } finally {
                  triggerBrainOptimization()
-                 _uiState.update { it.copy(isLoading = false, isSyncing = false) }
+                 _isLoading.value = false
+                 _isSyncing.value = false
              }
         }
+
     }
 
     fun updateListPaneWidth(width: Float) {
-        // Immediate UI update for responsiveness
-       _uiState.value = _uiState.value.copy(listPaneWidth = width)
        viewModelScope.launch {
            userPrefs.setListPaneWidth(width)
        }
     }
     
-    /**
-     * Navigation Logic (Offline-First).
-     * 1. Updates Path.
-     * 2. Observes DB immediately (Instant UI).
-     * NO AUTO-SYNC on navigation to prevent frequent blocking/network usage.
-     */
     fun loadFolder(path: String) {
-        _uiState.value = _uiState.value.copy(currentPath = path, error = null)
-        
-        // Instant DB Access
-        observeDatabase(path)
+        _currentPath.value = path
+        _error.value = null
     }
 
     fun refreshCurrentFolder() {
@@ -242,102 +267,43 @@ class MainViewModel @Inject constructor(
         if (owner == null || repo == null) return
 
         viewModelScope.launch {
-            // Trigger Top Bar AND Pull-Physics
-            _uiState.value = _uiState.value.copy(isRefreshing = true, isSyncing = true)
+            _isRefreshing.value = true
+            _isSyncing.value = true
             
             try {
-                // Hard Refresh / Authoritative Sync (Full Repo)
                 val result = repository.syncRepository(owner, repo)
                 
                 if (result.isSuccess) {
-                    // Log removal of legacy refresh bus usage.
-                    Log.i("Cortex", "Git Pull Success. Local Room DB should naturally react.")
                     widgetSnapshotManager.updateSnapshot()
-
-                    // CRITICAL: Reload Local Files
-                    loadFolder(_uiState.value.currentPath)
-
-
-                    // 2. Trigger Full Re-index on success
-                    Log.i("MainViewModel", "Git Pull Success. Queuing Neural Indexing.")
                     triggerBrainOptimization()
                 } else {
                     val errorMsg = result.exceptionOrNull()?.localizedMessage ?: "Unknown error"
-                    _uiState.value = _uiState.value.copy(error = "Sync Failed: $errorMsg")
+                    _error.value = "Sync Failed: $errorMsg"
                     _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Sync Failed ❌: $errorMsg"))
                 }
             } catch (e: Exception) {
                  _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Sync Error ⚠️: ${e.localizedMessage}"))
             } finally {
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    isRefreshing = false, 
-                    isSyncing = false
-                )
+                _isRefreshing.value = false
+                _isSyncing.value = false
             }
         }
     }
 
-
-
     fun onSearchQueryChanged(query: String) {
-        _uiState.value = _uiState.value.copy(searchQuery = query)
+        _searchQuery.value = query
     }
 
-    private fun observeDatabase(path: String) {
-        filesObservationJob?.cancel()
-        
-        // Use flatMapLatest to SWITCH streams based on query
-        val searchFlow = _uiState.map { it.searchQuery }.distinctUntilChanged()
-        
-        filesObservationJob = searchFlow.flatMapLatest { query ->
-            if (query.isBlank()) {
-                // CASE 1: Normal View (Scoped to currentPath)
-                repository.getFiles(path)
-            } else {
-                // CASE 2: Global Deep Search (Repo content-aware filter)
-                repository.searchFiles(query)
-            }
-        }.onEach { entities ->
-                val dtos = entities
-                    .map { it.toDto() }
-                    .filter { !it.name.startsWith(".") }
-                    .sortedWith(compareBy({ it.type != "dir" }, { it.name }))
-
-                // Extract unique folders for Move Dialog (simple flat list for now)
-                val allFolders = entities
-                    .filter { it.type == "dir" }
-                    .map { it.path }
-                    .distinct()
-                    .sorted()
-
-                _uiState.value = _uiState.value.copy(files = dtos, folders = allFolders)
-            }
-            .catch { e ->
-                _uiState.value = _uiState.value.copy(error = "DB Error: ${e.message}")
-            }
-            .launchIn(viewModelScope)
-    }
 
     fun loadFile(file: GithubFileDto) {
-        // Reset View & Draft
-        _uiState.value = _uiState.value.copy(
-            selectedFileName = file.name, 
-            selectedFilePath = file.path, // Store Full Path!
-            selectedFileContent = null,
-            unsavedContent = null,
-            hasUnsavedChanges = false,
-            error = null,
-            isEditing = false
-        )
-
-        // Observe Content Flow
-        val fileId = file.path 
-        observeFileContent(fileId)
-
-        // Trigger Sync
+        _selectedFileName.value = file.name
+        _selectedFilePath.value = file.path
+        _isEditing.value = false
+        _unsavedContent.value = null
+        _error.value = null
+        
         if (file.downloadUrl != null) {
-            syncFile(fileId, file.downloadUrl, isUserAction = false)
+            syncFile(file.path, file.downloadUrl, isUserAction = false)
         }
     }
     
@@ -347,87 +313,44 @@ class MainViewModel @Inject constructor(
     }
 
     fun closeFile() {
-        contentObservationJob?.cancel()
-        _uiState.value = _uiState.value.copy(
-            selectedFileName = null,
-            selectedFilePath = null,
-            selectedFileContent = null,
-            unsavedContent = null,
-            hasUnsavedChanges = false,
-            isEditing = false
-        )
-    }
-
-    private fun observeFileContent(path: String) {
-        contentObservationJob?.cancel()
-        contentObservationJob = repository.getFileContentFlow(path)
-            .onEach { content ->
-                 // Self-Healing: Check for Corrupted JSON Data
-                 if (content != null && content.trim().startsWith("{")) {
-                     try {
-                         val json = org.json.JSONObject(content)
-                         if (json.has("content") && json.has("sha") && json.has("encoding")) {
-                             val encoding = json.getString("encoding")
-                             if (encoding.equals("base64", ignoreCase = true)) {
-                                 val base64Content = json.optString("content", "")
-                                 val cleanBase64 = base64Content.replace("\n", "")
-                                 val decodedBytes = android.util.Base64.decode(cleanBase64, android.util.Base64.DEFAULT)
-                                 val cleanContent = String(decodedBytes, Charsets.UTF_8)
-                                 
-                                 _uiState.value = _uiState.value.copy(selectedFileContent = cleanContent)
-                                 
-                                 viewModelScope.launch {
-                                     repository.saveFileLocally(path, cleanContent)
-                                     Log.d("PixelBrain", "Self-Healed corrupted file (Aggressive): $path")
-                                 }
-                                 return@onEach
-                             }
-                         }
-                     } catch (e: Exception) { }
-                 }
-                 // Atomic UI Update Shield
-                 // If the user is actively editing, DO NOT overwrite their memory state 
-                 // with the delayed disk read, as it will cause a cursor jump.
-                 if (!_uiState.value.isEditing) {
-                     _uiState.value = _uiState.value.copy(selectedFileContent = content)
-                 }
-            }
-            .launchIn(viewModelScope)
+        _selectedFileName.value = null
+        _selectedFilePath.value = null
+        _isEditing.value = false
+        _unsavedContent.value = null
     }
 
     private fun syncFile(path: String, url: String, isUserAction: Boolean) {
          viewModelScope.launch {
-            if (isUserAction) _uiState.value = _uiState.value.copy(isRefreshing = true, isSyncing = true)
+            if (isUserAction) {
+                _isRefreshing.value = true
+                _isSyncing.value = true
+            }
             repository.refreshFileContent(path, url)
-            if (isUserAction) _uiState.value = _uiState.value.copy(isRefreshing = false, isSyncing = false)
+            if (isUserAction) {
+                _isRefreshing.value = false
+                _isSyncing.value = false
+            }
          }
     }
 
+
     fun toggleEditMode() {
-        val isEditing = !_uiState.value.isEditing
-        if (isEditing && _uiState.value.unsavedContent == null) {
-             _uiState.value = _uiState.value.copy(
-                 unsavedContent = _uiState.value.selectedFileContent ?: "",
-                 hasUnsavedChanges = false 
-             )
+        val next = !_isEditing.value
+        if (next && _unsavedContent.value == null) {
+             _unsavedContent.value = uiState.value.selectedFileContent ?: ""
         }
-        _uiState.value = _uiState.value.copy(isEditing = isEditing)
+        _isEditing.value = next
     }
 
     fun onContentChanged(newContent: String) {
-        // Detect newly checked off Markdown Tasks
-        val oldContent = _uiState.value.unsavedContent ?: _uiState.value.selectedFileContent ?: ""
+        val oldContent = _unsavedContent.value ?: uiState.value.selectedFileContent ?: ""
         detectAndProcessTaskCompletion(oldContent, newContent)
 
-        _uiState.value = _uiState.value.copy(
-            unsavedContent = newContent,
-            hasUnsavedChanges = true,
-            saveState = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.UNSAVED
-        )
-        
-        // Trigger the debounced auto-save sequence
+        _unsavedContent.value = newContent
+        _saveState.value = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.UNSAVED
         _autoSaveTriggerFlow.value = newContent
     }
+
 
     private fun detectAndProcessTaskCompletion(oldContent: String, newContent: String) {
         val oldLines = oldContent.lines()
@@ -453,143 +376,108 @@ class MainViewModel @Inject constructor(
     }
 
     fun refreshCurrentFile() {
-        val fileName = _uiState.value.selectedFileName ?: return
-        val file = _uiState.value.files.find { it.name == fileName } ?: return
+        val fileName = _selectedFileName.value ?: return
+        val file = uiState.value.files.find { it.name == fileName } ?: return
+
         if (file.downloadUrl == null) return
 
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isRefreshing = true, isSyncing = true)
+            _isRefreshing.value = true
+            _isSyncing.value = true
             repository.refreshFileContent(file.path, file.downloadUrl)
-            _uiState.value = _uiState.value.copy(isRefreshing = false, isSyncing = false)
+            _isRefreshing.value = false
+            _isSyncing.value = false
         }
+
     }
 
     // Event Channel
-    private val _uiEvent = kotlinx.coroutines.flow.MutableSharedFlow<cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent>()
+    private val _uiEvent = kotlinx.coroutines.flow.MutableSharedFlow<cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent>(
+        replay = 0,
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
     val uiEvent = _uiEvent.asSharedFlow()
 
-    fun saveFile() {
-        val currentFileName = _uiState.value.selectedFileName ?: return
-        val contentToSave = _uiState.value.unsavedContent ?: _uiState.value.selectedFileContent ?: return
 
-        // Resolve Path: PRIORITIZE selectedFilePath (The Source of Truth)
-        val path = _uiState.value.selectedFilePath ?: run {
-             // Fallback Logic (Legacy/Recover)
-             // If we don't have a path, assume context relative
-             val file = _uiState.value.files.find { it.name == currentFileName }
-             file?.path ?: run {
-                 val parent = _uiState.value.currentPath
-                 if (parent.isNotEmpty()) "$parent/$currentFileName" else currentFileName
-             }
-        }
+    fun saveFile() {
+        val path = _selectedFilePath.value ?: return
+        val content = _unsavedContent.value ?: return
 
         viewModelScope.launch {
             try {
-                // 1. Save & Sync Orchestration
+                _isSyncing.value = true
+                _saveState.value = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.SAVING
+                
                 val (owner, repo) = secretManager.getRepoInfo()
-                
-                _uiState.value = _uiState.value.copy(isSyncing = true, saveState = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.SAVING)
-                
-                val result = repository.saveAndSync(path, contentToSave, owner, repo)
+                val result = repository.saveAndSync(path, content, owner, repo)
                 
                 if (result.isSuccess) {
-                     // 2. Atomic UI Reset (Clear Dirty State but retain Edit Mode)
-                    _uiState.value = _uiState.value.copy(
-                        hasUnsavedChanges = false,
-                        saveState = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.SAVED,
-                        // We do NOT clear `unsavedContent` or `isEditing` here if they are still editing.
-                        // The memory state remains the Source of Truth while the editor is open.
-                        // However, if they are NOT editing (e.g., they hit Save manually from somewhere else), we update it.
-                        selectedFileContent = if (!_uiState.value.isEditing) contentToSave else _uiState.value.selectedFileContent
-                    )
+                    _saveState.value = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.SAVED
                     
                     launch {
                         kotlinx.coroutines.delay(2500L)
-                        if (_uiState.value.saveState == cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.SAVED) {
-                            _uiState.value = _uiState.value.copy(saveState = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.IDLE)
+                        if (_saveState.value == cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.SAVED) {
+                            _saveState.value = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.IDLE
                         }
                     }
                     _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Saved & Synced ✅"))
                 } else {
                     val msg = result.exceptionOrNull()?.message ?: "Unknown"
-                    // Still save local success?
-                    // Repository executes local save first. So if it failed at sync, local is saved.
-                    // We should probably reflect that state.
-                    // For now, let's assume partial success is still "Error" in UI but explain it.
-                    
-                    _uiState.value = _uiState.value.copy(
-                        isEditing = false,
-                        unsavedContent = null,
-                        hasUnsavedChanges = false,
-                        saveState = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.ERROR,
-                        selectedFileContent = contentToSave,
-                        error = "Sync Warning: $msg"
-                    )
-                     _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Saved Locally. Sync Failed: $msg"))
+                    _saveState.value = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.ERROR
+                    _error.value = "Sync Warning: $msg"
+                    _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Saved Locally. Sync Failed"))
                 }
-                
-                _uiState.value = _uiState.value.copy(isSyncing = false)
-
             } catch (e: Exception) {
                  _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Save Failed ❌: ${e.message}"))
-                 _uiState.value = _uiState.value.copy(isSyncing = false, saveState = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.ERROR)
+                 _saveState.value = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.ERROR
+            } finally {
+                _isSyncing.value = false
             }
         }
     }
+
     
     private fun syncDirtyFiles() {
         val (owner, repo) = secretManager.getRepoInfo()
         if (owner == null || repo == null) return
 
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isSyncing = true)
+            _isSyncing.value = true
             val result = repository.pushDirtyFiles(owner, repo)
             if (result.isFailure) {
-                _uiState.value = _uiState.value.copy(error = "Push Failed: ${result.exceptionOrNull()?.message}")
+                _error.value = "Push Failed: ${result.exceptionOrNull()?.message}"
             }
-            _uiState.value = _uiState.value.copy(isSyncing = false)
+            _isSyncing.value = false
         }
+
     }
 
-    /**
-     * Flushes the buffer to disk aggressively bypassing the debounce.
-     * Hooks natively into Android lifecycle events (onPause/onStop).
-     */
     fun forceSaveImmediate() {
-        if (_uiState.value.hasUnsavedChanges) {
+        if (uiState.value.hasUnsavedChanges) {
             saveFile()
         }
     }
 
-    fun navigateUp() {
-        navigateBack()
-    }
-
     fun navigateBack(): Boolean {
-        val currentPath = _uiState.value.currentPath
-        if (currentPath.isNotEmpty()) {
-            val parentPath = if(currentPath.contains("/")) currentPath.substringBeforeLast("/") else ""
-            loadFolder(parentPath)
+        val path = _currentPath.value
+        if (path.isNotEmpty()) {
+            _currentPath.value = if(path.contains("/")) path.substringBeforeLast("/") else ""
+            _error.value = null
             return true
         }
         return false
     }
 
-    fun mapsBack(): Boolean {
-        if (_uiState.value.currentPath.isNotEmpty()) {
-            navigateUp()
-            return true
-        }
-        return false
-    }
 
     fun logout() {
         secretManager.clear()
     }
 
     fun toggleFocusMode() {
-        _uiState.value = _uiState.value.copy(isFocusMode = !_uiState.value.isFocusMode)
+        _isFocusMode.value = !_isFocusMode.value
     }
+
 
     private fun FileEntity.toDto() = GithubFileDto(
         name = name,
@@ -624,15 +512,14 @@ class MainViewModel @Inject constructor(
             
             if (textToProcess != null) {
                 isExternalShare = true 
-                _uiState.value = _uiState.value.copy(isLoading = true)
+                _isLoading.value = true
                 viewModelScope.launch {
                     val result = cloud.wafflecommons.pixelbrainreader.data.utils.ContentSanitizer.processSharedContent(textToProcess, isMarkdown)
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        importState = ImportState(result.title, result.markdownContent)
-                    )
+                    _isLoading.value = false
+                    _importState.value = ImportState(result.title, result.markdownContent)
                 }
             }
+
         }
     }
 
@@ -643,10 +530,8 @@ class MainViewModel @Inject constructor(
              
              if (isExternalShare) {
                  dismissImport()
-                 _uiState.value = _uiState.value.copy(
-                     userMessage = "Imported & Saved",
-                     isExitPending = true 
-                 )
+                 _userMessage.value = "Imported & Saved"
+                 _isExitPending.value = true
              } else {
                  val newDto = GithubFileDto(
                     name = filename,
@@ -657,12 +542,13 @@ class MainViewModel @Inject constructor(
                 )
                  dismissImport()
                  loadFile(newDto)
-                 _uiState.value = _uiState.value.copy(userMessage = "Imported successfully")
+                 _userMessage.value = "Imported successfully"
              }
+
              
               val (owner, repo) = secretManager.getRepoInfo()
               if (owner != null && repo != null) {
-                   _uiState.value = _uiState.value.copy(isSyncing = true)
+                    _isSyncing.value = true
                    try {
                        val result = repository.pushDirtyFiles(owner, repo)
                        if (result.isSuccess) {
@@ -674,150 +560,118 @@ class MainViewModel @Inject constructor(
                    } catch (e: Exception) {
                        _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Git Sync Failed ❌: ${e.message}"))
                    }
-                   _uiState.value = _uiState.value.copy(isSyncing = false)
+                    _isSyncing.value = false
+
               }
              isExternalShare = false
         }
     }
 
     fun dismissImport() {
-        _uiState.value = _uiState.value.copy(importState = null)
+        _importState.value = null
         isExternalShare = false 
     }
 
+
     fun userMessageShown() {
-        _uiState.value = _uiState.value.copy(userMessage = null)
+        _userMessage.value = null
     }
+
 
     fun consumeNavigationTrigger() {
-        _uiState.value = _uiState.value.copy(navigationTrigger = null)
-    }
-    
-    fun requestDeleteFile() {
-        _uiState.value = _uiState.value.copy(showDeleteConfirmation = true)
+        _navigationTrigger.value = null
     }
 
-    fun dismissDeleteConfirmation() {
-        _uiState.value = _uiState.value.copy(showDeleteConfirmation = false)
+    
+    fun requestDeleteFile() {
+        _showDeleteConfirmation.value = true
     }
+
+
+    fun dismissDeleteConfirmation() {
+        _showDeleteConfirmation.value = false
+    }
+
 
     fun confirmDeleteFile() {
         dismissDeleteConfirmation()
-        val fileName = _uiState.value.selectedFileName ?: return
-        // Use selectedFilePath as authoritative source
-        val path = _uiState.value.selectedFilePath ?: _uiState.value.files.find { it.name == fileName }?.path ?: return
+        val fileName = _selectedFileName.value ?: return
+        val path = _selectedFilePath.value ?: uiState.value.files.find { it.name == fileName }?.path ?: return
+
         
         val (owner, repo) = secretManager.getRepoInfo()
         
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isSyncing = true, userMessage = "Deleting specified file...")
+            _isSyncing.value = true
+            _userMessage.value = "Deleting specified file..."
             
             val result = repository.deleteFile(path, owner, repo)
             
             if (result.isSuccess) {
                 closeFile()
                 navigateBack() // Go back to list
-                _uiState.value = _uiState.value.copy(userMessage = "File Deleted", isSyncing = false)
+                _userMessage.value = "File Deleted"
+                _isSyncing.value = false
             } else {
                  val msg = result.exceptionOrNull()?.message ?: "Unknown"
-                 _uiState.value = _uiState.value.copy(error = "Delete Failed: $msg", isSyncing = false)
+                 _error.value = "Delete Failed: $msg"
+                 _isSyncing.value = false
                  _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Delete Failed ❌: $msg"))
             }
         }
+
     }
 
     fun renameFile(newName: String, targetFile: GithubFileDto? = null) {
-        // Support renaming specific file (swipe) or current selected (menu)
-        val fileToRename = targetFile?.name ?: _uiState.value.selectedFileName ?: return
-        // Fix: Use selectedFilePath if targeting current
-        val path = if (targetFile != null) targetFile.path else _uiState.value.selectedFilePath ?: _uiState.value.files.find { it.name == fileToRename }?.path ?: return
-        
-        val isDirectory = _uiState.value.files.find { it.path == path }?.type == "dir" // safer check
-        
-        
-        // Construct new path. 
+        val path = targetFile?.path ?: _selectedFilePath.value ?: return
+        val isDirectory = uiState.value.files.find { it.path == path }?.type == "dir"
         val parentPath = if(path.contains("/")) path.substringBeforeLast("/") else ""
-        
-        // Logic Fix: Robust extension handling
-        val finalNewName = if (isDirectory) {
-            newName // Directories: Never append extension
-        } else {
-            if (newName.endsWith(".md", ignoreCase = true)) newName else "$newName.md"
-        }
-        
+        val finalNewName = if (isDirectory) newName else (if (newName.endsWith(".md")) newName else "$newName.md")
         val finalNewPath = if(parentPath.isNotEmpty()) "$parentPath/$finalNewName" else finalNewName
-        
         if (finalNewPath == path) return
-        
+
         val (owner, repo) = secretManager.getRepoInfo()
 
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            _uiState.value = _uiState.value.copy(
-                isSyncing = true,
-                userMessage = "Renaming ${if(isDirectory) "folder" else "file"}..."
-            )
+            _isSyncing.value = true
+            _userMessage.value = "Renaming ${if(isDirectory) "folder" else "file"}..."
             
             val result = repository.renameAndSync(path, finalNewPath, owner, repo)
-            
             if (result.isSuccess) {
-                // Update UI State locally for immediate feedback if needed (though DB observation updates list)
-                 if (targetFile == null) {
-                    _uiState.value = _uiState.value.copy(selectedFileName = finalNewName)
-                }
-                _uiState.value = _uiState.value.copy(
-                    isSyncing = false, 
-                    userMessage = "Renamed successfully"
-                )
+                 if (targetFile == null) _selectedFileName.value = finalNewName
+                 _userMessage.value = "Renamed successfully"
             } else {
-                 Log.e("PixelBrain", "Rename Failed", result.exceptionOrNull())
-                 _uiState.value = _uiState.value.copy(
-                     isSyncing = false,
-                     error = "Rename Failed: ${result.exceptionOrNull()?.message}"
-                 )
+                 _error.value = "Rename Failed: ${result.exceptionOrNull()?.message}"
             }
+            _isSyncing.value = false
         }
     }
+
 
     fun moveFile(file: GithubFileDto, targetFolder: String) {
         val currentPath = file.path
-        val newPath = if (targetFolder.isEmpty()) file.name else "$targetFolder/${file.name}" // Name stays same
+        val newPath = if (targetFolder.isEmpty()) file.name else "$targetFolder/${file.name}"
         
-        // 1. Check for valid move (destination != source)
         if (currentPath == newPath) {
-             _uiState.value = _uiState.value.copy(userMessage = "Item is already in this folder")
+             _userMessage.value = "Item is already in this folder"
              return
         }
 
-        // 2. Check if moving to same parent (Redundant but safe)
-        val currentParent = if(file.path.contains("/")) file.path.substringBeforeLast("/") else ""
-        if (currentParent == targetFolder) {
-             _uiState.value = _uiState.value.copy(userMessage = "Item is already in this folder")
-             return
-        }
-        
         val (owner, repo) = secretManager.getRepoInfo()
-
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-             _uiState.value = _uiState.value.copy(
-                isSyncing = true,
-                userMessage = "Moving to ${if(targetFolder.isEmpty()) "Root" else targetFolder}..."
-            )
+             _isSyncing.value = true
+             _userMessage.value = "Moving to ${if(targetFolder.isEmpty()) "Root" else targetFolder}..."
 
             val result = repository.renameAndSync(currentPath, newPath, owner, repo)
-            
              if (result.isSuccess) {
-                _uiState.value = _uiState.value.copy(
-                    isSyncing = false, 
-                    userMessage = "Moved successfully"
-                )
+                _userMessage.value = "Moved successfully"
             } else {
-                 _uiState.value = _uiState.value.copy(
-                     isSyncing = false,
-                     error = "Move Failed: ${result.exceptionOrNull()?.message}"
-                 )
+                 _error.value = "Move Failed: ${result.exceptionOrNull()?.message}"
             }
+            _isSyncing.value = false
         }
     }
+
 
 
 
@@ -858,294 +712,219 @@ class MainViewModel @Inject constructor(
         updateMoveDialogContent(path)
     }
     
-    fun navigateUpMoveFolder() {
-        val current = _uiState.value.moveDialogCurrentPath
+    fun navigateUp() {
+        val current = _currentPath.value
         if (current.isNotEmpty()) {
-            val parent = if(current.contains("/")) current.substringBeforeLast("/") else ""
+            val parent = if (current.contains("/")) current.substringBeforeLast("/") else ""
+            loadFolder(parent)
+        }
+    }
+
+    fun navigateUpMoveFolder() {
+        val current = _moveDialogCurrentPath.value
+        if (current.isNotEmpty()) {
+            val parent = if (current.contains("/")) current.substringBeforeLast("/") else ""
             updateMoveDialogContent(parent)
         }
     }
+
+
     
     private fun updateMoveDialogContent(currentPath: String) {
-        // Filter cached list to show only DIRECT children of currentPath
         val displayedFolders = cachedValidMoveDestinations.filter { folderPath ->
-            if (currentPath.isEmpty()) {
-                // Root: Show only top-level folders (no slashes)
-                !folderPath.contains("/")
-            } else {
-                // Subfolder: Show direct children (starts with path/, no extra slashes after)
-                folderPath.startsWith("$currentPath/") && 
-                !folderPath.substringAfter("$currentPath/").contains("/")
-            }
-        }.map { 
-            // Return only the folder name for display if needed, but we store full path
-            // Actually, let's return full path but UI can format it
-            it
+            if (currentPath.isEmpty()) !folderPath.contains("/")
+            else folderPath.startsWith("$currentPath/") && !folderPath.substringAfter("$currentPath/").contains("/")
         }
-
-        _uiState.value = _uiState.value.copy(
-            moveDialogCurrentPath = currentPath,
-            availableMoveDestinations = displayedFolders
-        )
+        _moveDialogCurrentPath.value = currentPath
+        _availableMoveDestinations.value = displayedFolders
     }
+
 
     fun openCreateFileDialog() {
         viewModelScope.launch {
-            val templates = templateRepository.getAvailableTemplates()
-            _uiState.value = _uiState.value.copy(
-                availableTemplates = templates,
-                showCreateFileDialog = true
-            )
+            _availableTemplates.value = templateRepository.getAvailableTemplates()
+            _showCreateFileDialog.value = true
         }
     }
 
     fun dismissCreateFileDialog() {
-        _uiState.value = _uiState.value.copy(showCreateFileDialog = false)
+        _showCreateFileDialog.value = false
     }
 
+
     fun createNewFile(filename: String? = null, templateName: String? = null) {
-        val parentPath = _uiState.value.currentPath
-        val finalName = if (filename.isNullOrBlank()) "Untitled_${System.currentTimeMillis()}.md" else if(filename.endsWith(".md")) filename else "$filename.md"
-        
+        val parentPath = _currentPath.value
+        val finalName = if (filename.isNullOrBlank()) "Untitled_${System.currentTimeMillis()}.md" else (if(filename.endsWith(".md")) filename else "$filename.md")
         val fullPath = if (parentPath.isNotEmpty()) "$parentPath/$finalName" else finalName
         
         viewModelScope.launch {
-            // 1. Prepare Content
             var content = ""
             if (!templateName.isNullOrBlank()) {
-                 // Fetch Template Content
-                 // We reuse Repository logic (or access Dao via Repo?)
-                 // FileRepository.getFileContentFlow works for reading, but we need single shot.
-                 // We can use the same path logic as TemplateRepository (it knows folder).
-                 // For now, let's use a public method on FileRepository if available?
-                 // Or just Read via Repo.
                  val templatePath = "${TemplateRepository.TEMPLATE_FOLDER}/$templateName"
                  val templateContent = repository.getFileContentFlow(templatePath).firstOrNull() ?: ""
-                 
-                 // Apply Engine
                  content = cloud.wafflecommons.pixelbrainreader.data.utils.TemplateEngine.apply(templateContent, finalName.substringBeforeLast("."))
             }
 
-            // 2. Synchronous Creation (Disk/DB)
             repository.saveFileLocally(fullPath, content)
-            
-            // 3. Close Dialog
-             _uiState.value = _uiState.value.copy(showCreateFileDialog = false)
+            _showCreateFileDialog.value = false
 
-            // 4. Immediate UI Update (Don't wait for DB Observer)
             val newDto = GithubFileDto(
                 name = finalName, 
                 path = fullPath, 
                 type = "file", 
                 downloadUrl = null,
-                // isDirty not in DTO, handled by UI state hasUnsavedChanges
                 lastModified = System.currentTimeMillis()
             )
-            
-            // 5. Open immediately
             loadFile(newDto)
-            
-            // 6. Set Edit Mode & Ready State
-            _uiState.value = _uiState.value.copy(
-                isEditing = true,
-                unsavedContent = content, // Ready for typing (pre-filled with template)
-                hasUnsavedChanges = true // It is a new file
-            )
+            _isEditing.value = true
+            _unsavedContent.value = content
         }
     }
+
 
     /**
      * Folder Insight / RAG Pivot
      * Analyzes current folder contents and generates an index.
      */
     fun analyzeCurrentFolder() {
-        val files = _uiState.value.files.filter { it.type == "file" }.take(10) // Limit to 10 files
+        val files = uiState.value.files.filter { it.type == "file" }.take(10)
         if (files.isEmpty()) {
-            _uiState.value = _uiState.value.copy(userMessage = "No files to analyze here.")
+            _userMessage.value = "No files to analyze here."
             return
         }
 
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, userMessage = "AI analyzing folder...")
-            
-            // 1. Fetch Content
+            _isLoading.value = true
+            _userMessage.value = "AI analyzing folder..."
             val fileContexts = files.mapNotNull { file ->
                 val content = repository.getFileContentFlow(file.path).firstOrNull() 
-                if (content != null) file.name to content else null
+                if (content != null) Pair(file.name, content) else null
             }
-            
-            // 2. Call Gemini
+
             val rawSummary = geminiRagManager.analyzeFolder(fileContexts)
-            
-            // Sanitize Output: Remove potential Markdown code fences
-            val summary = rawSummary
-                .replace(Regex("^```markdown\\s*", RegexOption.IGNORE_CASE), "")
+            val summary = rawSummary.replace(Regex("^```markdown\\s*", RegexOption.IGNORE_CASE), "")
                 .replace(Regex("^```\\s*", RegexOption.IGNORE_CASE), "")
-                .replace(Regex("\\s*```$"), "")
-                .trim()
+                .replace(Regex("\\s*```$"), "").trim()
             
-            // 3. Show Result as Virtual File (Detail Pane)
-            _uiState.value = _uiState.value.copy(
-                isLoading = false,
-                importState = null,
-                selectedFileName = "Folder_Insight.md",
-                selectedFileContent = "", // Disk state is empty
-                unsavedContent = summary, // Current state is the summary (Draft)
-                hasUnsavedChanges = true,
-                isEditing = false // View Mode
-            )
+            _isLoading.value = false
+            _selectedFileName.value = "Folder_Insight.md"
+            _unsavedContent.value = summary
+            _isEditing.value = false
         }
     }
 
+
     fun appendContent(text: String) {
-        val currentContent = _uiState.value.unsavedContent ?: _uiState.value.selectedFileContent ?: ""
+        val currentContent = _unsavedContent.value ?: uiState.value.selectedFileContent ?: ""
+
         val newContent = if (currentContent.isBlank()) text else "$currentContent\n\n$text"
-        
         onContentChanged(newContent)
-        
-        // Ensure we are in Edit Mode to see the changes and Save button
-        if (!_uiState.value.isEditing) {
-            _uiState.value = _uiState.value.copy(isEditing = true)
-        }
+        _isEditing.value = true
     }
 
     fun onWikiLinkClick(linkText: String) {
-        // 1. Aggressive Cleaning
-        var target = linkText.replace(Regex("[\\[\\]]"), "") // Remove [[ ]]
-        target = target.split("|")[0] // Remove alias
-        target = target.trim()
-        target = target.removeSuffix("/") // Critical Fix for "Folder/" links
-        
-        val cleanTarget = target // Final clean value
+        var target = linkText.replace(Regex("[\\[\\]]"), "").split("|")[0].trim().removeSuffix("/")
+        val cleanTarget = target
 
         viewModelScope.launch {
-            // STEP 2: Folder Detection (PRIORITY)
             val allFolders = repository.getAllFolders()
-            
-            // Check for Exact Match (or "Root/Target" suffix)
-            val matchingFolder = allFolders.find { 
-                it.equals(cleanTarget, ignoreCase = true) || it.endsWith("/$cleanTarget", ignoreCase = true) 
-            }
-            
+            val matchingFolder = allFolders.find { it.equals(cleanTarget, ignoreCase = true) || it.endsWith("/$cleanTarget", ignoreCase = true) }
             if (matchingFolder != null) {
-                // Folder Found: Update List, Keep Content Open
                 loadFolder(matchingFolder)
-                _uiState.value = _uiState.value.copy(userMessage = "📂 Opened ${matchingFolder.substringAfterLast("/")}")
+                _userMessage.value = "📂 Opened ${matchingFolder.substringAfterLast("/")}"
                 return@launch
             }
-
-            // STEP 3: File Check (Deterministic Resolver)
-            // Note: resolveLink is Strict (Exact or .md)
             val entity = repository.resolveLink(cleanTarget)
-            
             if (entity != null) {
                 if (entity.type == "dir") {
-                    // Redundant Safety Fallback
                     loadFolder(entity.path)
-                    _uiState.value = _uiState.value.copy(userMessage = "📂 Opened ${entity.name}")
-                } else {
-                    // File Found
-                    loadFile(entity.toDto())
-                }
+                    _userMessage.value = "📂 Opened ${entity.name}"
+                } else loadFile(entity.toDto())
                 return@launch
             }
-
-            // STEP 4: Fallback
-            _uiState.value = _uiState.value.copy(userMessage = "Target '$cleanTarget' not found")
+            _userMessage.value = "Target '$cleanTarget' not found"
         }
     }
 
-    /**
-     * Saves chat content to a new file in 00_Inbox.
-     * Non-blocking UI (Background save).
-     */
     fun saveChatToInbox(content: String) {
-        android.util.Log.d("PixelBrain", "saveChatToInbox called with length: ${content.length}")
         viewModelScope.launch {
             val folderName = "00_Inbox"
-            
-            // Ensure folder exists in DB (so it shows up in UI immediately)
             repository.createLocalFolder(folderName)
-            
-            // Format: AI_Note_YYYYMMDD_HHmmss.md
             val timestamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.getDefault()).format(java.util.Date())
-            val filename = "AI_Note_$timestamp.md"
-            val fullPath = "$folderName/$filename"
-            
-            // 1. Save Local
+            val fullPath = "$folderName/AI_Note_$timestamp.md"
             repository.saveFileLocally(fullPath, content)
-            
-            // 2. Feedback
-            _uiState.value = _uiState.value.copy(userMessage = "Saved to $folderName")
-            
-            // 3. Sync
+            _userMessage.value = "Saved to $folderName"
              val (owner, repo) = secretManager.getRepoInfo()
-             if (owner != null && repo != null) {
-                  repository.pushDirtyFiles(owner, repo)
-             }
+             if (owner != null && repo != null) repository.pushDirtyFiles(owner, repo)
         }
     }
 
-    /**
-     * FEATURE C: Daily Note
-     * Triggers logic to open or create today's journal entry.
-     */
     fun onTodayClicked(pathOverride: String? = null, startEditing: Boolean = false) {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true)
+            _isLoading.value = true
             try {
-                // 1. Get Path (This creates file if needed)
                 val notePath = pathOverride ?: dailyNoteRepository.getOrCreateTodayNote()
                 val noteName = notePath.substringAfterLast("/")
-                
-                // 2. Open File
-                // Construct Pseudo-DTO (Since we know path & name)
-                val dto = GithubFileDto(
-                     name = noteName,
-                     path = notePath,
-                     type = "file",
-                     downloadUrl = null, // Local
-                     sha = null,
-                     lastModified = System.currentTimeMillis()
-                )
-                
+                val dto = GithubFileDto(name = noteName, path = notePath, type = "file", downloadUrl = null, sha = null, lastModified = System.currentTimeMillis())
                 loadFile(dto)
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    isEditing = startEditing, // Open in Edit Mode if requested
-                    navigationTrigger = "home" // Step B (THE FIX): Force Navigation to Repo Tab
-                )
+                _isLoading.value = false
+                _isEditing.value = startEditing
+                _navigationTrigger.value = "home"
             } catch (e: Exception) {
-                Log.e("DailyNote", "Failed to open today", e)
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    error = "Failed to open Daily Note: ${e.message}"
-                )
+                _isLoading.value = false
+                _error.value = "Failed to open Daily Note: ${e.message}"
             }
         }
     }
+
     private fun triggerBrainOptimization() {
-        _uiState.value = _uiState.value.copy(isIndexing = true)
-        
-        val workRequest = OneTimeWorkRequestBuilder<IndexingWorker>()
-            .setInputData(workDataOf("FULL_REINDEX" to true))
-            .addTag("brain_optimization")
-            .build()
-            
+        _isIndexing.value = true
+        val workRequest = OneTimeWorkRequestBuilder<IndexingWorker>().setInputData(workDataOf("FULL_REINDEX" to true)).addTag("brain_optimization").build()
         WorkManager.getInstance(context).enqueue(workRequest as WorkRequest)
-        
-        // Observe Work Status to clear flag
         viewModelScope.launch {
-            WorkManager.getInstance(context)
-                .getWorkInfoByIdFlow(workRequest.id)
-                .collect { workInfo ->
-                    if (workInfo != null && workInfo.state.isFinished) {
-                        _uiState.value = _uiState.value.copy(
-                            isIndexing = false,
-                            userMessage = if(workInfo.state == androidx.work.WorkInfo.State.SUCCEEDED) "Brain Optimized 🧠" else null
-                        )
-                    }
+            WorkManager.getInstance(context).getWorkInfoByIdFlow(workRequest.id).collect { workInfo ->
+                if (workInfo != null && workInfo.state.isFinished) {
+                    _isIndexing.value = false
+                    if(workInfo.state == androidx.work.WorkInfo.State.SUCCEEDED) _userMessage.value = "Brain Optimized 🧠"
                 }
+            }
         }
     }
+
 }
+
+data class UiState(
+    val searchQuery: String = "",
+    val currentPath: String = "",
+    val files: List<GithubFileDto> = emptyList(),
+    val selectedFileContent: String? = null,
+    val unsavedContent: String? = null,
+    val selectedFileName: String? = null,
+    val selectedFilePath: String? = null,
+    val isLoading: Boolean = false,
+    val isRefreshing: Boolean = false,
+    val isSyncing: Boolean = false,
+    val isIndexing: Boolean = false,
+    val saveState: cloud.wafflecommons.pixelbrainreader.ui.components.SaveState = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.IDLE,
+    val userMessage: String? = null,
+    val error: String? = null,
+    val importState: ImportState? = null,
+    val isFocusMode: Boolean = false,
+    val isEditing: Boolean = false,
+    val folders: List<String> = emptyList(),
+    val isExitPending: Boolean = false,
+    val showDeleteConfirmation: Boolean = false,
+    val listPaneWidth: Float = 300f,
+    val availableMoveDestinations: List<String> = emptyList(),
+    val moveDialogCurrentPath: String = "",
+    val availableTemplates: List<String> = emptyList(),
+    val showCreateFileDialog: Boolean = false,
+    val navigationTrigger: String? = null,
+    val analysisResult: String? = null
+) {
+    val hasUnsavedChanges: Boolean get() = unsavedContent != null
+}
+
+data class ImportState(val title: String, val content: String)
+
+

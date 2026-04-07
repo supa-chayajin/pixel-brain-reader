@@ -38,7 +38,7 @@ import cloud.wafflecommons.pixelbrainreader.data.local.entity.TimelineEntryEntit
 import cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar
 import cloud.wafflecommons.pixelbrainreader.ui.components.MarkdownVisualTransformation
 import cloud.wafflecommons.pixelbrainreader.ui.journal.DailyNoteHeader
-import cloud.wafflecommons.pixelbrainreader.ui.journal.MorningBriefingSection
+
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.ScratchNoteEntity
@@ -66,9 +66,8 @@ fun DailyNoteScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val saveState by viewModel.saveState.collectAsStateWithLifecycle()
     val gamificationState by viewModel.gamificationState.collectAsStateWithLifecycle()
-    val oracleInsight by viewModel.oracleInsight.collectAsStateWithLifecycle()
     val gratitudes by viewModel.gratitudes.collectAsStateWithLifecycle() // RFC-009
-    val isOracleExpanded by viewModel.isOracleExpanded.collectAsStateWithLifecycle()
+
 
     var showAddTimelineDialog by remember { mutableStateOf(false) }
     var editTimelineEntry by remember { mutableStateOf<TimelineEntryEntity?>(null) }
@@ -206,15 +205,14 @@ fun DailyNoteScreen(
                         cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 0) {
                             val moodData = state.moodData
                             val lastUpdate = remember(moodData) { moodData?.entries?.firstOrNull()?.time }
-                                DailyNoteHeader(
+                            DailyNoteHeader(
                                 emoji = moodData?.summary?.mainEmoji,
                                 lastUpdate = lastUpdate,
                                 topDailyTags = state.topDailyTags,
                                 healthMetrics = state.healthMetrics,
-                                oracleInsight = oracleInsight,
-                                isOracleExpanded = isOracleExpanded,
-                                onToggleOracle = viewModel::toggleOracleExpanded
+                                weather = state.weather
                             )
+
                         }
                     }
 
@@ -233,15 +231,7 @@ fun DailyNoteScreen(
                         }
                     }
 
-                    // 2. Morning Briefing
-                    item {
-                        cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 2) {
-                            MorningBriefingSection(
-                                state = state.briefingState,
-                                onToggle = { viewModel.toggleBriefing() }
-                            )
-                        }
-                    }
+
                     
                     // 3. Mantra
                     if (state.mantra.isNotBlank()) {
