@@ -109,6 +109,43 @@ private fun MoodSparklineContent(trend: List<DailyMoodPoint>) {
                 style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
             )
             
+            // --- HR Overlay ---
+            fun getHrY(bpm: Int): Float {
+                 val minBpm = 50f
+                 val maxBpm = 130f
+                 val normalized = (bpm.toFloat() - minBpm) / (maxBpm - minBpm)
+                 val clamped = normalized.coerceIn(0f, 1f)
+                 return (topPadding + graphHeight) - (clamped * graphHeight)
+            }
+            
+            val hrPath = Path()
+            var firstHr = true
+            trend.forEachIndexed { index, point ->
+                if (point.avgBpm > 0) {
+                    val x = index * stepX
+                    val y = getHrY(point.avgBpm)
+                    if (firstHr) {
+                        hrPath.moveTo(x, y)
+                        firstHr = false
+                    } else {
+                        hrPath.lineTo(x, y)
+                    }
+                }
+            }
+            
+            if (!hrPath.isEmpty) {
+                drawPath(
+                    path = hrPath,
+                    color = Color(0xFFFF5252).copy(alpha = 0.7f), // Red overlay
+                    style = Stroke(
+                        width = 2.dp.toPx(), 
+                        cap = StrokeCap.Round, 
+                        pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
+                    )
+                )
+            }
+            // --- End HR Overlay ---
+            
             // Points
             val textPaint = android.graphics.Paint().apply {
                 color = android.graphics.Color.GRAY 

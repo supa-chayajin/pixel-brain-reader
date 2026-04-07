@@ -48,6 +48,7 @@ class AutomateHabitsUseCase @Inject constructor(
                 "health_connect_sleep" -> metrics.sleepDurationMinutes / 60.0
                 "health_connect_hydration" -> metrics.waterConsumedMl
                 "health_connect_mindfulness" -> metrics.mindfulnessMinutes.toDouble()
+                "health_connect_meditation" -> metrics.mindfulnessMinutes.toDouble()
                 "health_connect_weight" -> metrics.weight
                 
                 // [FIX Phase 5] "Prise de Masse" Nutrition Mapping

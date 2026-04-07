@@ -59,7 +59,8 @@ data class DailyNoteState(
 data class DailyMoodPoint(
     val date: LocalDate,
     val score: Float,
-    val emoji: String
+    val emoji: String,
+    val avgBpm: Int = 0
 )
 
 data class MorningBriefingUiState(
@@ -140,6 +141,16 @@ class DailyNoteViewModel @Inject constructor(
         (6 downTo 0).forEach { offset ->
             val d = date.minusDays(offset.toLong())
             val dayMoods = moods.filter { it.date == d.toString() }
+            
+            val metricsFile = File(context.filesDir, "10_Journal/data/health/metrics/$d.json")
+            var avgBpm = 0
+            if (metricsFile.exists()) {
+                try {
+                    val dhm = com.google.gson.Gson().fromJson(metricsFile.readText(), cloud.wafflecommons.pixelbrainreader.data.health.DailyHealthMetrics::class.java)
+                    avgBpm = dhm?.averageHeartRate ?: 0
+                } catch (e: Exception) {}
+            }
+            
             if (dayMoods.isNotEmpty()) {
                 val avg = dayMoods.map { it.score }.average()
                 val emoji = when {
@@ -150,9 +161,9 @@ class DailyNoteViewModel @Inject constructor(
                     avg < 4.2 -> "🙂"
                     else -> "🤩"
                 }
-                recentMoods.add(DailyMoodPoint(d, avg.toFloat(), emoji))
+                recentMoods.add(DailyMoodPoint(d, avg.toFloat(), emoji, avgBpm))
             } else {
-                recentMoods.add(DailyMoodPoint(d, 0f, "∅"))
+                recentMoods.add(DailyMoodPoint(d, 0f, "∅", avgBpm))
             }
         }
         recentMoods
@@ -338,10 +349,22 @@ class DailyNoteViewModel @Inject constructor(
         }
     }
 
+    fun updateTimelineEntry(entry: TimelineEntryEntity) {
+        viewModelScope.launch {
+            dashboardRepository.updateTimelineEntry(entry)
+        }
+    }
+
     fun addTask(label: String, targetDate: LocalDate = currentDate, scheduledTime: LocalTime? = null) {
         viewModelScope.launch {
             // Use Database-First Repository
             taskRepository.addTask(label, targetDate, scheduledTime)
+        }
+    }
+
+    fun updateTask(task: DailyTaskEntity) {
+        viewModelScope.launch {
+            dashboardRepository.updateTask(task)
         }
     }
 

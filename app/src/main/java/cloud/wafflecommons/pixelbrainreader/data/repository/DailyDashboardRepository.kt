@@ -116,6 +116,10 @@ class DailyDashboardRepository @Inject constructor(
         dashboardDao.insertTimelineEntry(entry)
     }
 
+    suspend fun updateTimelineEntry(entry: TimelineEntryEntity) = withContext(Dispatchers.IO) {
+        dashboardDao.insertTimelineEntry(entry)
+    }
+
     suspend fun addTask(date: LocalDate, label: String, time: LocalTime? = null, priority: Int = 1) = withContext(Dispatchers.IO) {
         ensureDashboard(date)
         val task = DailyTaskEntity(
@@ -124,6 +128,10 @@ class DailyDashboardRepository @Inject constructor(
             scheduledTime = time?.format(DateTimeFormatter.ofPattern("HH:mm")), 
             priority = priority
         )
+        dashboardDao.insertTask(task)
+    }
+
+    suspend fun updateTask(task: DailyTaskEntity) = withContext(Dispatchers.IO) {
         dashboardDao.insertTask(task)
     }
 

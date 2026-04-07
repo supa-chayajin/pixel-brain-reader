@@ -48,6 +48,7 @@ class HealthConnectManager @Inject constructor(
         return HealthConnectClient.getSdkStatus(context)
     }
 
+    @Suppress("OPT_IN_USAGE", "OPT_IN_USAGE_ERROR")
     suspend fun getDailyMetrics(date: LocalDate): DailyHealthMetrics = withContext(Dispatchers.IO) {
         val zoneId = ZoneId.systemDefault()
         
@@ -80,7 +81,16 @@ class HealthConnectManager @Inject constructor(
 
         val totalSteps = aggregateResponse?.get(StepsRecord.COUNT_TOTAL) ?: 0L
         val waterConsumedMl = aggregateResponse?.get(HydrationRecord.VOLUME_TOTAL)?.inMilliliters ?: 0.0
-        val caloriesConsumed = aggregateResponse?.get(NutritionRecord.ENERGY_TOTAL)?.inKilocalories ?: 0.0
+        
+        var caloriesConsumed = 0.0
+        try {
+            val nutritionRequest = ReadRecordsRequest(NutritionRecord::class, timeRangeFilter)
+            val nutritionResponse = healthConnectClient.readRecords(nutritionRequest)
+            caloriesConsumed = nutritionResponse.records.sumOf { it.energy?.inKilocalories ?: 0.0 }
+        } catch (e: Exception) {
+            Log.e("HealthConnectManager", "Failed to read nutrition", e)
+            caloriesConsumed = aggregateResponse?.get(NutritionRecord.ENERGY_TOTAL)?.inKilocalories ?: 0.0
+        }
 
         // 2. Read Sleep Sessions (Still involves some manual logic for overlaps)
         val sleepRequest = ReadRecordsRequest(SleepSessionRecord::class, sleepFilter)
@@ -109,15 +119,25 @@ class HealthConnectManager @Inject constructor(
         // 4. Read Mindfulness / Exercise
         var mindfulnessMinutes = 0L
         try {
+            val minRequest = ReadRecordsRequest(androidx.health.connect.client.records.MindfulnessSessionRecord::class, timeRangeFilter)
+            val minResponse = healthConnectClient.readRecords(minRequest)
+            mindfulnessMinutes += minResponse.records.sumOf {
+                Duration.between(it.startTime, it.endTime).toMinutes()
+            }
+        } catch (e: Exception) {
+            Log.e("HealthConnectManager", "Failed to read mindfulness session", e)
+        }
+        
+        try {
             val exerciseRequest = ReadRecordsRequest(ExerciseSessionRecord::class, timeRangeFilter)
             val exerciseResponse = healthConnectClient.readRecords(exerciseRequest)
-            mindfulnessMinutes = exerciseResponse.records.filter { 
+            mindfulnessMinutes += exerciseResponse.records.filter { 
                 it.exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_YOGA
             }.sumOf {
                 Duration.between(it.startTime, it.endTime).toMinutes()
             }
         } catch (e: Exception) {
-            Log.e("HealthConnectManager", "Failed to read mindfulness/exercise", e)
+            Log.e("HealthConnectManager", "Failed to read exercise mindfulness", e)
         }
 
         DailyHealthMetrics(

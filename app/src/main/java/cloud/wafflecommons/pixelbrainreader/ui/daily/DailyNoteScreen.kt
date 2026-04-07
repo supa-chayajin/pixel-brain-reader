@@ -71,7 +71,9 @@ fun DailyNoteScreen(
     val isOracleExpanded by viewModel.isOracleExpanded.collectAsStateWithLifecycle()
 
     var showAddTimelineDialog by remember { mutableStateOf(false) }
+    var editTimelineEntry by remember { mutableStateOf<TimelineEntryEntity?>(null) }
     var showAddTaskDialog by remember { mutableStateOf(false) }
+    var editTaskEntry by remember { mutableStateOf<DailyTaskEntity?>(null) }
     var showQuickCaptureSheet by remember { mutableStateOf(false) }
     var fabExpanded by remember { mutableStateOf(false) }
 
@@ -284,14 +286,21 @@ fun DailyNoteScreen(
                                     Column(modifier = Modifier.weight(0.4f)) {
                                         TimelineHeader()
                                         Spacer(Modifier.height(8.dp))
-                                        TimelineList(state.timelineEvents)
+                                        TimelineList(
+                                            events = state.timelineEvents, 
+                                            onEdit = { editTimelineEntry = it }
+                                        )
                                     }
 
                                     // Right Column: Journal + Second Brain
                                     Column(modifier = Modifier.weight(0.6f)) {
                                         JournalHeader()
                                         Spacer(Modifier.height(8.dp))
-                                        TaskList(state.dailyTasks, onToggle = { id, done -> viewModel.toggleTask(id, done) })
+                                        TaskList(
+                                            tasks = state.dailyTasks, 
+                                            onToggle = { id, done -> viewModel.toggleTask(id, done) },
+                                            onEdit = { editTaskEntry = it }
+                                        )
                                     }
                                 }
                             }
@@ -306,7 +315,10 @@ fun DailyNoteScreen(
                         // 5b. Timeline List (Animated)
                         item {
                             cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 5) {
-                                TimelineList(state.timelineEvents)
+                                TimelineList(
+                                    events = state.timelineEvents,
+                                    onEdit = { editTimelineEntry = it }
+                                )
                             }
                         }
 
@@ -319,7 +331,11 @@ fun DailyNoteScreen(
                         // 6b. Journal List (Animated)
                         item {
                             cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 6) {
-                                TaskList(state.dailyTasks, onToggle = { id, done -> viewModel.toggleTask(id, done) })
+                                TaskList(
+                                    tasks = state.dailyTasks, 
+                                    onToggle = { id, done -> viewModel.toggleTask(id, done) },
+                                    onEdit = { editTaskEntry = it }
+                                )
                             }
                         }
                     }
@@ -398,6 +414,37 @@ fun DailyNoteScreen(
             onSave = { content, color ->
                 viewModel.saveScrap(content, color)
                 showQuickCaptureSheet = false
+            }
+        )
+    }
+
+    if (editTimelineEntry != null) {
+        val entryToEdit = editTimelineEntry!!
+        EditTimelineDialog(
+            initialContent = entryToEdit.content,
+            initialTime = entryToEdit.time,
+            onDismiss = { editTimelineEntry = null },
+            onConfirm = { newContent, newTime ->
+                viewModel.updateTimelineEntry(entryToEdit.copy(content = newContent, time = newTime))
+                editTimelineEntry = null
+            }
+        )
+    }
+
+    if (editTaskEntry != null) {
+        val taskToEdit = editTaskEntry!!
+        val scheduledTime = taskToEdit.scheduledTime?.let {
+            LocalTime.parse(it, DateTimeFormatter.ofPattern("HH:mm"))
+        }
+
+        EditTaskDialog(
+            initialLabel = taskToEdit.label,
+            initialTime = scheduledTime,
+            onDismiss = { editTaskEntry = null },
+            onConfirm = { newLabel, newTime ->
+                val newTimeStr = newTime?.format(DateTimeFormatter.ofPattern("HH:mm"))
+                viewModel.updateTask(taskToEdit.copy(label = newLabel, scheduledTime = newTimeStr))
+                editTaskEntry = null
             }
         )
     }
@@ -520,7 +567,7 @@ private fun JournalHeader(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun TimelineList(events: List<TimelineEntryEntity>) {
+private fun TimelineList(events: List<TimelineEntryEntity>, onEdit: (TimelineEntryEntity) -> Unit) {
     if (events.isEmpty()) {
         Text(
             text = "No events recorded yet.",
@@ -534,7 +581,8 @@ private fun TimelineList(events: List<TimelineEntryEntity>) {
             sortedEvents.forEachIndexed { index, event ->
                 TimelineItem(
                     event = event,
-                    isLast = index == sortedEvents.lastIndex
+                    isLast = index == sortedEvents.lastIndex,
+                    onClick = { onEdit(event) }
                 )
             }
         }
@@ -542,8 +590,8 @@ private fun TimelineList(events: List<TimelineEntryEntity>) {
 }
 
 @Composable
-private fun TimelineItem(event: TimelineEntryEntity, isLast: Boolean) {
-    Row(modifier = Modifier.height(IntrinsicSize.Min)) {
+private fun TimelineItem(event: TimelineEntryEntity, isLast: Boolean, onClick: () -> Unit) {
+    Row(modifier = Modifier.height(IntrinsicSize.Min).clickable { onClick() }.padding(vertical = 4.dp)) {
         // Time Column & Line
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -591,7 +639,7 @@ private fun TimelineItem(event: TimelineEntryEntity, isLast: Boolean) {
 }
 
 @Composable
-private fun TaskList(tasks: List<DailyTaskEntity>, onToggle: (String, Boolean) -> Unit) {
+private fun TaskList(tasks: List<DailyTaskEntity>, onToggle: (String, Boolean) -> Unit, onEdit: (DailyTaskEntity) -> Unit) {
     if (tasks.isEmpty()) {
         Text(
             text = "All caught up.",
@@ -615,16 +663,16 @@ private fun TaskList(tasks: List<DailyTaskEntity>, onToggle: (String, Boolean) -
 
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             sorted.forEach { task ->
-                TaskItem(task, onToggle)
+                TaskItem(task, onToggle, onEdit)
             }
         }
     }
 }
 
 @Composable
-private fun TaskItem(task: DailyTaskEntity, onToggle: (String, Boolean) -> Unit) {
+private fun TaskItem(task: DailyTaskEntity, onToggle: (String, Boolean) -> Unit, onEdit: (DailyTaskEntity) -> Unit) {
     Surface(
-        onClick = { onToggle(task.id, !task.isDone) },
+        onClick = { onEdit(task) },
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainer,
         modifier = Modifier.fillMaxWidth()
@@ -633,11 +681,16 @@ private fun TaskItem(task: DailyTaskEntity, onToggle: (String, Boolean) -> Unit)
             modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = if (task.isDone) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
-                contentDescription = null,
-                tint = if (task.isDone) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            IconButton(
+                onClick = { onToggle(task.id, !task.isDone) },
+                modifier = Modifier.size(24.dp)
+            ) {
+                Icon(
+                    imageVector = if (task.isDone) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                    contentDescription = null,
+                    tint = if (task.isDone) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
             Spacer(Modifier.width(12.dp))
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -971,5 +1024,117 @@ private fun ScratchItem(
             }
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EditTimelineDialog(
+    initialContent: String, 
+    initialTime: LocalTime,
+    onDismiss: () -> Unit, 
+    onConfirm: (String, LocalTime) -> Unit
+) {
+    var content by remember { mutableStateOf(initialContent) }
+    
+    val timePickerState = rememberTimePickerState(
+        initialHour = initialTime.hour,
+        initialMinute = initialTime.minute,
+        is24Hour = true
+    )
+    
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit Moment") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                OutlinedTextField(
+                    value = content,
+                    onValueChange = { content = it },
+                    label = { Text("What happened?") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                TimeInput(state = timePickerState)
+            }
+        },
+        confirmButton = {
+            Button(onClick = { 
+                if (content.isNotBlank()) {
+                    onConfirm(content, LocalTime.of(timePickerState.hour, timePickerState.minute))
+                }
+            }) {
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EditTaskDialog(
+    initialLabel: String, 
+    initialTime: LocalTime?, 
+    onDismiss: () -> Unit, 
+    onConfirm: (String, LocalTime?) -> Unit
+) {
+    var label by remember { mutableStateOf(initialLabel) }
+    var useTime by remember { mutableStateOf(initialTime != null) }
+    
+    val timePickerState = rememberTimePickerState(
+        initialHour = initialTime?.hour ?: LocalTime.now().hour,
+        initialMinute = initialTime?.minute ?: LocalTime.now().minute,
+        is24Hour = true
+    )
+    
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit Task") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                OutlinedTextField(
+                    value = label,
+                    onValueChange = { label = it },
+                    label = { Text("Goal / Task") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { useTime = !useTime }
+                ) {
+                    cloud.wafflecommons.pixelbrainreader.ui.components.CortexBouncyCheckbox(
+                        checked = useTime, 
+                        onCheckedChange = { useTime = it }
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("Scheduled Time?")
+                }
+                
+                AnimatedVisibility(visible = useTime) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        TimeInput(state = timePickerState)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = { 
+                if (label.isNotBlank()) {
+                     val time = if (useTime) LocalTime.of(timePickerState.hour, timePickerState.minute) else null
+                     onConfirm(label, time)
+                } 
+            }) {
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
 }
 
