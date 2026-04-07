@@ -166,6 +166,24 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    private val _isSyncingConfigs = MutableStateFlow(false)
+    val isSyncingConfigs: StateFlow<Boolean> = _isSyncingConfigs.asStateFlow()
+
+    fun syncAllConfigsToVault(onComplete: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            _isSyncingConfigs.value = true
+            try {
+                habitRepository.performBulkConfigSync()
+                onComplete(true)
+            } catch (e: Exception) {
+                Log.e("SettingsViewModel", "Failed to sync configs", e)
+                onComplete(false)
+            } finally {
+                _isSyncingConfigs.value = false
+            }
+        }
+    }
+
     fun updateMoodEmoji(score: Int, emoji: String) {
         if (emoji.isBlank()) return
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {

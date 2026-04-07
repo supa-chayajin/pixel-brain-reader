@@ -68,26 +68,30 @@ class ChoreRepository @Inject constructor(
 
     // --- JSON Sync ---
     
-    private suspend fun exportRoomsToJson() = withContext(Dispatchers.IO) {
+    suspend fun exportHomeConfigToJson() = withContext(Dispatchers.IO) {
         try {
             fileRepository.createLocalFolder(homeDir)
+            
+            // 1. Export Rooms
             val rooms = homeRoomDao.getAllRoomsAsFlow().first()
-            val jsonOutput = gson.toJson(rooms)
-            fileRepository.saveFileLocally(roomsFile, jsonOutput)
+            val roomsJson = gson.toJson(rooms)
+            fileRepository.saveFileLocally(roomsFile, roomsJson)
+            Log.d("ChoreRepository", "Exported rooms.json successfully")
+
+            // 2. Export Chores
+            val chores = choreDao.getAllChoresAsFlow().first()
+            val choresJson = gson.toJson(chores)
+            fileRepository.saveFileLocally(choresFile, choresJson)
+            Log.d("ChoreRepository", "Exported chores.json successfully")
+            
         } catch (e: Exception) {
-            Log.e("ChoreRepository", "Failed to export rooms to JSON", e)
+            Log.e("ChoreRepository", "Failed to export home config to JSON", e)
+            throw e
         }
     }
 
-    private suspend fun exportChoresToJson() = withContext(Dispatchers.IO) {
-        try {
-            fileRepository.createLocalFolder(homeDir)
-            val chores = choreDao.getAllChoresAsFlow().first()
-            val jsonOutput = gson.toJson(chores)
-            fileRepository.saveFileLocally(choresFile, jsonOutput)
-        } catch (e: Exception) {
-            Log.e("ChoreRepository", "Failed to export chores to JSON", e)
-        }
-    }
+    private suspend fun exportRoomsToJson() = exportHomeConfigToJson()
+
+    private suspend fun exportChoresToJson() = exportHomeConfigToJson()
 }
 

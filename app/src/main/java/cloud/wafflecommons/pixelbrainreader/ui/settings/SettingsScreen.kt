@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.*
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -236,19 +237,48 @@ fun SettingsScreen(
                 
                 Spacer(Modifier.height(8.dp))
                 
+                val isSyncingConfigs by viewModel.isSyncingConfigs.collectAsStateWithLifecycle()
+
+                Button(
+                    onClick = {
+                        viewModel.syncAllConfigsToVault { success ->
+                             coroutineScope.launch {
+                                 if(success) {
+                                     snackbarHostState.showSnackbar("All configuration (Habits, Home OS) synced and pushed!")
+                                 } else {
+                                     snackbarHostState.showSnackbar("Failed to sync configurations. Check Git logs.")
+                                 }
+                             }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isSyncingConfigs
+                ) {
+                    if (isSyncingConfigs) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary)
+                    } else {
+                        Icon(Icons.Default.Sync, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Export & Sync All Configurations (Vault)")
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+                
                 OutlinedButton(
                     onClick = {
                         viewModel.forceSyncHabits {
                             coroutineScope.launch {
-                                snackbarHostState.showSnackbar("Habits synchronized with Vault configuration")
+                                snackbarHostState.showSnackbar("Habit configuration pulled and imported from Vault.")
                             }
                         }
                     },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isSyncingConfigs
                 ) {
-                    Icon(Icons.Default.Sync, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                    Icon(Icons.Default.Sync, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Force Sync Habits from Vault JSON", color = MaterialTheme.colorScheme.error)
+                    Text("Force Import Habits (Vault -> App)")
                 }
 
                 Spacer(Modifier.height(16.dp))
