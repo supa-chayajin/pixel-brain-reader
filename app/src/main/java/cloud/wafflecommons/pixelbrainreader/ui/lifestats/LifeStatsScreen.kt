@@ -1,23 +1,30 @@
 package cloud.wafflecommons.pixelbrainreader.ui.lifestats
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.LocalFireDepartment
+import androidx.compose.material.icons.filled.SelfImprovement
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.patrykandpatrick.vico.compose.axis.horizontal.rememberBottomAxis
-import com.patrykandpatrick.vico.compose.axis.vertical.rememberStartAxis
-import com.patrykandpatrick.vico.compose.chart.Chart
-import com.patrykandpatrick.vico.compose.chart.line.lineChart
-import com.patrykandpatrick.vico.compose.component.shape.shader.verticalGradient
-import com.patrykandpatrick.vico.core.entry.FloatEntry
-import com.patrykandpatrick.vico.core.entry.entryModelOf
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -25,106 +32,212 @@ fun LifeStatsScreen(
     onNavigateBack: () -> Unit,
     viewModel: LifeStatsViewModel = hiltViewModel()
 ) {
-    val rpgStats by viewModel.rpgStats.collectAsStateWithLifecycle()
-    val moodHistory by viewModel.moodHistory.collectAsStateWithLifecycle()
-    val habitCompletionRates by viewModel.habitCompletionRates.collectAsStateWithLifecycle()
-    val isHealthSynergyActive by viewModel.isHealthSynergyActive.collectAsStateWithLifecycle()
-    val scrollState = rememberScrollState()
+    val uiState by viewModel.finalUiState.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
             cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(title = "Statistiques de Vie")
         }
     ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .padding(innerPadding)
-                .fillMaxSize()
-                .verticalScroll(scrollState)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(24.dp)
+        if (uiState.isLoading) {
+            Box(Modifier.fillMaxSize().padding(innerPadding), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+            return@Scaffold
+        }
+
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(minSize = 340.dp),
+            contentPadding = innerPadding,
+            modifier = Modifier.padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-
-            // 1. Gamification Radar Chart
-            DashboardCard(title = "RPG Attributes") {
-                if (rpgStats.isNotEmpty()) {
-                    RadarChart(
-                        stats = rpgStats,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(300.dp)
-                    )
-                } else {
-                    Text("No RPG stats available yet.")
-                }
-            }
-
-            // 2. Statistics Cards
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                StatisticCard(
-                    title = "Habits Completion",
-                    value = (habitCompletionRates * 100).toInt(),
-                    unit = "%",
-                    modifier = Modifier.weight(1f)
-                )
-
-                StatisticCard(
-                    title = "Health Synergy",
-                    value = if (isHealthSynergyActive) 1 else 0,
-                    unit = if (isHealthSynergyActive) "Active" else "Inactive",
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            // 3. Mood History Vico Chart
-            DashboardCard(title = "Mood History (7 Days)") {
-                if (moodHistory.isNotEmpty()) {
-                    Chart(
-                        chart = lineChart(
-                            lines = listOf(
-                                com.patrykandpatrick.vico.compose.chart.line.lineSpec(
-                                    lineColor = Color(0xFF9C27B0), // Purple
-                                    lineBackgroundShader = verticalGradient(
-                                        colors = arrayOf(Color(0xFF9C27B0).copy(alpha = 0.5f), Color(0xFF9C27B0).copy(alpha = 0f))
-                                    )
-                                )
-                            )
-                        ),
-                        model = entryModelOf(moodHistory),
-                        startAxis = rememberStartAxis(title = "Mood Score"),
-                        bottomAxis = rememberBottomAxis(title = "Days Ago"),
-                        modifier = Modifier.height(200.dp)
-                    )
-                } else {
-                    Text("No mood history available yet.")
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(32.dp))
+            item { MoodVsHeartRateChartCard(uiState.moodHistory) }
+            item { HealthSummaryCard(uiState) }
+            item { CompletionRingsCard(uiState) }
         }
     }
 }
 
 @Composable
-fun DashboardCard(
-    title: String,
-    content: @Composable ColumnScope.() -> Unit
-) {
+private fun DashboardCard(title: String, content: @Composable ColumnScope.() -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(20.dp)) {
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.height(16.dp))
             content()
         }
+    }
+}
+
+@Composable
+private fun MoodVsHeartRateChartCard(moodHistory: List<LifeStatsMoodPoint>) {
+    DashboardCard(title = "Mood vs. Heart Rate (7 Days)") {
+        val primaryColor = MaterialTheme.colorScheme.primary
+        
+        Canvas(modifier = Modifier.fillMaxWidth().height(220.dp)) {
+            if (moodHistory.isEmpty()) return@Canvas
+            
+            val canvasWidth = size.width
+            val graphHeight = size.height - 40.dp.toPx()
+            val stepX = canvasWidth / (moodHistory.size.coerceAtLeast(2) - 1).toFloat()
+            val topPadding = 20.dp.toPx()
+            
+            // Draw Mood
+            val moodPath = Path()
+            fun getMoodY(score: Float): Float {
+                val clamped = ((score - 1f) / 4f).coerceIn(0f, 1f)
+                return (topPadding + graphHeight) - (clamped * graphHeight)
+            }
+            
+            moodHistory.forEachIndexed { index, point ->
+                val x = index * stepX
+                val y = getMoodY(point.score.coerceAtLeast(1f))
+                if (index == 0) moodPath.moveTo(x, y) else moodPath.lineTo(x, y)
+            }
+            drawPath(path = moodPath, color = primaryColor, style = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round))
+            
+            // Draw HR
+            val hrPath = Path()
+            var firstHr = true
+            fun getHrY(bpm: Int): Float {
+                val clamped = ((bpm.toFloat() - 50f) / 80f).coerceIn(0f, 1f)
+                return (topPadding + graphHeight) - (clamped * graphHeight)
+            }
+            
+            moodHistory.forEachIndexed { index, point ->
+                if (point.avgBpm > 0) {
+                    val x = index * stepX
+                    val y = getHrY(point.avgBpm)
+                    if (firstHr) { hrPath.moveTo(x, y); firstHr = false } else hrPath.lineTo(x, y)
+                }
+            }
+            
+            if (!hrPath.isEmpty) {
+                drawPath(
+                    path = hrPath,
+                    color = Color(0xFFFF5252).copy(alpha = 0.8f),
+                    style = Stroke(
+                        width = 2.dp.toPx(), cap = StrokeCap.Round,
+                        pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(15f, 15f), 0f)
+                    )
+                )
+            }
+            
+            // Draw emojis
+            val textPaint = android.graphics.Paint().apply {
+                textSize = 14.dp.toPx()
+                textAlign = android.graphics.Paint.Align.CENTER
+            }
+            moodHistory.forEachIndexed { index, point ->
+                val x = index * stepX
+                val y = getMoodY(point.score.coerceAtLeast(1f))
+                drawContext.canvas.nativeCanvas.drawText(point.emoji, x, y - 8.dp.toPx(), textPaint)
+            }
+        }
+    }
+}
+
+@Composable
+private fun HealthSummaryCard(uiState: LifeStatsUiState) {
+    DashboardCard(title = "Health Summary (7 Days)") {
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth()) {
+            HealthMetricItem(Modifier.weight(1f), "Calories", "${uiState.totalCalories} kcal", Icons.Default.LocalFireDepartment, Color(0xFFFFA726))
+            HealthMetricItem(Modifier.weight(1f), "Meditation", "${uiState.totalMeditationMinutes} min", Icons.Default.SelfImprovement, Color(0xFF29B6F6))
+        }
+        Spacer(Modifier.height(16.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth()) {
+            HealthMetricItem(Modifier.weight(1f), "Avg Heart Rate", "${uiState.avgHeartRate} BPM", Icons.Default.Favorite, Color(0xFFFF5252))
+            HealthMetricItem(Modifier.weight(1f), "Synergy", if (uiState.isHealthSynergyActive) "Active" else "Inactive", Icons.Default.Favorite, MaterialTheme.colorScheme.primary)
+        }
+    }
+}
+
+@Composable
+private fun HealthMetricItem(modifier: Modifier, title: String, value: String, icon: androidx.compose.ui.graphics.vector.ImageVector, iconTint: Color) {
+    Surface(modifier = modifier, shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surface) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(12.dp)) {
+            Icon(icon, contentDescription = title, tint = iconTint, modifier = Modifier.size(32.dp))
+            Spacer(Modifier.width(12.dp))
+            Column {
+                Text(text = title, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(text = value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+@Composable
+private fun CompletionRingsCard(uiState: LifeStatsUiState) {
+    DashboardCard(title = "Productivity Hub (7 Days)") {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(160.dp)) {
+                // Chore completion mapping: Clean / (Critical + Clean)
+                val totalChores = uiState.criticalChoresCount + uiState.cleanChoresCount
+                val choreRate = if (totalChores > 0) uiState.cleanChoresCount.toFloat() / totalChores.toFloat() else 0f
+                
+                ActivityRings(
+                    tasksProgress = uiState.taskCompletionRate,
+                    habitsProgress = uiState.habitCompletionRate,
+                    choresProgress = choreRate
+                )
+            }
+            Spacer(Modifier.width(24.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                LegendItem("Tasks", Color(0xFFE91E63), "${(uiState.taskCompletionRate * 100).toInt()}%")
+                LegendItem("Habits", Color(0xFF8BC34A), "${(uiState.habitCompletionRate * 100).toInt()}%")
+                val totalChores = uiState.criticalChoresCount + uiState.cleanChoresCount
+                val choreRate = if (totalChores > 0) uiState.cleanChoresCount.toFloat() / totalChores.toFloat() else 0f
+                LegendItem("Clean Chores", Color(0xFF03A9F4), "${(choreRate * 100).toInt()}%")
+            }
+        }
+    }
+}
+
+@Composable
+private fun LegendItem(label: String, color: Color, value: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Surface(color = color, shape = MaterialTheme.shapes.small, modifier = Modifier.size(12.dp)) {}
+        Spacer(Modifier.width(8.dp))
+        Text(text = label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        Text(text = value, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun ActivityRings(tasksProgress: Float, habitsProgress: Float, choresProgress: Float) {
+    val animTask by animateFloatAsState(targetValue = tasksProgress, animationSpec = tween(1500))
+    val animHabit by animateFloatAsState(targetValue = habitsProgress, animationSpec = tween(1500))
+    val animChore by animateFloatAsState(targetValue = choresProgress, animationSpec = tween(1500))
+
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        val strokeW = 14.dp.toPx()
+        val spacing = strokeW + 4.dp.toPx()
+        val center = Offset(size.width / 2, size.height / 2)
+        
+        fun drawRing(radius: Float, progress: Float, color: Color) {
+            drawCircle(color = color.copy(alpha = 0.2f), radius = radius, center = center, style = Stroke(strokeW))
+            drawArc(
+                color = color,
+                startAngle = -90f,
+                sweepAngle = 360f * progress.coerceIn(0f, 1f),
+                useCenter = false,
+                topLeft = Offset(center.x - radius, center.y - radius),
+                size = Size(radius * 2, radius * 2),
+                style = Stroke(strokeW, cap = StrokeCap.Round)
+            )
+        }
+        
+        drawRing(size.width / 2 - strokeW / 2, animTask, Color(0xFFE91E63))
+        drawRing(size.width / 2 - strokeW / 2 - spacing, animHabit, Color(0xFF8BC34A))
+        drawRing(size.width / 2 - strokeW / 2 - (spacing * 2), animChore, Color(0xFF03A9F4))
     }
 }
