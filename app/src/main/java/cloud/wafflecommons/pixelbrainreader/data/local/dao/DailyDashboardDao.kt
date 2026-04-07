@@ -24,6 +24,9 @@ interface DailyDashboardDao {
     @Query("SELECT * FROM daily_dashboard WHERE date = :date")
     fun getLiveDashboard(date: LocalDate): Flow<DailyDashboardEntity?>
 
+    @Query("SELECT * FROM daily_dashboard")
+    suspend fun getAllDashboards(): List<DailyDashboardEntity>
+
     // Update scalar fields
     @Query("UPDATE daily_dashboard SET dailyMantra = :mantra WHERE date = :date")
     suspend fun updateMantra(date: LocalDate, mantra: String)

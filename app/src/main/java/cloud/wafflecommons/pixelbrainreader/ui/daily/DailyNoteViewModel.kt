@@ -134,6 +134,30 @@ class DailyNoteViewModel @Inject constructor(
         } else null
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
+    // [MODIFIED] Reactive Mood Trend for the Graph
+    private val _moodTrend = combine(_selectedDate, moodRepository.getMoodFlow()) { date, moods ->
+        val recentMoods = mutableListOf<DailyMoodPoint>()
+        (6 downTo 0).forEach { offset ->
+            val d = date.minusDays(offset.toLong())
+            val dayMoods = moods.filter { it.date == d.toString() }
+            if (dayMoods.isNotEmpty()) {
+                val avg = dayMoods.map { it.score }.average()
+                val emoji = when {
+                    avg < 1.8 -> "😫"
+                    avg.isNaN() -> "😐"
+                    avg < 2.6 -> "😞"
+                    avg < 3.4 -> "😐"
+                    avg < 4.2 -> "🙂"
+                    else -> "🤩"
+                }
+                recentMoods.add(DailyMoodPoint(d, avg.toFloat(), emoji))
+            } else {
+                recentMoods.add(DailyMoodPoint(d, 0f, "∅"))
+            }
+        }
+        recentMoods
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     // [NEW] Persisted UI State
     val isOracleExpanded = userPrefs.isOracleExpanded
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
@@ -237,9 +261,10 @@ class DailyNoteViewModel @Inject constructor(
             scratchFlow,
             _currentDayMood,
             _healthMetrics,
-            userPrefs.isBriefingExpanded.map { it ?: true } // Expand flow
+            userPrefs.isBriefingExpanded.map { it ?: true }, // Expand flow
+            _moodTrend
         ) { args ->
-            // Use varargs combine trick since we have 7 flows
+            // Use varargs combine trick since we have 8 flows
             val dashboard = args[0] as? cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyDashboardEntity
             @Suppress("UNCHECKED_CAST") val timeline = args[1] as? List<TimelineEntryEntity> ?: emptyList()
             @Suppress("UNCHECKED_CAST") val tasks = args[2] as? List<DailyTaskEntity> ?: emptyList()
@@ -247,6 +272,7 @@ class DailyNoteViewModel @Inject constructor(
             val moodData = args[4] as? DailyMoodData
             val healthMetrics = args[5] as? cloud.wafflecommons.pixelbrainreader.data.health.DailyHealthMetrics
             val isExpanded = args[6] as? Boolean ?: true
+            @Suppress("UNCHECKED_CAST") val moodTrendData = args[7] as? List<DailyMoodPoint> ?: emptyList()
 
             // Shield ideas and notes from being overwritten by delayed disk emissions
             // if the user is actively typing (uncommitted changes exist in the buffer).
@@ -272,7 +298,7 @@ class DailyNoteViewModel @Inject constructor(
                 ?: emptyList()
             
             // Briefing State updating
-            val currentBriefing = _uiState.value.briefingState.copy(isExpanded = isExpanded)
+            val currentBriefing = _uiState.value.briefingState.copy(isExpanded = isExpanded, moodTrend = moodTrendData, isLoading = false)
 
             _uiState.update { 
                 it.copy(
@@ -285,7 +311,7 @@ class DailyNoteViewModel @Inject constructor(
                     moodData = moodData,
                     healthMetrics = healthMetrics,
                     topDailyTags = dailyTags,
-                    briefingState = currentBriefing, // Retain loaded details
+                    briefingState = currentBriefing, // Retain loaded details seamlessly overlaying Room Data
                     isLoading = false
                 )
             }
@@ -293,20 +319,14 @@ class DailyNoteViewModel @Inject constructor(
     }
 
     private suspend fun loadAuxiliaryData(date: LocalDate) {
-        // [REMOVED] Imperative overrides for _uiState.update(...) replaced by combine in observeRoomData.
-        
-        // Oracle Insight (Async)
-
-        
-        // Weather & Briefing Logic
-        val isExpanded = userPrefs.isBriefingExpanded.firstOrNull() ?: true
-        
-        // [NEW] Briefing loaded via Flow separately. 
-        // We still load "Non-AI" briefing data here (Mood/News).
-        val briefingState = loadMorningBriefingData(date, null, isExpanded)
-
+        val weather = try { weatherRepository.getCurrentWeatherAndLocation() } catch (e: Exception) { null }
         _uiState.update { current ->
-              current.copy(briefingState = briefingState) // Only overlay the ones we fetched synchronously (Network mostly)
+              current.copy(
+                  briefingState = current.briefingState.copy(
+                      weather = weather,
+                      quote = "Stay safe my friend, and don't you dare go hollow!"
+                  )
+              ) 
         }
     }
 
@@ -458,49 +478,5 @@ class DailyNoteViewModel @Inject constructor(
         }
     }
 
-    // --- Briefing Helpers (Simplified for brevity, logic preserved) ---
-    // --- Briefing Helpers ---
-    private suspend fun loadMorningBriefingData(
-        date: LocalDate, 
-        existingWeather: WeatherData?, 
-        isExpanded: Boolean
-    ): MorningBriefingUiState {
-        val weather = weatherRepository.getCurrentWeatherAndLocation()
-        // val news = try { newsRepository.getTodayNews() } catch (e: Exception) { emptyList() }
-        
-        // Mood Trends (Calculated here)
-        val moodTrend = loadMoodTrend(date)
 
-        // Quote is still generated on fly? Or cache it? 
-        // User requested caching AI. For now, let's keep quote lightweight or remove if blocking.
-        // Assuming Quote is fast/light or acceptable to load dynamically.
-        // To be strictly caching, we should have added it to DB. 
-        // For now, returning empty string for quote to speed up, or generate if needed.
-        // Let's keep it but handle failure gracefully.
-        
-        return MorningBriefingUiState(
-            weather = weather,
-            // weatherAdvice handled by Flow from Repository
-            moodTrend = moodTrend,
-            // news = news,
-            quote = "Stay safe my friend, and don't you dare go hollow!", // Placeholder as BriefingGenerator removed from VM
-            isExpanded = isExpanded,
-            isLoading = false
-        )
-    }
-
-    private suspend fun loadMoodTrend(date: LocalDate): List<DailyMoodPoint> {
-        val recentMoods = mutableListOf<DailyMoodPoint>()
-        // Last 7 Days (Today + 6 past days)
-        (6 downTo 0).forEach { offset ->
-            val d = date.minusDays(offset.toLong())
-            val dailyData = moodRepository.getDailyMood(d).firstOrNull()
-            if (dailyData != null && dailyData.entries.isNotEmpty()) {
-                recentMoods.add(DailyMoodPoint(d, dailyData.summary.averageScore.toFloat(), dailyData.summary.mainEmoji))
-            } else {
-                recentMoods.add(DailyMoodPoint(d, 0f, "∅"))
-            }
-        }
-        return recentMoods
-    }
 }

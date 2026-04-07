@@ -239,4 +239,26 @@ class DailyDashboardRepository @Inject constructor(
         val newContent = MarkdownBurner.burn(dashboard, timeline, tasks, activeScraps, gratitudes, frontmatter)
         fileRepository.saveFileLocally(path, newContent)
     }
+
+    suspend fun performRetroactiveExport() = withContext(Dispatchers.IO) {
+        val allDashboards = dashboardDao.getAllDashboards()
+        var recoveredCount = 0
+        for (dashboard in allDashboards) {
+            val date = dashboard.date
+            val path = "10_Journal/${date.format(DateTimeFormatter.ISO_DATE)}.md"
+            val fileExists = java.io.File(fileRepository.getLocalFile(path).absolutePath).exists()
+            // We re-burn every day to ensure completeness, or just burn if it's not existing.
+            // But retroactive means catching up missing days.
+            // If the buffer exists but the md file does not, or we just want to ensure everything is synced:
+            if (!fileExists || date == LocalDate.now()) {
+                burnToDisk(date)
+                recoveredCount++
+            }
+        }
+        
+        // Single Git Sync for all recovered/burned days
+        if (recoveredCount > 0) {
+            fileRepository.syncRepository(null, null, "main")
+        }
+    }
 }

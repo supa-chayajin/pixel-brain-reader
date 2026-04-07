@@ -20,8 +20,10 @@ class DailyExportWorker @AssistedInject constructor(
     override suspend fun doWork(): Result {
         Log.i("DailyExportWorker", "Starting automated Daily Burn process...")
         return try {
-            dashboardRepository.burnToDisk(LocalDate.now())
-            Log.i("DailyExportWorker", "Daily Burn completed successfully.")
+            // New logic: Perform full retroactive export, catching missing days.
+            // This replaces the simple burnToDisk(LocalDate.now()) to guarantee completely consistent history.
+            dashboardRepository.performRetroactiveExport()
+            Log.i("DailyExportWorker", "Daily Burn and Retroactive Recovery completed successfully.")
             Result.success()
         } catch (e: Exception) {
             Log.e("DailyExportWorker", "Failed to burn daily metrics", e)
