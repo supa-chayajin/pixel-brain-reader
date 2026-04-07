@@ -32,6 +32,8 @@ import com.google.gson.reflect.TypeToken
 class HabitRepository @Inject constructor(
     private val fileRepository: FileRepository,
     private val habitDao: HabitDao,
+    private val choreRepository: ChoreRepository,
+    private val jGitProvider: cloud.wafflecommons.pixelbrainreader.data.remote.JGitProvider,
     private val database: cloud.wafflecommons.pixelbrainreader.data.local.AppDatabase,
     private val secretManager: cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
 ) {
@@ -217,6 +219,29 @@ class HabitRepository @Inject constructor(
 
         } catch (e: Exception) {
             Log.e("HabitRepository", "Error exporting config to JSON", e)
+        }
+    }
+    suspend fun performBulkConfigSync() = withContext(Dispatchers.IO) {
+        try {
+            // 1. Export both Configs
+            exportConfigToJson()
+            choreRepository.exportHomeConfigToJson()
+
+            // 2. Add to Git Index (Critical Success Condition 3)
+            jGitProvider.addFile(configFile)
+            jGitProvider.addFile("10_Journal/data/home/rooms.json")
+            jGitProvider.addFile("10_Journal/data/home/chores.json")
+
+            // 3. Commit & Push
+            val (owner, repo) = secretManager.getRepoInfo()
+            if (!owner.isNullOrBlank() && !repo.isNullOrBlank()) {
+                fileRepository.pushDirtyFiles(owner, repo, "chore: Sync configuration (Habits, Home OS)")
+            } else {
+                Log.e("HabitRepository", "Sync failed: Repo info missing")
+            }
+        } catch (e: Exception) {
+            Log.e("HabitRepository", "Bulk sync failed", e)
+            throw e
         }
     }
 
