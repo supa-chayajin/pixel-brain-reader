@@ -7,11 +7,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
+
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -29,11 +27,10 @@ fun DailyNoteHeader(
     lastUpdate: String?,
     topDailyTags: List<String>,
     healthMetrics: DailyHealthMetrics? = null,
-    oracleInsight: String? = null,
-    isOracleExpanded: Boolean = true,
-    onToggleOracle: () -> Unit = {},
+    weather: WeatherData? = null,
     modifier: Modifier = Modifier
 ) {
+
     Surface(
         modifier = modifier
             .fillMaxWidth()
@@ -45,7 +42,7 @@ fun DailyNoteHeader(
         Column(
             modifier = Modifier.padding(20.dp)
         ) {
-            // Top Row: Emoji + Summary Stats
+             // Top Row: Emoji + Summary Stats
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
@@ -59,21 +56,34 @@ fun DailyNoteHeader(
 
                 // Right: Content
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Daily Summary",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.secondary
-                    )
-                    
-                    if (lastUpdate != null) {
-                        Text(
-                            text = "Last update: $lastUpdate",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Column {
+                            Text(
+                                text = "Daily Summary",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                            
+                            if (lastUpdate != null) {
+                                Text(
+                                    text = "Last update: $lastUpdate",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
 
+                        // Weather Pill
+                        if (weather != null) {
+                            WeatherPill(weather = weather)
+                        }
+                    }
+                    
                     if (topDailyTags.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(12.dp))
                         Text("Today's Top Tags:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
@@ -137,95 +147,37 @@ fun DailyNoteHeader(
                     }
                 }
             }
-
-            // Oracle Insight Section
-            if (!oracleInsight.isNullOrBlank()) {
-                Spacer(modifier = Modifier.height(20.dp))
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                Spacer(modifier = Modifier.height(16.dp))
-                OracleCard(
-                    insight = oracleInsight,
-                    isExpanded = isOracleExpanded,
-                    onToggle = onToggleOracle
-                )
-            }
         }
     }
 }
 
 @Composable
-fun OracleCard(
-    insight: String,
-    isExpanded: Boolean,
-    onToggle: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(
-                color = Color(0xFF3F51B5).copy(alpha = 0.05f), // Softer tint
-                shape = RoundedCornerShape(12.dp)
-            )
-            .border(
-                width = 1.dp,
-                color = Color(0xFF3F51B5).copy(alpha = 0.2f),
-                shape = RoundedCornerShape(12.dp)
-            )
-            .padding(12.dp)
+private fun WeatherPill(weather: WeatherData) {
+    Surface(
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.padding(start = 8.dp)
     ) {
-        // Header Row (Clickable)
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = onToggle
-                ),
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Default.AutoAwesome,
-                    contentDescription = "Oracle",
-                    tint = Color(0xFF3F51B5),
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Conseil de l'Oracle",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = Color(0xFF3F51B5),
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            
-            IconButton(
-                onClick = onToggle,
-                modifier = Modifier.size(24.dp)
-            ) {
-                Icon(
-                    imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                    contentDescription = if (isExpanded) "Collapse" else "Expand",
-                    tint = Color(0xFF3F51B5)
-                )
-            }
-        }
-
-        // Animated Content
-        AnimatedVisibility(visible = isExpanded) {
-            Column {
-                Spacer(modifier = Modifier.height(8.dp))
-                cloud.wafflecommons.pixelbrainreader.ui.components.ComposeCortexEditor(
-                    content = insight,
-                    onContentChange = {},
-                    readOnly = true,
-                    enabled = false, // Prevents keyboard from appearing
-                    useMonospace = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
+            // We use simple mapping here for now, or we could pass the icon from VM
+            // Since we added mapWmoToIcon, we should probably use it.
+            // But WeatherData currently only has emoji.
+            // Let's just use the emoji for now to keep it simple, OR update WeatherData.
+            Text(
+                text = weather.emoji,
+                fontSize = 16.sp
+            )
+            Text(
+                text = weather.temperature,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onPrimaryContainer
+            )
         }
     }
 }
+

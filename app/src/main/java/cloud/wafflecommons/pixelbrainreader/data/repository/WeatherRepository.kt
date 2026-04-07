@@ -13,6 +13,8 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AutoAwesome
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -137,6 +139,15 @@ class WeatherRepository @Inject constructor(
             else -> "🌡️"
         }
     }
+
+    fun mapWmoToIcon(code: Int): androidx.compose.ui.graphics.vector.ImageVector {
+        val icons = androidx.compose.material.icons.Icons.Rounded
+        return icons.AutoAwesome
+    }
+
+
+
+
 
     fun getParentingAdvice(weather: WeatherData): String {
         return when {
