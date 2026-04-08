@@ -11,24 +11,19 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.CloudUpload
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Mood
 import androidx.compose.material.icons.filled.Lightbulb
-import androidx.compose.material.icons.filled.NoteAdd
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Upgrade
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -48,6 +43,7 @@ import java.time.format.DateTimeFormatter
 import androidx.compose.ui.unit.sp
 import cloud.wafflecommons.pixelbrainreader.ui.components.CortexExpandableFAB
 import cloud.wafflecommons.pixelbrainreader.ui.components.FabActionItem
+import cloud.wafflecommons.pixelbrainreader.ui.components.PremiumWeatherCard
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -55,18 +51,13 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DailyNoteScreen(
-    onNavigateBack: () -> Unit,
-    onEditClicked: (String) -> Unit,
     onCheckInClicked: () -> Unit,
-    onOpenHabits: () -> Unit,
     onNavigateToSettings: () -> Unit,
-    isGlobalSyncing: Boolean = false,
     viewModel: DailyNoteViewModel = hiltViewModel(),
     lifeOSViewModel: cloud.wafflecommons.pixelbrainreader.ui.lifeos.LifeOSViewModel = hiltViewModel() // Legacy
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val saveState by viewModel.saveState.collectAsStateWithLifecycle()
-    val gamificationState by viewModel.gamificationState.collectAsStateWithLifecycle()
     val gratitudes by viewModel.gratitudes.collectAsStateWithLifecycle() // RFC-009
 
 
@@ -214,18 +205,16 @@ fun DailyNoteScreen(
                     contentPadding = PaddingValues(top = 16.dp, bottom = 100.dp),
                     verticalArrangement = Arrangement.spacedBy(24.dp)
                 ) {
-                    // 0.5 Weather
+                    // 0. Weather Dashboard
                     item {
-                        cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 1) {
-                            WeatherAssistChip(
-                                weather = state.weather ?: cloud.wafflecommons.pixelbrainreader.data.repository.WeatherData("⌛", "--°C", "Loading...", "Loading", -1)
-                            )
+                        cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 0) {
+                            PremiumWeatherCard(weather = state.weather)
                         }
                     }
 
                     // 1. Header & Stats
                     item {
-                        cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 0) {
+                        cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 2) {
                             val moodData = state.moodData
                             val lastUpdate = remember(moodData) { moodData?.entries?.firstOrNull()?.time }
                             DailyNoteHeader(
@@ -240,7 +229,7 @@ fun DailyNoteScreen(
 
                     // 3. Mantra
                     item {
-                        cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 3) {
+                        cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 4) {
                             Text(
                                 text = "Stay safe friend, and don't your dare go hollow!",
                                 style = MaterialTheme.typography.bodyLarge,
@@ -257,7 +246,7 @@ fun DailyNoteScreen(
 
                     // 4. Gratitude Express (RFC-009)
                     item {
-                        cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 4) {
+                        cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 5) {
                             GratitudeSection(
                                 gratitudes = gratitudes,
                                 onAddGratitude = viewModel::addGratitude,
@@ -269,7 +258,7 @@ fun DailyNoteScreen(
                     // 5. Adaptive Content (Two Columns vs Single Column)
                     if (isWide) {
                         item {
-                            cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 5) {
+                            cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 6) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(24.dp),
@@ -307,7 +296,7 @@ fun DailyNoteScreen(
                         
                         // 5b. Timeline List (Animated)
                         item {
-                            cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 5) {
+                            cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 6) {
                                 TimelineList(
                                     events = state.timelineEvents,
                                     onEdit = { editTimelineEntry = it }
@@ -323,7 +312,7 @@ fun DailyNoteScreen(
 
                         // 6b. Journal List (Animated)
                         item {
-                            cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 6) {
+                            cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 7) {
                                 TaskList(
                                     tasks = state.dailyTasks, 
                                     onToggle = { id, done -> viewModel.toggleTask(id, done) },
@@ -335,7 +324,7 @@ fun DailyNoteScreen(
 
                     // 6. Second Brain Section
                     item {
-                        cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 7) {
+                        cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 8) {
                             SecondBrainSection(
                                 ideas = state.ideasContent,
                                 notes = state.notesContent,
@@ -348,7 +337,7 @@ fun DailyNoteScreen(
                     // 7. Scratchpad (New Module)
                     if (state.scratchNotes.isNotEmpty()) {
                         item {
-                            cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 8) {
+                            cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 9) {
                                 ScratchpadWidget(
                                     scraps = state.scratchNotes,
                                     onDelete = { viewModel.deleteScrap(it) },
@@ -1132,45 +1121,4 @@ private fun EditTaskDialog(
 }
 
 
-@Composable
-private fun WeatherAssistChip(weather: cloud.wafflecommons.pixelbrainreader.data.repository.WeatherData) {
-    val (icon, condition) = mapWeatherCodeToIconAndCondition(weather.code)
-    
-    AssistChip(
-        onClick = { },
-        leadingIcon = {
-            Icon(
-                imageVector = icon,
-                contentDescription = condition,
-                modifier = Modifier.size(18.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        },
-        label = {
-            Text(
-                text = "${weather.temperature} • $condition",
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold
-            )
-        },
-        colors = AssistChipDefaults.assistChipColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-            labelColor = MaterialTheme.colorScheme.onSurfaceVariant
-        ),
-        border = null,
-        shape = RoundedCornerShape(16.dp),
-        modifier = Modifier.padding(bottom = 8.dp)
-    )
-}
 
-private fun mapWeatherCodeToIconAndCondition(code: Int): Pair<androidx.compose.ui.graphics.vector.ImageVector, String> {
-    return when (code) {
-        0 -> Icons.Rounded.WbSunny to "Clear"
-        1, 2, 3 -> Icons.Rounded.Cloud to "Cloudy"
-        45, 48 -> Icons.Rounded.Cloud to "Foggy"
-        51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82 -> Icons.Rounded.WaterDrop to "Rain"
-        71, 73, 75, 77, 85, 86 -> Icons.Rounded.AcUnit to "Snow"
-        95, 96, 99 -> Icons.Rounded.Thunderstorm to "Storm"
-        else -> Icons.Rounded.DeviceThermostat to "Unknown"
-    }
-}

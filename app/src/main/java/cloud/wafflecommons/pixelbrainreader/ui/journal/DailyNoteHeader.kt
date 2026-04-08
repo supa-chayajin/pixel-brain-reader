@@ -33,13 +33,14 @@ fun DailyNoteHeader(
     modifier: Modifier = Modifier
 ) {
 
-    Surface(
+    ElevatedCard(
         modifier = modifier
             .fillMaxWidth()
-            .padding(bottom = 8.dp),
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        tonalElevation = 2.dp
+            .padding(vertical = 8.dp),
+        shape = MaterialTheme.shapes.extraLarge,
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer
+        )
     ) {
         Column(
             modifier = Modifier.padding(20.dp)
