@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Upgrade
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -82,6 +83,19 @@ fun DailyNoteScreen(
         state.userMessage?.let {
             snackbarHostState.showSnackbar(it)
             viewModel.clearUserMessage()
+        }
+    }
+
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                viewModel.refreshWeather()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
 
@@ -197,9 +211,18 @@ fun DailyNoteScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(horizontal = 16.dp),
-                    contentPadding = PaddingValues(bottom = 100.dp),
+                    contentPadding = PaddingValues(top = 16.dp, bottom = 100.dp),
                     verticalArrangement = Arrangement.spacedBy(24.dp)
                 ) {
+                    // 0.5 Weather
+                    item {
+                        cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 1) {
+                            WeatherAssistChip(
+                                weather = state.weather ?: cloud.wafflecommons.pixelbrainreader.data.repository.WeatherData("⌛", "--°C", "Loading...", "Loading", -1)
+                            )
+                        }
+                    }
+
                     // 1. Header & Stats
                     item {
                         cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 0) {
@@ -210,46 +233,26 @@ fun DailyNoteScreen(
                                 lastUpdate = lastUpdate,
                                 topDailyTags = state.topDailyTags,
                                 healthMetrics = state.healthMetrics,
-                                weather = state.weather
+                                moodTrend = state.moodTrend
                             )
-
                         }
                     }
 
-                    // 1.5 Hero Card (Gamification)
-                    if (gamificationState != null) {
-                        item {
-                            cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 1) {
-                                cloud.wafflecommons.pixelbrainreader.ui.gamification.HeroCard(
-                                    state = gamificationState!!,
-                                    isHealthSynergyActive = false, // Handled via LifeStatsScreen if placed there, or we can pipe from LifeStatsViewModel
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 8.dp)
-                                )
-                            }
-                        }
-                    }
-
-
-                    
                     // 3. Mantra
-                    if (state.mantra.isNotBlank()) {
-                         item {
-                             cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 3) {
-                                 Text(
-                                     text = state.mantra,
-                                     style = MaterialTheme.typography.bodyLarge,
-                                     fontWeight = FontWeight.Medium,
-                                     fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
-                                     modifier = Modifier
-                                         .fillMaxWidth()
-                                         .padding(vertical = 8.dp),
-                                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                                     color = MaterialTheme.colorScheme.secondary
-                                 )
-                             }
-                         }
+                    item {
+                        cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 3) {
+                            Text(
+                                text = "Stay safe friend, and don't your dare go hollow!",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Medium,
+                                fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp),
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                        }
                     }
 
                     // 4. Gratitude Express (RFC-009)
@@ -1128,3 +1131,46 @@ private fun EditTaskDialog(
     )
 }
 
+
+@Composable
+private fun WeatherAssistChip(weather: cloud.wafflecommons.pixelbrainreader.data.repository.WeatherData) {
+    val (icon, condition) = mapWeatherCodeToIconAndCondition(weather.code)
+    
+    AssistChip(
+        onClick = { },
+        leadingIcon = {
+            Icon(
+                imageVector = icon,
+                contentDescription = condition,
+                modifier = Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        },
+        label = {
+            Text(
+                text = "${weather.temperature} • $condition",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        colors = AssistChipDefaults.assistChipColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+        ),
+        border = null,
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.padding(bottom = 8.dp)
+    )
+}
+
+private fun mapWeatherCodeToIconAndCondition(code: Int): Pair<androidx.compose.ui.graphics.vector.ImageVector, String> {
+    return when (code) {
+        0 -> Icons.Rounded.WbSunny to "Clear"
+        1, 2, 3 -> Icons.Rounded.Cloud to "Cloudy"
+        45, 48 -> Icons.Rounded.Cloud to "Foggy"
+        51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82 -> Icons.Rounded.WaterDrop to "Rain"
+        71, 73, 75, 77, 85, 86 -> Icons.Rounded.AcUnit to "Snow"
+        95, 96, 99 -> Icons.Rounded.Thunderstorm to "Storm"
+        else -> Icons.Rounded.DeviceThermostat to "Unknown"
+    }
+}

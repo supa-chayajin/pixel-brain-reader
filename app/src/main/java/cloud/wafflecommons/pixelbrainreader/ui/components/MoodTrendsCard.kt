@@ -1,10 +1,12 @@
 package cloud.wafflecommons.pixelbrainreader.ui.components
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -12,9 +14,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import cloud.wafflecommons.pixelbrainreader.ui.daily.DailyMoodPoint
 
 @Composable
@@ -22,25 +27,26 @@ fun MoodTrendsCard(
     moodTrend: List<DailyMoodPoint>,
     modifier: Modifier = Modifier
 ) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = "Mood Trends",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            if (moodTrend.isEmpty()) {
-                Text("No mood data yet.", style = MaterialTheme.typography.bodyMedium)
-            } else {
-                MoodSparklineContent(moodTrend)
+    Column(modifier = Modifier.padding(8.dp)) {
+        if (moodTrend.isEmpty()) {
+            Text("No mood data yet.", style = MaterialTheme.typography.bodyMedium)
+        } else {
+            MoodSparklineContent(moodTrend)
+        }
+        Spacer(modifier = Modifier.height(24.dp))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // Legend for Mood
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Box(modifier = Modifier.size(12.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(2.dp)))
+                Text("Mood", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            // Legend for HR
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Box(modifier = Modifier.size(12.dp).background(Color(0xFFFF5252).copy(alpha = 0.7f), RoundedCornerShape(2.dp)))
+                Text("Heart Rate", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -50,11 +56,18 @@ fun MoodTrendsCard(
 private fun MoodSparklineContent(trend: List<DailyMoodPoint>) {
     val primaryColor = MaterialTheme.colorScheme.primary
     val surfaceColor = MaterialTheme.colorScheme.surface
+    val onSurfaceColor = MaterialTheme.colorScheme.onSurface
+    val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
+    val dateStyle = MaterialTheme.typography.labelSmall.copy(
+        color = onSurfaceVariant,
+        fontSize = 10.sp
+    )
+    val textMeasurer = rememberTextMeasurer()
     
     // Graph Area
     Box(modifier = Modifier
         .fillMaxWidth()
-        .height(100.dp)
+        .height(140.dp)
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             if (trend.size < 2) return@Canvas
@@ -62,18 +75,14 @@ private fun MoodSparklineContent(trend: List<DailyMoodPoint>) {
             val width = size.width
             val height = size.height
             val topPadding = 20.dp.toPx()
-            val bottomPadding = 30.dp.toPx() // Space for emojis labels drawn relative to X? No, emojis are separate row.
-            val graphHeight = height - topPadding - 10.dp.toPx()
+            val graphHeight = height - topPadding - 25.dp.toPx()
             
             val stepX = width / (trend.size - 1)
             
             val path = Path()
             
             fun getY(score: Float): Float {
-                 // 5 -> top
-                 // 0/1 -> bottom
-                 val normalized = (score - 1f) / 4f // 1..5 -> 0..1
-                 // Clamp 0..1
+                 val normalized = (score - 1f) / 4f
                  val clamped = normalized.coerceIn(0f, 1f)
                  return (topPadding + graphHeight) - (clamped * graphHeight)
             }
@@ -89,8 +98,8 @@ private fun MoodSparklineContent(trend: List<DailyMoodPoint>) {
             // Fill
             val fillPath = Path()
             fillPath.addPath(path)
-            fillPath.lineTo(width, height) // bottom right
-            fillPath.lineTo(0f, height)    // bottom left
+            fillPath.lineTo(width, height)
+            fillPath.lineTo(0f, height)
             fillPath.close()
             
             drawPath(
@@ -136,7 +145,7 @@ private fun MoodSparklineContent(trend: List<DailyMoodPoint>) {
             if (!hrPath.isEmpty) {
                 drawPath(
                     path = hrPath,
-                    color = Color(0xFFFF5252).copy(alpha = 0.7f), // Red overlay
+                    color = Color(0xFFFF5252).copy(alpha = 0.7f),
                     style = Stroke(
                         width = 2.dp.toPx(), 
                         cap = StrokeCap.Round, 
@@ -144,51 +153,68 @@ private fun MoodSparklineContent(trend: List<DailyMoodPoint>) {
                     )
                 )
             }
-            // --- End HR Overlay ---
+            val dateFormatter = java.time.format.DateTimeFormatter.ofPattern("EEE", java.util.Locale.getDefault())
             
-            // Points
-            val textPaint = android.graphics.Paint().apply {
-                color = android.graphics.Color.GRAY 
-                textSize = 30f
-                textAlign = android.graphics.Paint.Align.CENTER
-            }
-
+            // Points & Overlay text
             trend.forEachIndexed { index, point ->
                 val x = index * stepX
-                // Draw point only if valid?
+                
+                // Draw Date Label (X-Axis)
+                val dateStr = point.date.format(dateFormatter)
+                val dateLayout = textMeasurer.measure(text = dateStr, style = dateStyle)
+                val dateX = x - (dateLayout.size.width / 2f)
+                val dateY = height - dateLayout.size.height // Very bottom
+                
+                drawText(
+                    textLayoutResult = dateLayout,
+                    topLeft = Offset(dateX, dateY)
+                )
+
+                // Draw HR Label
+                if (point.avgBpm > 0) {
+                    val yHr = getHrY(point.avgBpm)
+                    val hrText = "${point.avgBpm}"
+                    val hrStyle = TextStyle(color = Color(0xFFFF5252), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    val hrLayout = textMeasurer.measure(text = hrText, style = hrStyle)
+                    
+                    drawText(
+                        textLayoutResult = hrLayout,
+                        topLeft = Offset(x - (hrLayout.size.width / 2f), yHr - hrLayout.size.height - 4.dp.toPx())
+                    )
+                }
+
+                // Draw Mood Point and Label
                 if (point.score >= 1f) {
                     val y = getY(point.score)
                     drawCircle(color = surfaceColor, radius = 6.dp.toPx(), center = Offset(x, y))
                     drawCircle(color = primaryColor, radius = 4.dp.toPx(), center = Offset(x, y))
                     
-                    // Label
-                    drawContext.canvas.nativeCanvas.drawText(
-                        String.format("%.1f", point.score),
-                        x,
-                        y - 12.dp.toPx(),
-                        textPaint
+                    val emojiStr = if (point.emoji == "∅") "•" else point.emoji
+                    val emojiStyle = TextStyle(fontSize = 14.sp)
+                    val emojiLayout = textMeasurer.measure(text = emojiStr, style = emojiStyle)
+                    
+                    val scoreStr = String.format(java.util.Locale.US, "%.1f", point.score)
+                    val scoreStyle = TextStyle(color = primaryColor, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    val scoreLayout = textMeasurer.measure(text = scoreStr, style = scoreStyle)
+
+                    val emojiX = x - (emojiLayout.size.width / 2f)
+                    // Push emoji high enough to fit score below it and above the circle dot
+                    val emojiY = y - emojiLayout.size.height - scoreLayout.size.height - 8.dp.toPx()
+                    
+                    val scoreX = x - (scoreLayout.size.width / 2f)
+                    val scoreY = emojiY + emojiLayout.size.height + 2.dp.toPx()
+                    
+                    drawText(
+                        textLayoutResult = emojiLayout,
+                        topLeft = Offset(emojiX, emojiY)
+                    )
+                    
+                    drawText(
+                        textLayoutResult = scoreLayout,
+                        topLeft = Offset(scoreX, scoreY)
                     )
                 }
             }
-        }
     }
-    
-    // Emoji Row
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        trend.forEach { point ->
-            // If placeholder (score 0), show dot? Or just show the emoji passed (which is "∅") from VM?
-            // "If a day is missing, show a neutral placeholder (e.g., a subtle gray dot)."
-            // VM sets logic: add(DailyMoodPoint(d, 0f, "∅"))
-            // So point.emoji is "∅".
-            // Let's filter that for a Dot visually.
-            if (point.emoji == "∅") {
-                Text("•", color = MaterialTheme.colorScheme.outlineVariant)
-            } else {
-                Text(point.emoji, style = MaterialTheme.typography.bodyLarge)
-            }
-        }
-    }
+}
 }

@@ -54,7 +54,8 @@ data class DailyNoteState(
     val briefingState: MorningBriefingUiState = MorningBriefingUiState(),
     val topDailyTags: List<String> = emptyList(),
     val scratchNotes: List<cloud.wafflecommons.pixelbrainreader.data.local.entity.ScratchNoteEntity> = emptyList(),
-    val userMessage: String? = null
+    val userMessage: String? = null,
+    val moodTrend: List<DailyMoodPoint> = emptyList()
 )
 
 data class DailyMoodPoint(
@@ -100,6 +101,11 @@ class DailyNoteViewModel @Inject constructor(
 
     private val _userMessage = MutableStateFlow<String?>(null)
     private val _isLoading = MutableStateFlow(false)
+    private val _weatherRefreshTrigger = MutableStateFlow(0)
+
+    fun refreshWeather() {
+        _weatherRefreshTrigger.value++
+    }
 
     // RFC-009: Gratitude Express Flow
     val gratitudes: StateFlow<List<GratitudeEntity>> = _selectedDate.flatMapLatest { date ->
@@ -160,15 +166,22 @@ class DailyNoteViewModel @Inject constructor(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // Weather Flow (Reactive)
-    private val _weather = _selectedDate.flatMapLatest { date ->
-        flow {
-            if (date == LocalDate.now()) {
-                emit(try { weatherRepository.getCurrentWeatherAndLocation() } catch (e: Exception) { null })
-            } else {
-                emit(try { weatherRepository.getHistoricalWeather(date) } catch (e: Exception) { null })
+    private val _weather = combine(_selectedDate, _weatherRefreshTrigger) { date, _ -> date }
+        .flatMapLatest { date ->
+            flow {
+                if (date == LocalDate.now()) {
+                    emit(try { weatherRepository.getCurrentWeatherAndLocation() } catch (e: Exception) { null })
+                } else {
+                    emit(try { weatherRepository.getHistoricalWeather(date) } catch (e: Exception) { null })
+                }
             }
-        }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), cloud.wafflecommons.pixelbrainreader.data.repository.WeatherData(
+            emoji = "⌛",
+            temperature = "--°C",
+            location = "Loading...",
+            description = "Loading",
+            code = -1
+        ))
 
     // Debounce for Text Inputs
     private val _ideasUpdates = MutableStateFlow<String?>(null)
@@ -229,6 +242,7 @@ class DailyNoteViewModel @Inject constructor(
         DailyNoteState(
             date = date,
             moodData = moodData,
+            moodTrend = moodTrendData,
             healthMetrics = healthMetrics,
             mantra = dashboard?.dailyMantra ?: "Stay safe friend, and don't your dare go hollow!",
             ideasContent = shieldedIdeas,
@@ -236,6 +250,7 @@ class DailyNoteViewModel @Inject constructor(
             timelineEvents = timeline,
             dailyTasks = tasks,
             scratchNotes = scraps,
+            weather = weatherData ?: cloud.wafflecommons.pixelbrainreader.data.repository.WeatherData("⌛", "--°C", "Loading...", "Loading", -1),
             weatherData = weatherData,
             isLoading = isLoading,
             topDailyTags = dailyTags,
@@ -258,6 +273,7 @@ class DailyNoteViewModel @Inject constructor(
                 Log.e("DailyNoteVM", "Silent Health Sync Failed", e)
             }
         }
+        refreshWeather()
         
         // Initial Trigger
         loadDailyNote(LocalDate.now())

@@ -26,7 +26,8 @@ data class WeatherData(
     val emoji: String,
     val temperature: String,
     val location: String?,
-    val description: String
+    val description: String,
+    val code: Int = 0
 )
 
 @Singleton
@@ -51,7 +52,8 @@ class WeatherRepository @Inject constructor(
                 emoji = mapWmoToEmoji(wmoCode),
                 temperature = "${maxTemp.toInt()}°C",
                 location = city,
-                description = "Forecast"
+                description = "Forecast",
+                code = wmoCode
             )
         } catch (e: Exception) {
             Log.e("WeatherRepository", "Failed to fetch weather", e)
@@ -81,7 +83,8 @@ class WeatherRepository @Inject constructor(
                 emoji = mapWmoToEmoji(wmoCode),
                 temperature = "${maxTemp.toInt()}°C",
                 location = city,
-                description = "Archive"
+                description = "Archive",
+                code = wmoCode
             )
         } catch (e: Exception) {
              Log.e("WeatherRepository", "Failed to fetch historical weather", e)
