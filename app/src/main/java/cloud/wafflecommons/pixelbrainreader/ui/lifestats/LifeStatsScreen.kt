@@ -17,14 +17,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import cloud.wafflecommons.pixelbrainreader.ui.components.MoodTrendsCard
+import cloud.wafflecommons.pixelbrainreader.ui.daily.DailyMoodPoint
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -81,68 +81,16 @@ private fun DashboardCard(title: String, content: @Composable ColumnScope.() -> 
 @Composable
 private fun MoodVsHeartRateChartCard(moodHistory: List<LifeStatsMoodPoint>) {
     DashboardCard(title = "Mood vs. Heart Rate (7 Days)") {
-        val primaryColor = MaterialTheme.colorScheme.primary
-        
-        Canvas(modifier = Modifier.fillMaxWidth().height(220.dp)) {
-            if (moodHistory.isEmpty()) return@Canvas
-            
-            val canvasWidth = size.width
-            val graphHeight = size.height - 40.dp.toPx()
-            val stepX = canvasWidth / (moodHistory.size.coerceAtLeast(2) - 1).toFloat()
-            val topPadding = 20.dp.toPx()
-            
-            // Draw Mood
-            val moodPath = Path()
-            fun getMoodY(score: Float): Float {
-                val clamped = ((score - 1f) / 4f).coerceIn(0f, 1f)
-                return (topPadding + graphHeight) - (clamped * graphHeight)
-            }
-            
-            moodHistory.forEachIndexed { index, point ->
-                val x = index * stepX
-                val y = getMoodY(point.score.coerceAtLeast(1f))
-                if (index == 0) moodPath.moveTo(x, y) else moodPath.lineTo(x, y)
-            }
-            drawPath(path = moodPath, color = primaryColor, style = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round))
-            
-            // Draw HR
-            val hrPath = Path()
-            var firstHr = true
-            fun getHrY(bpm: Int): Float {
-                val clamped = ((bpm.toFloat() - 50f) / 80f).coerceIn(0f, 1f)
-                return (topPadding + graphHeight) - (clamped * graphHeight)
-            }
-            
-            moodHistory.forEachIndexed { index, point ->
-                if (point.avgBpm > 0) {
-                    val x = index * stepX
-                    val y = getHrY(point.avgBpm)
-                    if (firstHr) { hrPath.moveTo(x, y); firstHr = false } else hrPath.lineTo(x, y)
-                }
-            }
-            
-            if (!hrPath.isEmpty) {
-                drawPath(
-                    path = hrPath,
-                    color = Color(0xFFFF5252).copy(alpha = 0.8f),
-                    style = Stroke(
-                        width = 2.dp.toPx(), cap = StrokeCap.Round,
-                        pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(15f, 15f), 0f)
-                    )
+        MoodTrendsCard(
+            moodTrend = moodHistory.map {
+                DailyMoodPoint(
+                    date = it.date,
+                    score = it.score,
+                    emoji = it.emoji,
+                    avgBpm = it.avgBpm
                 )
             }
-            
-            // Draw emojis
-            val textPaint = android.graphics.Paint().apply {
-                textSize = 14.dp.toPx()
-                textAlign = android.graphics.Paint.Align.CENTER
-            }
-            moodHistory.forEachIndexed { index, point ->
-                val x = index * stepX
-                val y = getMoodY(point.score.coerceAtLeast(1f))
-                drawContext.canvas.nativeCanvas.drawText(point.emoji, x, y - 8.dp.toPx(), textPaint)
-            }
-        }
+        )
     }
 }
 

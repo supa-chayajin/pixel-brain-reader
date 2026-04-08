@@ -28,26 +28,11 @@ fun MoodTrendsCard(
     modifier: Modifier = Modifier
 ) {
     Column(modifier = Modifier.padding(8.dp)) {
+        Spacer(modifier = Modifier.height(24.dp))
         if (moodTrend.isEmpty()) {
             Text("No mood data yet.", style = MaterialTheme.typography.bodyMedium)
         } else {
             MoodSparklineContent(moodTrend)
-        }
-        Spacer(modifier = Modifier.height(24.dp))
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            // Legend for Mood
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Box(modifier = Modifier.size(12.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(2.dp)))
-                Text("Mood", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            // Legend for HR
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Box(modifier = Modifier.size(12.dp).background(Color(0xFFFF5252).copy(alpha = 0.7f), RoundedCornerShape(2.dp)))
-                Text("Heart Rate", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
         }
     }
 }
