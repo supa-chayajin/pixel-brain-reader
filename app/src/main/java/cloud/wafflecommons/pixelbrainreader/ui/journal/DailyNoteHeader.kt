@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 
@@ -19,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cloud.wafflecommons.pixelbrainreader.data.health.DailyHealthMetrics
 import cloud.wafflecommons.pixelbrainreader.data.repository.WeatherData
+import cloud.wafflecommons.pixelbrainreader.ui.daily.DailyMoodPoint
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -27,7 +29,7 @@ fun DailyNoteHeader(
     lastUpdate: String?,
     topDailyTags: List<String>,
     healthMetrics: DailyHealthMetrics? = null,
-    weather: WeatherData? = null,
+    moodTrend: List<DailyMoodPoint> = emptyList(),
     modifier: Modifier = Modifier
 ) {
 
@@ -76,11 +78,6 @@ fun DailyNoteHeader(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                        }
-
-                        // Weather Pill
-                        if (weather != null) {
-                            WeatherPill(weather = weather)
                         }
                     }
                     
@@ -147,36 +144,17 @@ fun DailyNoteHeader(
                     }
                 }
             }
-        }
-    }
-}
 
-@Composable
-private fun WeatherPill(weather: WeatherData) {
-    Surface(
-        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
-        shape = RoundedCornerShape(16.dp),
-        modifier = Modifier.padding(start = 8.dp)
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            // We use simple mapping here for now, or we could pass the icon from VM
-            // Since we added mapWmoToIcon, we should probably use it.
-            // But WeatherData currently only has emoji.
-            // Let's just use the emoji for now to keep it simple, OR update WeatherData.
-            Text(
-                text = weather.emoji,
-                fontSize = 16.sp
-            )
-            Text(
-                text = weather.temperature,
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
-            )
+            Column {
+                Spacer(modifier = Modifier.height(16.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                Spacer(modifier = Modifier.height(16.dp))
+
+                cloud.wafflecommons.pixelbrainreader.ui.components.MoodTrendsCard(
+                    moodTrend = moodTrend,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+            }
         }
     }
 }
