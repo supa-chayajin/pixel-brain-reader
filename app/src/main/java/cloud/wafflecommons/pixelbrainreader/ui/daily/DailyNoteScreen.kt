@@ -1,5 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.ui.daily
 
+import android.annotation.SuppressLint
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -47,7 +48,16 @@ import cloud.wafflecommons.pixelbrainreader.ui.components.PremiumWeatherCard
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.material.icons.rounded.Checklist
+import androidx.compose.material.icons.rounded.Event
+import androidx.compose.material.icons.rounded.Mood
+import androidx.compose.material.icons.rounded.TextFields
+import androidx.compose.material.icons.sharp.AddCircle
+import androidx.compose.material.icons.sharp.CheckCircle
+import androidx.compose.material.icons.sharp.Lightbulb
+import androidx.compose.material.icons.sharp.Mood
 
+@SuppressLint("UnusedBoxWithConstraintsScope")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DailyNoteScreen(
@@ -118,16 +128,6 @@ fun DailyNoteScreen(
                     }
                 },
                 actions = {
-                    FilledTonalIconButton(
-                        onClick = { lifeOSViewModel.forceSyncEverything() },
-                        colors = IconButtonDefaults.filledTonalIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    ) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
-                    }
-
                     val context = androidx.compose.ui.platform.LocalContext.current
                     FilledTonalIconButton(
                         onClick = {
@@ -160,19 +160,19 @@ fun DailyNoteScreen(
         },
         floatingActionButton = {
             val fabItems = listOf(
-                FabActionItem(icon = Icons.Default.Mood, label = "Mood Check-in") {
+                FabActionItem(icon = Icons.Rounded.Mood, label = "Mood Check-in") {
                     fabExpanded = false
                     onCheckInClicked()
                 },
-                FabActionItem(icon = Icons.Default.AddCircle, label = "Timeline Item") {
+                FabActionItem(icon = Icons.Rounded.Event, label = "Timeline") {
                     fabExpanded = false
                     showAddTimelineDialog = true
                 },
-                FabActionItem(icon = Icons.Default.CheckCircle, label = "Fast Task") {
+                FabActionItem(icon = Icons.Rounded.Checklist, label = "Task") {
                     fabExpanded = false
                     showAddTaskDialog = true
                 },
-                FabActionItem(icon = Icons.Default.Lightbulb, label = "Scratchpad") {
+                FabActionItem(icon = Icons.Rounded.TextFields, label = "Scratchpad") {
                     fabExpanded = false
                     showQuickCaptureSheet = true
                 }
@@ -354,12 +354,12 @@ fun DailyNoteScreen(
                 visible = fabExpanded,
                 enter = fadeIn(),
                 exit = fadeOut(),
-                modifier = Modifier.padding(padding)
+                modifier = Modifier.fillMaxSize()
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.4f))
+                        .background(Color.Black.copy(alpha = 0.55f))
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null

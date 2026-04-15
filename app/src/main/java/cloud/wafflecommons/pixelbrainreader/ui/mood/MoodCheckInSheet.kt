@@ -54,10 +54,9 @@ fun MoodCheckInSheet(
         listOf(
             ActivityCategory("Hobbies", listOf(
                 ActivityItem("Coding", Icons.Outlined.Code),
+                ActivityItem("Working", Icons.Outlined.WorkHistory),
                 ActivityItem("Gaming", Icons.Outlined.SportsEsports),
-                ActivityItem("Chilling", Icons.Outlined.BeachAccess),
-                ActivityItem("Smoking", Icons.Outlined.SmokingRooms),
-                ActivityItem("Working", Icons.Outlined.WorkHistory)
+                ActivityItem("Chilling", Icons.Outlined.BeachAccess)
             )),
             ActivityCategory("Social & Vibe", listOf(
                 ActivityItem("Solo", Icons.Outlined.Person),
@@ -66,9 +65,9 @@ fun MoodCheckInSheet(
             )),
             ActivityCategory("Location", listOf(
                 ActivityItem("Home", Icons.Outlined.Home),
+                ActivityItem("Work", Icons.Outlined.HomeWork),
                 ActivityItem("CDS", Icons.Outlined.Work),
-                ActivityItem("Out", Icons.Outlined.NaturePeople),
-                ActivityItem("Work", Icons.Outlined.HomeWork)
+                ActivityItem("Out", Icons.Outlined.NaturePeople)
             ))
         )
     }
