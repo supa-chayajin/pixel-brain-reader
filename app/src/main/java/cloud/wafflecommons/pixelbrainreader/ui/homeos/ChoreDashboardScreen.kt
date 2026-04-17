@@ -50,15 +50,6 @@ fun ChoreDashboardScreen(
                 title = "Chores",
                 subtitle = "Get something done today"
             )
-        },
-        floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = { showAddSheet = true },
-                icon = { Icon(Icons.Rounded.Add, contentDescription = "Ajouter") },
-                text = { Text("New chore") },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
-            )
         }
     ) { padding ->
         if (groupedChores.isEmpty()) {
