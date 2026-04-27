@@ -10,6 +10,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.SelfImprovement
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Bedtime
+import androidx.compose.material.icons.filled.TaskAlt
+import androidx.compose.material3.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -33,6 +36,8 @@ fun LifeStatsScreen(
     viewModel: LifeStatsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.finalUiState.collectAsStateWithLifecycle()
+    val sleepDuration by viewModel.sleepDurationState.collectAsStateWithLifecycle()
+    val globalCompletion by viewModel.globalCompletionState.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -54,6 +59,8 @@ fun LifeStatsScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item { MoodVsHeartRateChartCard(uiState.moodHistory) }
+            item { HealthOverviewCard(uiState) }
+            item { DualInsightCards(sleepDuration, globalCompletion) }
             item { HealthSummaryCard(uiState) }
             item { CompletionRingsCard(uiState) }
         }
@@ -104,13 +111,13 @@ private fun HealthSummaryCard(uiState: LifeStatsUiState) {
         Spacer(Modifier.height(16.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth()) {
             HealthMetricItem(Modifier.weight(1f), "Avg Heart Rate", "${uiState.avgHeartRate} BPM", Icons.Default.Favorite, Color(0xFFFF5252))
-            HealthMetricItem(Modifier.weight(1f), "Synergy", if (uiState.isHealthSynergyActive) "Active" else "Inactive", Icons.Default.Favorite, MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.weight(1f))
         }
     }
 }
 
 @Composable
-private fun HealthMetricItem(modifier: Modifier, title: String, value: String, icon: androidx.compose.ui.graphics.vector.ImageVector, iconTint: Color) {
+private fun HealthMetricItem(modifier: Modifier, title: String, value: String, icon: androidx.compose.ui.graphics.vector.ImageVector, iconTint: Color, subtitle: String? = null) {
     Surface(modifier = modifier, shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surface) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(12.dp)) {
             Icon(icon, contentDescription = title, tint = iconTint, modifier = Modifier.size(32.dp))
@@ -118,8 +125,40 @@ private fun HealthMetricItem(modifier: Modifier, title: String, value: String, i
             Column {
                 Text(text = title, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(text = value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                if (subtitle != null) {
+                    Text(text = subtitle, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun HealthOverviewCard(uiState: LifeStatsUiState) {
+    DashboardCard(title = "Health Overview (Today)") {
+        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            val distFormatted = String.format(java.util.Locale.US, "%.1f", uiState.todayDistanceKm)
+            HealthProgressRow("Distance", "$distFormatted km", (uiState.todayDistanceKm / 5.0).toFloat(), Color(0xFF4CAF50))
+            HealthProgressRow("Active Minutes", "${uiState.todayActiveMinutes} min", uiState.todayActiveMinutes.toFloat() / 30f, Color(0xFFFF9800))
+        }
+    }
+}
+
+@Composable
+private fun HealthProgressRow(title: String, value: String, progress: Float, color: Color) {
+    val animatedProgress by animateFloatAsState(targetValue = progress.coerceIn(0f, 1f), animationSpec = tween(1000))
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.weight(0.4f)) {
+            Text(text = title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+            Text(text = value, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        LinearProgressIndicator(
+            progress = { animatedProgress },
+            modifier = Modifier.weight(0.6f).height(8.dp),
+            color = color,
+            trackColor = color.copy(alpha = 0.2f),
+            strokeCap = StrokeCap.Round
+        )
     }
 }
 
@@ -187,5 +226,46 @@ private fun ActivityRings(tasksProgress: Float, habitsProgress: Float, choresPro
         drawRing(size.width / 2 - strokeW / 2, animTask, Color(0xFFE91E63))
         drawRing(size.width / 2 - strokeW / 2 - spacing, animHabit, Color(0xFF8BC34A))
         drawRing(size.width / 2 - strokeW / 2 - (spacing * 2), animChore, Color(0xFF03A9F4))
+    }
+}
+
+@Composable
+private fun DualInsightCards(sleepDurationMinutes: Long, globalCompletion: Float) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        // Card 1: Sleep & Recovery
+        ElevatedCard(
+            modifier = Modifier.weight(1f),
+            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Icon(Icons.Default.Bedtime, contentDescription = "Sleep", tint = Color(0xFF673AB7), modifier = Modifier.size(28.dp))
+                Spacer(Modifier.height(12.dp))
+                Text("Sleep & Recovery", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                
+                val hours = sleepDurationMinutes / 60
+                val mins = sleepDurationMinutes % 60
+                val sleepText = if (sleepDurationMinutes > 0) "${hours}h ${mins}m" else "--h --m"
+                
+                Text(sleepText, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            }
+        }
+        
+        // Card 2: Global Completion
+        ElevatedCard(
+            modifier = Modifier.weight(1f),
+            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Icon(Icons.Default.TaskAlt, contentDescription = "Completion", tint = Color(0xFF4CAF50), modifier = Modifier.size(28.dp))
+                Spacer(Modifier.height(12.dp))
+                Text("Productivité Globale", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                
+                val percent = (globalCompletion * 100).toInt()
+                Text("$percent% Complété", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            }
+        }
     }
 }

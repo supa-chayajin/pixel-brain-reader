@@ -5,8 +5,8 @@ import androidx.compose.material3.IconButtonColors
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalView
-import cloud.wafflecommons.pixelbrainreader.ui.utils.HapticHelper.performHapticTick
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 
 @Composable
 fun CortexIconButton(
@@ -16,11 +16,11 @@ fun CortexIconButton(
     colors: IconButtonColors = IconButtonDefaults.iconButtonColors(),
     content: @Composable () -> Unit
 ) {
-    val view = LocalView.current
+    val haptic = LocalHapticFeedback.current
     
     IconButton(
         onClick = {
-            view.performHapticTick()
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
             onClick()
         },
         modifier = modifier,

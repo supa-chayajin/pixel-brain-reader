@@ -70,7 +70,7 @@ fun HabitConfigScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            items(activeHabits) { habit ->
+            items(activeHabits, key = { it.id }) { habit ->
                 ElevatedCard(
                     onClick = { 
                         editingHabit = habit

@@ -280,34 +280,6 @@ fun SettingsScreen(
                     Spacer(Modifier.width(8.dp))
                     Text("Force Import Habits (Vault -> App)")
                 }
-
-                Spacer(Modifier.height(16.dp))
-
-                // Mood Emoji Mapping
-                Text("Mood Emoji Configuration", style = MaterialTheme.typography.titleSmall)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    (1..5).forEach { score ->
-                        val currentEmoji = moodEmojiMapping[score] ?: ""
-                        OutlinedTextField(
-                            value = currentEmoji,
-                            onValueChange = { newVal ->
-                                // Limit to 2 characters to generally restrict to one emoji/cluster
-                                if (newVal.length <= 2) {
-                                    viewModel.updateMoodEmoji(score, newVal)
-                                }
-                            },
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(horizontal = 4.dp),
-                            singleLine = true,
-                            label = { Text("$score") },
-                            textStyle = androidx.compose.ui.text.TextStyle(textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-                        )
-                    }
-                }
             }
             
             // 4. About

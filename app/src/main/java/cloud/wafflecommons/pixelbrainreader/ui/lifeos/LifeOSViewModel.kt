@@ -97,10 +97,17 @@ class LifeOSViewModel @Inject constructor(
                  var streak = 0
                  var checkDate = if (isCompletedToday) date else date.minusDays(1)
                  for (i in 0..365) {
+                      val checkDateKey = dayMap[checkDate.dayOfWeek] ?: "MON"
+                      val isCheckDateScheduled = cleanFreq.isEmpty() || cleanFreq.contains(checkDateKey)
+                      
                       val d = checkDate.toString()
                       val log = habitLogs.find { it.date == d }
+                      
                       if (isHabitComplete(habit, log)) {
                           streak++
+                          checkDate = checkDate.minusDays(1)
+                      } else if (!isCheckDateScheduled) {
+                          // Skip days where the habit wasn't scheduled
                           checkDate = checkDate.minusDays(1)
                       } else {
                           break

@@ -79,7 +79,7 @@ fun MoodHistoryScreen(
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    items(entries) { entry ->
+                    items(entries, key = { it.time }) { entry ->
                         MoodTimelineItem(entry)
                     }
                 }
