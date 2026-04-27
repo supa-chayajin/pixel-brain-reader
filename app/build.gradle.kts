@@ -7,6 +7,7 @@ plugins {
     alias(libs.plugins.hilt.android)
     alias(libs.plugins.ksp)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.googleServices)
 }
 
 val localProperties = Properties()
@@ -23,8 +24,8 @@ android {
         minSdk = 36
         compileSdk = 36
         targetSdkPreview = "36"
-        versionCode = 6
-        versionName = "6.0.0"
+        versionCode = 610
+        versionName = "6.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -65,6 +66,12 @@ android {
         }
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += "META-INF/INDEX.LIST"
+            excludes += "META-INF/DEPENDENCIES"
+            excludes += "META-INF/LICENSE"
+            excludes += "META-INF/NOTICE"
+            excludes += "META-INF/LICENSE.txt"
+            excludes += "META-INF/NOTICE.txt"
         }
     }
 
@@ -201,5 +208,14 @@ dependencies {
 
     // Sensory Polish
     implementation(libs.konfetti.compose)
+
+    // Google Auth & Ecosystem
+    implementation(libs.play.services.auth)
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services.auth)
+    implementation(libs.googleid)
+    implementation(libs.google.api.client.android)
+    implementation(libs.google.api.services.calendar)
+    implementation(libs.google.api.services.tasks)
 }
 

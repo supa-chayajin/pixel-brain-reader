@@ -53,6 +53,9 @@ interface DailyDashboardDao {
     @Query("DELETE FROM timeline_entries WHERE date = :date")
     suspend fun clearTimeline(date: LocalDate)
 
+    @Query("SELECT * FROM timeline_entries WHERE googleEventId = :googleEventId LIMIT 1")
+    suspend fun getTimelineEntryByGoogleEventId(googleEventId: String): TimelineEntryEntity?
+
     // --- Tasks ---
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTask(task: DailyTaskEntity)

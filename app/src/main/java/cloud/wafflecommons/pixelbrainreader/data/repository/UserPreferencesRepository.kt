@@ -139,4 +139,18 @@ class UserPreferencesRepository @Inject constructor(
             preferences[KEY_LAST_INDEX_TIME] = timestamp
         }
     }
+
+    // --- Google Sync ---
+    private val KEY_GOOGLE_SYNC_ENABLED = androidx.datastore.preferences.core.booleanPreferencesKey("google_sync_enabled")
+
+    val isGoogleSyncEnabled: Flow<Boolean> = context.dataStore.data
+        .map { preferences ->
+            preferences[KEY_GOOGLE_SYNC_ENABLED] ?: false 
+        }
+
+    suspend fun setGoogleSyncEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_GOOGLE_SYNC_ENABLED] = enabled
+        }
+    }
 }

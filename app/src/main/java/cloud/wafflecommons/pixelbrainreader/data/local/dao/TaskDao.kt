@@ -29,4 +29,7 @@ interface TaskDao {
 
     @Query("UPDATE daily_tasks SET isDone = :isDone WHERE id = :taskId")
     suspend fun updateTaskStatus(taskId: String, isDone: Boolean)
+
+    @Query("SELECT * FROM daily_tasks WHERE googleTaskId = :googleTaskId LIMIT 1")
+    suspend fun getTaskByGoogleTaskId(googleTaskId: String): DailyTaskEntity?
 }

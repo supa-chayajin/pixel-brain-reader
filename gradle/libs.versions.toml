@@ -45,8 +45,13 @@ coroutinesGuava = "1.10.2"
 glance = "1.1.0"
 mockk = "1.13.8"
 coroutinesTest = "1.7.3"
-rssParser = "6.0.8"
+rssparser = "6.0.8"
 snakeyaml = "2.2"
+credentials = "1.3.0"
+googleid = "1.1.1"
+googleApiClient = "2.6.0"
+googleCalendar = "v3-rev20260225-2.0.0"
+googleTasks = "v1-rev20251102-2.0.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -154,10 +159,20 @@ mockk = { group = "io.mockk", name = "mockk", version.ref = "mockk" }
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutinesTest" }
 
 # RSS Parser
-rssparser = { group = "com.prof18.rssparser", name = "rssparser", version.ref = "rssParser" }
+rssparser = { group = "com.prof18.rssparser", name = "rssparser", version.ref = "rssparser" }
 
 # YAML
 snakeyaml = { group = "org.yaml", name = "snakeyaml", version.ref = "snakeyaml" }
+
+# Google Auth & API
+play-services-auth = { group = "com.google.android.gms", name = "play-services-auth", version = "21.2.0" }
+androidx-credentials = { group = "androidx.credentials", name = "credentials", version.ref = "credentials" }
+androidx-credentials-play-services-auth = { group = "androidx.credentials", name = "credentials-play-services-auth", version.ref = "credentials" }
+googleid = { group = "com.google.android.libraries.identity.googleid", name = "googleid", version.ref = "googleid" }
+google-services = { group = "com.google.gms", name = "google-services", version = "4.4.2" }
+google-api-client-android = { group = "com.google.api-client", name = "google-api-client-android", version.ref = "googleApiClient" }
+google-api-services-calendar = { group = "com.google.apis", name = "google-api-services-calendar", version.ref = "googleCalendar" }
+google-api-services-tasks = { group = "com.google.apis", name = "google-api-services-tasks", version.ref = "googleTasks" }
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 jetbrains-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
@@ -165,3 +180,4 @@ hilt-android = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+googleServices = { id = "com.google.gms.google-services", version = "4.4.2" }
