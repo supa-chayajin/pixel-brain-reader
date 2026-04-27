@@ -244,7 +244,8 @@ class JGitProvider @Inject constructor(
     }
 
     /**
-     * Pulls from remote. Handles conflict interceptions safely without destroying the AST.
+     * Pulls from remote using REBASE strategy (no merge commits allowed).
+     * Handles rebase conflicts gracefully: backs up local changes, aborts rebase, and reports.
      */
     suspend fun pull(remoteName: String = "origin"): SyncResult = withContext(Dispatchers.IO) {
         if (!isReady()) return@withContext SyncResult.Error(Exception("Repository not initialized"))
@@ -258,34 +259,47 @@ class JGitProvider @Inject constructor(
             Git.open(rootDir).use { git ->
                 val pullResult = git.pull()
                     .setRemote(remoteName)
-                    .setRebase(false) // Standard merge to predictably expose conflicts
+                    .setRebase(true) // STRICT REBASE — no merge commits
                     .setCredentialsProvider(provider)
                     .setProgressMonitor(AndroidLogProgressMonitor())
                     .call()
-                    
-                val mergeResult = pullResult.mergeResult
-                if (mergeResult != null && (mergeResult.mergeStatus == org.eclipse.jgit.api.MergeResult.MergeStatus.CONFLICTING || mergeResult.mergeStatus == org.eclipse.jgit.api.MergeResult.MergeStatus.FAILED)) {
-                    val conflicts = mergeResult.conflicts?.keys ?: emptySet()
-                    if (conflicts.isNotEmpty()) {
-                        Log.w("JGitProvider", "Merge Conflicts Detected: ${conflicts.size} files. Moving to defensive interception.")
-                        
-                        var backedUpCount = 0
-                        
-                        for (relativePath in conflicts) {
-                            // Phase A: Secure Local Backup
-                            val backup = conflictResolver.secureLocalBackup(relativePath)
-                            if (backup != null) backedUpCount++
-                            
-                            // Phase B: Force Checkout (THEIRS) - Ruthlessly overwrite local file with remote to keep the AST pristine
-                            git.checkout().addPath(relativePath).setStage(CheckoutCommand.Stage.THEIRS).call()
-                            
-                            // Phase C: Index Resolution - Force add the fixed file to the git index so JGit knows the conflict is resolved
-                            git.add().addFilepattern(relativePath).call()
+
+                val rebaseResult = pullResult.rebaseResult
+                if (rebaseResult != null) {
+                    when (rebaseResult.status) {
+                        org.eclipse.jgit.api.RebaseResult.Status.OK,
+                        org.eclipse.jgit.api.RebaseResult.Status.UP_TO_DATE,
+                        org.eclipse.jgit.api.RebaseResult.Status.FAST_FORWARD -> {
+                            Log.i("JGitProvider", "Pull (rebase) successful: ${rebaseResult.status}")
                         }
-                        
-                        // Final Auto-Commit to lock in the resolutions
-                        git.commit().setMessage("Auto-resolved sync conflicts via side-by-side backup").call()
-                        return@withContext SyncResult.ResolvedWithConflicts(backedUpCount)
+                        org.eclipse.jgit.api.RebaseResult.Status.STOPPED,
+                        org.eclipse.jgit.api.RebaseResult.Status.CONFLICTS,
+                        org.eclipse.jgit.api.RebaseResult.Status.FAILED -> {
+                            Log.w("JGitProvider", "Rebase conflict/failure: ${rebaseResult.status}. Backing up and aborting.")
+
+                            // Back up any conflicting files before aborting
+                            var backedUpCount = 0
+                            val conflicts = rebaseResult.conflicts ?: emptyList()
+                            for (relativePath in conflicts) {
+                                val backup = conflictResolver.secureLocalBackup(relativePath)
+                                if (backup != null) backedUpCount++
+                            }
+
+                            // Abort the rebase to restore working tree to pre-pull state
+                            try {
+                                git.rebase()
+                                    .setOperation(org.eclipse.jgit.api.RebaseCommand.Operation.ABORT)
+                                    .call()
+                                Log.i("JGitProvider", "Rebase aborted successfully. $backedUpCount files backed up.")
+                            } catch (abortEx: Exception) {
+                                Log.e("JGitProvider", "Failed to abort rebase", abortEx)
+                            }
+
+                            return@withContext SyncResult.ResolvedWithConflicts(backedUpCount)
+                        }
+                        else -> {
+                            Log.w("JGitProvider", "Unexpected rebase status: ${rebaseResult.status}")
+                        }
                     }
                 }
             }

@@ -39,6 +39,7 @@ import cloud.wafflecommons.pixelbrainreader.ui.journal.DailyNoteHeader
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.ScratchNoteEntity
+import cloud.wafflecommons.pixelbrainreader.data.sync.SyncState
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import androidx.compose.ui.unit.sp
@@ -69,6 +70,8 @@ fun DailyNoteScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val saveState by viewModel.saveState.collectAsStateWithLifecycle()
     val gratitudes by viewModel.gratitudes.collectAsStateWithLifecycle() // RFC-009
+    val syncState by viewModel.isSyncing.collectAsStateWithLifecycle()
+    val isRefreshing = syncState is SyncState.Syncing
 
 
     var showAddTimelineDialog by remember { mutableStateOf(false) }
@@ -185,11 +188,14 @@ fun DailyNoteScreen(
             )
         }
     ) { padding ->
+        cloud.wafflecommons.pixelbrainreader.ui.components.PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = { viewModel.triggerSync() },
+            modifier = Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)
+        ) {
         Box(modifier = Modifier.fillMaxSize()) {
             BoxWithConstraints(
                 modifier = Modifier
-                    .padding(padding)
-                    .consumeWindowInsets(padding)
                     .imePadding()
                     .fillMaxSize()
             ) {
@@ -365,10 +371,11 @@ fun DailyNoteScreen(
                             indication = null
                         ) { fabExpanded = false }
                 )
-            }
         }
     }
-    }
+    } // Custom PullToRefreshBox
+    } // Scaffold content
+    } // Scaffold
 
     if (showAddTimelineDialog) {
         AddTimelineDialog(

@@ -1,5 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.ui.components
 
+import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.offset
@@ -7,6 +8,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
@@ -28,16 +31,34 @@ fun PullToRefreshBox(
 ) {
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     val density = LocalDensity.current
+    val threshold = 80.dp
+    val thresholdPx = with(density) { threshold.toPx() }
     
-    // Trigger Haptics on Refresh Start
-    androidx.compose.runtime.LaunchedEffect(isRefreshing) {
-        if (isRefreshing) {
-            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+    // Internal Animatable for smooth content displacement
+    val verticalOffset = remember { Animatable(0f) }
+
+    // M3 PullToRefreshState
+    val state = androidx.compose.material3.pulltorefresh.rememberPullToRefreshState()
+
+    // Sync Animatable with Pull State while dragging
+    LaunchedEffect(state.distanceFraction) {
+        if (!isRefreshing) {
+            verticalOffset.snapTo(state.distanceFraction * thresholdPx)
         }
     }
 
-    // M3 1.3 requires state sharing
-    val state = androidx.compose.material3.pulltorefresh.rememberPullToRefreshState()
+    // Handle Refresh Lifecycle
+    LaunchedEffect(isRefreshing) {
+        if (isRefreshing) {
+            // Trigger Haptics
+            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+            // Maintain offset during refresh
+            verticalOffset.animateTo(thresholdPx)
+        } else {
+            // Animate back to zero when refreshing finishes
+            verticalOffset.animateTo(0f)
+        }
+    }
 
     androidx.compose.material3.pulltorefresh.PullToRefreshBox(
         isRefreshing = isRefreshing,
@@ -46,15 +67,14 @@ fun PullToRefreshBox(
         state = state,
         indicator = {
              // Indicator: "Pull to Sync" Message (Behind Content)
-             // Visible only during drag, hidden when Sync starts (Top Bar takes over)
              androidx.compose.animation.AnimatedVisibility(
-                visible = state.distanceFraction > 0f && !isRefreshing,
+                visible = verticalOffset.value > 10f,
                 enter = androidx.compose.animation.fadeIn(),
                 exit = androidx.compose.animation.fadeOut(),
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .zIndex(-1f) // Behind content
-                    .padding(top = 32.dp) // Push down a bit
+                    .zIndex(-1f)
+                    .padding(top = 24.dp)
              ) {
                 androidx.compose.foundation.layout.Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -62,14 +82,18 @@ fun PullToRefreshBox(
                     modifier = Modifier.padding(8.dp)
                 ) {
                     androidx.compose.material3.Icon(
-                        imageVector = androidx.compose.material.icons.Icons.Filled.Refresh,
+                        imageVector = Icons.Filled.Refresh,
                         contentDescription = null,
                         tint = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(18.dp)
                     )
                     androidx.compose.foundation.layout.Spacer(modifier = Modifier.padding(4.dp))
                     androidx.compose.material3.Text(
-                        text = if (state.distanceFraction >= 1f) "Release to Sync" else "Syncing Repository...",
+                        text = when {
+                            isRefreshing -> "Syncing Repository..."
+                            state.distanceFraction >= 1f -> "Release to Sync"
+                            else -> "Pull to Sync"
+                        },
                         style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
                         color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -77,13 +101,10 @@ fun PullToRefreshBox(
              }
         },
         content = {
-            // Content Moves Down (Displacement)
              Box(
                 modifier = Modifier
                     .offset {
-                        val thresholdPx = with(density) { 100.dp.toPx() }
-                        val offsetPx = (state.distanceFraction * thresholdPx).coerceAtMost(thresholdPx * 2) 
-                        IntOffset(0, offsetPx.roundToInt())
+                        IntOffset(0, verticalOffset.value.roundToInt())
                     }
             ) {
                 content()

@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import cloud.wafflecommons.pixelbrainreader.data.sync.SyncState
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cloud.wafflecommons.pixelbrainreader.ui.components.MoodTrendsCard
 import cloud.wafflecommons.pixelbrainreader.ui.daily.DailyMoodPoint
@@ -38,31 +39,41 @@ fun LifeStatsScreen(
     val uiState by viewModel.finalUiState.collectAsStateWithLifecycle()
     val sleepDuration by viewModel.sleepDurationState.collectAsStateWithLifecycle()
     val globalCompletion by viewModel.globalCompletionState.collectAsStateWithLifecycle()
+    val syncState by viewModel.isSyncing.collectAsStateWithLifecycle()
+    val isRefreshing = syncState is SyncState.Syncing
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
 
     Scaffold(
         topBar = {
             cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(title = "Statistiques de Vie")
         }
     ) { innerPadding ->
-        if (uiState.isLoading) {
-            Box(Modifier.fillMaxSize().padding(innerPadding), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
-            return@Scaffold
-        }
-
-        LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 340.dp),
-            contentPadding = innerPadding,
-            modifier = Modifier.padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+        cloud.wafflecommons.pixelbrainreader.ui.components.PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = { 
+                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                viewModel.triggerSync() 
+            },
+            modifier = Modifier.fillMaxSize().padding(innerPadding)
         ) {
-            item { MoodVsHeartRateChartCard(uiState.moodHistory) }
-            item { HealthOverviewCard(uiState) }
-            item { DualInsightCards(sleepDuration, globalCompletion) }
-            item { HealthSummaryCard(uiState) }
-            item { CompletionRingsCard(uiState) }
+            if (uiState.isLoading) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            } else {
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = 340.dp),
+                    modifier = Modifier.fillMaxSize().padding(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    item { MoodVsHeartRateChartCard(uiState.moodHistory) }
+                    item { HealthOverviewCard(uiState) }
+                    item { DualInsightCards(sleepDuration, globalCompletion) }
+                    item { HealthSummaryCard(uiState) }
+                    item { CompletionRingsCard(uiState) }
+                }
+            }
         }
     }
 }

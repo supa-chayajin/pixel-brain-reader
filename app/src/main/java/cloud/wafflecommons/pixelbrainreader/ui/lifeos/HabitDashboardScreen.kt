@@ -17,8 +17,8 @@ import androidx.compose.material3.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import cloud.wafflecommons.pixelbrainreader.data.sync.SyncState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,9 +42,10 @@ fun HabitDashboardScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val todayHabits by viewModel.todayHabits.collectAsStateWithLifecycle()
-    val isSyncing by viewModel.isSyncing.collectAsStateWithLifecycle()
+    val syncState by viewModel.isSyncing.collectAsStateWithLifecycle()
+    val isRefreshing = syncState is SyncState.Syncing
 
-    val pullToRefreshState = rememberPullToRefreshState()
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
 
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
@@ -69,10 +70,12 @@ fun HabitDashboardScreen(
             )
         }
     ) { padding ->
-        PullToRefreshBox(
-            isRefreshing = isSyncing,
-            onRefresh = { viewModel.forceSyncEverything() },
-            state = pullToRefreshState,
+        cloud.wafflecommons.pixelbrainreader.ui.components.PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = { 
+                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                viewModel.forceSyncEverything() 
+            },
             modifier = Modifier.fillMaxSize().padding(padding)
         ) {
             if (state.isLoading) {

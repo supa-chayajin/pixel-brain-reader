@@ -1,15 +1,28 @@
 package cloud.wafflecommons.pixelbrainreader
 
 import android.app.Application
+import android.util.Log
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.work.Configuration
+import cloud.wafflecommons.pixelbrainreader.data.sync.SyncOrchestrator
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
 import androidx.hilt.work.HiltWorkerFactory
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 @HiltAndroidApp
 class PixelBrainApplication : Application(), Configuration.Provider {
 
     @Inject lateinit var workerFactory: HiltWorkerFactory
+    @Inject lateinit var syncOrchestrator: SyncOrchestrator
+
+    /** Application-scoped coroutine scope — survives Activity recreation. */
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onCreate() {
         super.onCreate()
@@ -20,6 +33,25 @@ class PixelBrainApplication : Application(), Configuration.Provider {
             )
         )
         scheduleDailyBurnWork()
+        registerForegroundSyncObserver()
+    }
+
+    /**
+     * Registers a ProcessLifecycleOwner observer that triggers a full
+     * Git→Health→Git sync cycle every time the app comes to the foreground.
+     * Cooldown/debounce is handled inside SyncOrchestrator (60s minimum interval).
+     */
+    private fun registerForegroundSyncObserver() {
+        ProcessLifecycleOwner.get().lifecycle.addObserver(
+            LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_RESUME) {
+                    Log.d("PixelBrainApp", "ON_RESUME detected — launching sync cycle")
+                    appScope.launch {
+                        syncOrchestrator.executeFullSyncCycle()
+                    }
+                }
+            }
+        )
     }
 
     private fun scheduleDailyBurnWork() {
