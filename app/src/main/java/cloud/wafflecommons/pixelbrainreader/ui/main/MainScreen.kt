@@ -550,20 +550,7 @@ fun MainScreen(
                                             )
                                         }
 
-                                        // Delete
-                                        FilledTonalIconButton(
-                                            onClick = { viewModel.requestDeleteFile() },
-                                            colors = IconButtonDefaults.filledTonalIconButtonColors(
-                                                containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
-                                                contentColor = MaterialTheme.colorScheme.onErrorContainer
-                                            )
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Rounded.Delete,
-                                                contentDescription = "Delete File",
-                                                tint = MaterialTheme.colorScheme.error
-                                            )
-                                        }
+                                        // Delete button removed from here
 
                                         // Focus Mode (Large Screen Only)
                                         if (isLargeScreen) {
@@ -654,8 +641,6 @@ fun MainScreen(
                                                     currentPath = uiState.currentPath,
                                                     searchQuery = uiState.searchQuery, // PASS QUERY
                                                     showMenuIcon = false,
-                                                    availableMoveDestinations = uiState.availableMoveDestinations,
-                                                    moveDialogCurrentPath = uiState.moveDialogCurrentPath,
                                                     onFileClick = { file ->
                                                         viewModel.loadFile(file)
                                                         scope.launch { navigator.navigateTo(ListDetailPaneScaffoldRole.Detail) }
@@ -666,10 +651,10 @@ fun MainScreen(
                                                     onRefresh = { viewModel.refreshCurrentFolder() },
                                                     onCreateFile = { viewModel.openCreateFileDialog() },
                                                     onRenameFile = { newName, file -> viewModel.renameFile(newName, file) },
-                                                    onMoveFile = { file, folder -> viewModel.moveFile(file, folder) },
-                                                    onPrepareMove = { file -> viewModel.prepareMove(file) },
-                                                    onMoveNavigateTo = { path -> viewModel.navigateToMoveFolder(path) },
-                                                    onMoveNavigateUp = { viewModel.navigateUpMoveFolder() },
+                                                    onDeleteFile = { file -> 
+                                                        viewModel.loadFile(file)
+                                                        viewModel.requestDeleteFile()
+                                                    },
                                                     onAnalyzeFolder = { viewModel.analyzeCurrentFolder() }
                                                 )
                                             }

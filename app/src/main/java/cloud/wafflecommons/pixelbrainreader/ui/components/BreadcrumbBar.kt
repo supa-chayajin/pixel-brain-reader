@@ -63,8 +63,9 @@ fun BreadcrumbBar(
         Icon(Icons.AutoMirrored.Filled.ArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
 
         if (showCompact) {
+            val parentPath = pathParts.dropLast(1).joinToString("/")
             FilledTonalButton(
-                onClick = { null },
+                onClick = { onPathClick(parentPath) },
                 colors = ButtonDefaults.filledTonalButtonColors(
                     containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                     contentColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -82,7 +83,7 @@ fun BreadcrumbBar(
              val lastPart = pathParts.last()
 
             FilledTonalButton(
-                onClick = { null },
+                onClick = { onPathClick(currentPath) },
                 colors = ButtonDefaults.filledTonalButtonColors(
                     containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                     contentColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -117,9 +118,7 @@ fun BreadcrumbBar(
                         text = part,
                         style = if (index == pathParts.lastIndex) MaterialTheme.typography.titleSmall else MaterialTheme.typography.bodyMedium,
                         color = if (index == pathParts.lastIndex) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier
-                            .clickable {  }
-                            .padding(horizontal = 4.dp)
+                        modifier = Modifier.padding(horizontal = 4.dp)
                     )
                 }
             }

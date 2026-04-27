@@ -10,8 +10,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.platform.LocalView
-import cloud.wafflecommons.pixelbrainreader.ui.utils.HapticHelper.performHapticClick
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 
 @Composable
 fun CortexBouncyCheckbox(
@@ -19,7 +19,7 @@ fun CortexBouncyCheckbox(
     onCheckedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val view = LocalView.current
+    val haptic = LocalHapticFeedback.current
     
     // Scale animation: 1.0 -> 1.2 -> 1.0 when checked changes
     // We can simulate a "bounce" by checking if state changed? 
@@ -37,7 +37,7 @@ fun CortexBouncyCheckbox(
         Checkbox(
             checked = checked,
             onCheckedChange = {
-                view.performHapticClick()
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 onCheckedChange(it)
             },
             colors = CheckboxDefaults.colors(

@@ -26,6 +26,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import cloud.wafflecommons.pixelbrainreader.ui.utils.hapticClickable
 
 data class FabActionItem(
     val icon: ImageVector,
@@ -40,6 +43,7 @@ fun CortexExpandableFAB(
     items: List<FabActionItem>,
     modifier: Modifier = Modifier
 ) {
+    val haptic = LocalHapticFeedback.current
     Column(
         horizontalAlignment = Alignment.End,
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -65,7 +69,7 @@ fun CortexExpandableFAB(
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
-                            .clickable(
+                            .hapticClickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null,
                                 onClick = {
@@ -86,6 +90,7 @@ fun CortexExpandableFAB(
                             ) {
                                 IconButton(
                                     onClick = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                         onExpandedChange(false)
                                         item.onClick()
                                     },
@@ -122,7 +127,10 @@ fun CortexExpandableFAB(
         )
 
         FloatingActionButton(
-            onClick = { onExpandedChange(!expanded) },
+            onClick = { 
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onExpandedChange(!expanded) 
+            },
             containerColor = MaterialTheme.colorScheme.secondaryContainer,
             contentColor = MaterialTheme.colorScheme.onSecondaryContainer
         ) {

@@ -87,7 +87,7 @@ fun NewFileBottomSheet(
                 }
 
                 // Option B: Templates
-                items(availableTemplates) { templateName ->
+                items(availableTemplates, key = { it }) { templateName ->
                     val displayName = formatTemplateName(templateName)
                     TemplateListItem(
                         displayName = displayName,

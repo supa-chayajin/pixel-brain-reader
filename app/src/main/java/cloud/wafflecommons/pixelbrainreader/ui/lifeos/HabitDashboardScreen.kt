@@ -133,7 +133,7 @@ fun HabitDashboardScreen(
                         }
 
                         // Habits in Category (Grid Layout)
-                        items(habits.size) { index ->
+                        items(count = habits.size, key = { index -> habits[index].config.id }) { index ->
                             val habitStats = habits[index]
                             cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = index + 1) {
                                 HabitCard(

@@ -2,7 +2,6 @@ package cloud.wafflecommons.pixelbrainreader.ui.lifestats
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import cloud.wafflecommons.pixelbrainreader.domain.gamification.ApplyHealthSynergyUseCase
 import cloud.wafflecommons.pixelbrainreader.data.gamification.GamificationRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.MoodRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.HabitRepository
@@ -14,6 +13,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.Immutable
 import cloud.wafflecommons.pixelbrainreader.data.repository.TaskRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.ChoreRepository
 import cloud.wafflecommons.pixelbrainreader.domain.homeos.CalculateChoreEntropyUseCase
@@ -25,6 +25,7 @@ import java.io.File
 import java.time.LocalDate
 import javax.inject.Inject
 
+@Immutable
 data class LifeStatsMoodPoint(
     val date: LocalDate,
     val score: Float,
@@ -32,14 +33,21 @@ data class LifeStatsMoodPoint(
     val avgBpm: Int = 0
 )
 
+@Immutable
 data class LifeStatsUiState(
     val moodHistory: List<LifeStatsMoodPoint> = emptyList(),
     val avgMood7Days: Float = 0f,
     val avgMood30Days: Float = 0f,
-    
     val avgHeartRate: Int = 0,
     val totalCalories: Int = 0,
     val totalMeditationMinutes: Int = 0,
+    
+    val activeMinutes7Days: List<Float> = emptyList(),
+    val distance7Days: List<Float> = emptyList(),
+    val sleepDuration7Days: List<Float> = emptyList(),
+    val todayDistanceKm: Double = 0.0,
+    val todayActiveMinutes: Long = 0L,
+    val todaySleepMinutes: Long = 0L,
     
     val habitCompletionRate: Float = 0f,
     val taskCompletionRate: Float = 0f,
@@ -47,7 +55,6 @@ data class LifeStatsUiState(
     val criticalChoresCount: Int = 0,
     val cleanChoresCount: Int = 0,
     
-    val isHealthSynergyActive: Boolean = false,
     val isLoading: Boolean = true
 )
 
@@ -59,19 +66,9 @@ class LifeStatsViewModel @Inject constructor(
     choreRepository: ChoreRepository,
     private val taskRepository: TaskRepository,
     private val calculateChoreEntropyUseCase: CalculateChoreEntropyUseCase,
-    private val applyHealthSynergyUseCase: ApplyHealthSynergyUseCase,
     gamificationPreferences: cloud.wafflecommons.pixelbrainreader.data.local.preferences.GamificationPreferences,
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context
 ) : ViewModel() {
-
-    init {
-        viewModelScope.launch {
-            applyHealthSynergyUseCase(LocalDate.now())
-        }
-    }
-
-    private val isHealthSynergyActiveFlow = gamificationPreferences.lastHealthSynergyAppliedDateFlow
-        .map { it == LocalDate.now().toString() }
 
     // Dummy flow to trigger refresh when date changes
     private val todayFlow = flow {
@@ -82,9 +79,8 @@ class LifeStatsViewModel @Inject constructor(
         moodRepository.getMoodFlow(),
         habitRepository.getLogsForYearFlow(LocalDate.now().year),
         choreRepository.getAllChoresStream(),
-        isHealthSynergyActiveFlow,
-        todayFlow // ensures we have 5 arguments for combine, or we can use combine over 5 sources
-    ) { moods, habitLogsMap, chores, synergyActive, today ->
+        combine(todayFlow, habitRepository.getHabitConfigsFlow()) { today, configs -> today to configs }
+    ) { moods, habitLogsMap, chores, (today, configs) ->
         
         // --- Mental Health (Mood) ---
         val mood7Days = moods.filter { it.date >= today.minusDays(7).toString() }
@@ -100,6 +96,13 @@ class LifeStatsViewModel @Inject constructor(
         var hrDaysCount = 0
         
         val moodHistoryLine = mutableListOf<LifeStatsMoodPoint>()
+        val distanceHistory = mutableListOf<Float>()
+        val activeMinHistory = mutableListOf<Float>()
+        val sleepHistory = mutableListOf<Float>()
+        
+        var todayDistanceKm = 0.0
+        var todayActiveMinutes = 0L
+        var todaySleepMinutes = 0L
         
         (6 downTo 0).forEach { offset ->
             val d = today.minusDays(offset.toLong())
@@ -117,7 +120,23 @@ class LifeStatsViewModel @Inject constructor(
                         totalHrSum += dayAvgBpm
                         hrDaysCount++
                     }
-                } catch (e: Exception) {}
+                    distanceHistory.add(dhm?.distanceKm?.toFloat() ?: 0f)
+                    activeMinHistory.add(dhm?.activeMinutes?.toFloat() ?: 0f)
+                    sleepHistory.add(dhm?.sleepDurationMinutes?.toFloat() ?: 0f)
+                    if (offset == 0) {
+                        todayDistanceKm = dhm?.distanceKm ?: 0.0
+                        todayActiveMinutes = dhm?.activeMinutes ?: 0L
+                        todaySleepMinutes = dhm?.sleepDurationMinutes ?: 0L
+                    }
+                } catch (e: Exception) {
+                    distanceHistory.add(0f)
+                    activeMinHistory.add(0f)
+                    sleepHistory.add(0f)
+                }
+            } else {
+                distanceHistory.add(0f)
+                activeMinHistory.add(0f)
+                sleepHistory.add(0f)
             }
             
             val dayMoods = moods.filter { it.date == d.toString() }
@@ -137,20 +156,42 @@ class LifeStatsViewModel @Inject constructor(
         val avgHeartRate = if (hrDaysCount > 0) totalHrSum / hrDaysCount else 0
 
         // --- Productivity (Habits & Tasks) ---
-        var totalHabitLogs = 0
-        var completedHabitLogs = 0
+        var totalHabitsScheduledToday = 0
+        var completedHabitsToday = 0
         
-        // Look at past 7 days for habits
-        val past7DaysStrings = (0..6).map { today.minusDays(it.toLong()).toString() }
+        val dayMap = mapOf(
+            java.time.DayOfWeek.MONDAY to "MON",
+            java.time.DayOfWeek.TUESDAY to "TUE",
+            java.time.DayOfWeek.WEDNESDAY to "WED",
+            java.time.DayOfWeek.THURSDAY to "THU",
+            java.time.DayOfWeek.FRIDAY to "FRI",
+            java.time.DayOfWeek.SATURDAY to "SAT",
+            java.time.DayOfWeek.SUNDAY to "SUN"
+        )
+        val todayKey = dayMap[today.dayOfWeek] ?: "MON"
+        val todayString = today.toString()
         
-        habitLogsMap.forEach { (habitId, logs) ->
-            logs.filter { it.date in past7DaysStrings }.forEach { log ->
-                val target = log.value
-                if (target > 0) completedHabitLogs++
-                totalHabitLogs++
+        configs.filter { !it.archived }.forEach { habit ->
+            val cleanFreq = habit.frequency.map { it.trim().uppercase() }
+            val isScheduled = cleanFreq.isEmpty() || cleanFreq.contains(todayKey)
+            
+            if (isScheduled) {
+                totalHabitsScheduledToday++
+                val log = habitLogsMap[habit.id]?.find { it.date == todayString }
+                if (log != null) {
+                    val isCompleted = if (habit.type == cloud.wafflecommons.pixelbrainreader.data.model.HabitType.MEASURABLE) {
+                        log.value >= habit.targetValue
+                    } else {
+                        log.status == cloud.wafflecommons.pixelbrainreader.data.model.HabitStatus.COMPLETED
+                    }
+                    if (isCompleted) {
+                        completedHabitsToday++
+                    }
+                }
             }
         }
-        val habitCompletionRate = if (totalHabitLogs == 0) 0f else (completedHabitLogs.toFloat() / totalHabitLogs.toFloat())
+        
+        val habitCompletionRate = if (totalHabitsScheduledToday == 0) 1f else (completedHabitsToday.toFloat() / totalHabitsScheduledToday.toFloat())
         
         // Tasks (Suspend call workaround - we should ideally fetch this outside combine or use getTasksFlow)
         // Since getTasksFlow exists, let's just cheat and do synchronous runBlocking or simply rely on tasks flow. 
@@ -170,11 +211,16 @@ class LifeStatsViewModel @Inject constructor(
             avgHeartRate = avgHeartRate,
             totalCalories = totalCalories.toInt(),
             totalMeditationMinutes = totalMeditation,
+            activeMinutes7Days = activeMinHistory,
+            distance7Days = distanceHistory,
+            sleepDuration7Days = sleepHistory,
+            todayDistanceKm = todayDistanceKm,
+            todayActiveMinutes = todayActiveMinutes,
+            todaySleepMinutes = todaySleepMinutes,
             habitCompletionRate = habitCompletionRate,
             taskCompletionRate = 0f, // Resolved below
             criticalChoresCount = criticalChoresCount,
             cleanChoresCount = cleanChoresCount,
-            isHealthSynergyActive = synergyActive,
             isLoading = false
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), LifeStatsUiState(isLoading = true))
@@ -196,4 +242,15 @@ class LifeStatsViewModel @Inject constructor(
     val finalUiState: StateFlow<LifeStatsUiState> = combine(uiState, taskRatiosFlow) { state, taskRatio ->
         state.copy(taskCompletionRate = taskRatio)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), LifeStatsUiState(isLoading = true))
+
+    val sleepDurationState: StateFlow<Long> = finalUiState.map { it.todaySleepMinutes }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0L)
+
+    val globalCompletionState: StateFlow<Float> = finalUiState.map { state ->
+        val totalChores = state.criticalChoresCount + state.cleanChoresCount
+        val choreRate = if (totalChores > 0) state.cleanChoresCount.toFloat() / totalChores.toFloat() else 0f
+        
+        // Simple average of 3 metrics (Task, Habit, Chores)
+        (state.taskCompletionRate + state.habitCompletionRate + choreRate) / 3f
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0f)
 }

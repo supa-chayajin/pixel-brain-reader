@@ -104,7 +104,7 @@ fun ChatPanel(
                         contentPadding = PaddingValues(top = 16.dp, bottom = 24.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        items(viewModel.messages) { msg ->
+                        items(viewModel.messages, key = { it.id }) { msg ->
                             ChatBubble(
                                 message = msg,
                                 onInsert = if (!msg.isUser) onInsertContent else null,

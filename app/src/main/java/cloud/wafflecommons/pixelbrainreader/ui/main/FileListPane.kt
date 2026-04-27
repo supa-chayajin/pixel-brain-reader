@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material3.*
@@ -38,8 +39,6 @@ import cloud.wafflecommons.pixelbrainreader.data.remote.model.GithubFileDto
 @Composable
 fun FileListPane(
     files: List<GithubFileDto>,
-    availableMoveDestinations: List<String>, // Passed from VM (Smart Filtered)
-    moveDialogCurrentPath: String, // Added state
     isLoading: Boolean,
     isRefreshing: Boolean,
     searchQuery: String = "", // Added for Search Feedback
@@ -53,17 +52,13 @@ fun FileListPane(
     onRefresh: () -> Unit,
     onCreateFile: () -> Unit,
     onRenameFile: (String, GithubFileDto) -> Unit,
-    onMoveFile: (GithubFileDto, String) -> Unit,
-    onPrepareMove: (GithubFileDto) -> Unit,
-    onMoveNavigateTo: (String) -> Unit,
-    onMoveNavigateUp: () -> Unit,
+    onDeleteFile: (GithubFileDto) -> Unit,
     onAnalyzeFolder: () -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
     
     // Dialog States
     var showRenameDialog by remember { mutableStateOf<GithubFileDto?>(null) }
-    var showMoveDialog by remember { mutableStateOf<GithubFileDto?>(null) }
     // Rename Dialog
     if (showRenameDialog != null) {
         val file = showRenameDialog!!
@@ -90,80 +85,6 @@ fun FileListPane(
             },
             dismissButton = {
                 TextButton(onClick = { showRenameDialog = null }) { Text("Cancel") }
-            }
-        )
-    }
-
-    // Move Dialog
-    if (showMoveDialog != null) {
-        val file = showMoveDialog!!
-        AlertDialog(
-            onDismissRequest = { showMoveDialog = null },
-            shape = RoundedCornerShape(28.dp),
-            title = { 
-                Column {
-                    Text("Move to...")
-                    if (moveDialogCurrentPath.isNotEmpty()) {
-                        Text(
-                            text = "📂 $moveDialogCurrentPath",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    } else {
-                         Text(
-                            text = "📂 (Root)",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            },
-            text = {
-                LazyColumn(
-                    modifier = Modifier.heightIn(max = 300.dp).fillMaxWidth()
-                ) {
-                    // Back Button Logic in List if not root
-                    if (moveDialogCurrentPath.isNotEmpty()) {
-                        item {
-                            ListItem(
-                                headlineContent = { Text(".. (Up)") },
-                                leadingContent = { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) },
-                                modifier = Modifier.clickable { onMoveNavigateUp() }
-                            )
-                        }
-                    }
-
-                    items(availableMoveDestinations) { folderPath ->
-                        val folderName = folderPath.substringAfterLast("/")
-                         ListItem(
-                            headlineContent = { Text("📂 $folderName") },
-                            trailingContent = { Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null) },
-                            modifier = Modifier.clickable { 
-                                onMoveNavigateTo(folderPath) // Drill Down
-                            }
-                        )
-                    }
-                    if (availableMoveDestinations.isEmpty()) {
-                         item {
-                             Text(
-                                 if (moveDialogCurrentPath.isEmpty()) "No folders found." else "No subfolders.", 
-                                 modifier = Modifier.padding(16.dp),
-                                 style = MaterialTheme.typography.bodyMedium
-                             )
-                         }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    onMoveFile(file, moveDialogCurrentPath)
-                    showMoveDialog = null
-                }) {
-                    Text("Move Here")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showMoveDialog = null }) { Text("Cancel") }
             }
         )
     }
@@ -270,6 +191,10 @@ fun FileListPane(
                 },
                 modifier = Modifier.fillMaxSize()
             ) {
+                val filteredFiles = remember(files, currentPath) { 
+                    files.filter { it.name != "." && it.path != currentPath }
+                }
+
                 LazyColumn(
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -295,7 +220,6 @@ fun FileListPane(
                         }
                     }
 
-                    val filteredFiles = files.filter { it.name != "." && it.path != currentPath }
                     items(filteredFiles, key = { it.path }) { file ->
                         val dismissState = rememberSwipeToDismissBoxState(
                             confirmValueChange = { dismissValue ->
@@ -306,9 +230,8 @@ fun FileListPane(
                                         false 
                                     }
                                     SwipeToDismissBoxValue.EndToStart -> {
-                                        // Move
-                                        showMoveDialog = file
-                                        onPrepareMove(file) 
+                                        // Delete
+                                        onDeleteFile(file)
                                         false
                                     }
                                     else -> false
@@ -323,13 +246,13 @@ fun FileListPane(
                                 val color by animateColorAsState(
                                     when (dismissState.targetValue) {
                                         SwipeToDismissBoxValue.StartToEnd -> MaterialTheme.colorScheme.primaryContainer 
-                                        SwipeToDismissBoxValue.EndToStart -> MaterialTheme.colorScheme.tertiaryContainer 
+                                        SwipeToDismissBoxValue.EndToStart -> MaterialTheme.colorScheme.errorContainer 
                                         else -> MaterialTheme.colorScheme.surfaceContainerLow
                                     }
                                 )
                                 val icon = when (dismissState.targetValue) {
                                     SwipeToDismissBoxValue.StartToEnd -> Icons.Default.Edit
-                                    SwipeToDismissBoxValue.EndToStart -> Icons.Default.FolderOpen
+                                    SwipeToDismissBoxValue.EndToStart -> Icons.Default.Delete
                                     else -> Icons.Default.Edit
                                 }
                                 val alignment = when (direction) {
@@ -348,7 +271,7 @@ fun FileListPane(
                                     Icon(
                                         icon,
                                         contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                        tint = if (dismissState.targetValue == SwipeToDismissBoxValue.EndToStart) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer
                                     )
                                 }
                             }
