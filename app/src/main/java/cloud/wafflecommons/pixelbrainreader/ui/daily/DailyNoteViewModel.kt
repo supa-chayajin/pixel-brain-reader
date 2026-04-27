@@ -92,7 +92,8 @@ class DailyNoteViewModel @Inject constructor(
     private val gamificationRepository: cloud.wafflecommons.pixelbrainreader.data.gamification.GamificationRepository,
     private val syncHealthDataUseCase: SyncHealthDataUseCase,
     private val dailyNoteRepository: cloud.wafflecommons.pixelbrainreader.data.repository.DailyNoteRepository,
-    private val taskRepository: cloud.wafflecommons.pixelbrainreader.data.repository.TaskRepository
+    private val taskRepository: cloud.wafflecommons.pixelbrainreader.data.repository.TaskRepository,
+    private val syncOrchestrator: cloud.wafflecommons.pixelbrainreader.data.sync.SyncOrchestrator
 ) : ViewModel() {
 
     // [NEW] Reactive Date Selection
@@ -105,6 +106,21 @@ class DailyNoteViewModel @Inject constructor(
 
     fun refreshWeather() {
         _weatherRefreshTrigger.value++
+    }
+
+    // Global Sync State for PullToRefresh
+    val isSyncing: StateFlow<cloud.wafflecommons.pixelbrainreader.data.sync.SyncState> = syncOrchestrator.syncState
+
+    /**
+     * Triggers a full Git→Health→Git sync cycle.
+     * Called by PullToRefresh on DailyNoteScreen.
+     */
+    fun triggerSync() {
+        viewModelScope.launch(Dispatchers.IO) {
+            syncOrchestrator.executeFullSyncCycle()
+            // Reload the current day's data after sync
+            loadDailyNote(_selectedDate.value)
+        }
     }
 
     // RFC-009: Gratitude Express Flow

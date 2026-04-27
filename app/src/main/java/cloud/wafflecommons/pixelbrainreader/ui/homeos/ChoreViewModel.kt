@@ -22,7 +22,8 @@ import javax.inject.Inject
 class ChoreViewModel @Inject constructor(
     private val choreRepository: ChoreRepository,
     private val calculateChoreEntropyUseCase: CalculateChoreEntropyUseCase,
-    private val grantXpUseCase: GrantXpUseCase
+    private val grantXpUseCase: GrantXpUseCase,
+    private val syncOrchestrator: cloud.wafflecommons.pixelbrainreader.data.sync.SyncOrchestrator
 ) : ViewModel() {
 
     // Sorted and grouped by Room natively for the UI
@@ -48,6 +49,14 @@ class ChoreViewModel @Inject constructor(
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = emptyList()
         )
+    
+    val isSyncing: StateFlow<cloud.wafflecommons.pixelbrainreader.data.sync.SyncState> = syncOrchestrator.syncState
+
+    fun triggerSync() {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            syncOrchestrator.executeFullSyncCycle()
+        }
+    }
 
     fun doChore(choreId: String) {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {

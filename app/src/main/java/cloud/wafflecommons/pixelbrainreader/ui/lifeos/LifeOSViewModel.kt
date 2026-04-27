@@ -53,7 +53,8 @@ class LifeOSViewModel @Inject constructor(
     private val gamificationRepository: cloud.wafflecommons.pixelbrainreader.data.gamification.GamificationRepository,
     private val grantXpUseCase: cloud.wafflecommons.pixelbrainreader.domain.gamification.GrantXpUseCase,
     private val automateHabitsUseCase: cloud.wafflecommons.pixelbrainreader.domain.gamification.AutomateHabitsUseCase,
-    private val jGitProvider: JGitProvider
+    private val jGitProvider: JGitProvider,
+    private val syncOrchestrator: cloud.wafflecommons.pixelbrainreader.data.sync.SyncOrchestrator
 ) : ViewModel() {
 
     private val selectedDateFlow = MutableStateFlow(LocalDate.now())
@@ -157,8 +158,7 @@ class LifeOSViewModel @Inject constructor(
     private val _xpEvents = MutableSharedFlow<cloud.wafflecommons.pixelbrainreader.data.gamification.XpGainEntry>()
     val xpEvents = _xpEvents.asSharedFlow()
 
-    private val _isSyncing = MutableStateFlow(false)
-    val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
+    val isSyncing: StateFlow<cloud.wafflecommons.pixelbrainreader.data.sync.SyncState> = syncOrchestrator.syncState
 
     init {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
@@ -173,20 +173,8 @@ class LifeOSViewModel @Inject constructor(
     }
 
     fun forceSyncEverything() {
-        if (_isSyncing.value) return
-        _isSyncing.value = true
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            try {
-                // 1. Health Connect Sync
-                automateHabitsUseCase(LocalDate.now())
-                
-                // 2. Git Fetch & Merge (Pull)
-                jGitProvider.pull()
-            } catch (e: Exception) {
-                android.util.Log.e("LifeOSViewModel", "Emergency sync failed", e)
-            } finally {
-                _isSyncing.value = false
-            }
+            syncOrchestrator.executeFullSyncCycle()
         }
     }
 

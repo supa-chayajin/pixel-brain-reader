@@ -67,7 +67,8 @@ class LifeStatsViewModel @Inject constructor(
     private val taskRepository: TaskRepository,
     private val calculateChoreEntropyUseCase: CalculateChoreEntropyUseCase,
     gamificationPreferences: cloud.wafflecommons.pixelbrainreader.data.local.preferences.GamificationPreferences,
-    @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context
+    @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context,
+    private val syncOrchestrator: cloud.wafflecommons.pixelbrainreader.data.sync.SyncOrchestrator
 ) : ViewModel() {
 
     // Dummy flow to trigger refresh when date changes
@@ -242,6 +243,14 @@ class LifeStatsViewModel @Inject constructor(
     val finalUiState: StateFlow<LifeStatsUiState> = combine(uiState, taskRatiosFlow) { state, taskRatio ->
         state.copy(taskCompletionRate = taskRatio)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), LifeStatsUiState(isLoading = true))
+
+    val isSyncing: StateFlow<cloud.wafflecommons.pixelbrainreader.data.sync.SyncState> = syncOrchestrator.syncState
+
+    fun triggerSync() {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            syncOrchestrator.executeFullSyncCycle()
+        }
+    }
 
     val sleepDurationState: StateFlow<Long> = finalUiState.map { it.todaySleepMinutes }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0L)

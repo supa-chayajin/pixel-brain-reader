@@ -9,7 +9,6 @@ import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
 import androidx.compose.foundation.lazy.staggeredgrid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ShowChart
-import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.CleaningServices
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material3.*
@@ -24,16 +23,19 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import cloud.wafflecommons.pixelbrainreader.data.sync.SyncState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @Composable
 fun ChoreDashboardScreen(
     viewModel: ChoreViewModel = hiltViewModel()
 ) {
     val groupedChores by viewModel.groupedChores.collectAsState()
+    val syncState by viewModel.isSyncing.collectAsStateWithLifecycle()
+    val isRefreshing = syncState is SyncState.Syncing
+
     val configuration = LocalConfiguration.current
     val haptic = LocalHapticFeedback.current
-
-    var showAddSheet by remember { mutableStateOf(false) }
 
     // Adaptive: More granular columns for foldables/large tablets
     val columns = when {
@@ -52,10 +54,17 @@ fun ChoreDashboardScreen(
             )
         }
     ) { padding ->
+        cloud.wafflecommons.pixelbrainreader.ui.components.PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = { 
+                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                viewModel.triggerSync() 
+            },
+            modifier = Modifier.fillMaxSize().padding(padding)
+        ) {
         if (groupedChores.isEmpty()) {
             EmptyChoreState(
-                modifier = Modifier.padding(padding),
-                onAddClick = { showAddSheet = true }
+                modifier = Modifier.fillMaxSize()
             )
         } else {
             val horizontalPadding = if (configuration.screenWidthDp > 840) 32.dp else 16.dp
@@ -115,15 +124,9 @@ fun ChoreDashboardScreen(
                     }
                 }
             }
-        }
     }
-
-    if (showAddSheet) {
-        AddChoreBottomSheet(
-            onDismiss = { showAddSheet = false },
-            viewModel = viewModel
-        )
-    }
+}
+}
 }
 
 @Composable
@@ -255,8 +258,7 @@ fun ChoreCard(chore: ChoreUiModel, onDoItClick: () -> Unit) {
 
 @Composable
 fun EmptyChoreState(
-    modifier: Modifier = Modifier,
-    onAddClick: () -> Unit
+    modifier: Modifier = Modifier
 ) {
     Column(
         modifier = modifier.fillMaxSize().padding(32.dp),
@@ -277,20 +279,11 @@ fun EmptyChoreState(
             textAlign = androidx.compose.ui.text.style.TextAlign.Center
         )
         Text(
-            text = "Configure chores to start earning XP.",
+            text = "Configure chores in Settings to start earning XP.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             modifier = Modifier.padding(top = 8.dp)
         )
-        Spacer(modifier = Modifier.height(32.dp))
-        Button(
-            onClick = onAddClick,
-            shape = MaterialTheme.shapes.medium
-        ) {
-            Icon(Icons.Rounded.Add, contentDescription = null)
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("Create chore")
-        }
     }
 }

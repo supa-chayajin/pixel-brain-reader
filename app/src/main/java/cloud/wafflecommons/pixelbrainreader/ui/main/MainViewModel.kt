@@ -59,6 +59,7 @@ class MainViewModel @Inject constructor(
     private val uiEffectManager: cloud.wafflecommons.pixelbrainreader.ui.utils.UiEffectManager,
     private val gamificationRepository: cloud.wafflecommons.pixelbrainreader.data.gamification.GamificationRepository,
     private val jGitProvider: cloud.wafflecommons.pixelbrainreader.data.remote.JGitProvider,
+    private val syncOrchestrator: cloud.wafflecommons.pixelbrainreader.data.sync.SyncOrchestrator,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
     private val _currentPath = MutableStateFlow("")
@@ -94,6 +95,9 @@ class MainViewModel @Inject constructor(
 
     // Global Effects (One-shot)
     val globalEffects = uiEffectManager.effects
+
+    // Global Sync State (observable by UI)
+    val globalSyncState = syncOrchestrator.syncState
 
     // Reactive File List
     private val _filesFlow = combine(_currentPath, _searchQuery) { path, query ->
@@ -221,23 +225,19 @@ class MainViewModel @Inject constructor(
             return
         }
 
-
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
              _isLoading.value = true
              _isSyncing.value = true
              
              try {
-                 // Immediate Background Pull using JGitProvider
-                 val syncResult = jGitProvider.pull()
+                 // Delegate to the global SyncOrchestrator for the strict Git→Health→Git cycle
+                 val didSync = syncOrchestrator.executeFullSyncCycle()
                  
-                 if (syncResult is cloud.wafflecommons.pixelbrainreader.data.remote.SyncResult.Success || syncResult is cloud.wafflecommons.pixelbrainreader.data.remote.SyncResult.ResolvedWithConflicts) {
+                 if (didSync) {
                      _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Sync Complete ✅"))
                      loadFolder(_currentPath.value)
-                     triggerBrainOptimization()
                  } else {
-                     val errorMsg = (syncResult as? cloud.wafflecommons.pixelbrainreader.data.remote.SyncResult.Error)?.exception?.message ?: "Unknown Error"
-                     Log.w("MainViewModel", "Initial Sync failed: $errorMsg")
-                     _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Sync Failed ❌: Using local cache"))
+                     Log.w("MainViewModel", "Initial sync was skipped (cooldown or in-progress)")
                  }
              } catch (e: Exception) {
                  Log.e("MainViewModel", "Sync Error", e)
@@ -248,7 +248,6 @@ class MainViewModel @Inject constructor(
                  _isSyncing.value = false
              }
         }
-
     }
 
     fun updateListPaneWidth(width: Float) {
