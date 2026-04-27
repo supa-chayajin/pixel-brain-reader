@@ -16,6 +16,7 @@ import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.rounded.HomeWork
+import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.*
 import kotlinx.coroutines.launch
@@ -40,6 +41,7 @@ import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.permission.HealthPermission
+import androidx.activity.result.contract.ActivityResultContracts
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -79,6 +81,19 @@ fun SettingsScreen(
 
 
     val coroutineScope = rememberCoroutineScope()
+
+    // Google Sign-In Launcher
+    val googleSignInLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val data = result.data
+        val authResult = viewModel.googleAuthManager.handleSignInResult(data)
+        viewModel.onGoogleSignInResult(authResult.isSuccess)
+        if (authResult.isFailure) {
+            val error = authResult.exceptionOrNull()
+            Toast.makeText(context, "Google Sign-In Failed: ${error?.message}", Toast.LENGTH_LONG).show()
+        }
+    }
     
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -166,6 +181,56 @@ fun SettingsScreen(
                          }
                      }
                  }
+            }
+
+            // 0b. Google Ecosystem
+            SettingsSection(
+                title = "Écosystème Google",
+                icon = Icons.Rounded.AccountCircle
+            ) {
+                val isEnabled = uiState.isGoogleSyncEnabled
+                val isLinked = uiState.isGoogleAccountLinked
+
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isLinked) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant
+                    ),
+                    onClick = {
+                        if (!isEnabled) {
+                            googleSignInLauncher.launch(viewModel.googleAuthManager.getSignInIntent())
+                        } else {
+                            viewModel.setGoogleSyncEnabled(false)
+                        }
+                    }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Google Calendar & Tasks",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = if (isLinked) "Synced (Read-Only)" else "Connect your Google account",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                        Switch(
+                            checked = isEnabled,
+                            onCheckedChange = { checked ->
+                                if (checked) {
+                                    googleSignInLauncher.launch(viewModel.googleAuthManager.getSignInIntent())
+                                } else {
+                                    viewModel.setGoogleSyncEnabled(false)
+                                }
+                            }
+                        )
+                    }
+                }
             }
 
             // 1. Intelligence Section

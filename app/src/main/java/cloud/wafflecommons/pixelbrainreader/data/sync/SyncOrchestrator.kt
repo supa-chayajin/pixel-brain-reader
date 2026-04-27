@@ -37,7 +37,8 @@ sealed class SyncState {
 @Singleton
 class SyncOrchestrator @Inject constructor(
     private val jGitProvider: JGitProvider,
-    private val syncHealthDataUseCase: SyncHealthDataUseCase
+    private val syncHealthDataUseCase: SyncHealthDataUseCase,
+    private val googleSyncRepository: cloud.wafflecommons.pixelbrainreader.data.repository.GoogleSyncRepository
 ) {
     companion object {
         private const val TAG = "SyncOrchestrator"
@@ -108,6 +109,16 @@ class SyncOrchestrator @Inject constructor(
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Phase 2: Health sync exception (non-fatal)", e)
+            }
+
+            // Phase 2.5: Google Ecosystem Sync (non-fatal)
+            Log.i(TAG, "Phase 2.5: Google Ecosystem sync...")
+            try {
+                googleSyncRepository.syncTodayCalendarEvents()
+                googleSyncRepository.syncPendingGoogleTasks()
+                Log.i(TAG, "Phase 2.5: Google sync OK")
+            } catch (e: Exception) {
+                Log.w(TAG, "Phase 2.5: Google sync failed (non-fatal)", e)
             }
 
             // Phase 3: Git Add + Commit + Push

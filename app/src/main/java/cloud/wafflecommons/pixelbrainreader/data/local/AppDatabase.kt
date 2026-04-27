@@ -36,7 +36,7 @@ import cloud.wafflecommons.pixelbrainreader.data.local.entity.ChoreEntity
         cloud.wafflecommons.pixelbrainreader.data.local.entity.HomeRoomEntity::class, // V4.6.1 Home Config
         ChoreEntity::class // V4.6 Home OS
     ], 
-    version = 21, // Version 21 for HomeRoomEntity and roomId FK
+    version = 22, // Version 22 for schema updates
     exportSchema = false
 )
 @androidx.room.TypeConverters(RoomTypeConverters::class)

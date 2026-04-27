@@ -29,5 +29,6 @@ data class TimelineEntryEntity(
     val time: LocalTime,
     val content: String,
     // Store original line to preserve formatting if needed during burn-back
-    val originalMarkdown: String? = null 
+    val originalMarkdown: String? = null,
+    val googleEventId: String? = null // For duplicate detection in Google Calendar sync
 )

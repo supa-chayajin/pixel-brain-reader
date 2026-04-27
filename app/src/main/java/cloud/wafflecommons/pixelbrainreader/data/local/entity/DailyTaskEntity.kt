@@ -22,5 +22,7 @@ data class DailyTaskEntity(
     val scheduledTime: String? = null, // "14:00" stored as string for simplicity in this refactor
     val isDone: Boolean = false,
     val priority: Int = 1,
-    val section: String = "Journal"
+    val section: String = "Journal",
+    val googleTaskId: String? = null, // ID from external provider (Google Tasks)
+    val source: String = "Local" // "Local", "GoogleTasks", etc.
 )

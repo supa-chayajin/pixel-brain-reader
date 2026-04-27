@@ -33,14 +33,15 @@ class SettingsViewModel @Inject constructor(
     private val healthConnectManager: cloud.wafflecommons.pixelbrainreader.data.health.HealthConnectManager,
     private val syncHealthDataUseCase: cloud.wafflecommons.pixelbrainreader.data.usecase.SyncHealthDataUseCase,
     private val habitRepository: cloud.wafflecommons.pixelbrainreader.data.repository.HabitRepository,
-    private val gamificationPrefs: GamificationPreferences
+    private val gamificationPrefs: GamificationPreferences,
+    val googleAuthManager: cloud.wafflecommons.pixelbrainreader.data.auth.GoogleAuthManager
 ) : ViewModel() {
 
     data class SettingsUiState(
         val paneWidth: Float = 360f,
         val themeConfig: AppThemeConfig = AppThemeConfig.FOLLOW_SYSTEM,
         val currentAiModel: cloud.wafflecommons.pixelbrainreader.data.model.AiModel = cloud.wafflecommons.pixelbrainreader.data.model.AiModel.GEMINI_FLASH,
-        val appVersion: String = "6.0.0",
+        val appVersion: String = "6.1.0",
         val repoOwner: String? = null,
         val repoName: String? = null,
         // AI Config (Advanced/Internal)
@@ -49,7 +50,10 @@ class SettingsViewModel @Inject constructor(
         val llmModelName: String = "gemini-2.5-flash-lite",
         // Health Connect
         val healthConnectStatus: Int = 0, // 0=Unknown, 1=Available, 2=NotInstalled, 3=NoPermissions, 4=Connected
-        val healthConnectPermissionsGranted: Boolean = false
+        val healthConnectPermissionsGranted: Boolean = false,
+        // Google Sync
+        val isGoogleSyncEnabled: Boolean = false,
+        val isGoogleAccountLinked: Boolean = false
     )
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -87,6 +91,15 @@ class SettingsViewModel @Inject constructor(
         
         userPrefs.llmModelName.onEach { name ->
              _uiState.value = _uiState.value.copy(llmModelName = name)
+        }.launchIn(viewModelScope)
+
+        userPrefs.isGoogleSyncEnabled.onEach { enabled ->
+            _uiState.value = _uiState.value.copy(isGoogleSyncEnabled = enabled)
+            googleAuthManager.setAccountLinked(enabled) // Sync internal state for now
+        }.launchIn(viewModelScope)
+
+        googleAuthManager.isAccountLinked.onEach { linked ->
+            _uiState.value = _uiState.value.copy(isGoogleAccountLinked = linked)
         }.launchIn(viewModelScope)
     }
 
@@ -163,6 +176,35 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             habitRepository.importConfigFromJson()
             onComplete()
+        }
+    }
+
+    fun setGoogleSyncEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            userPrefs.setGoogleSyncEnabled(enabled)
+            if (!enabled) {
+                googleAuthManager.signOut()
+            }
+        }
+    }
+
+    // Auth events for the UI
+    private val _googleSignInRequest = MutableSharedFlow<Unit>()
+    val googleSignInRequest = _googleSignInRequest.asSharedFlow()
+
+    fun requestGoogleSignIn() {
+        viewModelScope.launch {
+            _googleSignInRequest.emit(Unit)
+        }
+    }
+
+    fun onGoogleSignInResult(success: Boolean) {
+        viewModelScope.launch {
+            if (success) {
+                userPrefs.setGoogleSyncEnabled(true)
+            } else {
+                userPrefs.setGoogleSyncEnabled(false)
+            }
         }
     }
 

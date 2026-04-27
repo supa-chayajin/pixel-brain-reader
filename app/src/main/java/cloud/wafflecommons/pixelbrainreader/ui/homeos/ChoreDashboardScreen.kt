@@ -39,8 +39,7 @@ fun ChoreDashboardScreen(
 
     // Adaptive: More granular columns for foldables/large tablets
     val columns = when {
-        configuration.screenWidthDp > 1200 -> 4
-        configuration.screenWidthDp > 840 -> 3
+        configuration.screenWidthDp > 1200 -> 3
         configuration.screenWidthDp > 600 -> 2
         else -> 1
     }
@@ -54,14 +53,6 @@ fun ChoreDashboardScreen(
             )
         }
     ) { padding ->
-        cloud.wafflecommons.pixelbrainreader.ui.components.PullToRefreshBox(
-            isRefreshing = isRefreshing,
-            onRefresh = { 
-                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                viewModel.triggerSync() 
-            },
-            modifier = Modifier.fillMaxSize().padding(padding)
-        ) {
         if (groupedChores.isEmpty()) {
             EmptyChoreState(
                 modifier = Modifier.fillMaxSize()
@@ -81,7 +72,7 @@ fun ChoreDashboardScreen(
                     item(span = StaggeredGridItemSpan.FullLine) {
                         RoomHeader(roomName = roomName, urgentCount = chores.count { it.statusColor == StatusColor.RED })
                     }
-                    
+
                     if (chores.isEmpty()) {
                         item {
                             Card(
@@ -98,8 +89,8 @@ fun ChoreDashboardScreen(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Icon(
-                                        Icons.Rounded.CheckCircle, 
-                                        contentDescription = null, 
+                                        Icons.Rounded.CheckCircle,
+                                        contentDescription = null,
                                         tint = Color(0xFF4CAF50).copy(alpha = 0.6f)
                                     )
                                     Spacer(Modifier.width(12.dp))
@@ -124,9 +115,8 @@ fun ChoreDashboardScreen(
                     }
                 }
             }
+        }
     }
-}
-}
 }
 
 @Composable
