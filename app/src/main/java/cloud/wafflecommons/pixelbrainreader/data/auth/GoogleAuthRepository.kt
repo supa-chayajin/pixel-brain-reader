@@ -10,6 +10,7 @@ import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialException
+import androidx.credentials.exceptions.NoCredentialException
 import cloud.wafflecommons.pixelbrainreader.R
 import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
 import com.google.android.gms.auth.api.identity.AuthorizationRequest
@@ -63,36 +64,76 @@ class GoogleAuthRepository @Inject constructor(
     /**
      * Shows the Google account picker. Requires an Activity because Credential
      * Manager draws UI bound to the host window.
+     *
+     * Two-step pattern (matches Google's official samples):
+     *  1. filterByAuthorizedAccounts = true → silent return if the user has
+     *     previously authorized this app's Web Client ID with a Google account.
+     *  2. On [NoCredentialException], retry with filter = false to surface the
+     *     full picker for first-time sign-in.
+     *
+     * If both steps return [NoCredentialException], the device genuinely has
+     * no Google account configured at the OS level — surface an actionable
+     * error so the user knows to add one in Settings → Accounts.
      */
     suspend fun signIn(activity: Activity): Result<String> {
         return try {
-            val option = GetGoogleIdOption.Builder()
-                .setServerClientId(webClientId)
-                .setFilterByAuthorizedAccounts(false) // surface all eligible accounts
-                .setAutoSelectEnabled(false)
-                .build()
-            val request = GetCredentialRequest.Builder().addCredentialOption(option).build()
-            val response = credentialManager.getCredential(activity, request)
-            val cred = response.credential
-            if (cred !is CustomCredential ||
-                cred.type != GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
-            ) {
-                return Result.failure(
-                    IllegalStateException("Unexpected credential type: ${cred::class.java.name}")
+            tryGetCredential(activity, filterAuthorized = true)
+        } catch (silent: NoCredentialException) {
+            Log.i(TAG, "Silent attempt returned NoCredentialException; showing full picker", silent)
+            try {
+                tryGetCredential(activity, filterAuthorized = false)
+            } catch (full: NoCredentialException) {
+                // NoCredentialException with filter=false on a device that HAS Google accounts
+                // almost always indicates Cloud Console misconfiguration:
+                //  - Web Client ID in strings.xml doesn't match a Web OAuth client in the project
+                //  - Android OAuth client missing this app's package + SHA-1
+                //  - Web and Android clients live in different Cloud projects
+                // Run `./gradlew signingReport` and verify against Cloud Console → Credentials.
+                Log.e(TAG, "Credential Manager refused with filter=false. " +
+                        "Type=${full.type}; errorMessage=${full.errorMessage}", full)
+                Result.failure(
+                    IllegalStateException(
+                        "Credential Manager refused (${full.type}). " +
+                        "Likely cause: Web Client ID or SHA-1 not registered in Cloud Console."
+                    )
                 )
+            } catch (e: GetCredentialException) {
+                Log.e(TAG, "Credential Manager failure (full): type=${e.type}; msg=${e.errorMessage}", e)
+                Result.failure(e)
             }
-            val googleCred = GoogleIdTokenCredential.createFrom(cred.data)
-            secretManager.saveGoogleEmail(googleCred.id)
-            _isAccountLinked.value = true
-            Log.i(TAG, "Identity acquired for ${googleCred.id}")
-            Result.success(googleCred.id)
         } catch (e: GetCredentialException) {
-            Log.e(TAG, "Credential Manager failure: ${e.type}", e)
+            Log.e(TAG, "Credential Manager failure (silent): type=${e.type}; msg=${e.errorMessage}", e)
             Result.failure(e)
         } catch (e: Exception) {
             Log.e(TAG, "Sign-in failure", e)
             Result.failure(e)
         }
+    }
+
+    private suspend fun tryGetCredential(
+        activity: Activity,
+        filterAuthorized: Boolean
+    ): Result<String> {
+        val option = GetGoogleIdOption.Builder()
+            .setServerClientId(webClientId)
+            .setFilterByAuthorizedAccounts(filterAuthorized)
+            .setAutoSelectEnabled(false)
+            .build()
+        val request = GetCredentialRequest.Builder().addCredentialOption(option).build()
+        val response = credentialManager.getCredential(activity, request)
+        val cred = response.credential
+        if (cred !is CustomCredential ||
+            cred.type != GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
+        ) {
+            return Result.failure(
+                IllegalStateException("Unexpected credential type: ${cred::class.java.name}")
+            )
+        }
+        val googleCred = GoogleIdTokenCredential.createFrom(cred.data)
+        secretManager.saveGoogleEmail(googleCred.id)
+        _isAccountLinked.value = true
+        Log.i(TAG, "Identity acquired for ${googleCred.id} (filtered=$filterAuthorized)")
+        return Result.success(googleCred.id)
     }
 
     // --- Step 2: Authorization (Calendar + Tasks scopes) ---------------------
@@ -117,6 +158,9 @@ class GoogleAuthRepository @Inject constructor(
             val result = authClient.authorize(request).await()
             val token = result.accessToken
             if (token != null) {
+                // Opportunistically capture the email from the authorized account
+                // so we don't depend on the Credential Manager identity step at all.
+                rememberEmailIfPresent(result)
                 val expiresAt = System.currentTimeMillis() + ACCESS_TOKEN_TTL_MS
                 secretManager.saveGoogleAccessToken(token, expiresAt)
                 Result.success(AuthorizationOutcome.Authorized(token, expiresAt))
@@ -133,6 +177,25 @@ class GoogleAuthRepository @Inject constructor(
         }
     }
 
+    /**
+     * AuthorizationResult.toGoogleSignInAccount() is deprecated but remains the
+     * supported way to read the email of the account the user picked during
+     * authorize(). Lets us skip the Credential Manager identity step when it
+     * refuses with TYPE_NO_CREDENTIAL (misconfigured OAuth consent screen,
+     * test-mode without the user as a test user, etc.).
+     */
+    @Suppress("DEPRECATION")
+    private fun rememberEmailIfPresent(
+        result: com.google.android.gms.auth.api.identity.AuthorizationResult
+    ) {
+        val email = result.toGoogleSignInAccount()?.email
+        if (!email.isNullOrBlank() && secretManager.getGoogleEmail() != email) {
+            secretManager.saveGoogleEmail(email)
+            _isAccountLinked.value = true
+            Log.i(TAG, "Captured email from AuthorizationResult: $email")
+        }
+    }
+
     /** Resolve the consent intent that [authorize] surfaced via [AuthorizationOutcome.NeedsUserConsent]. */
     fun completeAuthorization(data: Intent?): Result<String> {
         return try {
@@ -141,6 +204,7 @@ class GoogleAuthRepository @Inject constructor(
                 ?: return Result.failure(
                     IllegalStateException("No access token after user consent")
                 )
+            rememberEmailIfPresent(result)
             val expiresAt = System.currentTimeMillis() + ACCESS_TOKEN_TTL_MS
             secretManager.saveGoogleAccessToken(token, expiresAt)
             Result.success(token)
