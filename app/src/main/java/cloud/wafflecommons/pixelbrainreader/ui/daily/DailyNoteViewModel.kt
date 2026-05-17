@@ -93,8 +93,17 @@ class DailyNoteViewModel @Inject constructor(
     private val syncHealthDataUseCase: SyncHealthDataUseCase,
     private val dailyNoteRepository: cloud.wafflecommons.pixelbrainreader.data.repository.DailyNoteRepository,
     private val taskRepository: cloud.wafflecommons.pixelbrainreader.data.repository.TaskRepository,
-    private val syncOrchestrator: cloud.wafflecommons.pixelbrainreader.data.sync.SyncOrchestrator
+    private val syncOrchestrator: cloud.wafflecommons.pixelbrainreader.data.sync.SyncOrchestrator,
+    private val googleCalendarRepository: cloud.wafflecommons.pixelbrainreader.data.repository.GoogleCalendarRepository
 ) : ViewModel() {
+
+    /**
+     * Tracks `/event` command lines already dispatched, keyed by date, to keep
+     * the debouncer's auto-scan idempotent: re-saving a note that still
+     * contains a previously-processed command must not create a duplicate.
+     * Entries for inactive dates are dropped when [loadDailyNote] swaps date.
+     */
+    private val processedEventCommands = mutableMapOf<LocalDate, MutableSet<String>>()
 
     // [NEW] Reactive Date Selection
     private val _selectedDate = MutableStateFlow(LocalDate.now())
@@ -297,6 +306,10 @@ class DailyNoteViewModel @Inject constructor(
     }
 
     fun loadDailyNote(date: LocalDate) {
+        if (date != _selectedDate.value) {
+            // Forget commands processed for the date we're leaving.
+            processedEventCommands.remove(_selectedDate.value)
+        }
         _selectedDate.value = date
         viewModelScope.launch {
             _isLoading.value = true
@@ -372,10 +385,11 @@ class DailyNoteViewModel @Inject constructor(
     
     @OptIn(FlowPreview::class)
     private fun setupDebouncers() {
-        _ideasUpdates.debounce(1500L).filterNotNull().distinctUntilChanged().onEach { 
+        _ideasUpdates.debounce(1500L).filterNotNull().distinctUntilChanged().onEach { content ->
             _saveState.value = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.SAVING
             try {
-                dashboardRepository.updateSecondBrain(_selectedDate.value, "IDEAS", it)
+                dashboardRepository.updateSecondBrain(_selectedDate.value, "IDEAS", content)
+                scanContentForEventCommands(content, _selectedDate.value)
                 _saveState.value = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.SAVED
                 delay(2500L)
                 if (_saveState.value == cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.SAVED) {
@@ -386,10 +400,11 @@ class DailyNoteViewModel @Inject constructor(
             }
         }.launchIn(viewModelScope)
 
-        _notesUpdates.debounce(1500L).filterNotNull().distinctUntilChanged().onEach { 
+        _notesUpdates.debounce(1500L).filterNotNull().distinctUntilChanged().onEach { content ->
             _saveState.value = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.SAVING
             try {
-                dashboardRepository.updateSecondBrain(_selectedDate.value, "NOTES", it)
+                dashboardRepository.updateSecondBrain(_selectedDate.value, "NOTES", content)
+                scanContentForEventCommands(content, _selectedDate.value)
                 _saveState.value = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.SAVED
                 delay(2500L)
                 if (_saveState.value == cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.SAVED) {
@@ -402,6 +417,66 @@ class DailyNoteViewModel @Inject constructor(
     }
 
     fun clearUserMessage() { _userMessage.value = null }
+
+    // --- V6 Sub-turn C: Google Calendar command surface ----------------------
+
+    /**
+     * Parses a `/event ...` command line and creates the corresponding event
+     * in the user's primary Google Calendar. Result surfaces via
+     * [_userMessage] (Snackbar in DailyNoteScreen).
+     *
+     * Safe to call directly from UI or from [scanContentForEventCommands].
+     */
+    fun createEventFromCommand(line: String, date: LocalDate = _selectedDate.value) {
+        val parsed = cloud.wafflecommons.pixelbrainreader.data.utils.MarkdownCommandParser
+            .parseEvent(line, today = date)
+            ?: run {
+                _userMessage.value = "Couldn't parse /event command"
+                return
+            }
+        viewModelScope.launch(Dispatchers.IO) {
+            googleCalendarRepository.createEvent(parsed.title, parsed.startsAt).fold(
+                onSuccess = { _userMessage.value = "📅 Event created: ${parsed.title}" },
+                onFailure = { _userMessage.value = "Event create failed: ${it.message}" }
+            )
+        }
+    }
+
+    /**
+     * Deletes a timeline entry. If the entry is linked to Google Calendar
+     * (googleEventId != null), the delete is propagated remotely first;
+     * a remote failure aborts and surfaces an error, leaving the row intact.
+     */
+    fun deleteTimelineEvent(entry: TimelineEntryEntity) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val gid = entry.googleEventId
+            if (gid != null) {
+                val res = googleCalendarRepository.deleteEvent(gid)
+                if (res.isFailure) {
+                    _userMessage.value = "Couldn't delete on Google: ${res.exceptionOrNull()?.message}"
+                    return@launch
+                }
+            }
+            dashboardRepository.deleteTimelineEntry(entry.id)
+            _userMessage.value = "Event removed"
+        }
+    }
+
+    /**
+     * Scans saved content for `/event` lines and dispatches the ones we
+     * haven't seen yet for this date. Idempotent thanks to
+     * [processedEventCommands]: re-saving the same content is a no-op.
+     */
+    private fun scanContentForEventCommands(content: String, date: LocalDate) {
+        val processed = processedEventCommands.getOrPut(date) { mutableSetOf() }
+        content.lineSequence().forEach { rawLine ->
+            val line = rawLine.trim()
+            if (line.startsWith("/event", ignoreCase = true) && line !in processed) {
+                processed += line
+                createEventFromCommand(line, date)
+            }
+        }
+    }
     
     fun compileDay() {
         viewModelScope.launch(Dispatchers.IO) {

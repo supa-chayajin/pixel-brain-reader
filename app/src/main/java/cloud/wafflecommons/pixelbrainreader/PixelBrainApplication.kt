@@ -33,6 +33,7 @@ class PixelBrainApplication : Application(), Configuration.Provider {
             )
         )
         scheduleDailyBurnWork()
+        scheduleTaskSyncWorker()
         registerForegroundSyncObserver()
     }
 
@@ -81,6 +82,35 @@ class PixelBrainApplication : Application(), Configuration.Provider {
             "DailyExportWorker",
             androidx.work.ExistingPeriodicWorkPolicy.UPDATE,
             exportWorkRequest
+        )
+    }
+
+    /**
+     * Periodically drains the DailyTaskEntity outbox into Google Tasks.
+     * 15-minute interval is the WorkManager minimum for PeriodicWork.
+     * Constraints: network connected + battery not low; exponential backoff
+     * on Result.retry from TaskSyncWorker.
+     */
+    private fun scheduleTaskSyncWorker() {
+        val constraints = androidx.work.Constraints.Builder()
+            .setRequiredNetworkType(androidx.work.NetworkType.CONNECTED)
+            .setRequiresBatteryNotLow(true)
+            .build()
+
+        val request = androidx.work.PeriodicWorkRequestBuilder<cloud.wafflecommons.pixelbrainreader.data.workers.TaskSyncWorker>(
+            15, java.util.concurrent.TimeUnit.MINUTES
+        )
+            .setConstraints(constraints)
+            .setBackoffCriteria(
+                androidx.work.BackoffPolicy.EXPONENTIAL,
+                1, java.util.concurrent.TimeUnit.MINUTES
+            )
+            .build()
+
+        androidx.work.WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            cloud.wafflecommons.pixelbrainreader.data.workers.TaskSyncWorker.UNIQUE_NAME,
+            androidx.work.ExistingPeriodicWorkPolicy.UPDATE,
+            request
         )
     }
 

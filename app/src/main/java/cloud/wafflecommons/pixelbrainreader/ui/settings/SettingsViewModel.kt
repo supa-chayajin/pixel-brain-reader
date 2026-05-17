@@ -7,7 +7,7 @@ import android.content.IntentSender
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import cloud.wafflecommons.pixelbrainreader.data.auth.GoogleAuthManager
+import cloud.wafflecommons.pixelbrainreader.data.auth.GoogleAuthRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.AppThemeConfig
 import cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
 import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
@@ -38,7 +38,7 @@ class SettingsViewModel @Inject constructor(
     private val syncHealthDataUseCase: cloud.wafflecommons.pixelbrainreader.data.usecase.SyncHealthDataUseCase,
     private val habitRepository: cloud.wafflecommons.pixelbrainreader.data.repository.HabitRepository,
     private val gamificationPrefs: GamificationPreferences,
-    val googleAuthManager: GoogleAuthManager
+    val googleAuthManager: GoogleAuthRepository
 ) : ViewModel() {
 
     sealed class GoogleAuthEvent {
@@ -215,11 +215,11 @@ class SettingsViewModel @Inject constructor(
                 return@launch
             }
             when (val outcome = googleAuthManager.authorize().getOrNull()) {
-                is GoogleAuthManager.AuthorizationOutcome.Authorized -> {
+                is GoogleAuthRepository.AuthorizationOutcome.Authorized -> {
                     userPrefs.setGoogleSyncEnabled(true)
                     _googleAuthEvents.emit(GoogleAuthEvent.Linked)
                 }
-                is GoogleAuthManager.AuthorizationOutcome.NeedsUserConsent ->
+                is GoogleAuthRepository.AuthorizationOutcome.NeedsUserConsent ->
                     _googleAuthEvents.emit(GoogleAuthEvent.ConsentRequired(outcome.intentSender))
                 null ->
                     _googleAuthEvents.emit(GoogleAuthEvent.Failed("Authorization failed"))

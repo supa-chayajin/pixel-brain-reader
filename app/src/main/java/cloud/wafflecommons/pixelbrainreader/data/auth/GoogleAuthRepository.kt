@@ -47,7 +47,7 @@ private const val TOKEN_SKEW_MS = 60L * 1000L
  *     launch; the resolved Intent is handed back via [completeAuthorization].
  */
 @Singleton
-class GoogleAuthManager @Inject constructor(
+class GoogleAuthRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val secretManager: SecretManager
 ) {
@@ -104,11 +104,13 @@ class GoogleAuthManager @Inject constructor(
 
     suspend fun authorize(): Result<AuthorizationOutcome> {
         return try {
+            // V6 bidirectional sync needs read+write scopes.
+            // Users who consented to *_READONLY in V5 will be re-prompted for the wider scope.
             val request = AuthorizationRequest.Builder()
                 .setRequestedScopes(
                     listOf(
-                        Scope(CalendarScopes.CALENDAR_READONLY),
-                        Scope(TasksScopes.TASKS_READONLY)
+                        Scope(CalendarScopes.CALENDAR),
+                        Scope(TasksScopes.TASKS)
                     )
                 )
                 .build()

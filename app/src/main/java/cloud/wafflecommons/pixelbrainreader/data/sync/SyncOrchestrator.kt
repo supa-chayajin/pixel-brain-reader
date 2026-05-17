@@ -38,7 +38,8 @@ sealed class SyncState {
 class SyncOrchestrator @Inject constructor(
     private val jGitProvider: JGitProvider,
     private val syncHealthDataUseCase: SyncHealthDataUseCase,
-    private val googleSyncRepository: cloud.wafflecommons.pixelbrainreader.data.repository.GoogleSyncRepository,
+    private val googleCalendarRepository: cloud.wafflecommons.pixelbrainreader.data.repository.GoogleCalendarRepository,
+    private val googleTaskRepository: cloud.wafflecommons.pixelbrainreader.data.repository.GoogleTaskRepository,
     private val vaultDiscoveryRepository: cloud.wafflecommons.pixelbrainreader.data.repository.VaultDiscoveryRepository
 ) {
     companion object {
@@ -121,8 +122,8 @@ class SyncOrchestrator @Inject constructor(
             // Phase 2.5: Google Ecosystem Sync (non-fatal)
             Log.i(TAG, "Phase 2.5: Google Ecosystem sync...")
             try {
-                googleSyncRepository.syncTodayCalendarEvents()
-                googleSyncRepository.syncPendingGoogleTasks()
+                googleCalendarRepository.syncTodayEvents()
+                googleTaskRepository.syncPendingTasks()
                 Log.i(TAG, "Phase 2.5: Google sync OK")
             } catch (e: Exception) {
                 Log.w(TAG, "Phase 2.5: Google sync failed (non-fatal)", e)
