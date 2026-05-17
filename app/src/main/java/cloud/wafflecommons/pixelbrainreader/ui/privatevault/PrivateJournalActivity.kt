@@ -30,6 +30,7 @@ import androidx.compose.runtime.*
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -140,7 +141,7 @@ fun PrivateVaultScreen(
     onAuthenticate: () -> Unit,
     onBack: () -> Unit
 ) {
-    val state by viewModel.uiState.collectAsState()
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     
     // Handle One-Time Events (Toasts)
@@ -272,7 +273,7 @@ fun PrivateVaultScreen(
                  file = state.selectedFile,
                  content = state.editorContent,
                  title = state.selectedFile?.name?.removeSuffix(".md.enc") ?: "New Note",
-                 saveState = viewModel.saveState.collectAsState().value,
+                 saveState = viewModel.saveState.collectAsStateWithLifecycle().value,
                  onContentChange = { viewModel.onEditorContentChange(it) },
                  onClose = { viewModel.closeNote() },
                  onForceSave = { viewModel.forceSaveImmediate() }

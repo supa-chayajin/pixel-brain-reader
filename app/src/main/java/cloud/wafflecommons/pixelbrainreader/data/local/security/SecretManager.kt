@@ -25,6 +25,11 @@ class SecretManager @Inject constructor(
         const val KEY_PROVIDER = "provider_type"
         private const val KEY_GEMINI_API_KEY = "gemini_api_key"
         private const val KEY_VAULT_PASSWORD = "vault_master_password"
+
+        // V6: Google ecosystem auth tokens (Credential Manager + AuthorizationClient).
+        private const val KEY_GOOGLE_EMAIL = "google_email"
+        private const val KEY_GOOGLE_ACCESS_TOKEN = "google_access_token"
+        private const val KEY_GOOGLE_TOKEN_EXPIRES_AT = "google_token_expires_at"
     }
 
     private val masterKey = MasterKey.Builder(context)
@@ -158,5 +163,34 @@ class SecretManager @Inject constructor(
 
     fun getVaultPassword(): String? {
         return encryptedPrefs.getString(KEY_VAULT_PASSWORD, null)
+    }
+
+    // --- V6: Google ecosystem credentials -------------------------------------
+
+    fun saveGoogleEmail(email: String) {
+        encryptedPrefs.edit().putString(KEY_GOOGLE_EMAIL, email).apply()
+    }
+
+    fun getGoogleEmail(): String? = encryptedPrefs.getString(KEY_GOOGLE_EMAIL, null)
+
+    fun saveGoogleAccessToken(token: String, expiresAtMillis: Long) {
+        encryptedPrefs.edit()
+            .putString(KEY_GOOGLE_ACCESS_TOKEN, token)
+            .putLong(KEY_GOOGLE_TOKEN_EXPIRES_AT, expiresAtMillis)
+            .apply()
+    }
+
+    fun getGoogleAccessToken(): Pair<String, Long>? {
+        val token = encryptedPrefs.getString(KEY_GOOGLE_ACCESS_TOKEN, null) ?: return null
+        val expiresAt = encryptedPrefs.getLong(KEY_GOOGLE_TOKEN_EXPIRES_AT, 0L)
+        return token to expiresAt
+    }
+
+    fun clearGoogleAuth() {
+        encryptedPrefs.edit()
+            .remove(KEY_GOOGLE_EMAIL)
+            .remove(KEY_GOOGLE_ACCESS_TOKEN)
+            .remove(KEY_GOOGLE_TOKEN_EXPIRES_AT)
+            .apply()
     }
 }

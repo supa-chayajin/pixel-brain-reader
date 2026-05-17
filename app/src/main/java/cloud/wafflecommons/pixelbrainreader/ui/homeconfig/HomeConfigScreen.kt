@@ -16,6 +16,7 @@ import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -35,8 +36,8 @@ fun HomeConfigScreen(
     onNavigateBack: () -> Unit,
     viewModel: HomeConfigViewModel = hiltViewModel()
 ) {
-    val rooms by viewModel.allRooms.collectAsState()
-    val choresByRoom by viewModel.choresByRoom.collectAsState()
+    val rooms by viewModel.allRooms.collectAsStateWithLifecycle()
+    val choresByRoom by viewModel.choresByRoom.collectAsStateWithLifecycle()
 
     var showRoomDialog by remember { mutableStateOf<HomeRoomEntity?>(null) }
     var showCreateRoomDialog by remember { mutableStateOf(false) }

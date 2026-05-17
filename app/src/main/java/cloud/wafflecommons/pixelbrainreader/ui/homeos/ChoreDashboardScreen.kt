@@ -30,7 +30,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 fun ChoreDashboardScreen(
     viewModel: ChoreViewModel = hiltViewModel()
 ) {
-    val groupedChores by viewModel.groupedChores.collectAsState()
+    val groupedChores by viewModel.groupedChores.collectAsStateWithLifecycle()
     val syncState by viewModel.isSyncing.collectAsStateWithLifecycle()
     val isRefreshing = syncState is SyncState.Syncing
 

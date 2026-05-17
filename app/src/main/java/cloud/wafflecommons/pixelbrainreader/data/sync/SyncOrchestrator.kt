@@ -38,7 +38,8 @@ sealed class SyncState {
 class SyncOrchestrator @Inject constructor(
     private val jGitProvider: JGitProvider,
     private val syncHealthDataUseCase: SyncHealthDataUseCase,
-    private val googleSyncRepository: cloud.wafflecommons.pixelbrainreader.data.repository.GoogleSyncRepository
+    private val googleSyncRepository: cloud.wafflecommons.pixelbrainreader.data.repository.GoogleSyncRepository,
+    private val vaultDiscoveryRepository: cloud.wafflecommons.pixelbrainreader.data.repository.VaultDiscoveryRepository
 ) {
     companion object {
         private const val TAG = "SyncOrchestrator"
@@ -98,6 +99,12 @@ class SyncOrchestrator @Inject constructor(
                 }
             }
 
+            // Phase 1.5: Reindex Room from vault FS — keeps the index honest after a pull
+            // that may have added/removed/modified files outside the app's write path.
+            Log.i(TAG, "Phase 1.5: Reindexing Room (post-pull)...")
+            runCatching { vaultDiscoveryRepository.reindexAll(0L) }
+                .onFailure { Log.w(TAG, "Post-pull reindex failed (non-fatal)", it) }
+
             // Phase 2: Health Data Sync (non-fatal)
             Log.i(TAG, "Phase 2: Health data sync...")
             try {
@@ -138,6 +145,11 @@ class SyncOrchestrator @Inject constructor(
                 lastSyncTimestamp = System.currentTimeMillis()
                 return@withContext false
             }
+
+            // Phase 3.5: Reindex Room from vault FS so post-write state is reflected in the index.
+            Log.i(TAG, "Phase 3.5: Reindexing Room (post-push)...")
+            runCatching { vaultDiscoveryRepository.reindexAll(0L) }
+                .onFailure { Log.w(TAG, "Post-push reindex failed (non-fatal)", it) }
 
             Log.i(TAG, "=== Full Sync Cycle Complete ===")
             _syncState.value = SyncState.Success
