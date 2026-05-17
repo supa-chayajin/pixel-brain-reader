@@ -87,10 +87,9 @@ class GeminiRagManager @Inject constructor(
         Log.d("Cortex", "🚀 Prompting Gemini Nano via ML Kit...")
         val model = localModel
         if (model == null) return "Cortex Intelligence (Local) is not available on this device."
-        
-            val response = model.generateContent(prompt)
-             return response.candidates.firstOrNull()?.text ?: "No response from Cortex."
 
+        val response = model.generateContent(prompt)
+        return response.candidates.firstOrNull()?.text ?: "No response from Cortex."
     }
 
     /**

@@ -26,10 +26,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Bolt
+import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Psychology
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import cloud.wafflecommons.pixelbrainreader.data.ai.NanoState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -68,6 +72,16 @@ fun ChatPanel(
         targetValue = if (viewModel.currentMode == ChatMode.ORACLE) Color(0xFF9C27B0) else Color(0xFFFF9800), // Purple vs Orange
         label = "modeColor"
     )
+
+    val nanoState by viewModel.nanoState.collectAsStateWithLifecycle()
+
+    if (viewModel.showCloudFallbackDialog) {
+        CloudFallbackDialog(
+            reason = viewModel.cloudFallbackReason,
+            onConfirm = viewModel::onConfirmCloudFallback,
+            onDismiss = viewModel::onDismissCloudFallback
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -117,6 +131,12 @@ fun ChatPanel(
 
             // Input Area
             Column {
+                // Nano availability indicator — proactive, always visible
+                NanoStatusIndicator(
+                    state = nanoState,
+                    modifier = Modifier.padding(start = 24.dp, top = 4.dp, bottom = 2.dp)
+                )
+
                 // Loading Indicator Text
                 AnimatedVisibility(visible = viewModel.loadingStage != null) {
                     Text(
@@ -409,6 +429,89 @@ fun StealthInputBar(
             }
         }
     }
+}
+
+@Composable
+fun NanoStatusIndicator(state: NanoState, modifier: Modifier = Modifier) {
+    val (icon, tint, label) = when (state) {
+        is NanoState.Ready -> Triple(
+            Icons.Rounded.Bolt,
+            MaterialTheme.colorScheme.primary,
+            "Gemini Nano · on-device"
+        )
+        is NanoState.Downloading -> Triple(
+            Icons.Rounded.Bolt,
+            MaterialTheme.colorScheme.tertiary,
+            "Gemini Nano · downloading…"
+        )
+        is NanoState.Checking, NanoState.Unknown -> Triple(
+            Icons.Rounded.Bolt,
+            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+            "Checking on-device AI…"
+        )
+        is NanoState.Unavailable, is NanoState.Error -> Triple(
+            Icons.Rounded.CloudOff,
+            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f),
+            "On-device AI unavailable · cloud requires consent"
+        )
+    }
+
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = label,
+            tint = tint,
+            modifier = Modifier.size(14.dp)
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = tint
+        )
+    }
+}
+
+@Composable
+fun CloudFallbackDialog(
+    reason: String?,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                imageVector = Icons.Rounded.CloudOff,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary
+            )
+        },
+        title = { Text("Local AI unavailable") },
+        text = {
+            Column {
+                Text(
+                    reason ?: "Gemini Nano cannot process this request.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "Sending this prompt to the secure Cloud Gemini service means it will leave your device.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) { Text("Use Cloud") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
 }
 
 @Composable

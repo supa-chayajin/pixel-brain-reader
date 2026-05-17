@@ -75,6 +75,13 @@ android {
         }
     }
 
+    // Make android.util.Log return defaults instead of throwing in JVM unit tests
+    testOptions {
+        unitTests {
+            isReturnDefaultValues = true
+        }
+    }
+
     // AI Models (TFLite) must not be compressed
     androidResources {
         noCompress += "tflite"
@@ -172,6 +179,8 @@ dependencies {
     // AI Core & MediaPipe (V4.0: Neural Vault)
     implementation(libs.kotlinx.coroutines.play.services)
     implementation(libs.google.ai.client)
+    // Gemini Nano on-device (AICore) — privacy-first local inference, no silent cloud fallback
+    implementation(libs.google.ai.edge.aicore)
     implementation(libs.mediapipe.tasks.text)
     implementation(libs.kotlinx.coroutines.guava)
     implementation(libs.mlkit.genai.prompt)

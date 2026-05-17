@@ -28,6 +28,7 @@ coroutinesPlayServices = "1.7.3"
 mlkitGenai = "1.0.0-alpha1"
 mlkitGenaiBeta = "1.0.0-beta1"
 googleAiClient = "0.9.0"
+googleAiEdgeAicore = "0.0.1-exp01"
 connectClient = "1.1.0"
 vico = "1.13.0"
 remoteCreationCore = "1.0.0-alpha03"
@@ -122,6 +123,7 @@ mlkit-genai-summarization = { group = "com.google.mlkit", name = "genai-summariz
 mlkit-genai-rewriting = { group = "com.google.mlkit", name = "genai-rewriting", version.ref = "mlkitGenaiBeta" }
 mlkit-genai-proofreading = { group = "com.google.mlkit", name = "genai-proofreading", version.ref = "mlkitGenaiBeta" }
 google-ai-client = { group = "com.google.ai.client.generativeai", name = "generativeai", version.ref = "googleAiClient" }
+google-ai-edge-aicore = { group = "com.google.ai.edge.aicore", name = "aicore", version.ref = "googleAiEdgeAicore" }
 jgit = { group = "org.eclipse.jgit", name = "org.eclipse.jgit", version = "6.8.0.202311291450-r" }
 kaml = { group = "com.charleskorn.kaml", name = "kaml", version = "0.60.0" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version = "1.6.3" }
