@@ -62,12 +62,41 @@ class GoogleTaskRepository @Inject constructor(
             }
             try {
                 val service = buildService(token)
+                val zone = ZoneId.systemDefault()
+                val startInstant = today.atStartOfDay(zone).toInstant()
+                val endInstant = today.plusDays(1).atStartOfDay(zone).toInstant()
+                val offsetMinutes = zone.rules.getOffset(startInstant).totalSeconds / 60
+                // Server-side narrowing. dueMin/dueMax are RFC 3339 strings;
+                // we encode the explicit local offset so the bounds match the
+                // user's actual "today", not a UTC-shifted day.
+                val dueMin = DateTime(startInstant.toEpochMilli(), offsetMinutes).toStringRfc3339()
+                val dueMax = DateTime(endInstant.toEpochMilli(), offsetMinutes).toStringRfc3339()
+
+                // Drop yesterday's stale Google rows (and rows that fell out of
+                // the new strict filter, e.g. overdue or null-due imports from
+                // before the V6 fix). Locally-dirty and pending-deletion rows
+                // are preserved so TaskSyncWorker can finish draining them.
+                taskDao.purgeCleanGoogleTasksForDate(today.toString())
+
                 var total = 0
                 for (list in service.tasklists().list().execute().items.orEmpty()) {
                     val tasks = service.tasks().list(list.id)
                         .setShowCompleted(false)
+                        .setDueMin(dueMin)
+                        .setDueMax(dueMax)
                         .execute()
-                    tasks.items.orEmpty().forEach { gt ->
+
+                    // Client-side strict filter: import ONLY tasks whose due date
+                    // (in local TZ) equals today. This single equality check
+                    // enforces Rule A (today only), Rule B (no null due), and
+                    // Rule C (no overdue) — and also defends against the server
+                    // dueMin/dueMax returning boundary rows due to TZ quirks.
+                    val todayOnly = tasks.items.orEmpty().filter { gt ->
+                        val dueLocal = parseDueToLocalDate(gt.due, zone)
+                        dueLocal != null && dueLocal == today
+                    }
+
+                    todayOnly.forEach { gt ->
                         val entity = DailyTaskEntity(
                             scheduledDate = today.toString(),
                             label = gt.title ?: "Untitled Task",
@@ -141,6 +170,19 @@ class GoogleTaskRepository @Inject constructor(
                 Result.failure(e)
             }
         }
+
+    /**
+     * Google Tasks emits `due` as RFC 3339 (e.g. "2026-05-17T00:00:00.000Z").
+     * Returns the calendar date in [zone], or null if missing/unparseable.
+     */
+    private fun parseDueToLocalDate(due: String?, zone: ZoneId): LocalDate? {
+        if (due.isNullOrBlank()) return null
+        return try {
+            java.time.OffsetDateTime.parse(due).atZoneSameInstant(zone).toLocalDate()
+        } catch (e: Exception) {
+            null
+        }
+    }
 
     private fun dueAsRfc3339(date: LocalDate): String {
         // Tasks model exposes `due` as a String (RFC 3339). The server discards

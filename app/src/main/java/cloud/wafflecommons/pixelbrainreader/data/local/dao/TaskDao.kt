@@ -7,7 +7,9 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface TaskDao {
 
-    @Query("SELECT * FROM daily_tasks WHERE scheduledDate = :date ORDER BY isDone ASC, priority DESC")
+    // V6 outbox: pendingDeletion rows are hidden from the live UI so deletes
+    // feel instant. Use getTasksSnapshot if you need every row including pending.
+    @Query("SELECT * FROM daily_tasks WHERE scheduledDate = :date AND pendingDeletion = 0 ORDER BY isDone ASC, priority DESC")
     fun getTasksForDate(date: String): Flow<List<DailyTaskEntity>>
 
     @Query("SELECT * FROM daily_tasks WHERE scheduledDate = :date ORDER BY isDone ASC, priority DESC")
@@ -53,4 +55,22 @@ interface TaskDao {
 
     @Query("UPDATE daily_tasks SET isDirty = 0 WHERE id = :id")
     suspend fun clearDirty(id: String)
+
+    /**
+     * Drops every Google-sourced row for [date] that has no pending local
+     * mutation (isDirty=0 AND pendingDeletion=0). Called before re-importing
+     * today's Google Tasks so rows that no longer match the strict "due ==
+     * today" filter (overdue, null-due, etc.) don't linger from a stale import.
+     *
+     * Preserves locally-checked rows the TaskSyncWorker hasn't pushed yet, and
+     * preserves rows queued for remote deletion.
+     */
+    @Query("""
+        DELETE FROM daily_tasks
+        WHERE source = 'GoogleTasks'
+          AND scheduledDate = :date
+          AND isDirty = 0
+          AND pendingDeletion = 0
+    """)
+    suspend fun purgeCleanGoogleTasksForDate(date: String)
 }
