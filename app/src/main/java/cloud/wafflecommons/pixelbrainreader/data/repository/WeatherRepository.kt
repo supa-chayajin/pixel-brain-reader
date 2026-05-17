@@ -8,11 +8,15 @@ import android.os.Build
 import android.util.Log
 import androidx.core.content.ContextCompat
 import cloud.wafflecommons.pixelbrainreader.data.remote.OpenMeteoService
+import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
 import java.time.LocalDate
@@ -39,15 +43,21 @@ class WeatherRepository @Inject constructor(
     private val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
 
     suspend fun getCurrentWeatherAndLocation(): WeatherData? {
-        val location = getLastKnownLocation() ?: return null
+        val location = getLastKnownLocation()
+        if (location == null) {
+            Log.w("WeatherRepository", "Weather skipped: getLastKnownLocation returned null " +
+                    "(no permission, no cached fix, or active fetch timed out)")
+            return null
+        }
+        Log.d("WeatherRepository", "Got location: ${location.latitude},${location.longitude}")
         val city = getCityName(location.latitude, location.longitude)
-        
+        Log.d("WeatherRepository", "Resolved city: $city")
+
         return try {
-            // Use Forecast for Today
             val response = service.getForecast(location.latitude, location.longitude)
             val wmoCode = response.daily.weathercode.firstOrNull() ?: 0
             val maxTemp = response.daily.temperature_2m_max.firstOrNull() ?: 0.0
-            
+            Log.d("WeatherRepository", "OpenMeteo OK: code=$wmoCode, max=$maxTemp")
             WeatherData(
                 emoji = mapWmoToEmoji(wmoCode),
                 temperature = "${maxTemp.toInt()}°C",
@@ -55,6 +65,9 @@ class WeatherRepository @Inject constructor(
                 description = "Forecast",
                 code = wmoCode
             )
+        } catch (e: CancellationException) {
+            // flatMapLatest cancelled us; let the framework see it.
+            throw e
         } catch (e: Exception) {
             Log.e("WeatherRepository", "Failed to fetch weather", e)
             null
@@ -93,18 +106,48 @@ class WeatherRepository @Inject constructor(
     }
 
     private suspend fun getLastKnownLocation(): android.location.Location? {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+        val granted = ContextCompat.checkSelfPermission(
+            context, Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!granted) {
+            Log.w("WeatherRepository", "ACCESS_COARSE_LOCATION not granted; weather disabled until permission is granted")
             return null
         }
 
-        return suspendCancellableCoroutine { cont ->
-            fusedLocationClient.lastLocation.addOnSuccessListener { location ->
-                cont.resume(location)
-            }.addOnFailureListener {
-                cont.resume(null)
-            }.addOnCanceledListener {
-                cont.resume(null)
+        // Step 1: try the cheap cached fix.
+        val cached: android.location.Location? = suspendCancellableCoroutine { cont ->
+            fusedLocationClient.lastLocation
+                .addOnSuccessListener { cont.resume(it) }
+                .addOnFailureListener { cont.resume(null) }
+                .addOnCanceledListener { cont.resume(null) }
+        }
+        if (cached != null) return cached
+
+        // Step 2: no cached fix (fresh install, location was off, etc.). Force a one-shot
+        // active request with the cheap BALANCED priority. Many devices return null from
+        // lastLocation until something has actively asked for a fix at least once.
+        // 10s timeout so an offline GPS doesn't keep the weather flow stuck forever —
+        // the caller will see null and emit, instead of waiting indefinitely.
+        Log.i("WeatherRepository", "lastLocation was null; requesting active fix (10s timeout)")
+        return try {
+            withTimeoutOrNull(10_000L) {
+                suspendCancellableCoroutine<android.location.Location?> { cont ->
+                    fusedLocationClient
+                        .getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, null)
+                        .addOnSuccessListener { cont.resume(it) }
+                        .addOnFailureListener {
+                            Log.w("WeatherRepository", "Active location request failed", it)
+                            cont.resume(null)
+                        }
+                        .addOnCanceledListener { cont.resume(null) }
+                }
+            }.also {
+                if (it == null) Log.w("WeatherRepository", "Active location fix timed out or returned null")
             }
+        } catch (e: SecurityException) {
+            // Permission revoked between our check and the call (rare).
+            Log.e("WeatherRepository", "Permission revoked mid-request", e)
+            null
         }
     }
 
@@ -125,6 +168,8 @@ class WeatherRepository @Inject constructor(
                 val addresses = geocoder.getFromLocation(lat, long, 1)
                 addresses?.firstOrNull()?.locality ?: addresses?.firstOrNull()?.subAdminArea
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e("WeatherRepository", "Geocoder failed", e)
             null

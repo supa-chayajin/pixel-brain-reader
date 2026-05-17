@@ -15,6 +15,8 @@ import java.io.Writer
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 sealed class SyncResult {
@@ -37,6 +39,16 @@ class JGitProvider @Inject constructor(
     init {
         cleanStaleLocks()
     }
+
+    /**
+     * Serializes every JGit write across all callers (HabitRepository background
+     * push, SyncOrchestrator foreground sync, NoteRepository save, etc.). JGit's
+     * own .git/index.lock file is per-operation and gives a hard failure on
+     * contention — this mutex prevents concurrent writers from racing into it.
+     * cleanStaleLocks() runs under the lock so a previously-crashed lock from
+     * a process that died with a held mutex still gets cleared.
+     */
+    private val gitMutex = Mutex()
 
     private val rootDir: File
         get() = File(context.filesDir, "vault")
@@ -133,15 +145,18 @@ class JGitProvider @Inject constructor(
      * Stages all changes (git add .).
      */
     suspend fun addAll(): Result<Unit> = withContext(Dispatchers.IO) {
-        try {
-            Git.open(rootDir).use { git ->
-                // Directive: Use git.add().addFilepattern(".").call() effectively acting as a git add .
-                git.add().addFilepattern(".").call()
-                git.add().addFilepattern(".").setUpdate(true).call()
+        gitMutex.withLock {
+            cleanStaleLocks()
+            try {
+                Git.open(rootDir).use { git ->
+                    // Directive: Use git.add().addFilepattern(".").call() effectively acting as a git add .
+                    git.add().addFilepattern(".").call()
+                    git.add().addFilepattern(".").setUpdate(true).call()
+                }
+                Result.success(Unit)
+            } catch (e: Exception) {
+                Result.failure(e)
             }
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
         }
     }
 
@@ -149,13 +164,16 @@ class JGitProvider @Inject constructor(
      * Removes a file from the git index.
      */
     suspend fun removeFile(relativePath: String): Result<Unit> = withContext(Dispatchers.IO) {
-        try {
-            Git.open(rootDir).use { git ->
-                git.rm().addFilepattern(relativePath).setCached(true).call()
+        gitMutex.withLock {
+            cleanStaleLocks()
+            try {
+                Git.open(rootDir).use { git ->
+                    git.rm().addFilepattern(relativePath).setCached(true).call()
+                }
+                Result.success(Unit)
+            } catch (e: Exception) {
+                Result.failure(e)
             }
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
         }
     }
 
@@ -163,13 +181,16 @@ class JGitProvider @Inject constructor(
      * Adds a specific file to the git index.
      */
     suspend fun addFile(relativePath: String): Result<Unit> = withContext(Dispatchers.IO) {
-        try {
-            Git.open(rootDir).use { git ->
-                git.add().addFilepattern(relativePath).call()
+        gitMutex.withLock {
+            cleanStaleLocks()
+            try {
+                Git.open(rootDir).use { git ->
+                    git.add().addFilepattern(relativePath).call()
+                }
+                Result.success(Unit)
+            } catch (e: Exception) {
+                Result.failure(e)
             }
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
         }
     }
 
@@ -182,39 +203,42 @@ class JGitProvider @Inject constructor(
      * Handles Detached HEAD by switching to main if needed.
      */
     suspend fun commit(message: String): Result<Unit> = withContext(Dispatchers.IO) {
-        try {
-            Git.open(rootDir).use { git ->
-                // 1. Fix Detached HEAD
-                val repo = git.repository
-                val branch = repo.branch
-                // ObjectId.isId(branch) checks if it's a commit hash (detached) vs a ref name
-                if (org.eclipse.jgit.lib.ObjectId.isId(branch)) {
-                    Log.w("JGitProvider", "Detached HEAD detected ($branch). Checking out 'main'...")
-                    git.checkout().setName("main").call()
-                }
+        gitMutex.withLock {
+            cleanStaleLocks()
+            try {
+                Git.open(rootDir).use { git ->
+                    // 1. Fix Detached HEAD
+                    val repo = git.repository
+                    val branch = repo.branch
+                    // ObjectId.isId(branch) checks if it's a commit hash (detached) vs a ref name
+                    if (org.eclipse.jgit.lib.ObjectId.isId(branch)) {
+                        Log.w("JGitProvider", "Detached HEAD detected ($branch). Checking out 'main'...")
+                        git.checkout().setName("main").call()
+                    }
 
-                // 2. Force Add (Stage All)
-                // Add new/modified files
-                git.add().addFilepattern(".").call()
-                // Stage deletions
-                git.add().addFilepattern(".").setUpdate(true).call()
+                    // 2. Force Add (Stage All)
+                    // Add new/modified files
+                    git.add().addFilepattern(".").call()
+                    // Stage deletions
+                    git.add().addFilepattern(".").setUpdate(true).call()
 
-                // 3. Commit
-                val status = git.status().call()
-                if (status.hasUncommittedChanges()) {
-                    val revCommit = git.commit()
-                        .setMessage(message)
-                        .setAuthor("PixelBrain User", "user@pixelbrain.local")
-                        .call()
-                    Log.i("JGitProvider", "Committed: $message (Hash: ${revCommit.name})")
-                } else {
-                    Log.d("JGitProvider", "No changes to commit after adding.")
+                    // 3. Commit
+                    val status = git.status().call()
+                    if (status.hasUncommittedChanges()) {
+                        val revCommit = git.commit()
+                            .setMessage(message)
+                            .setAuthor("PixelBrain User", "user@pixelbrain.local")
+                            .call()
+                        Log.i("JGitProvider", "Committed: $message (Hash: ${revCommit.name})")
+                    } else {
+                        Log.d("JGitProvider", "No changes to commit after adding.")
+                    }
                 }
+                Result.success(Unit)
+            } catch (e: Exception) {
+                Log.e("JGitProvider", "Commit Failed", e)
+                Result.failure(e)
             }
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Log.e("JGitProvider", "Commit Failed", e)
-            Result.failure(e)
         }
     }
 
@@ -223,23 +247,26 @@ class JGitProvider @Inject constructor(
      */
     suspend fun push(remoteName: String = "origin"): Result<Unit> = withContext(Dispatchers.IO) {
         if (!isReady()) return@withContext Result.failure(Exception("Repository not initialized"))
-        
-        try {
-            val token = secretManager.getToken() ?: return@withContext Result.failure(Exception("No API Token found"))
-            val provider = UsernamePasswordCredentialsProvider("token", token)
 
-            Git.open(rootDir).use { git ->
-                git.push()
-                    .setRemote(remoteName)
-                    .setCredentialsProvider(provider)
-                    .setProgressMonitor(AndroidLogProgressMonitor())
-                    .call()
+        gitMutex.withLock {
+            cleanStaleLocks()
+            try {
+                val token = secretManager.getToken() ?: return@withContext Result.failure(Exception("No API Token found"))
+                val provider = UsernamePasswordCredentialsProvider("token", token)
+
+                Git.open(rootDir).use { git ->
+                    git.push()
+                        .setRemote(remoteName)
+                        .setCredentialsProvider(provider)
+                        .setProgressMonitor(AndroidLogProgressMonitor())
+                        .call()
+                }
+                Log.i("JGitProvider", "Push Successful")
+                Result.success(Unit)
+            } catch (e: Exception) {
+                Log.e("JGitProvider", "Push Failed", e)
+                Result.failure(e)
             }
-            Log.i("JGitProvider", "Push Successful")
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Log.e("JGitProvider", "Push Failed", e)
-            Result.failure(e)
         }
     }
 
@@ -250,8 +277,10 @@ class JGitProvider @Inject constructor(
     suspend fun pull(remoteName: String = "origin"): SyncResult = withContext(Dispatchers.IO) {
         if (!isReady()) return@withContext SyncResult.Error(Exception("Repository not initialized"))
 
-        try {
-            ensureCriticalDirectories() // Defensive check before pulling
+        gitMutex.withLock {
+            cleanStaleLocks()
+            try {
+                ensureCriticalDirectories() // Defensive check before pulling
 
             val token = secretManager.getToken() ?: return@withContext SyncResult.Error(Exception("No API Token found"))
             val provider = UsernamePasswordCredentialsProvider("token", token)
@@ -305,15 +334,18 @@ class JGitProvider @Inject constructor(
             }
             Log.i("JGitProvider", "Pull Successful")
             return@withContext SyncResult.Success
-        } catch (e: Exception) {
-             if (e is RefNotAdvertisedException) {
-                 Log.w("JGitProvider", "Pull skipped: Ref not advertised (Empty repo?)")
-                 return@withContext SyncResult.Success
-             } else {
-                 Log.e("JGitProvider", "Pull Failed", e)
-                 return@withContext SyncResult.Error(e)
-             }
+            } catch (e: Exception) {
+                 if (e is RefNotAdvertisedException) {
+                     Log.w("JGitProvider", "Pull skipped: Ref not advertised (Empty repo?)")
+                     return@withContext SyncResult.Success
+                 } else {
+                     Log.e("JGitProvider", "Pull Failed", e)
+                     return@withContext SyncResult.Error(e)
+                 }
+            }
         }
+        // gitMutex closed; unreachable but required for compiler.
+        SyncResult.Success
     }
 
     /**

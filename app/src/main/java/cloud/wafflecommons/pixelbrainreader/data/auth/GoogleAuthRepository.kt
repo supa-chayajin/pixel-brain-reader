@@ -217,6 +217,16 @@ class GoogleAuthRepository @Inject constructor(
     // --- Background-safe accessor --------------------------------------------
 
     /**
+     * Forgets the cached access token (keeps the linked email + scopes). Use
+     * after a 401 from a Google API to force the next [getValidAccessToken]
+     * call to re-authorize via AuthorizationClient. Silent — the user does not
+     * see UI unless consent was revoked server-side.
+     */
+    fun invalidateAccessToken() {
+        secretManager.clearGoogleAccessToken()
+    }
+
+    /**
      * Returns a valid access token, refreshing silently via [authorize] when
      * the cached one is near expiry. Returns null when a fresh UI consent is
      * required — background callers (SyncOrchestrator, workers) must skip

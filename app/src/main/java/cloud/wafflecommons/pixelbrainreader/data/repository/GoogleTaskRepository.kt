@@ -6,6 +6,8 @@ import cloud.wafflecommons.pixelbrainreader.data.local.dao.TaskDao
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyTaskEntity
 import com.google.api.client.http.HttpRequestInitializer
 import com.google.api.client.http.HttpTransport
+import com.google.api.client.http.HttpUnsuccessfulResponseHandler
+import kotlinx.coroutines.runBlocking
 import com.google.api.client.json.JsonFactory
 import com.google.api.client.util.DateTime
 import com.google.api.services.tasks.Tasks
@@ -43,10 +45,22 @@ class GoogleTaskRepository @Inject constructor(
 ) {
 
     private fun buildService(token: String): Tasks {
-        val bearer = HttpRequestInitializer { request ->
+        // See GoogleCalendarRepository.buildService for the retry-handler rationale.
+        val initializer = HttpRequestInitializer { request ->
             request.headers.authorization = "Bearer $token"
+            request.unsuccessfulResponseHandler = HttpUnsuccessfulResponseHandler { req, response, supportsRetry ->
+                if (response.statusCode == 401 && supportsRetry) {
+                    android.util.Log.w(TAG, "401 from Tasks API; invalidating cached token and retrying once")
+                    authRepository.invalidateAccessToken()
+                    val fresh = runBlocking { authRepository.getValidAccessToken() }
+                    if (fresh != null) {
+                        req.headers.authorization = "Bearer $fresh"
+                        true
+                    } else false
+                } else false
+            }
         }
-        return Tasks.Builder(transport, jsonFactory, bearer)
+        return Tasks.Builder(transport, jsonFactory, initializer)
             .setApplicationName(APP_NAME)
             .build()
     }
