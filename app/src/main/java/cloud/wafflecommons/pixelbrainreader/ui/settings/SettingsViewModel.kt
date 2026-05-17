@@ -207,22 +207,35 @@ class SettingsViewModel @Inject constructor(
 
     fun connectGoogle(activity: Activity) {
         viewModelScope.launch {
+            // Credential Manager identity is best-effort. When it refuses
+            // (TYPE_NO_CREDENTIAL on devices where OAuth consent screen / SHA-1
+            // aren't fully wired), we fall through to AuthorizationClient —
+            // it uses a different GMS code path and brings its own account
+            // picker via the consent intent. The email gets captured from
+            // AuthorizationResult.toGoogleSignInAccount() in either path.
             val signIn = googleAuthManager.signIn(activity)
             if (signIn.isFailure) {
-                _googleAuthEvents.emit(
-                    GoogleAuthEvent.Failed(signIn.exceptionOrNull()?.message ?: "Sign-in failed")
+                Log.w(
+                    "SettingsViewModel",
+                    "Credential Manager sign-in failed; falling through to AuthorizationClient",
+                    signIn.exceptionOrNull()
                 )
-                return@launch
             }
-            when (val outcome = googleAuthManager.authorize().getOrNull()) {
+            val outcome = googleAuthManager.authorize().getOrNull()
+            when (outcome) {
                 is GoogleAuthRepository.AuthorizationOutcome.Authorized -> {
                     userPrefs.setGoogleSyncEnabled(true)
                     _googleAuthEvents.emit(GoogleAuthEvent.Linked)
                 }
                 is GoogleAuthRepository.AuthorizationOutcome.NeedsUserConsent ->
                     _googleAuthEvents.emit(GoogleAuthEvent.ConsentRequired(outcome.intentSender))
-                null ->
-                    _googleAuthEvents.emit(GoogleAuthEvent.Failed("Authorization failed"))
+                null -> {
+                    // Both Credential Manager AND AuthorizationClient failed —
+                    // surface the more specific Credential Manager error if we have one.
+                    val msg = signIn.exceptionOrNull()?.message
+                        ?: "Google connection failed; check Cloud Console config"
+                    _googleAuthEvents.emit(GoogleAuthEvent.Failed(msg))
+                }
             }
         }
     }
