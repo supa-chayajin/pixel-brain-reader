@@ -190,15 +190,36 @@ class DailyNoteViewModel @Inject constructor(
         recentMoods
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // Weather Flow (Reactive)
-    private val _weather = combine(_selectedDate, _weatherRefreshTrigger) { date, _ -> date }
+    // Weather Flow (Reactive).
+    // The previous version caught Exception (which includes CancellationException)
+    // and tried emit(null). When flatMapLatest cancelled mid-fetch, the catch
+    // swallowed the CE, then emit(null) re-threw CE because the coroutine was
+    // already dead — so the StateFlow never received a value and the UI stuck
+    // on the Loading placeholder. Now we split CE vs real failure and let
+    // cancellation propagate cleanly.
+    private val _weather = combine(_selectedDate, _weatherRefreshTrigger) { date, trigger ->
+        Log.d("WeatherFlow", "Combine: date=$date trigger=$trigger")
+        date
+    }
         .flatMapLatest { date ->
             flow {
-                if (date == LocalDate.now()) {
-                    emit(try { weatherRepository.getCurrentWeatherAndLocation() } catch (e: Exception) { null })
-                } else {
-                    emit(try { weatherRepository.getHistoricalWeather(date) } catch (e: Exception) { null })
+                Log.d("WeatherFlow", "Fetching weather for $date")
+                val result: cloud.wafflecommons.pixelbrainreader.data.repository.WeatherData? = try {
+                    if (date == LocalDate.now()) {
+                        weatherRepository.getCurrentWeatherAndLocation()
+                    } else {
+                        weatherRepository.getHistoricalWeather(date)
+                    }
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    // flatMapLatest replaced us; let the framework see it.
+                    Log.d("WeatherFlow", "Fetch cancelled for $date")
+                    throw e
+                } catch (e: Exception) {
+                    Log.e("WeatherFlow", "Fetch failed for $date", e)
+                    null
                 }
+                Log.d("WeatherFlow", "Emitting $result for $date")
+                emit(result)
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), cloud.wafflecommons.pixelbrainreader.data.repository.WeatherData(
             emoji = "⌛",

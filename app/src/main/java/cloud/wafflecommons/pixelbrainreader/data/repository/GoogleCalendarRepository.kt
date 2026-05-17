@@ -6,6 +6,8 @@ import cloud.wafflecommons.pixelbrainreader.data.local.dao.DailyDashboardDao
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.TimelineEntryEntity
 import com.google.api.client.http.HttpRequestInitializer
 import com.google.api.client.http.HttpTransport
+import com.google.api.client.http.HttpUnsuccessfulResponseHandler
+import kotlinx.coroutines.runBlocking
 import com.google.api.client.json.JsonFactory
 import com.google.api.client.util.DateTime
 import com.google.api.services.calendar.Calendar
@@ -48,10 +50,27 @@ class GoogleCalendarRepository @Inject constructor(
 ) {
 
     private fun buildService(token: String): Calendar {
-        val bearer = HttpRequestInitializer { request ->
+        // Initializer stamps the bearer header AND attaches a 401 retry handler:
+        // when Google rejects the cached token (early revocation, scope change,
+        // clock skew vs our 55-min TTL), invalidate the cache and re-fetch a
+        // fresh token via AuthorizationClient. runBlocking is acceptable here
+        // because the HTTP call is already on Dispatchers.IO and the handler
+        // is sync by design.
+        val initializer = HttpRequestInitializer { request ->
             request.headers.authorization = "Bearer $token"
+            request.unsuccessfulResponseHandler = HttpUnsuccessfulResponseHandler { req, response, supportsRetry ->
+                if (response.statusCode == 401 && supportsRetry) {
+                    android.util.Log.w(TAG, "401 from Calendar API; invalidating cached token and retrying once")
+                    authRepository.invalidateAccessToken()
+                    val fresh = runBlocking { authRepository.getValidAccessToken() }
+                    if (fresh != null) {
+                        req.headers.authorization = "Bearer $fresh"
+                        true
+                    } else false
+                } else false
+            }
         }
-        return Calendar.Builder(transport, jsonFactory, bearer)
+        return Calendar.Builder(transport, jsonFactory, initializer)
             .setApplicationName(APP_NAME)
             .build()
     }
@@ -77,6 +96,14 @@ class GoogleCalendarRepository @Inject constructor(
                 val offsetMinutes = zone.rules.getOffset(startInstant).totalSeconds / 60
                 val timeMin = DateTime(startInstant.toEpochMilli(), offsetMinutes)
                 val timeMax = DateTime(endInstant.toEpochMilli(), offsetMinutes)
+
+                // FK guard: timeline_entries(date) → daily_dashboard(date). Insert
+                // the parent dashboard row first (IGNORE on conflict) so the
+                // upserts below don't trip SQLITE_CONSTRAINT_FOREIGNKEY when
+                // today's dashboard hasn't been materialized yet.
+                dailyDashboardDao.insertDashboard(
+                    cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyDashboardEntity(date = today)
+                )
 
                 // Drop yesterday's Calendar-sourced timeline rows (and rows for
                 // events the user moved to another day in Google's UI). Locally-

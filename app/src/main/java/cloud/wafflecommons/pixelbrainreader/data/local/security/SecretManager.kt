@@ -193,4 +193,17 @@ class SecretManager @Inject constructor(
             .remove(KEY_GOOGLE_TOKEN_EXPIRES_AT)
             .apply()
     }
+
+    /**
+     * Clears ONLY the cached access token + expiry, preserving the linked email.
+     * Used by GoogleAuthRepository.invalidateAccessToken so a 401 from the
+     * Google APIs forces the next [getValidAccessToken] call to re-authorize
+     * silently via AuthorizationClient, without un-linking the account.
+     */
+    fun clearGoogleAccessToken() {
+        encryptedPrefs.edit()
+            .remove(KEY_GOOGLE_ACCESS_TOKEN)
+            .remove(KEY_GOOGLE_TOKEN_EXPIRES_AT)
+            .apply()
+    }
 }
