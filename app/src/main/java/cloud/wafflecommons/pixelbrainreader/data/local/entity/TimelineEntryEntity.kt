@@ -30,5 +30,8 @@ data class TimelineEntryEntity(
     val content: String,
     // Store original line to preserve formatting if needed during burn-back
     val originalMarkdown: String? = null,
-    val googleEventId: String? = null // For duplicate detection in Google Calendar sync
+    val googleEventId: String? = null, // For duplicate detection in Google Calendar sync
+    // V6: outbox flags drained by CalendarSyncWorker
+    val isDirty: Boolean = false,
+    val pendingDeletion: Boolean = false
 )

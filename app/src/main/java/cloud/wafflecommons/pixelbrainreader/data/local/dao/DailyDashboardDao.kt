@@ -44,7 +44,9 @@ interface DailyDashboardDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTimelineEntry(entry: TimelineEntryEntity)
 
-    @Query("SELECT * FROM timeline_entries WHERE date = :date ORDER BY time ASC")
+    // V6 outbox: pendingDeletion rows are hidden from the live UI so deletes
+    // feel instant. Snapshot/burn-back queries still see them via getTimelineSnapshot.
+    @Query("SELECT * FROM timeline_entries WHERE date = :date AND pendingDeletion = 0 ORDER BY time ASC")
     fun getLiveTimeline(date: LocalDate): Flow<List<TimelineEntryEntity>>
 
     @Query("SELECT * FROM timeline_entries WHERE date = :date ORDER BY time ASC")
@@ -56,6 +58,40 @@ interface DailyDashboardDao {
     @Query("DELETE FROM timeline_entries WHERE id = :id")
     suspend fun deleteTimelineEntryById(id: String)
 
+    /**
+     * Drops every Calendar-sourced timeline entry for [date] (rows whose
+     * googleEventId is non-null) that has no pending local mutation. Called
+     * before re-importing today's events so rows that no longer match the
+     * strict window don't linger from a stale import.
+     *
+     * Preserves:
+     *  - User-created timeline entries (googleEventId IS NULL — kept by source).
+     *  - Locally-edited Google entries (isDirty = 1) — worker hasn't pushed yet.
+     *  - Entries queued for remote deletion (pendingDeletion = 1).
+     */
+    @Query("""
+        DELETE FROM timeline_entries
+        WHERE date = :date
+          AND googleEventId IS NOT NULL
+          AND isDirty = 0
+          AND pendingDeletion = 0
+    """)
+    suspend fun purgeGoogleTimelineForDate(date: LocalDate)
+
+    // --- V6 Calendar outbox ---------------------------------------------------
+
+    @Query("SELECT * FROM timeline_entries WHERE id = :id LIMIT 1")
+    suspend fun getTimelineEntryById(id: String): TimelineEntryEntity?
+
+    @Query("SELECT * FROM timeline_entries WHERE isDirty = 1 OR pendingDeletion = 1")
+    suspend fun getDirtyTimelineSnapshot(): List<TimelineEntryEntity>
+
+    @Query("UPDATE timeline_entries SET googleEventId = :googleEventId, isDirty = 0 WHERE id = :id")
+    suspend fun markTimelinePushedWithGoogleId(id: String, googleEventId: String)
+
+    @Query("UPDATE timeline_entries SET isDirty = 0 WHERE id = :id")
+    suspend fun clearTimelineDirty(id: String)
+
     @Query("SELECT * FROM timeline_entries WHERE googleEventId = :googleEventId LIMIT 1")
     suspend fun getTimelineEntryByGoogleEventId(googleEventId: String): TimelineEntryEntity?
 
@@ -63,7 +99,9 @@ interface DailyDashboardDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTask(task: DailyTaskEntity)
 
-    @Query("SELECT * FROM daily_tasks WHERE scheduledDate = :date ORDER BY isDone ASC, scheduledTime ASC NULLS LAST, priority DESC")
+    // V6 outbox: pendingDeletion rows are hidden from the live UI so deletes
+    // feel instant. Snapshot/burn-back queries still see them via getTasksSnapshot.
+    @Query("SELECT * FROM daily_tasks WHERE scheduledDate = :date AND pendingDeletion = 0 ORDER BY isDone ASC, scheduledTime ASC NULLS LAST, priority DESC")
     fun getLiveTasks(date: LocalDate): Flow<List<DailyTaskEntity>>
 
     @Query("SELECT * FROM daily_tasks WHERE scheduledDate = :date ORDER BY isDone ASC, scheduledTime ASC NULLS LAST, priority DESC")

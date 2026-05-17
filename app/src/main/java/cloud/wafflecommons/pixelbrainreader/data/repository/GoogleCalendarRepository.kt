@@ -68,15 +68,32 @@ class GoogleCalendarRepository @Inject constructor(
             try {
                 val service = buildService(token)
                 val zone = ZoneId.systemDefault()
-                val start = DateTime(today.atStartOfDay(zone).toInstant().toEpochMilli())
-                val end = DateTime(today.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli())
+                // Compose timeMin / timeMax with the explicit local offset baked
+                // into the RFC 3339 string (e.g. 2026-05-17T00:00:00.000+02:00),
+                // not the UTC `Z` form. The Calendar API accepts both, but the
+                // explicit-offset form is the unambiguous spec for "local today".
+                val startInstant = today.atStartOfDay(zone).toInstant()
+                val endInstant = today.plusDays(1).atStartOfDay(zone).toInstant()
+                val offsetMinutes = zone.rules.getOffset(startInstant).totalSeconds / 60
+                val timeMin = DateTime(startInstant.toEpochMilli(), offsetMinutes)
+                val timeMax = DateTime(endInstant.toEpochMilli(), offsetMinutes)
+
+                // Drop yesterday's Calendar-sourced timeline rows (and rows for
+                // events the user moved to another day in Google's UI). Locally-
+                // created entries (googleEventId IS NULL) are preserved.
+                dailyDashboardDao.purgeGoogleTimelineForDate(today)
 
                 var total = 0
                 for (cal in service.calendarList().list().execute().items.orEmpty()) {
                     val events = service.events().list(cal.id)
-                        .setTimeMin(start)
-                        .setTimeMax(end)
+                        .setTimeMin(timeMin)
+                        .setTimeMax(timeMax)
                         .setSingleEvents(true)
+                        // Expand recurring events in the user's local TZ so
+                        // occurrences land on the same calendar day they would
+                        // visually appear in Google Calendar.
+                        .setTimeZone(zone.id)
+                        .setOrderBy("startTime")
                         .execute()
                     events.items.orEmpty().forEach { evt ->
                         val entity = TimelineEntryEntity(

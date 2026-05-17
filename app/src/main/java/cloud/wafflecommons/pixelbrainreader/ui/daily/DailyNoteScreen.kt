@@ -276,8 +276,7 @@ fun DailyNoteScreen(
                                         Spacer(Modifier.height(8.dp))
                                         TimelineList(
                                             events = state.timelineEvents,
-                                            onEdit = { editTimelineEntry = it },
-                                            onDelete = viewModel::deleteTimelineEvent
+                                            onEdit = { editTimelineEntry = it }
                                         )
                                     }
 
@@ -306,8 +305,7 @@ fun DailyNoteScreen(
                             cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 6) {
                                 TimelineList(
                                     events = state.timelineEvents,
-                                    onEdit = { editTimelineEntry = it },
-                                    onDelete = viewModel::deleteTimelineEvent
+                                    onEdit = { editTimelineEntry = it }
                                 )
                             }
                         }
@@ -558,11 +556,7 @@ private fun JournalHeader(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun TimelineList(
-    events: List<TimelineEntryEntity>,
-    onEdit: (TimelineEntryEntity) -> Unit,
-    onDelete: (TimelineEntryEntity) -> Unit
-) {
+private fun TimelineList(events: List<TimelineEntryEntity>, onEdit: (TimelineEntryEntity) -> Unit) {
     if (events.isEmpty()) {
         Text(
             text = "No events recorded yet.",
@@ -574,64 +568,13 @@ private fun TimelineList(
         Column(modifier = Modifier.padding(start = 8.dp)) {
             val sortedEvents = events.sortedBy { it.time }
             sortedEvents.forEachIndexed { index, event ->
-                SwipeToDeleteRow(onDismiss = { onDelete(event) }) {
-                    TimelineItem(
-                        event = event,
-                        isLast = index == sortedEvents.lastIndex,
-                        onClick = { onEdit(event) }
-                    )
-                }
-            }
-        }
-    }
-}
-
-/**
- * Swipe-left to dismiss. The dismissal is optimistic: confirmValueChange
- * returns true so the row visually slides off immediately, then [onDismiss]
- * fires. If the underlying delete fails, the Room flow re-emits the entry
- * and it reappears (the VM also surfaces an error Snackbar).
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun SwipeToDeleteRow(
-    onDismiss: () -> Unit,
-    content: @Composable () -> Unit
-) {
-    val dismissState = rememberSwipeToDismissBoxState(
-        confirmValueChange = { value ->
-            if (value == SwipeToDismissBoxValue.EndToStart) {
-                onDismiss()
-                true
-            } else false
-        }
-    )
-    SwipeToDismissBox(
-        state = dismissState,
-        enableDismissFromStartToEnd = false,
-        enableDismissFromEndToStart = true,
-        backgroundContent = {
-            val justify = when (dismissState.dismissDirection) {
-                SwipeToDismissBoxValue.EndToStart -> Arrangement.End
-                else -> Arrangement.Start
-            }
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.errorContainer)
-                    .padding(horizontal = 20.dp),
-                horizontalArrangement = justify,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Delete,
-                    contentDescription = "Delete",
-                    tint = MaterialTheme.colorScheme.onErrorContainer
+                TimelineItem(
+                    event = event,
+                    isLast = index == sortedEvents.lastIndex,
+                    onClick = { onEdit(event) }
                 )
             }
         }
-    ) {
-        content()
     }
 }
 

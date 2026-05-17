@@ -13,10 +13,13 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.decodeFromString
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -47,6 +50,14 @@ class HabitRepository @Inject constructor(
     private val habitMutex = Mutex()
     private val habitsDir = "10_Journal/data/habits"
     private val configFile = "10_Journal/data/habits/config.json"
+
+    /**
+     * Repository-owned scope for fire-and-forget background work (Git push after
+     * a habit log). Outlives any ViewModelScope so a fast user navigation can't
+     * cancel the push. SupervisorJob means a single push failure doesn't tear
+     * down sibling pushes.
+     */
+    private val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     // --- Auto-Initialization ---
     
@@ -259,47 +270,60 @@ class HabitRepository @Inject constructor(
              .mapValues { (_, logs) -> logs.map { mapLogToDomain(it) } }
     }
 
-    suspend fun logHabit(date: LocalDate, entry: HabitLogEntry) = habitMutex.withLock {
+    suspend fun logHabit(date: LocalDate, entry: HabitLogEntry) {
+        // Phase 1 — Optimistic UI: write Room FIRST, off the mutex.
+        // This is what drives the Habit Flow → Compose recomposition, so the
+        // checkbox flips on the next frame instead of after the JSON+network round-trip.
         withContext(Dispatchers.IO) {
-            val year = date.year
-            val logPath = "$habitsDir/log_$year.json"
-            
-            // Read
-            val currentJson = fileRepository.readFile(logPath)
-            val allLogs: MutableMap<String, MutableList<HabitLogDto>> = try {
-                if (!currentJson.isNullOrBlank()) {
-                    jsonParser.decodeFromString(currentJson)
-                } else mutableMapOf()
-            } catch (e: Exception) { mutableMapOf() }
-            
-            // Map Domain -> DTO
-            val dto = HabitLogDto(
-                habitId = entry.habitId,
-                date = entry.date,
-                value = entry.value,
-                status = entry.status.name
-            )
-            
-            // Update List
-            val habitLogs = allLogs.getOrPut(entry.habitId) { mutableListOf() }
-            habitLogs.removeIf { it.date == entry.date }
-            habitLogs.add(dto)
-            
-            // Save File
-            val newJson = jsonParser.encodeToString(allLogs)
-            fileRepository.saveFileLocally(logPath, newJson)
-            
-            // Update DB
             habitDao.insertLog(mapLogToEntity(entry))
-            
-            // Sync
+        }
+
+        // Phase 2 — Vault persistence (JSON file). Still suspending so a caller
+        // that needs to await disk consistency (e.g. before a manual sync) can
+        // join here. Held under the mutex to serialize concurrent toggles on
+        // the same year file, but no longer blocks the UI update.
+        habitMutex.withLock {
+            withContext(Dispatchers.IO) {
+                val year = date.year
+                val logPath = "$habitsDir/log_$year.json"
+
+                val currentJson = fileRepository.readFile(logPath)
+                val allLogs: MutableMap<String, MutableList<HabitLogDto>> = try {
+                    if (!currentJson.isNullOrBlank()) jsonParser.decodeFromString(currentJson)
+                    else mutableMapOf()
+                } catch (e: Exception) {
+                    mutableMapOf()
+                }
+
+                val dto = HabitLogDto(
+                    habitId = entry.habitId,
+                    date = entry.date,
+                    value = entry.value,
+                    status = entry.status.name
+                )
+                val habitLogs = allLogs.getOrPut(entry.habitId) { mutableListOf() }
+                habitLogs.removeIf { it.date == entry.date }
+                habitLogs.add(dto)
+
+                val newJson = jsonParser.encodeToString(allLogs)
+                fileRepository.saveFileLocally(logPath, newJson)
+            }
+        }
+
+        // Phase 3 — Git push. Fire-and-forget on the repository's own scope so a
+        // fast follow-up toggle never waits for the network. Errors are logged;
+        // SyncOrchestrator picks up un-pushed work on the next foreground sync.
+        backgroundScope.launch {
             try {
                 val (owner, repo) = secretManager.getRepoInfo()
                 if (!owner.isNullOrBlank() && !repo.isNullOrBlank()) {
-                    fileRepository.pushDirtyFiles(owner, repo, "feat(habits): log habit ${entry.habitId} for $date")
+                    fileRepository.pushDirtyFiles(
+                        owner, repo,
+                        "feat(habits): log habit ${entry.habitId} for $date"
+                    )
                 }
             } catch (e: Exception) {
-                Log.e("HabitRepository", "Failed to sync", e)
+                Log.e("HabitRepository", "Background push failed for ${entry.habitId}@$date", e)
             }
         }
     }

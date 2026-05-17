@@ -120,8 +120,38 @@ class DailyDashboardRepository @Inject constructor(
         dashboardDao.insertTimelineEntry(entry)
     }
 
+    /**
+     * Local-first event creation. Inserts a [TimelineEntryEntity] with
+     * isDirty=true; CalendarSyncWorker picks it up and POSTs to Google,
+     * then writes the returned googleEventId back via markTimelinePushedWithGoogleId.
+     * Works offline — the row appears in the timeline immediately.
+     */
+    suspend fun queueTimelineEvent(date: LocalDate, time: LocalTime, content: String) =
+        withContext(Dispatchers.IO) {
+            ensureDashboard(date)
+            val entry = TimelineEntryEntity(
+                date = date,
+                time = time,
+                content = content,
+                isDirty = true
+            )
+            dashboardDao.insertTimelineEntry(entry)
+        }
+
+    /**
+     * For Google-linked entries the delete is deferred: the row is flagged
+     * pendingDeletion=true so CalendarSyncWorker drops it on Google before
+     * removing the local copy. Local-only entries are hard-deleted immediately.
+     */
     suspend fun deleteTimelineEntry(id: String) = withContext(Dispatchers.IO) {
-        dashboardDao.deleteTimelineEntryById(id)
+        val entry = dashboardDao.getTimelineEntryById(id)
+        if (entry?.googleEventId != null) {
+            dashboardDao.insertTimelineEntry(
+                entry.copy(pendingDeletion = true, isDirty = true)
+            )
+        } else {
+            dashboardDao.deleteTimelineEntryById(id)
+        }
     }
 
     suspend fun addTask(date: LocalDate, label: String, time: LocalTime? = null, priority: Int = 1) = withContext(Dispatchers.IO) {

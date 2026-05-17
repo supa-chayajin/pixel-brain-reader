@@ -421,9 +421,10 @@ class DailyNoteViewModel @Inject constructor(
     // --- V6 Sub-turn C: Google Calendar command surface ----------------------
 
     /**
-     * Parses a `/event ...` command line and creates the corresponding event
-     * in the user's primary Google Calendar. Result surfaces via
-     * [_userMessage] (Snackbar in DailyNoteScreen).
+     * Parses a `/event ...` command line and queues the corresponding event
+     * for Google Calendar via the outbox. The row appears in the timeline
+     * immediately (optimistic UI); CalendarSyncWorker POSTs to Google and
+     * writes the returned googleEventId back when the device is online.
      *
      * Safe to call directly from UI or from [scanContentForEventCommands].
      */
@@ -435,30 +436,25 @@ class DailyNoteViewModel @Inject constructor(
                 return
             }
         viewModelScope.launch(Dispatchers.IO) {
-            googleCalendarRepository.createEvent(parsed.title, parsed.startsAt).fold(
-                onSuccess = { _userMessage.value = "📅 Event created: ${parsed.title}" },
-                onFailure = { _userMessage.value = "Event create failed: ${it.message}" }
+            dashboardRepository.queueTimelineEvent(
+                date = parsed.startsAt.toLocalDate(),
+                time = parsed.startsAt.toLocalTime(),
+                content = parsed.title
             )
+            _userMessage.value = "📅 Event queued: ${parsed.title}"
         }
     }
 
     /**
-     * Deletes a timeline entry. If the entry is linked to Google Calendar
-     * (googleEventId != null), the delete is propagated remotely first;
-     * a remote failure aborts and surfaces an error, leaving the row intact.
+     * Deletes a timeline entry through the outbox. The repository decides
+     * whether to defer (Google-linked rows are flagged pendingDeletion for
+     * CalendarSyncWorker) or hard-delete (purely local rows).
      */
     fun deleteTimelineEvent(entry: TimelineEntryEntity) {
         viewModelScope.launch(Dispatchers.IO) {
-            val gid = entry.googleEventId
-            if (gid != null) {
-                val res = googleCalendarRepository.deleteEvent(gid)
-                if (res.isFailure) {
-                    _userMessage.value = "Couldn't delete on Google: ${res.exceptionOrNull()?.message}"
-                    return@launch
-                }
-            }
             dashboardRepository.deleteTimelineEntry(entry.id)
-            _userMessage.value = "Event removed"
+            _userMessage.value = if (entry.googleEventId != null)
+                "Event removal queued" else "Event removed"
         }
     }
 
