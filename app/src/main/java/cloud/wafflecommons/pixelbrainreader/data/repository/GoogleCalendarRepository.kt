@@ -1,0 +1,182 @@
+package cloud.wafflecommons.pixelbrainreader.data.repository
+
+import android.util.Log
+import cloud.wafflecommons.pixelbrainreader.data.auth.GoogleAuthRepository
+import cloud.wafflecommons.pixelbrainreader.data.local.dao.DailyDashboardDao
+import cloud.wafflecommons.pixelbrainreader.data.local.entity.TimelineEntryEntity
+import com.google.api.client.http.HttpRequestInitializer
+import com.google.api.client.http.HttpTransport
+import com.google.api.client.json.JsonFactory
+import com.google.api.client.util.DateTime
+import com.google.api.services.calendar.Calendar
+import com.google.api.services.calendar.model.Event
+import com.google.api.services.calendar.model.EventDateTime
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.LocalTime
+import java.time.OffsetDateTime
+import java.time.ZoneId
+import java.util.TimeZone
+import javax.inject.Inject
+import javax.inject.Singleton
+
+private const val TAG = "GoogleCalendarRepo"
+private const val APP_NAME = "PixelBrainReader"
+private const val PRIMARY_CALENDAR = "primary"
+
+/**
+ * Google Calendar bidirectional sync.
+ *
+ * Read: [syncTodayEvents] imports today's events from all calendars into Room.
+ * Write: [createEvent] / [updateEvent] / [deleteEvent] target the user's
+ * primary calendar. Multi-calendar write is intentionally out of scope.
+ *
+ * Token plumbing uses [HttpRequestInitializer] (the non-deprecated path):
+ * each HTTP request stamps its own bearer header. The deprecated
+ * GoogleCredential() approach is gone.
+ */
+@Singleton
+class GoogleCalendarRepository @Inject constructor(
+    private val authRepository: GoogleAuthRepository,
+    private val userPreferences: UserPreferencesRepository,
+    private val dailyDashboardDao: DailyDashboardDao,
+    private val transport: HttpTransport,
+    private val jsonFactory: JsonFactory
+) {
+
+    private fun buildService(token: String): Calendar {
+        val bearer = HttpRequestInitializer { request ->
+            request.headers.authorization = "Bearer $token"
+        }
+        return Calendar.Builder(transport, jsonFactory, bearer)
+            .setApplicationName(APP_NAME)
+            .build()
+    }
+
+    // --- READ -----------------------------------------------------------------
+
+    suspend fun syncTodayEvents(today: LocalDate = LocalDate.now()): Result<Int> =
+        withContext(Dispatchers.IO) {
+            if (!userPreferences.isGoogleSyncEnabled.first()) return@withContext Result.success(0)
+            val token = authRepository.getValidAccessToken() ?: run {
+                Log.w(TAG, "No valid token; skipping calendar import")
+                return@withContext Result.success(0)
+            }
+            try {
+                val service = buildService(token)
+                val zone = ZoneId.systemDefault()
+                val start = DateTime(today.atStartOfDay(zone).toInstant().toEpochMilli())
+                val end = DateTime(today.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli())
+
+                var total = 0
+                for (cal in service.calendarList().list().execute().items.orEmpty()) {
+                    val events = service.events().list(cal.id)
+                        .setTimeMin(start)
+                        .setTimeMax(end)
+                        .setSingleEvents(true)
+                        .execute()
+                    events.items.orEmpty().forEach { evt ->
+                        val entity = TimelineEntryEntity(
+                            date = today,
+                            time = extractStartTime(evt),
+                            content = "[${cal.summary ?: "Calendar"}] ${evt.summary ?: "No title"}",
+                            googleEventId = evt.id
+                        )
+                        val existing = dailyDashboardDao
+                            .getTimelineEntryByGoogleEventId(entity.googleEventId!!)
+                        dailyDashboardDao.insertTimelineEntry(
+                            if (existing != null) entity.copy(id = existing.id) else entity
+                        )
+                        total++
+                    }
+                }
+                Result.success(total)
+            } catch (e: Exception) {
+                Log.e(TAG, "Calendar import failed", e)
+                Result.failure(e)
+            }
+        }
+
+    // --- WRITE ----------------------------------------------------------------
+
+    suspend fun createEvent(
+        title: String,
+        startsAt: LocalDateTime,
+        endsAt: LocalDateTime = startsAt.plusHours(1)
+    ): Result<String> = withContext(Dispatchers.IO) {
+        val token = authRepository.getValidAccessToken()
+            ?: return@withContext Result.failure(IllegalStateException("No valid Google access token"))
+        try {
+            val service = buildService(token)
+            val tz = TimeZone.getDefault().id
+            val event = Event()
+                .setSummary(title)
+                .setStart(EventDateTime().setDateTime(toApiDateTime(startsAt)).setTimeZone(tz))
+                .setEnd(EventDateTime().setDateTime(toApiDateTime(endsAt)).setTimeZone(tz))
+            val created = service.events().insert(PRIMARY_CALENDAR, event).execute()
+            Log.i(TAG, "Created event ${created.id}: $title @ $startsAt")
+            Result.success(created.id)
+        } catch (e: Exception) {
+            Log.e(TAG, "createEvent failed", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun updateEvent(
+        eventId: String,
+        title: String? = null,
+        startsAt: LocalDateTime? = null,
+        endsAt: LocalDateTime? = null
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        val token = authRepository.getValidAccessToken()
+            ?: return@withContext Result.failure(IllegalStateException("No valid Google access token"))
+        try {
+            val service = buildService(token)
+            val current = service.events().get(PRIMARY_CALENDAR, eventId).execute()
+            title?.let { current.summary = it }
+            val tz = TimeZone.getDefault().id
+            startsAt?.let {
+                current.start = EventDateTime().setDateTime(toApiDateTime(it)).setTimeZone(tz)
+            }
+            endsAt?.let {
+                current.end = EventDateTime().setDateTime(toApiDateTime(it)).setTimeZone(tz)
+            }
+            service.events().update(PRIMARY_CALENDAR, eventId, current).execute()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e(TAG, "updateEvent failed for $eventId", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deleteEvent(eventId: String): Result<Unit> = withContext(Dispatchers.IO) {
+        val token = authRepository.getValidAccessToken()
+            ?: return@withContext Result.failure(IllegalStateException("No valid Google access token"))
+        try {
+            buildService(token).events().delete(PRIMARY_CALENDAR, eventId).execute()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e(TAG, "deleteEvent failed for $eventId", e)
+            Result.failure(e)
+        }
+    }
+
+    // --- Helpers --------------------------------------------------------------
+
+    private fun extractStartTime(evt: Event): LocalTime {
+        val raw = evt.start?.dateTime?.toString() ?: return LocalTime.MIDNIGHT
+        return try {
+            OffsetDateTime.parse(raw).toLocalTime()
+        } catch (e: Exception) {
+            LocalTime.MIDNIGHT
+        }
+    }
+
+    private fun toApiDateTime(local: LocalDateTime): DateTime {
+        val epoch = local.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        return DateTime(epoch)
+    }
+}

@@ -1,6 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.di
 
-import cloud.wafflecommons.pixelbrainreader.data.auth.GoogleAuthManager
+import cloud.wafflecommons.pixelbrainreader.data.auth.GoogleAuthRepository
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
 import com.google.api.client.json.gson.GsonFactory
 import com.google.api.services.calendar.Calendar

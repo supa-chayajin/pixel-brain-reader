@@ -36,7 +36,7 @@ import cloud.wafflecommons.pixelbrainreader.data.local.entity.ChoreEntity
         cloud.wafflecommons.pixelbrainreader.data.local.entity.HomeRoomEntity::class, // V4.6.1 Home Config
         ChoreEntity::class // V4.6 Home OS
     ], 
-    version = 22, // Version 22 for schema updates
+    version = 23, // V6: DailyTaskEntity gains isDirty + pendingDeletion for outbox sync
     exportSchema = false
 )
 @androidx.room.TypeConverters(RoomTypeConverters::class)

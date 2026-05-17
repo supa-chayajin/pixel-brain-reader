@@ -27,9 +27,30 @@ interface TaskDao {
     @Query("DELETE FROM daily_tasks WHERE id = :taskId")
     suspend fun deleteTask(taskId: String)
 
-    @Query("UPDATE daily_tasks SET isDone = :isDone WHERE id = :taskId")
+    // V6: auto-marks dirty when the task is linked to Google so TaskSyncWorker
+    // picks the toggle up. Local-only tasks (googleTaskId NULL) stay clean.
+    @Query("""
+        UPDATE daily_tasks
+        SET isDone = :isDone,
+            isDirty = CASE WHEN googleTaskId IS NOT NULL THEN 1 ELSE isDirty END
+        WHERE id = :taskId
+    """)
     suspend fun updateTaskStatus(taskId: String, isDone: Boolean)
 
     @Query("SELECT * FROM daily_tasks WHERE googleTaskId = :googleTaskId LIMIT 1")
     suspend fun getTaskByGoogleTaskId(googleTaskId: String): DailyTaskEntity?
+
+    // --- V6 outbox -----------------------------------------------------------
+
+    @Query("SELECT * FROM daily_tasks WHERE id = :id LIMIT 1")
+    suspend fun getTaskById(id: String): DailyTaskEntity?
+
+    @Query("SELECT * FROM daily_tasks WHERE isDirty = 1 OR pendingDeletion = 1")
+    suspend fun getDirtyTasksSnapshot(): List<DailyTaskEntity>
+
+    @Query("UPDATE daily_tasks SET googleTaskId = :googleTaskId, isDirty = 0 WHERE id = :id")
+    suspend fun markPushedWithGoogleId(id: String, googleTaskId: String)
+
+    @Query("UPDATE daily_tasks SET isDirty = 0 WHERE id = :id")
+    suspend fun clearDirty(id: String)
 }

@@ -24,5 +24,8 @@ data class DailyTaskEntity(
     val priority: Int = 1,
     val section: String = "Journal",
     val googleTaskId: String? = null, // ID from external provider (Google Tasks)
-    val source: String = "Local" // "Local", "GoogleTasks", etc.
+    val source: String = "Local", // "Local", "GoogleTasks", etc.
+    // V6: outbox flags drained by TaskSyncWorker
+    val isDirty: Boolean = false,
+    val pendingDeletion: Boolean = false
 )

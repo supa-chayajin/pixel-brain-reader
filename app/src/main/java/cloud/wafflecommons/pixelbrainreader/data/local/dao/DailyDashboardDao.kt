@@ -53,6 +53,9 @@ interface DailyDashboardDao {
     @Query("DELETE FROM timeline_entries WHERE date = :date")
     suspend fun clearTimeline(date: LocalDate)
 
+    @Query("DELETE FROM timeline_entries WHERE id = :id")
+    suspend fun deleteTimelineEntryById(id: String)
+
     @Query("SELECT * FROM timeline_entries WHERE googleEventId = :googleEventId LIMIT 1")
     suspend fun getTimelineEntryByGoogleEventId(googleEventId: String): TimelineEntryEntity?
 
@@ -66,7 +69,14 @@ interface DailyDashboardDao {
     @Query("SELECT * FROM daily_tasks WHERE scheduledDate = :date ORDER BY isDone ASC, scheduledTime ASC NULLS LAST, priority DESC")
     suspend fun getTasksSnapshot(date: LocalDate): List<DailyTaskEntity>
 
-    @Query("UPDATE daily_tasks SET isDone = :isDone WHERE id = :taskId")
+    // V6: auto-marks dirty when the task is linked to Google so TaskSyncWorker
+    // picks the toggle up. Mirrors TaskDao.updateTaskStatus for the DashboardRepo path.
+    @Query("""
+        UPDATE daily_tasks
+        SET isDone = :isDone,
+            isDirty = CASE WHEN googleTaskId IS NOT NULL THEN 1 ELSE isDirty END
+        WHERE id = :taskId
+    """)
     suspend fun updateTaskStatus(taskId: String, isDone: Boolean)
 
     @Query("DELETE FROM daily_tasks WHERE scheduledDate = :date")

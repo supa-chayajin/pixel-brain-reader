@@ -120,6 +120,10 @@ class DailyDashboardRepository @Inject constructor(
         dashboardDao.insertTimelineEntry(entry)
     }
 
+    suspend fun deleteTimelineEntry(id: String) = withContext(Dispatchers.IO) {
+        dashboardDao.deleteTimelineEntryById(id)
+    }
+
     suspend fun addTask(date: LocalDate, label: String, time: LocalTime? = null, priority: Int = 1) = withContext(Dispatchers.IO) {
         ensureDashboard(date)
         val task = DailyTaskEntity(
