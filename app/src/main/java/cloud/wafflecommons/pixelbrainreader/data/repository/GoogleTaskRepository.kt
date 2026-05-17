@@ -86,10 +86,9 @@ class GoogleTaskRepository @Inject constructor(
                 val dueMin = DateTime(startInstant.toEpochMilli(), offsetMinutes).toStringRfc3339()
                 val dueMax = DateTime(endInstant.toEpochMilli(), offsetMinutes).toStringRfc3339()
 
-                // Drop yesterday's stale Google rows (and rows that fell out of
-                // the new strict filter, e.g. overdue or null-due imports from
-                // before the V6 fix). Locally-dirty and pending-deletion rows
-                // are preserved so TaskSyncWorker can finish draining them.
+                // Drop yesterday's clean Google rows. Locally-dirty +
+                // pending-deletion rows are preserved so TaskSyncWorker can
+                // finish draining them.
                 taskDao.purgeCleanGoogleTasksForDate(today.toString())
 
                 var total = 0
@@ -100,11 +99,12 @@ class GoogleTaskRepository @Inject constructor(
                         .setDueMax(dueMax)
                         .execute()
 
-                    // Client-side strict filter: import ONLY tasks whose due date
-                    // (in local TZ) equals today. This single equality check
-                    // enforces Rule A (today only), Rule B (no null due), and
-                    // Rule C (no overdue) — and also defends against the server
-                    // dueMin/dueMax returning boundary rows due to TZ quirks.
+                    // Strict "today only" filter. A single equality check rejects:
+                    //   - tasks with no due date (parseDueToLocalDate returns null)
+                    //   - overdue tasks (dueLocal < today)
+                    //   - future tasks (dueLocal > today)
+                    // Also defends against the server's dueMin/dueMax returning
+                    // boundary rows due to RFC 3339 / time-zone quirks.
                     val todayOnly = tasks.items.orEmpty().filter { gt ->
                         val dueLocal = parseDueToLocalDate(gt.due, zone)
                         dueLocal != null && dueLocal == today
