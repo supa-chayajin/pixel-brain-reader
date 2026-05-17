@@ -23,14 +23,14 @@ class DailyNoteRepository @Inject constructor(
     private val fileDao: FileDao,
     private val fileContentDao: FileContentDao,
     private val gratitudeDao: cloud.wafflecommons.pixelbrainreader.data.local.dao.GratitudeDao,
-    private val grantXpUseCase: cloud.wafflecommons.pixelbrainreader.data.usecase.GrantXpUseCase
+    private val grantXpUseCase: cloud.wafflecommons.pixelbrainreader.data.usecase.GrantXpUseCase,
+    private val safeFileProvider: cloud.wafflecommons.pixelbrainreader.data.utils.SafeFileProvider
 ) {
 
     companion object {
         private const val JOURNAL_ROOT = "10_Journal"
         private const val TEMPLATE_PATH = "99_System/Templates/T_Daily_Journal.md"
         private const val DEFAULT_TEMPLATE = """---
----
 title: {{date}}
 date: {{date}}
 updated: {{date}}
@@ -101,16 +101,15 @@ links: []
      */
     suspend fun getDailyNoteContent(date: LocalDate): String? = withContext(Dispatchers.IO) {
         val fileName = date.format(DateTimeFormatter.ISO_DATE) + ".md"
-        val file = File(context.filesDir, "$JOURNAL_ROOT/$fileName")
-        
-        if (file.exists()) {
-             try {
-                 file.readText()
-             } catch (e: Exception) {
-                 Log.e("DailyNoteRepository", "Failed to read file from disk: ${file.path}", e)
-                 null
-             }
-        } else {
+        val path = "$JOURNAL_ROOT/$fileName"
+        try {
+            val file = safeFileProvider.getSafeFile(path)
+            if (file.exists()) file.readText() else null
+        } catch (e: SecurityException) {
+            Log.e("DailyNoteRepository", "Path traversal blocked for $path", e)
+            null
+        } catch (e: Exception) {
+            Log.e("DailyNoteRepository", "Failed to read $path", e)
             null
         }
     }
@@ -131,8 +130,8 @@ links: []
             val fileName = date.format(DateTimeFormatter.ISO_DATE) + ".md"
             val targetPath = "$JOURNAL_ROOT/$fileName"
 
-            // 1. Directory Guarantee
-            val journalDir = File(context.filesDir, JOURNAL_ROOT)
+            // 1. Directory Guarantee — resolve under vault root so writes land where JGit can see them.
+            val journalDir = safeFileProvider.getSafeFile(JOURNAL_ROOT)
             if (!journalDir.exists()) journalDir.mkdirs()
             fileRepository.createLocalFolder(JOURNAL_ROOT)
 
@@ -162,9 +161,9 @@ links: []
          withContext(Dispatchers.IO) {
              val fileName = date.format(DateTimeFormatter.ISO_DATE) + ".md"
              val targetPath = "$JOURNAL_ROOT/$fileName"
-             
-             // 1. Directory Guarantee
-             val journalDir = File(context.filesDir, JOURNAL_ROOT)
+
+             // 1. Directory Guarantee — vault-rooted so JGit picks the file up on next commit.
+             val journalDir = safeFileProvider.getSafeFile(JOURNAL_ROOT)
              if (!journalDir.exists()) journalDir.mkdirs()
              fileRepository.createLocalFolder(JOURNAL_ROOT)
              
@@ -219,14 +218,12 @@ links: []
         val fileName = date.format(DateTimeFormatter.ISO_DATE) + ".md"
         val path = "$JOURNAL_ROOT/$fileName"
         
-        // 1. Locate Physical File
-        // We use FileRepository logic or direct File access? 
-        // Direct access is safer for "Physical Backup" (bypassing DB/Cache).
-        val journalDir = File(context.filesDir, JOURNAL_ROOT)
+        // 1. Locate Physical File — resolve under vault root to match JGit's working tree.
+        val journalDir = safeFileProvider.getSafeFile(JOURNAL_ROOT)
         if (!journalDir.exists()) journalDir.mkdirs()
-        
-        val currentFile = File(journalDir, fileName)
-        val backupFile = File(journalDir, "${fileName}.bak")
+
+        val currentFile = safeFileProvider.getSafeFile("$JOURNAL_ROOT/$fileName")
+        val backupFile = safeFileProvider.getSafeFile("$JOURNAL_ROOT/${fileName}.bak")
         
         // 2. Create Backup
         if (currentFile.exists() && currentFile.length() > 0) {

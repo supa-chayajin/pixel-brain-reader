@@ -15,6 +15,7 @@ import androidx.compose.material3.TopAppBarDefaults // Added
 import androidx.compose.material3.ExperimentalMaterial3Api // Added
 import androidx.compose.ui.input.nestedscroll.nestedScroll // Added
 import androidx.compose.runtime.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -31,7 +32,7 @@ import java.time.format.DateTimeFormatter
 fun MoodHistoryScreen(
     viewModel: MoodViewModel = hiltViewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var showSheet by remember { mutableStateOf(false) }
     val context = androidx.compose.ui.platform.LocalContext.current
 

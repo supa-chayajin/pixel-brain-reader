@@ -34,6 +34,7 @@ import androidx.health.connect.client.PermissionController
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.material.icons.filled.HealthAndSafety
 import androidx.hilt.navigation.compose.hiltViewModel
+import android.app.Activity
 import android.widget.Toast
 import androidx.compose.material.icons.rounded.CleaningServices
 import androidx.compose.material.icons.rounded.DateRange
@@ -41,6 +42,7 @@ import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.permission.HealthPermission
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -51,8 +53,8 @@ fun SettingsScreen(
     onNavigateToHomeConfig: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsState()
-    val moodEmojiMapping by viewModel.moodEmojiMapping.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val moodEmojiMapping by viewModel.moodEmojiMapping.collectAsStateWithLifecycle()
     val scrollState = rememberScrollState()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
@@ -82,16 +84,26 @@ fun SettingsScreen(
 
     val coroutineScope = rememberCoroutineScope()
 
-    // Google Sign-In Launcher
-    val googleSignInLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
+    // V6: Credential Manager flow.
+    // signIn() is suspending and triggered from the VM; AuthorizationClient may
+    // surface a consent IntentSender, which we resolve through StartIntentSenderForResult.
+    val activity = LocalContext.current as Activity
+    val consentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartIntentSenderForResult()
     ) { result ->
-        val data = result.data
-        val authResult = viewModel.googleAuthManager.handleSignInResult(data)
-        viewModel.onGoogleSignInResult(authResult.isSuccess)
-        if (authResult.isFailure) {
-            val error = authResult.exceptionOrNull()
-            Toast.makeText(context, "Google Sign-In Failed: ${error?.message}", Toast.LENGTH_LONG).show()
+        viewModel.onConsentResolved(result.data)
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.googleAuthEvents.collect { event ->
+            when (event) {
+                is SettingsViewModel.GoogleAuthEvent.ConsentRequired ->
+                    consentLauncher.launch(IntentSenderRequest.Builder(event.intentSender).build())
+                SettingsViewModel.GoogleAuthEvent.Linked ->
+                    Toast.makeText(context, "Google account linked", Toast.LENGTH_SHORT).show()
+                is SettingsViewModel.GoogleAuthEvent.Failed ->
+                    Toast.makeText(context, "Google: ${event.message}", Toast.LENGTH_LONG).show()
+            }
         }
     }
     
@@ -197,7 +209,7 @@ fun SettingsScreen(
                     ),
                     onClick = {
                         if (!isEnabled) {
-                            googleSignInLauncher.launch(viewModel.googleAuthManager.getSignInIntent())
+                            viewModel.connectGoogle(activity)
                         } else {
                             viewModel.setGoogleSyncEnabled(false)
                         }
@@ -223,7 +235,7 @@ fun SettingsScreen(
                             checked = isEnabled,
                             onCheckedChange = { checked ->
                                 if (checked) {
-                                    googleSignInLauncher.launch(viewModel.googleAuthManager.getSignInIntent())
+                                    viewModel.connectGoogle(activity)
                                 } else {
                                     viewModel.setGoogleSyncEnabled(false)
                                 }

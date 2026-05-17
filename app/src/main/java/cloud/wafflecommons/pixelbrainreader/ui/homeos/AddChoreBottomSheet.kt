@@ -6,6 +6,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -19,7 +20,7 @@ fun AddChoreBottomSheet(
     onDismiss: () -> Unit,
     viewModel: ChoreViewModel
 ) {
-    val allRooms by viewModel.allRooms.collectAsState()
+    val allRooms by viewModel.allRooms.collectAsStateWithLifecycle()
 
     var name by remember { mutableStateOf("") }
     var selectedRoomId by remember { mutableStateOf("") }

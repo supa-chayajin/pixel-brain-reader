@@ -14,3 +14,13 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+.claude/
+.devtool/
+.opencode/
+.project-memory/
+.tooling-venv/
+graphify-out/
+scripts/
+CLAUDE.md
+opencode.json

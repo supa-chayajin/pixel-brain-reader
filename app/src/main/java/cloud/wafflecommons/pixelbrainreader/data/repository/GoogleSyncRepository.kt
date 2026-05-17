@@ -53,8 +53,10 @@ class GoogleSyncRepository @Inject constructor(
         if (!userPreferences.isGoogleSyncEnabled.first()) return@withContext Result.success(0)
 
         try {
-            // Placeholder: In Part 3 we'd get a real token. For now using a placeholder.
-            val token = "PLACEHOLDER_TOKEN" 
+            val token = googleAuthManager.getValidAccessToken() ?: run {
+                android.util.Log.w("GoogleSync", "No valid Google access token; skipping calendar sync")
+                return@withContext Result.success(0)
+            }
             val service = getCalendarService(token)
             
             val today = LocalDate.now()
@@ -114,7 +116,10 @@ class GoogleSyncRepository @Inject constructor(
         if (!userPreferences.isGoogleSyncEnabled.first()) return@withContext Result.success(0)
 
         try {
-            val token = "PLACEHOLDER_TOKEN"
+            val token = googleAuthManager.getValidAccessToken() ?: run {
+                android.util.Log.w("GoogleSync", "No valid Google access token; skipping tasks sync")
+                return@withContext Result.success(0)
+            }
             val service = getTasksService(token)
             
             val taskLists = service.tasklists().list().execute()

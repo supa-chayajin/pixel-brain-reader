@@ -6,7 +6,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -60,7 +60,7 @@ class MainActivity : FragmentActivity() {
 
         setContent {
             // Observe the theme from the repository directly
-            val themeConfig by userPrefs.themeConfig.collectAsState(initial = AppThemeConfig.FOLLOW_SYSTEM)
+            val themeConfig by userPrefs.themeConfig.collectAsStateWithLifecycle(initialValue = AppThemeConfig.FOLLOW_SYSTEM)
             
             val useDarkTheme = when (themeConfig) {
                 AppThemeConfig.DARK -> true

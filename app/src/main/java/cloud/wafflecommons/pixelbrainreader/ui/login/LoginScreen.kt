@@ -28,7 +28,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,11 +46,11 @@ fun LoginScreen(
     onLoginSuccess: () -> Unit,
     viewModel: LoginViewModel = hiltViewModel()
 ) {
-    val token by viewModel.token.collectAsState()
-    val repoUrl by viewModel.repoUrl.collectAsState()
-    val isLoading by viewModel.isLoading.collectAsState()
-    val isTokenValid by viewModel.isTokenValid.collectAsState()
-    val loginSuccess by viewModel.loginSuccess.collectAsState()
+    val token by viewModel.token.collectAsStateWithLifecycle()
+    val repoUrl by viewModel.repoUrl.collectAsStateWithLifecycle()
+    val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
+    val isTokenValid by viewModel.isTokenValid.collectAsStateWithLifecycle()
+    val loginSuccess by viewModel.loginSuccess.collectAsStateWithLifecycle()
 
     LaunchedEffect(loginSuccess) {
         if (loginSuccess) {

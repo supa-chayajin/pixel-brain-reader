@@ -1,9 +1,13 @@
 package cloud.wafflecommons.pixelbrainreader.ui.settings
 
+import android.app.Activity
 import android.content.Context
+import android.content.Intent
+import android.content.IntentSender
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import cloud.wafflecommons.pixelbrainreader.data.auth.GoogleAuthManager
 import cloud.wafflecommons.pixelbrainreader.data.repository.AppThemeConfig
 import cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
 import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
@@ -34,8 +38,15 @@ class SettingsViewModel @Inject constructor(
     private val syncHealthDataUseCase: cloud.wafflecommons.pixelbrainreader.data.usecase.SyncHealthDataUseCase,
     private val habitRepository: cloud.wafflecommons.pixelbrainreader.data.repository.HabitRepository,
     private val gamificationPrefs: GamificationPreferences,
-    val googleAuthManager: cloud.wafflecommons.pixelbrainreader.data.auth.GoogleAuthManager
+    val googleAuthManager: GoogleAuthManager
 ) : ViewModel() {
+
+    sealed class GoogleAuthEvent {
+        data class ConsentRequired(val intentSender: IntentSender) : GoogleAuthEvent()
+        data class Failed(val message: String) : GoogleAuthEvent()
+        object Linked : GoogleAuthEvent()
+    }
+
 
     data class SettingsUiState(
         val paneWidth: Float = 360f,
@@ -188,22 +199,44 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    // Auth events for the UI
-    private val _googleSignInRequest = MutableSharedFlow<Unit>()
-    val googleSignInRequest = _googleSignInRequest.asSharedFlow()
+    // V6: Credential Manager + AuthorizationClient flow.
+    // Activity-scoped operations are surfaced as events; the UI launches them
+    // and feeds the result back via onConsentResolved.
+    private val _googleAuthEvents = MutableSharedFlow<GoogleAuthEvent>(extraBufferCapacity = 1)
+    val googleAuthEvents = _googleAuthEvents.asSharedFlow()
 
-    fun requestGoogleSignIn() {
+    fun connectGoogle(activity: Activity) {
         viewModelScope.launch {
-            _googleSignInRequest.emit(Unit)
+            val signIn = googleAuthManager.signIn(activity)
+            if (signIn.isFailure) {
+                _googleAuthEvents.emit(
+                    GoogleAuthEvent.Failed(signIn.exceptionOrNull()?.message ?: "Sign-in failed")
+                )
+                return@launch
+            }
+            when (val outcome = googleAuthManager.authorize().getOrNull()) {
+                is GoogleAuthManager.AuthorizationOutcome.Authorized -> {
+                    userPrefs.setGoogleSyncEnabled(true)
+                    _googleAuthEvents.emit(GoogleAuthEvent.Linked)
+                }
+                is GoogleAuthManager.AuthorizationOutcome.NeedsUserConsent ->
+                    _googleAuthEvents.emit(GoogleAuthEvent.ConsentRequired(outcome.intentSender))
+                null ->
+                    _googleAuthEvents.emit(GoogleAuthEvent.Failed("Authorization failed"))
+            }
         }
     }
 
-    fun onGoogleSignInResult(success: Boolean) {
+    fun onConsentResolved(data: Intent?) {
         viewModelScope.launch {
-            if (success) {
+            val res = googleAuthManager.completeAuthorization(data)
+            if (res.isSuccess) {
                 userPrefs.setGoogleSyncEnabled(true)
+                _googleAuthEvents.emit(GoogleAuthEvent.Linked)
             } else {
-                userPrefs.setGoogleSyncEnabled(false)
+                _googleAuthEvents.emit(
+                    GoogleAuthEvent.Failed(res.exceptionOrNull()?.message ?: "Consent failed")
+                )
             }
         }
     }
