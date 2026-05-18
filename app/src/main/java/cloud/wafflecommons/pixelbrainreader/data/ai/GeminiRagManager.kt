@@ -3,8 +3,6 @@ package cloud.wafflecommons.pixelbrainreader.data.ai
 import android.content.Context
 import android.util.Log
 import cloud.wafflecommons.pixelbrainreader.BuildConfig
-import com.google.mlkit.genai.prompt.GenerativeModel
-import com.google.mlkit.genai.prompt.Generation
 import kotlinx.coroutines.flow.firstOrNull
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -16,11 +14,9 @@ import kotlinx.coroutines.flow.flow
 class GeminiRagManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val vectorSearchEngine: VectorSearchEngine,
-    private val userPrefs: cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
+    private val userPrefs: cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository,
+    private val localAiManager: LocalAiManager
 ) {
-    // ML Kit GenAI client for on-device Gemini Nano. `Generation.getClient()`
-    // is the documented factory; `GenerativeModel` itself is an interface.
-    private val localModel: GenerativeModel by lazy { Generation.getClient() }
 
     // --- RAG Core ---
     private suspend fun retrieveContext(query: String): List<String> {
@@ -74,18 +70,20 @@ class GeminiRagManager @Inject constructor(
     }
 
     /**
-     * Executes the prompt on Gemini Nano (On-Device).
-     * Uses ML Kit Prompt API.
+     * Executes the prompt on Gemini Nano (On-Device) via [LocalAiManager], which
+     * owns the model lifecycle and fast-fails when the model is not Ready. This
+     * keeps the Settings-driven download contract intact even for callers that
+     * reach the local engine through the RAG pipeline (e.g. [analyzeFolder]).
      */
     suspend fun generateWithLocalEngine(prompt: String): String {
-        Log.d("Cortex", "Prompting Gemini Nano via ML Kit…")
-        return try {
-            val response = localModel.generateContent(prompt)
-            response.candidates.firstOrNull()?.text ?: "No response from Cortex."
-        } catch (e: com.google.mlkit.genai.common.GenAiException) {
-            Log.e("Cortex", "ML Kit GenAI local inference failed (errorCode=${e.errorCode})", e)
-            "Cortex Intelligence (Local) is not available on this device."
-        }
+        Log.d("Cortex", "Prompting Gemini Nano via LocalAiManager…")
+        return localAiManager.generateResponse(prompt).fold(
+            onSuccess = { it },
+            onFailure = { e ->
+                Log.e("Cortex", "Local AI generation failed", e)
+                "Cortex (Local) unavailable: ${e.localizedMessage ?: e.message ?: "unknown error"}"
+            }
+        )
     }
 
     /**

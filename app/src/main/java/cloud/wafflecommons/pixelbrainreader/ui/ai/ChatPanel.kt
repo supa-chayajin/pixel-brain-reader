@@ -444,6 +444,11 @@ fun NanoStatusIndicator(state: NanoState, modifier: Modifier = Modifier) {
             MaterialTheme.colorScheme.tertiary,
             "Gemini Nano · downloading…"
         )
+        NanoState.NotDownloaded -> Triple(
+            Icons.Rounded.CloudOff,
+            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+            "Gemini Nano · download in Settings"
+        )
         is NanoState.Checking, NanoState.Unknown -> Triple(
             Icons.Rounded.Bolt,
             MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),

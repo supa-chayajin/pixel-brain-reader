@@ -55,12 +55,32 @@ class LocalAiManagerTest {
         val states: List<NanoState> = listOf(
             NanoState.Unknown,
             NanoState.Checking,
-            NanoState.Downloading(progress = 0L, totalBytes = 100L),
+            NanoState.NotDownloaded,
+            NanoState.Downloading(progress = 0.5f, bytesDownloaded = 50L, totalBytes = 100L),
             NanoState.Ready,
             NanoState.Unavailable("no model"),
             NanoState.Error(RuntimeException("boom"))
         )
-        assertEquals(6, states.size)
+        assertEquals(7, states.size)
+    }
+
+    @Test
+    fun `generateResponse fast-fails with Unavailable when state is not Ready`() = runTest {
+        // The manager starts in NanoState.Unknown. With a mocked Context there is no
+        // path to NanoState.Ready, so generateResponse must NOT trigger a download
+        // or warmup — it must return Result.failure(NanoException.Unavailable) without
+        // ever touching the model. This locks in the lifecycle-decoupling contract.
+        val manager = LocalAiManager(context)
+
+        val result = manager.generateResponse("hello")
+
+        assertTrue("Result should be failure", result.isFailure)
+        val ex = result.exceptionOrNull()
+        assertNotNull(ex)
+        assertTrue(
+            "Expected NanoException.Unavailable but got ${ex!!::class.simpleName}",
+            ex is NanoException.Unavailable
+        )
     }
 
     @Test
