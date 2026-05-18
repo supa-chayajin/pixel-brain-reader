@@ -3,8 +3,8 @@ package cloud.wafflecommons.pixelbrainreader.data.ai
 import android.content.Context
 import android.util.Log
 import cloud.wafflecommons.pixelbrainreader.BuildConfig
-import com.google.mlkit.genai.prompt.GenerateContentResponse
 import com.google.mlkit.genai.prompt.GenerativeModel
+import com.google.mlkit.genai.prompt.Generation
 import kotlinx.coroutines.flow.firstOrNull
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -18,15 +18,9 @@ class GeminiRagManager @Inject constructor(
     private val vectorSearchEngine: VectorSearchEngine,
     private val userPrefs: cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
 ) {
-    // Initialize the ML Kit Generative Model (Local)
-    private val localModel: GenerativeModel? by lazy { initOrGetModel() }
-
-    private fun initOrGetModel(): GenerativeModel? {
-        // FIXME: GenerativeModel is an interface. Need to find correct Factory/Builder.
-        // Disabling Local AI for now to allow build.
-        Log.e("Cortex", "ML Kit GenerativeModel init disabled: API mismatch.")
-        return null
-    }
+    // ML Kit GenAI client for on-device Gemini Nano. `Generation.getClient()`
+    // is the documented factory; `GenerativeModel` itself is an interface.
+    private val localModel: GenerativeModel by lazy { Generation.getClient() }
 
     // --- RAG Core ---
     private suspend fun retrieveContext(query: String): List<String> {
@@ -84,12 +78,14 @@ class GeminiRagManager @Inject constructor(
      * Uses ML Kit Prompt API.
      */
     suspend fun generateWithLocalEngine(prompt: String): String {
-        Log.d("Cortex", "🚀 Prompting Gemini Nano via ML Kit...")
-        val model = localModel
-        if (model == null) return "Cortex Intelligence (Local) is not available on this device."
-
-        val response = model.generateContent(prompt)
-        return response.candidates.firstOrNull()?.text ?: "No response from Cortex."
+        Log.d("Cortex", "Prompting Gemini Nano via ML Kit…")
+        return try {
+            val response = localModel.generateContent(prompt)
+            response.candidates.firstOrNull()?.text ?: "No response from Cortex."
+        } catch (e: com.google.mlkit.genai.common.GenAiException) {
+            Log.e("Cortex", "ML Kit GenAI local inference failed (errorCode=${e.errorCode})", e)
+            "Cortex Intelligence (Local) is not available on this device."
+        }
     }
 
     /**
