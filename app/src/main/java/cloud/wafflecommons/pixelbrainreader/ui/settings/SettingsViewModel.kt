@@ -7,6 +7,8 @@ import android.content.IntentSender
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import cloud.wafflecommons.pixelbrainreader.data.ai.LocalAiManager
+import cloud.wafflecommons.pixelbrainreader.data.ai.NanoState
 import cloud.wafflecommons.pixelbrainreader.data.auth.GoogleAuthRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.AppThemeConfig
 import cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
@@ -38,13 +40,24 @@ class SettingsViewModel @Inject constructor(
     private val syncHealthDataUseCase: cloud.wafflecommons.pixelbrainreader.data.usecase.SyncHealthDataUseCase,
     private val habitRepository: cloud.wafflecommons.pixelbrainreader.data.repository.HabitRepository,
     private val gamificationPrefs: GamificationPreferences,
-    val googleAuthManager: GoogleAuthRepository
+    val googleAuthManager: GoogleAuthRepository,
+    private val localAiManager: LocalAiManager
 ) : ViewModel() {
 
     sealed class GoogleAuthEvent {
         data class ConsentRequired(val intentSender: IntentSender) : GoogleAuthEvent()
         data class Failed(val message: String) : GoogleAuthEvent()
         object Linked : GoogleAuthEvent()
+    }
+
+    /** One-shot UI events surfaced by the on-device model lifecycle. */
+    sealed class NanoModelEvent {
+        /**
+         * The user tried to select Local AI while the model was not yet [NanoState.Ready].
+         * The selection was rejected; the UI should show the [reason] and keep the
+         * previously persisted [AiModel] active.
+         */
+        data class MustDownloadFirst(val reason: String) : NanoModelEvent()
     }
 
 
@@ -69,6 +82,12 @@ class SettingsViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
+
+    /** Mirrors [LocalAiManager.nanoState] for the Settings UI. */
+    val nanoState: StateFlow<NanoState> = localAiManager.nanoState
+
+    private val _nanoModelEvents = MutableSharedFlow<NanoModelEvent>(extraBufferCapacity = 4)
+    val nanoModelEvents = _nanoModelEvents.asSharedFlow()
 
     val moodEmojiMapping: StateFlow<Map<Int, String>> = gamificationPrefs.moodEmojiMappingFlow
         .stateIn(
@@ -130,9 +149,52 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun updateAiModel(model: cloud.wafflecommons.pixelbrainreader.data.model.AiModel) {
+        // Gate Local AI behind a downloaded + ready on-device model. The Settings
+        // screen owns the download lifecycle — see [onDownloadNanoModel]. If the
+        // user picks CORTEX_LOCAL while the model isn't Ready, we reject the
+        // selection and emit a one-shot event so the UI can show a snackbar. The
+        // persisted preference is untouched, so the radio stays on the previous
+        // (cloud) choice.
+        if (model == cloud.wafflecommons.pixelbrainreader.data.model.AiModel.CORTEX_LOCAL) {
+            val state = localAiManager.nanoState.value
+            if (state !is NanoState.Ready) {
+                viewModelScope.launch {
+                    _nanoModelEvents.emit(
+                        NanoModelEvent.MustDownloadFirst(describeNotReady(state))
+                    )
+                }
+                return
+            }
+        }
         viewModelScope.launch {
             userPrefs.setAiModel(model)
         }
+    }
+
+    /** Explicit user-initiated download of Gemini Nano. */
+    fun onDownloadNanoModel() {
+        localAiManager.downloadModel()
+    }
+
+    /** Deep-link to AICore system settings so the user can clear the model from disk. */
+    fun onOpenNanoModelSettings() {
+        localAiManager.openAicoreSettings()
+    }
+
+    private fun describeNotReady(state: NanoState): String = when (state) {
+        NanoState.NotDownloaded ->
+            "Download Gemini Nano first to use Local AI."
+        is NanoState.Downloading -> {
+            val pct = if (state.progress in 0f..1f) " (${(state.progress * 100).toInt()}%)" else ""
+            "Gemini Nano is still downloading$pct. Pick Local AI once it's ready."
+        }
+        NanoState.Checking, NanoState.Unknown ->
+            "Still checking on-device AI availability — try again in a moment."
+        is NanoState.Unavailable ->
+            "Local AI isn't available on this device: ${state.reason}"
+        is NanoState.Error ->
+            "Local AI hit an error: ${state.cause.localizedMessage ?: state.cause.message ?: "unknown"}"
+        NanoState.Ready -> "Local AI is ready." // unreachable
     }
 
     // Advanced Local Config setters

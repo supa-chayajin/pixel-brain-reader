@@ -1,6 +1,10 @@
 package cloud.wafflecommons.pixelbrainreader.data.ai
 
+import android.content.ActivityNotFoundException
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import android.util.Log
 import com.google.mlkit.genai.common.DownloadStatus
 import com.google.mlkit.genai.common.FeatureStatus
@@ -28,15 +32,13 @@ import javax.inject.Singleton
  * Privacy-first manager for on-device Gemini Nano inference via the
  * **ML Kit GenAI Prompt** API (`com.google.mlkit:genai-prompt`).
  *
- * We do NOT call `com.google.ai.edge.aicore` directly because that SDK requires
- * per-app allowlisting in Google's Early Access Program — third-party apps get
- * `NOT_AVAILABLE / "Required LLM feature not found"`. ML Kit GenAI wraps the
- * same AICore + Nano model behind a higher-level API that is open to all apps.
- *
  * STRICT CONTRACT — DO NOT BREAK:
- *  1. This class NEVER falls back to cloud inference.
- *  2. All failures are surfaced as [Result.failure] with a typed [NanoException] subclass.
- *  3. The presentation layer is responsible for obtaining explicit user consent before
+ *  1. [generateResponse] NEVER triggers a download. If the model is not [NanoState.Ready]
+ *     the call fast-fails with [NanoException.Unavailable]. The Settings screen is the
+ *     sole orchestrator of the download lifecycle (see [downloadModel]).
+ *  2. This class NEVER falls back to cloud inference.
+ *  3. All failures are surfaced as [Result.failure] with a typed [NanoException].
+ *  4. The presentation layer is responsible for obtaining explicit user consent before
  *     escalating to any cloud provider.
  */
 @Singleton
@@ -58,10 +60,19 @@ class LocalAiManager @Inject constructor(
     private var downloadJob: Job? = null
 
     init {
+        // Passive probe ONLY. Never starts a download from here — that requires
+        // explicit user intent through [downloadModel].
         ioScope.launch { refreshAvailability() }
     }
 
-    /** Re-probe ML Kit GenAI availability. Safe to call from lifecycle observers (e.g. ON_RESUME). */
+    /**
+     * Probe ML Kit GenAI status and reflect it in [nanoState]. Idempotent and safe to
+     * call from lifecycle observers (e.g. ON_RESUME). Will NOT initiate a download.
+     *
+     * If the system reports a download is already in progress (resumed from a prior
+     * session), we attach to its progress flow so the UI can show it — but we never
+     * start a new download here.
+     */
     suspend fun refreshAvailability() = withContext(Dispatchers.IO) {
         if (_nanoState.value is NanoState.Downloading) return@withContext
         _nanoState.value = NanoState.Checking
@@ -80,27 +91,86 @@ class LocalAiManager @Inject constructor(
     }
 
     /**
-     * Run on-device inference.
+     * Explicit user-initiated download. Idempotent — no-op when already downloading,
+     * already Ready, or device-Unavailable. Safe to call from the UI thread; the
+     * actual work runs on [ioScope].
+     */
+    fun downloadModel() {
+        ioScope.launch {
+            when (val current = _nanoState.value) {
+                is NanoState.Downloading -> {
+                    Log.i(tag, "downloadModel() ignored — download already in progress")
+                    return@launch
+                }
+                NanoState.Ready -> {
+                    Log.i(tag, "downloadModel() ignored — model already Ready")
+                    return@launch
+                }
+                is NanoState.Unavailable -> {
+                    // Re-probe in case the user cleared disk or updated the system.
+                    Log.w(tag, "downloadModel() called while Unavailable (${current.reason}) — re-probing")
+                    refreshAvailability()
+                    if (_nanoState.value !is NanoState.NotDownloaded && _nanoState.value !is NanoState.Ready) {
+                        return@launch
+                    }
+                }
+                else -> Unit
+            }
+            startDownload()
+        }
+    }
+
+    /**
+     * Deep-link to the AICore app's system settings so the user can clear the
+     * Gemini Nano model from disk.
      *
-     * @return [Result.success] with the model's text, or [Result.failure] holding a
-     *   [NanoException]. **Never** reaches the network.
+     * ML Kit GenAI does NOT expose a public delete API — the on-disk model is owned
+     * by Android AICore and can only be removed by the user from system Settings.
+     * If the AICore package is not present on the device we fall back to the
+     * top-level Settings screen.
+     */
+    fun openAicoreSettings() {
+        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+            data = Uri.fromParts("package", AICORE_PACKAGE, null)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        try {
+            appContext.startActivity(intent)
+        } catch (e: ActivityNotFoundException) {
+            Log.w(tag, "AICore app details not found; falling back to global Settings", e)
+            val fallback = Intent(Settings.ACTION_SETTINGS).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            appContext.startActivity(fallback)
+        }
+    }
+
+    /**
+     * Run on-device inference. Fast-fails with [NanoException.Unavailable] when the
+     * model is not [NanoState.Ready] — this method NEVER triggers a download or
+     * status probe of its own.
      */
     suspend fun generateResponse(prompt: String): Result<String> = withContext(Dispatchers.IO) {
         if (prompt.isBlank()) {
             return@withContext Result.failure(NanoException.BadInput("Empty prompt"))
         }
 
+        // Strict contract: never trigger a download from the generation path.
         if (_nanoState.value !is NanoState.Ready) {
-            refreshAvailability()
-            if (_nanoState.value !is NanoState.Ready) {
-                val reason = when (val s = _nanoState.value) {
-                    is NanoState.Unavailable -> s.reason
-                    is NanoState.Error -> s.cause.localizedMessage ?: s.cause.message ?: "error"
-                    is NanoState.Downloading -> "model is downloading"
-                    else -> "Gemini Nano is not ready on this device"
+            val reason = when (val s = _nanoState.value) {
+                NanoState.NotDownloaded ->
+                    "model not downloaded — open Settings to download Gemini Nano"
+                is NanoState.Downloading -> {
+                    val pct = if (s.progress in 0f..1f) " (${(s.progress * 100).toInt()}%)" else ""
+                    "model is downloading$pct"
                 }
-                return@withContext Result.failure(NanoException.Unavailable(reason))
+                is NanoState.Unavailable -> s.reason
+                is NanoState.Error -> s.cause.localizedMessage ?: s.cause.message ?: "error"
+                NanoState.Checking -> "still checking on-device AI availability"
+                NanoState.Unknown -> "Gemini Nano is not ready on this device"
+                NanoState.Ready -> "unreachable"
             }
+            return@withContext Result.failure(NanoException.Unavailable(reason))
         }
 
         sessionMutex.withLock {
@@ -136,8 +206,8 @@ class LocalAiManager @Inject constructor(
     }
 
     private companion object {
-        const val WARMUP_TIMEOUT_MS = 300_000L
         const val INFERENCE_TIMEOUT_MS = 900_000L
+        const val AICORE_PACKAGE = "com.google.android.aicore"
     }
 
     private fun ensureModel(): GenerativeModel {
@@ -151,15 +221,29 @@ class LocalAiManager @Inject constructor(
     }
 
     /**
-     * Map an ML Kit feature status to our [NanoState]. If the feature is
-     * downloadable we kick off a background collection on [download()] so the
-     * UI can show progress instead of a stale "Unavailable".
+     * Map an ML Kit feature status to our [NanoState].
+     *
+     * - [FeatureStatus.AVAILABLE] → [NanoState.Ready]. We deliberately do NOT call
+     *   `GenerativeModel.warmup()`: on Pixel devices it has been observed to block
+     *   indefinitely at the AICore service layer, and worse, to wedge subsequent
+     *   `generateContent()` calls behind it. Skipping warmup means the first
+     *   inference pays a one-time model-load cost (a few seconds), but it
+     *   actually completes — which is the correctness contract we need.
+     * - [FeatureStatus.DOWNLOADABLE] → [NanoState.NotDownloaded] and waits for
+     *   explicit user opt-in via [downloadModel].
+     * - [FeatureStatus.DOWNLOADING] → attach to the in-flight download flow so
+     *   the UI can show progress (system-initiated, e.g. resumed from a prior
+     *   session).
      */
-    private suspend fun applyStatus(status: Int) {
+    private fun applyStatus(status: Int) {
         when (status) {
-            FeatureStatus.AVAILABLE -> markReadyAfterWarmup()
-            FeatureStatus.DOWNLOADING,
-            FeatureStatus.DOWNLOADABLE -> startDownload()
+            FeatureStatus.AVAILABLE -> {
+                Log.i(tag, "ML Kit GenAI status=AVAILABLE — marking Ready (no warmup; first inference loads on demand)")
+                _nanoState.value = NanoState.Ready
+            }
+            FeatureStatus.DOWNLOADING -> startDownload()
+            FeatureStatus.DOWNLOADABLE ->
+                _nanoState.value = NanoState.NotDownloaded
             FeatureStatus.UNAVAILABLE ->
                 _nanoState.value = NanoState.Unavailable(
                     reason = "ML Kit GenAI reports UNAVAILABLE on this device"
@@ -172,69 +256,38 @@ class LocalAiManager @Inject constructor(
     }
 
     /**
-     * Warm up the inference engine before declaring the model Ready.
-     *
-     * Without this, the *first* call to [GenerativeModel.generateContent] hangs
-     * indefinitely while ML Kit lazily binds to the AICore service and loads
-     * the LLM weights on a Pixel device. `warmup()` performs that handshake
-     * up-front so subsequent inference returns in normal latency.
-     *
-     * Bounded with [WARMUP_TIMEOUT_MS] so a wedged AICore bind does not leave
-     * the UI stuck on "Checking…". If warmup times out we still flip to Ready
-     * optimistically — ML Kit will join any in-progress warmup on the first
-     * inference call, and [generateResponse] has its own timeout so the user
-     * can't be hung forever there either.
-     */
-    private suspend fun markReadyAfterWarmup() {
-        Log.i(tag, "ML Kit GenAI status=AVAILABLE — running warmup() with ${WARMUP_TIMEOUT_MS / 1000}s budget…")
-        val start = System.currentTimeMillis()
-        try {
-            val completed = withTimeoutOrNull(WARMUP_TIMEOUT_MS) {
-                ensureModel().warmup()
-                true
-            }
-            val elapsed = System.currentTimeMillis() - start
-            if (completed == null) {
-                Log.w(tag, "warmup() did not complete in ${elapsed}ms — flipping to Ready optimistically; first inference will join any in-progress warmup")
-            } else {
-                Log.i(tag, "warmup OK in ${elapsed}ms — Nano is Ready")
-            }
-            _nanoState.value = NanoState.Ready
-        } catch (e: GenAiException) {
-            logGenAiException("warmup", e)
-            _nanoState.value = classifyAvailability(e)
-        } catch (e: Throwable) {
-            Log.e(tag, "Unexpected warmup error", e)
-            _nanoState.value = NanoState.Error(e)
-        }
-    }
-
-    /**
-     * Subscribe to [GenerativeModel.download] and translate its [DownloadStatus]
-     * events to [NanoState]. We guard with a single [downloadJob] so repeated
-     * `ON_RESUME` probes don't spawn multiple collectors.
+     * Subscribe to [GenerativeModel.download] and translate [DownloadStatus] events
+     * to [NanoState]. Guarded with a single [downloadJob] so repeated probes don't
+     * spawn multiple collectors.
      */
     private fun startDownload() {
         if (downloadJob?.isActive == true) return
-        _nanoState.value = NanoState.Downloading(progress = 0L)
+        _nanoState.value = NanoState.Downloading(progress = -1f)
         downloadJob = ioScope.launch {
             try {
                 ensureModel().download().collect { event ->
                     when (event) {
                         is DownloadStatus.DownloadStarted ->
                             _nanoState.value = NanoState.Downloading(
-                                progress = 0L,
+                                progress = 0f,
+                                bytesDownloaded = 0L,
                                 totalBytes = event.bytesToDownload
                             )
                         is DownloadStatus.DownloadProgress -> {
-                            val current = _nanoState.value
-                            if (current is NanoState.Downloading) {
-                                _nanoState.value = current.copy(progress = event.totalBytesDownloaded)
-                            }
+                            val total = (_nanoState.value as? NanoState.Downloading)?.totalBytes ?: -1L
+                            val downloaded = event.totalBytesDownloaded
+                            val ratio = if (total > 0L) {
+                                (downloaded.toFloat() / total).coerceIn(0f, 1f)
+                            } else -1f
+                            _nanoState.value = NanoState.Downloading(
+                                progress = ratio,
+                                bytesDownloaded = downloaded,
+                                totalBytes = total
+                            )
                         }
                         is DownloadStatus.DownloadCompleted -> {
-                            Log.i(tag, "ML Kit GenAI download completed — warming up")
-                            markReadyAfterWarmup()
+                            Log.i(tag, "ML Kit GenAI download completed — marking Ready (no warmup)")
+                            _nanoState.value = NanoState.Ready
                         }
                         is DownloadStatus.DownloadFailed -> {
                             logGenAiException("download", event.e)
@@ -327,11 +380,36 @@ class LocalAiManager @Inject constructor(
 
 /** Lifecycle state of the on-device Gemini Nano model. */
 sealed class NanoState {
+    /** Initial state before the first probe completes. */
     data object Unknown : NanoState()
+
+    /** A status probe is in flight. */
     data object Checking : NanoState()
-    data class Downloading(val progress: Long, val totalBytes: Long = -1L) : NanoState()
+
+    /** Model is downloadable but the user has not yet started the download. */
+    data object NotDownloaded : NanoState()
+
+    /**
+     * A download is in progress.
+     *
+     * @param progress 0f..1f, or [-1f] when the total size is not yet known
+     *                 (the UI should fall back to an indeterminate indicator).
+     * @param bytesDownloaded Total bytes received so far.
+     * @param totalBytes Expected total size, or -1L when unknown.
+     */
+    data class Downloading(
+        val progress: Float,
+        val bytesDownloaded: Long = 0L,
+        val totalBytes: Long = -1L
+    ) : NanoState()
+
+    /** Model is on-device and warmed up — ready for inference. */
     data object Ready : NanoState()
+
+    /** Device cannot run the model (no AICore, incompatible hardware, disk full, …). */
     data class Unavailable(val reason: String) : NanoState()
+
+    /** Transient error during probe/download/warmup. */
     data class Error(val cause: Throwable) : NanoState()
 }
 

@@ -18,15 +18,19 @@ import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.rounded.HomeWork
 import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material3.*
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import cloud.wafflecommons.pixelbrainreader.data.ai.NanoState
 import cloud.wafflecommons.pixelbrainreader.data.repository.AppThemeConfig
 import cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
 import androidx.health.connect.client.HealthConnectClient
@@ -55,9 +59,21 @@ fun SettingsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val moodEmojiMapping by viewModel.moodEmojiMapping.collectAsStateWithLifecycle()
+    val nanoState by viewModel.nanoState.collectAsStateWithLifecycle()
     val scrollState = rememberScrollState()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
+
+    // Surface gating errors from the AI selection (e.g. picking Local AI before
+    // the model is downloaded) as a snackbar.
+    LaunchedEffect(Unit) {
+        viewModel.nanoModelEvents.collect { event ->
+            when (event) {
+                is SettingsViewModel.NanoModelEvent.MustDownloadFirst ->
+                    snackbarHostState.showSnackbar(event.reason)
+            }
+        }
+    }
     
     // Health Connect Permission Launcher
     val permissions = remember {
@@ -252,19 +268,33 @@ fun SettingsScreen(
             ) {
                 cloud.wafflecommons.pixelbrainreader.data.model.AiModel.entries.forEach { model ->
                     val isSelected = (uiState.currentAiModel == model)
-                    
+
                     val subtitle = when(model) {
                          cloud.wafflecommons.pixelbrainreader.data.model.AiModel.GEMINI_FLASH -> "Fast & Efficient. Requires Internet."
                          cloud.wafflecommons.pixelbrainreader.data.model.AiModel.GEMINI_PRO -> "Maximum reasoning. Requires Internet."
                          cloud.wafflecommons.pixelbrainreader.data.model.AiModel.CORTEX_LOCAL -> "Gemini Nano. 100% Private & Offline."
                     }
 
+                    // Local AI radio is disabled while the on-device model is not yet
+                    // Ready — the user must explicitly download it via the panel below.
+                    val isLocal = model == cloud.wafflecommons.pixelbrainreader.data.model.AiModel.CORTEX_LOCAL
+                    val enabled = !isLocal || nanoState is NanoState.Ready
+
                     IntelligenceOption(
                         title = model.displayName,
                         subtitle = subtitle,
                         selected = isSelected,
+                        enabled = enabled,
                         onClick = { viewModel.updateAiModel(model) }
                     )
+
+                    if (isLocal) {
+                        NanoModelLifecyclePanel(
+                            state = nanoState,
+                            onDownload = viewModel::onDownloadNanoModel,
+                            onManageStorage = viewModel::onOpenNanoModelSettings
+                        )
+                    }
                 }
             }
 
@@ -407,21 +437,24 @@ fun IntelligenceOption(
     title: String,
     subtitle: String,
     selected: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    enabled: Boolean = true
 ) {
+    val rowAlpha = if (enabled) 1f else 0.5f
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .clickable(enabled = enabled, onClick = onClick)
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         RadioButton(
             selected = selected,
-            onClick = onClick
+            onClick = onClick,
+            enabled = enabled
         )
         Spacer(modifier = Modifier.width(12.dp))
-        Column {
+        Column(modifier = Modifier.alpha(rowAlpha)) {
             Text(
                 text = title,
                 style = MaterialTheme.typography.bodyLarge
@@ -433,4 +466,133 @@ fun IntelligenceOption(
             )
         }
     }
+}
+
+/**
+ * Cohesive panel rendered directly below the "Local AI" radio option. Drives the
+ * full on-device model lifecycle — Download, Progress, Ready, Error — without
+ * leaving the existing AI selection section.
+ */
+@Composable
+private fun NanoModelLifecyclePanel(
+    state: NanoState,
+    onDownload: () -> Unit,
+    onManageStorage: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(start = 52.dp, end = 4.dp, top = 4.dp, bottom = 12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        shape = MaterialTheme.shapes.medium,
+        tonalElevation = 1.dp
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            when (state) {
+                NanoState.Unknown, NanoState.Checking -> {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            text = "Checking model availability…",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
+                NanoState.NotDownloaded -> {
+                    Button(
+                        onClick = onDownload,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.Download, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Download Gemini Nano (~1.5 GB)")
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = "Stays on-device. Required before selecting Local AI.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                is NanoState.Downloading -> {
+                    val label = if (state.totalBytes > 0L) {
+                        "Downloading model… ${formatBytes(state.bytesDownloaded)} / ${formatBytes(state.totalBytes)}"
+                    } else {
+                        "Downloading model…"
+                    }
+                    Text(text = label, style = MaterialTheme.typography.bodyMedium)
+                    Spacer(Modifier.height(8.dp))
+                    if (state.progress in 0f..1f) {
+                        LinearProgressIndicator(
+                            progress = { state.progress },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    } else {
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    }
+                }
+                NanoState.Ready -> {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Model ready for offline use",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "Manage storage in AICore settings",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        IconButton(onClick = onManageStorage) {
+                            Icon(
+                                imageVector = Icons.Outlined.FolderOpen,
+                                contentDescription = "Manage model storage in AICore settings"
+                            )
+                        }
+                    }
+                }
+                is NanoState.Unavailable -> {
+                    Text(
+                        text = "Local AI unavailable on this device: ${state.reason}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+                is NanoState.Error -> {
+                    Text(
+                        text = "Download failed: ${state.cause.localizedMessage ?: state.cause.message ?: state.cause::class.java.simpleName}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = onDownload,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Retry download")
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun formatBytes(bytes: Long): String {
+    if (bytes <= 0L) return "0 MB"
+    val mb = bytes / 1_000_000.0
+    if (mb >= 1024.0) return "%.2f GB".format(mb / 1024.0)
+    return "%.0f MB".format(mb)
 }
