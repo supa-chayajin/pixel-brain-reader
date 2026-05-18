@@ -449,10 +449,15 @@ fun NanoStatusIndicator(state: NanoState, modifier: Modifier = Modifier) {
             MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
             "Checking on-device AI…"
         )
-        is NanoState.Unavailable, is NanoState.Error -> Triple(
+        is NanoState.Unavailable -> Triple(
             Icons.Rounded.CloudOff,
-            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f),
-            "On-device AI unavailable · cloud requires consent"
+            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+            "Nano unavailable · ${state.reason}"
+        )
+        is NanoState.Error -> Triple(
+            Icons.Rounded.CloudOff,
+            MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
+            "Nano error · ${state.cause.localizedMessage ?: state.cause.message ?: state.cause::class.java.simpleName}"
         )
     }
 
@@ -470,7 +475,9 @@ fun NanoStatusIndicator(state: NanoState, modifier: Modifier = Modifier) {
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
-            color = tint
+            color = tint,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }

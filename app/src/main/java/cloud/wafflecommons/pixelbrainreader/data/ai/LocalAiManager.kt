@@ -54,13 +54,16 @@ class LocalAiManager @Inject constructor(
         // A download in progress drives state via the DownloadCallback — don't override it.
         if (_nanoState.value is NanoState.Downloading) return@withContext
         _nanoState.value = NanoState.Checking
+        Log.i(tag, "Probing AICore availability (package=${appContext.packageName})…")
         try {
             ensureModel().prepareInferenceEngine()
+            Log.i(tag, "AICore prepareInferenceEngine() OK — Nano is Ready")
             _nanoState.value = NanoState.Ready
         } catch (e: GenerativeAIException) {
+            logAicoreException("prepareInferenceEngine", e)
             _nanoState.value = classifyAvailability(e)
         } catch (e: Throwable) {
-            Log.w(tag, "Unexpected error probing AICore", e)
+            Log.e(tag, "Unexpected non-GenerativeAIException probing AICore", e)
             _nanoState.value = NanoState.Error(e)
         }
     }
@@ -131,9 +134,13 @@ class LocalAiManager @Inject constructor(
                     _nanoState.value = NanoState.Ready
                 }
                 override fun onDownloadFailed(failureStatus: String, e: GenerativeAIException) {
+                    Log.w(tag, "AICore onDownloadFailed status=$failureStatus")
+                    logAicoreException("downloadFailed", e)
                     _nanoState.value = classifyAvailability(e)
                 }
                 override fun onDownloadDidNotStart(e: GenerativeAIException) {
+                    Log.w(tag, "AICore onDownloadDidNotStart")
+                    logAicoreException("downloadDidNotStart", e)
                     _nanoState.value = classifyAvailability(e)
                 }
             })
@@ -147,10 +154,31 @@ class LocalAiManager @Inject constructor(
         return when (e.errorCode) {
             GenerativeAIException.ErrorCode.NOT_AVAILABLE,
             GenerativeAIException.ErrorCode.NEEDS_SYSTEM_UPDATE,
-            GenerativeAIException.ErrorCode.NOT_ENOUGH_DISK_SPACE ->
+            GenerativeAIException.ErrorCode.NOT_ENOUGH_DISK_SPACE -> {
+                Log.w(tag, "classify → Unavailable (errorCode=${e.errorCode}): ${describe(e)}")
                 NanoState.Unavailable(reason = describe(e))
-            else -> NanoState.Error(e)
+            }
+            else -> {
+                Log.e(tag, "classify → Error (errorCode=${e.errorCode}): ${describe(e)}")
+                NanoState.Error(e)
+            }
         }
+    }
+
+    /**
+     * Verbose dump of an AICore failure. We log the typed `errorCode` first
+     * because the `message` field is often a generic "Model not available"
+     * string while the code disambiguates allowlisting vs. system update vs.
+     * disk-space vs. other transient errors.
+     */
+    private fun logAicoreException(stage: String, e: GenerativeAIException) {
+        Log.e(tag, "AICore failure @ $stage")
+        Log.e(tag, "  errorCode  = ${e.errorCode}")
+        Log.e(tag, "  message    = ${e.message}")
+        Log.e(tag, "  localized  = ${e.localizedMessage}")
+        Log.e(tag, "  cause      = ${e.cause}")
+        Log.e(tag, "  exception class = ${e::class.java.name}")
+        Log.e(tag, "AICore stack trace:", e)
     }
 
     private fun mapAicoreException(e: GenerativeAIException): NanoException {
