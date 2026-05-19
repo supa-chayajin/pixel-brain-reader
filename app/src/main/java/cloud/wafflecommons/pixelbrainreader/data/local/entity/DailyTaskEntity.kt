@@ -1,18 +1,22 @@
 package cloud.wafflecommons.pixelbrainreader.data.local.entity
 
 import androidx.room.Entity
-import androidx.room.ForeignKey
+import androidx.room.Index
 import androidx.room.PrimaryKey
-import java.time.LocalDate
-import java.time.LocalTime
 import java.util.UUID
 
 /**
  * Represents a task in the "Journal" or "LifeOS" section.
+ *
+ * `googleTaskId` is uniquely indexed: SQLite treats multiple NULLs as distinct,
+ * so local-only rows are unaffected while Google-imported rows can never duplicate.
  */
 @Entity(
     tableName = "daily_tasks",
-    indices = [androidx.room.Index(value = ["scheduledDate"])]
+    indices = [
+        Index(value = ["scheduledDate"]),
+        Index(value = ["googleTaskId"], unique = true)
+    ]
 )
 data class DailyTaskEntity(
     @PrimaryKey
@@ -24,8 +28,5 @@ data class DailyTaskEntity(
     val priority: Int = 1,
     val section: String = "Journal",
     val googleTaskId: String? = null, // ID from external provider (Google Tasks)
-    val source: String = "Local", // "Local", "GoogleTasks", etc.
-    // V6: outbox flags drained by TaskSyncWorker
-    val isDirty: Boolean = false,
-    val pendingDeletion: Boolean = false
+    val source: String = "Local" // "Local", "GoogleTasks", etc.
 )

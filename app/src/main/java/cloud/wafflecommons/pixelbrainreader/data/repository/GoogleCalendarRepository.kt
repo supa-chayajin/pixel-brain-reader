@@ -12,33 +12,24 @@ import com.google.api.client.json.JsonFactory
 import com.google.api.client.util.DateTime
 import com.google.api.services.calendar.Calendar
 import com.google.api.services.calendar.model.Event
-import com.google.api.services.calendar.model.EventDateTime
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
-import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.OffsetDateTime
 import java.time.ZoneId
-import java.util.TimeZone
 import javax.inject.Inject
 import javax.inject.Singleton
 
 private const val TAG = "GoogleCalendarRepo"
 private const val APP_NAME = "PixelBrainReader"
-private const val PRIMARY_CALENDAR = "primary"
 
 /**
- * Google Calendar bidirectional sync.
+ * Google Calendar one-way importer (Google -> Room).
  *
- * Read: [syncTodayEvents] imports today's events from all calendars into Room.
- * Write: [createEvent] / [updateEvent] / [deleteEvent] target the user's
- * primary calendar. Multi-calendar write is intentionally out of scope.
- *
- * Token plumbing uses [HttpRequestInitializer] (the non-deprecated path):
- * each HTTP request stamps its own bearer header. The deprecated
- * GoogleCredential() approach is gone.
+ * [syncTodayEvents] imports today's events from all the user's calendars into
+ * Room. Push back to Google is intentionally not supported here.
  */
 @Singleton
 class GoogleCalendarRepository @Inject constructor(
@@ -50,17 +41,12 @@ class GoogleCalendarRepository @Inject constructor(
 ) {
 
     private fun buildService(token: String): Calendar {
-        // Initializer stamps the bearer header AND attaches a 401 retry handler:
-        // when Google rejects the cached token (early revocation, scope change,
-        // clock skew vs our 55-min TTL), invalidate the cache and re-fetch a
-        // fresh token via AuthorizationClient. runBlocking is acceptable here
-        // because the HTTP call is already on Dispatchers.IO and the handler
-        // is sync by design.
+        // 401 retry handler: see GoogleTaskRepository.buildService for rationale.
         val initializer = HttpRequestInitializer { request ->
             request.headers.authorization = "Bearer $token"
             request.unsuccessfulResponseHandler = HttpUnsuccessfulResponseHandler { req, response, supportsRetry ->
                 if (response.statusCode == 401 && supportsRetry) {
-                    android.util.Log.w(TAG, "401 from Calendar API; invalidating cached token and retrying once")
+                    Log.w(TAG, "401 from Calendar API; invalidating cached token and retrying once")
                     authRepository.invalidateAccessToken()
                     val fresh = runBlocking { authRepository.getValidAccessToken() }
                     if (fresh != null) {
@@ -75,8 +61,6 @@ class GoogleCalendarRepository @Inject constructor(
             .build()
     }
 
-    // --- READ -----------------------------------------------------------------
-
     suspend fun syncTodayEvents(today: LocalDate = LocalDate.now()): Result<Int> =
         withContext(Dispatchers.IO) {
             if (!userPreferences.isGoogleSyncEnabled.first()) return@withContext Result.success(0)
@@ -89,15 +73,14 @@ class GoogleCalendarRepository @Inject constructor(
                 val zone = ZoneId.systemDefault()
                 // Compose timeMin / timeMax with the explicit local offset baked
                 // into the RFC 3339 string (e.g. 2026-05-17T00:00:00.000+02:00),
-                // not the UTC `Z` form. The Calendar API accepts both, but the
-                // explicit-offset form is the unambiguous spec for "local today".
+                // not the UTC `Z` form. Unambiguous spec for "local today".
                 val startInstant = today.atStartOfDay(zone).toInstant()
                 val endInstant = today.plusDays(1).atStartOfDay(zone).toInstant()
                 val offsetMinutes = zone.rules.getOffset(startInstant).totalSeconds / 60
                 val timeMin = DateTime(startInstant.toEpochMilli(), offsetMinutes)
                 val timeMax = DateTime(endInstant.toEpochMilli(), offsetMinutes)
 
-                // FK guard: timeline_entries(date) → daily_dashboard(date). Insert
+                // FK guard: timeline_entries(date) -> daily_dashboard(date). Insert
                 // the parent dashboard row first (IGNORE on conflict) so the
                 // upserts below don't trip SQLITE_CONSTRAINT_FOREIGNKEY when
                 // today's dashboard hasn't been materialized yet.
@@ -105,9 +88,9 @@ class GoogleCalendarRepository @Inject constructor(
                     cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyDashboardEntity(date = today)
                 )
 
-                // Drop yesterday's Calendar-sourced timeline rows (and rows for
-                // events the user moved to another day in Google's UI). Locally-
-                // created entries (googleEventId IS NULL) are preserved.
+                // Wipe today's Google-sourced timeline rows first so the freshly
+                // fetched batch is the truth (handles user deletions / moves on Google's side).
+                // Locally-created entries (googleEventId IS NULL) are preserved.
                 dailyDashboardDao.purgeGoogleTimelineForDate(today)
 
                 var total = 0
@@ -123,17 +106,16 @@ class GoogleCalendarRepository @Inject constructor(
                         .setOrderBy("startTime")
                         .execute()
                     events.items.orEmpty().forEach { evt ->
+                        val existing = dailyDashboardDao
+                            .getTimelineEntryByGoogleEventId(evt.id)
                         val entity = TimelineEntryEntity(
+                            id = existing?.id ?: java.util.UUID.randomUUID().toString(),
                             date = today,
                             time = extractStartTime(evt),
                             content = "[${cal.summary ?: "Calendar"}] ${evt.summary ?: "No title"}",
                             googleEventId = evt.id
                         )
-                        val existing = dailyDashboardDao
-                            .getTimelineEntryByGoogleEventId(entity.googleEventId!!)
-                        dailyDashboardDao.insertTimelineEntry(
-                            if (existing != null) entity.copy(id = existing.id) else entity
-                        )
+                        dailyDashboardDao.insertTimelineEntry(entity)
                         total++
                     }
                 }
@@ -144,72 +126,6 @@ class GoogleCalendarRepository @Inject constructor(
             }
         }
 
-    // --- WRITE ----------------------------------------------------------------
-
-    suspend fun createEvent(
-        title: String,
-        startsAt: LocalDateTime,
-        endsAt: LocalDateTime = startsAt.plusHours(1)
-    ): Result<String> = withContext(Dispatchers.IO) {
-        val token = authRepository.getValidAccessToken()
-            ?: return@withContext Result.failure(IllegalStateException("No valid Google access token"))
-        try {
-            val service = buildService(token)
-            val tz = TimeZone.getDefault().id
-            val event = Event()
-                .setSummary(title)
-                .setStart(EventDateTime().setDateTime(toApiDateTime(startsAt)).setTimeZone(tz))
-                .setEnd(EventDateTime().setDateTime(toApiDateTime(endsAt)).setTimeZone(tz))
-            val created = service.events().insert(PRIMARY_CALENDAR, event).execute()
-            Log.i(TAG, "Created event ${created.id}: $title @ $startsAt")
-            Result.success(created.id)
-        } catch (e: Exception) {
-            Log.e(TAG, "createEvent failed", e)
-            Result.failure(e)
-        }
-    }
-
-    suspend fun updateEvent(
-        eventId: String,
-        title: String? = null,
-        startsAt: LocalDateTime? = null,
-        endsAt: LocalDateTime? = null
-    ): Result<Unit> = withContext(Dispatchers.IO) {
-        val token = authRepository.getValidAccessToken()
-            ?: return@withContext Result.failure(IllegalStateException("No valid Google access token"))
-        try {
-            val service = buildService(token)
-            val current = service.events().get(PRIMARY_CALENDAR, eventId).execute()
-            title?.let { current.summary = it }
-            val tz = TimeZone.getDefault().id
-            startsAt?.let {
-                current.start = EventDateTime().setDateTime(toApiDateTime(it)).setTimeZone(tz)
-            }
-            endsAt?.let {
-                current.end = EventDateTime().setDateTime(toApiDateTime(it)).setTimeZone(tz)
-            }
-            service.events().update(PRIMARY_CALENDAR, eventId, current).execute()
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Log.e(TAG, "updateEvent failed for $eventId", e)
-            Result.failure(e)
-        }
-    }
-
-    suspend fun deleteEvent(eventId: String): Result<Unit> = withContext(Dispatchers.IO) {
-        val token = authRepository.getValidAccessToken()
-            ?: return@withContext Result.failure(IllegalStateException("No valid Google access token"))
-        try {
-            buildService(token).events().delete(PRIMARY_CALENDAR, eventId).execute()
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Log.e(TAG, "deleteEvent failed for $eventId", e)
-            Result.failure(e)
-        }
-    }
-
-    // --- Helpers --------------------------------------------------------------
-
     private fun extractStartTime(evt: Event): LocalTime {
         val raw = evt.start?.dateTime?.toString() ?: return LocalTime.MIDNIGHT
         return try {
@@ -217,10 +133,5 @@ class GoogleCalendarRepository @Inject constructor(
         } catch (e: Exception) {
             LocalTime.MIDNIGHT
         }
-    }
-
-    private fun toApiDateTime(local: LocalDateTime): DateTime {
-        val epoch = local.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        return DateTime(epoch)
     }
 }

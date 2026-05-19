@@ -18,22 +18,16 @@ import java.time.LocalDate
 import java.time.ZoneId
 import javax.inject.Inject
 import javax.inject.Singleton
-import com.google.api.services.tasks.model.Task as GoogleTask
 
 private const val TAG = "GoogleTaskRepo"
 private const val APP_NAME = "PixelBrainReader"
-private const val DEFAULT_LIST = "@default"
 
 /**
- * Google Tasks bidirectional sync.
+ * Google Tasks one-way importer (Google -> Room).
  *
- * Read: [syncPendingTasks] imports uncompleted tasks from all lists into Room.
- * Write: [createTask] / [pushCompletion] / [deleteTask] target the user's
- * default task list.
- *
- * Writes are typically queued via the dirty-flag outbox on [DailyTaskEntity]
- * and drained by TaskSyncWorker (sub-turn B), but the methods are public so
- * the UI can also call them directly for immediate-confirmation flows.
+ * [syncPendingTasks] imports today's tasks from all lists into Room — both
+ * incomplete AND completed, preserving Google's status as the source of truth.
+ * Push back to Google is intentionally not supported here.
  */
 @Singleton
 class GoogleTaskRepository @Inject constructor(
@@ -45,12 +39,15 @@ class GoogleTaskRepository @Inject constructor(
 ) {
 
     private fun buildService(token: String): Tasks {
-        // See GoogleCalendarRepository.buildService for the retry-handler rationale.
+        // 401 retry handler: when Google rejects the cached token (early
+        // revocation, scope change, clock skew vs our 55-min TTL), invalidate
+        // the cache and re-fetch once. runBlocking is acceptable here because
+        // the HTTP call is already on Dispatchers.IO.
         val initializer = HttpRequestInitializer { request ->
             request.headers.authorization = "Bearer $token"
             request.unsuccessfulResponseHandler = HttpUnsuccessfulResponseHandler { req, response, supportsRetry ->
                 if (response.statusCode == 401 && supportsRetry) {
-                    android.util.Log.w(TAG, "401 from Tasks API; invalidating cached token and retrying once")
+                    Log.w(TAG, "401 from Tasks API; invalidating cached token and retrying once")
                     authRepository.invalidateAccessToken()
                     val fresh = runBlocking { authRepository.getValidAccessToken() }
                     if (fresh != null) {
@@ -65,8 +62,6 @@ class GoogleTaskRepository @Inject constructor(
             .build()
     }
 
-    // --- READ -----------------------------------------------------------------
-
     suspend fun syncPendingTasks(today: LocalDate = LocalDate.now()): Result<Int> =
         withContext(Dispatchers.IO) {
             if (!userPreferences.isGoogleSyncEnabled.first()) return@withContext Result.success(0)
@@ -80,21 +75,22 @@ class GoogleTaskRepository @Inject constructor(
                 val startInstant = today.atStartOfDay(zone).toInstant()
                 val endInstant = today.plusDays(1).atStartOfDay(zone).toInstant()
                 val offsetMinutes = zone.rules.getOffset(startInstant).totalSeconds / 60
-                // Server-side narrowing. dueMin/dueMax are RFC 3339 strings;
-                // we encode the explicit local offset so the bounds match the
-                // user's actual "today", not a UTC-shifted day.
+                // Server-side narrowing. RFC 3339 with the explicit local offset
+                // bounds match the user's actual "today", not a UTC-shifted day.
                 val dueMin = DateTime(startInstant.toEpochMilli(), offsetMinutes).toStringRfc3339()
                 val dueMax = DateTime(endInstant.toEpochMilli(), offsetMinutes).toStringRfc3339()
 
-                // Drop yesterday's clean Google rows. Locally-dirty +
-                // pending-deletion rows are preserved so TaskSyncWorker can
-                // finish draining them.
-                taskDao.purgeCleanGoogleTasksForDate(today.toString())
+                // Wipe today's Google-sourced rows first so the freshly fetched
+                // batch is the truth (handles user deletions / completion flips on Google's side).
+                taskDao.purgeGoogleTasksForDate(today.toString())
 
                 var total = 0
                 for (list in service.tasklists().list().execute().items.orEmpty()) {
                     val tasks = service.tasks().list(list.id)
-                        .setShowCompleted(false)
+                        // Include completed + hidden so today's done tasks are imported with
+                        // their real status preserved (Rule 3).
+                        .setShowCompleted(true)
+                        .setShowHidden(true)
                         .setDueMin(dueMin)
                         .setDueMax(dueMax)
                         .execute()
@@ -111,76 +107,23 @@ class GoogleTaskRepository @Inject constructor(
                     }
 
                     todayOnly.forEach { gt ->
+                        val isCompleted = gt.status == "completed"
+                        val existing = taskDao.getTaskByGoogleTaskId(gt.id)
                         val entity = DailyTaskEntity(
+                            id = existing?.id ?: java.util.UUID.randomUUID().toString(),
                             scheduledDate = today.toString(),
                             label = gt.title ?: "Untitled Task",
-                            isDone = false,
+                            isDone = isCompleted,
                             googleTaskId = gt.id,
                             source = "GoogleTasks"
                         )
-                        val existing = taskDao.getTaskByGoogleTaskId(entity.googleTaskId!!)
-                        if (existing != null) {
-                            // Preserve local id + dirty flags; only refresh the label.
-                            taskDao.updateTask(existing.copy(label = entity.label))
-                        } else {
-                            taskDao.insertTask(entity)
-                        }
+                        taskDao.insertTask(entity)
                         total++
                     }
                 }
                 Result.success(total)
             } catch (e: Exception) {
                 Log.e(TAG, "Tasks import failed", e)
-                Result.failure(e)
-            }
-        }
-
-    // --- WRITE ----------------------------------------------------------------
-
-    suspend fun createTask(title: String, dueAt: LocalDate? = null): Result<String> =
-        withContext(Dispatchers.IO) {
-            val token = authRepository.getValidAccessToken()
-                ?: return@withContext Result.failure(IllegalStateException("No valid Google access token"))
-            try {
-                val service = buildService(token)
-                val task = GoogleTask().setTitle(title)
-                dueAt?.let { task.due = dueAsRfc3339(it) }
-                val created = service.tasks().insert(DEFAULT_LIST, task).execute()
-                Log.i(TAG, "Created Google task ${created.id}: $title")
-                Result.success(created.id)
-            } catch (e: Exception) {
-                Log.e(TAG, "createTask failed", e)
-                Result.failure(e)
-            }
-        }
-
-    suspend fun pushCompletion(googleTaskId: String, isDone: Boolean): Result<Unit> =
-        withContext(Dispatchers.IO) {
-            val token = authRepository.getValidAccessToken()
-                ?: return@withContext Result.failure(IllegalStateException("No valid Google access token"))
-            try {
-                val service = buildService(token)
-                val current = service.tasks().get(DEFAULT_LIST, googleTaskId).execute()
-                current.status = if (isDone) "completed" else "needsAction"
-                // `completed` is RFC 3339 String on the Tasks model; required for "completed", cleared otherwise.
-                current.completed = if (isDone) DateTime(System.currentTimeMillis()).toStringRfc3339() else null
-                service.tasks().update(DEFAULT_LIST, googleTaskId, current).execute()
-                Result.success(Unit)
-            } catch (e: Exception) {
-                Log.e(TAG, "pushCompletion failed for $googleTaskId", e)
-                Result.failure(e)
-            }
-        }
-
-    suspend fun deleteTask(googleTaskId: String): Result<Unit> =
-        withContext(Dispatchers.IO) {
-            val token = authRepository.getValidAccessToken()
-                ?: return@withContext Result.failure(IllegalStateException("No valid Google access token"))
-            try {
-                buildService(token).tasks().delete(DEFAULT_LIST, googleTaskId).execute()
-                Result.success(Unit)
-            } catch (e: Exception) {
-                Log.e(TAG, "deleteTask failed for $googleTaskId", e)
                 Result.failure(e)
             }
         }
@@ -196,12 +139,5 @@ class GoogleTaskRepository @Inject constructor(
         } catch (e: Exception) {
             null
         }
-    }
-
-    private fun dueAsRfc3339(date: LocalDate): String {
-        // Tasks model exposes `due` as a String (RFC 3339). The server discards
-        // time-of-day on this field but still requires a full timestamp.
-        val instant = date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        return DateTime(instant).toStringRfc3339()
     }
 }

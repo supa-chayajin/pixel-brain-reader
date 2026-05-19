@@ -36,7 +36,7 @@ import cloud.wafflecommons.pixelbrainreader.data.local.entity.ChoreEntity
         cloud.wafflecommons.pixelbrainreader.data.local.entity.HomeRoomEntity::class, // V4.6.1 Home Config
         ChoreEntity::class // V4.6 Home OS
     ], 
-    version = 24, // V6: TimelineEntryEntity also gains isDirty + pendingDeletion (Calendar outbox)
+    version = 25, // Google sync becomes import-only: drop isDirty/pendingDeletion + add unique index on googleEventId/googleTaskId
     exportSchema = false
 )
 @androidx.room.TypeConverters(RoomTypeConverters::class)
