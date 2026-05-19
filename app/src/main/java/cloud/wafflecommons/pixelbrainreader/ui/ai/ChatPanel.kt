@@ -61,15 +61,28 @@ fun ChatPanel(
     var textState by remember { mutableStateOf(TextFieldValue("")) }
     val listState = rememberLazyListState()
 
-    // Auto-scroll logic
-    LaunchedEffect(viewModel.messages.size) {
-        if (viewModel.messages.isNotEmpty()) {
-            listState.animateScrollToItem(viewModel.messages.lastIndex)
+    val currentMode by viewModel.currentMode.collectAsStateWithLifecycle()
+    val persistedHistory by viewModel.chatHistory.collectAsStateWithLifecycle()
+    val streaming by viewModel.streamingMessage.collectAsStateWithLifecycle()
+
+    // Single source of truth for what the list renders: persisted history +
+    // optional transient streaming bubble (cloud-only — Nano is one-shot).
+    val displayedMessages = remember(persistedHistory, streaming) {
+        if (streaming != null) persistedHistory + streaming!! else persistedHistory
+    }
+
+    // Auto-scroll on any new item — covers persisted appends AND streaming
+    // token updates (size grows by 1 when streaming starts, then content grows
+    // in place which won't trigger this; that's fine, the user already sees the
+    // last bubble).
+    LaunchedEffect(displayedMessages.size) {
+        if (displayedMessages.isNotEmpty()) {
+            listState.animateScrollToItem(displayedMessages.lastIndex)
         }
     }
 
     val modeColor by animateColorAsState(
-        targetValue = if (viewModel.currentMode == ChatMode.ORACLE) Color(0xFF9C27B0) else Color(0xFFFF9800), // Purple vs Orange
+        targetValue = if (currentMode == ChatMode.ORACLE) Color(0xFF9C27B0) else Color(0xFFFF9800), // Purple vs Orange
         label = "modeColor"
     )
 
@@ -90,7 +103,7 @@ fun ChatPanel(
                 
                 // --- MODE SWITCHER ---
                 BrainModeSwitch(
-                    currentMode = viewModel.currentMode,
+                    currentMode = currentMode,
                     onModeChanged = { viewModel.toggleMode() },
                     activeColor = modeColor
                 )
@@ -109,8 +122,8 @@ fun ChatPanel(
         ) {
             // Chat Content
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                if (viewModel.messages.isEmpty()) {
-                    EmptyStatePlaceholder(mode = viewModel.currentMode)
+                if (displayedMessages.isEmpty()) {
+                    EmptyStatePlaceholder(mode = currentMode)
                 } else {
                     LazyColumn(
                         state = listState,
@@ -118,7 +131,7 @@ fun ChatPanel(
                         contentPadding = PaddingValues(top = 16.dp, bottom = 24.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        items(viewModel.messages, key = { it.id }) { msg ->
+                        items(displayedMessages, key = { it.id }) { msg ->
                             ChatBubble(
                                 message = msg,
                                 onInsert = if (!msg.isUser) onInsertContent else null,
@@ -157,7 +170,7 @@ fun ChatPanel(
                         }
                     },
                     isLoading = viewModel.loadingStage != null,
-                    hint = if (viewModel.currentMode == ChatMode.ORACLE) "Ask your Second Brain..." else "Spark a creative idea...",
+                    hint = if (currentMode == ChatMode.ORACLE) "Ask your Second Brain..." else "Spark a creative idea...",
                     accentColor = modeColor
                 )
             }

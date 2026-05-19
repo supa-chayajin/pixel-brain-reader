@@ -11,6 +11,7 @@ import com.google.mlkit.genai.common.FeatureStatus
 import com.google.mlkit.genai.common.GenAiException
 import com.google.mlkit.genai.prompt.GenerativeModel
 import com.google.mlkit.genai.prompt.Generation
+import cloud.wafflecommons.pixelbrainreader.data.local.entity.ChatMessageEntity
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -203,6 +204,65 @@ class LocalAiManager @Inject constructor(
                 Result.failure(NanoException.Generation(e))
             }
         }
+    }
+
+    /**
+     * Memory-aware inference for chat surfaces.
+     *
+     * ML Kit's [GenerativeModel.generateContent] takes one string only — no session
+     * object, no role-tagged turns. We hand-roll the prompt with explicit section
+     * markers so Gemini Nano can distinguish system instructions, optional RAG
+     * grounding, and the rolling conversation history.
+     *
+     * Contract:
+     *  - The caller is responsible for trimming [chatHistory] to a safe sliding window
+     *    (typical N = 6, i.e. 3 turns). Passing the full history will eventually trip
+     *    [NanoException.ContextExceeded].
+     *  - [chatHistory] is the *prior* conversation only — [currentQuery] is appended
+     *    after it, terminated by a trailing `Model:` cue that anchors the response.
+     *  - [ragContext] is optional. When provided, it's injected verbatim under a
+     *    REFERENCE INFORMATION block; the [systemPrompt] should already instruct
+     *    the model to stay grounded in that block.
+     *  - All failure modes are the same as [generateResponse] — including
+     *    [NanoException.Unavailable] when Nano isn't Ready.
+     */
+    suspend fun generateAugmentedResponse(
+        systemPrompt: String,
+        ragContext: String?,
+        chatHistory: List<ChatMessageEntity>,
+        currentQuery: String
+    ): Result<String> {
+        val prompt = buildAugmentedPrompt(systemPrompt, ragContext, chatHistory, currentQuery)
+        return generateResponse(prompt)
+    }
+
+    private fun buildAugmentedPrompt(
+        systemPrompt: String,
+        ragContext: String?,
+        chatHistory: List<ChatMessageEntity>,
+        currentQuery: String
+    ): String = buildString {
+        append("[SYSTEM]\n")
+        append(systemPrompt.trim())
+        append("\n\n")
+
+        if (!ragContext.isNullOrBlank()) {
+            append("[REFERENCE INFORMATION]\n")
+            append("Use the following context from the user's notes to ground your answer. ")
+            append("If the answer is not in these references, say so plainly.\n\n")
+            append(ragContext.trim())
+            append("\n\n")
+        }
+
+        append("[CONVERSATION]\n")
+        chatHistory.forEach { msg ->
+            val label = if (msg.role == "USER") "User" else "Model"
+            append(label).append(": ").append(msg.content.trim()).append('\n')
+        }
+        append("User: ").append(currentQuery.trim()).append('\n')
+        // Trailing cue — Nano completes after this label, which keeps the response
+        // role-anchored even when chat history is empty.
+        append("Model:")
     }
 
     private companion object {
