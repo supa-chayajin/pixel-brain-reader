@@ -78,18 +78,12 @@ class FileRepository @Inject constructor(
          // 4. Push
          val pushResult = jGitProvider.push()
          
-         // 5. Reindex (Legacy)
+         // 5. Reindex file table (so the UI sees post-pull state).
+         // Embedding indexing is now exclusively triggered by the user from
+         // Settings → "Index Knowledge Vault" (manual). We do NOT enqueue
+         // IndexingWorker here.
          vaultDiscoveryRepository.reindexAll()
-         
-              // 6. Trigger Full Indexing Worker (Immediate)
-              val workRequest = androidx.work.OneTimeWorkRequestBuilder<cloud.wafflecommons.pixelbrainreader.data.workers.IndexingWorker>()
-                 .setInputData(androidx.work.workDataOf("FULL_REINDEX" to true))
-                 .addTag("smart_indexing")
-                 .build()
-              
-              androidx.work.WorkManager.getInstance(context).enqueue(workRequest)
-              Log.d("FileRepository", "Scheduled Smart Indexing (Immediate)")
-         
+
          return pushResult
     }
     

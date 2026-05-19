@@ -388,7 +388,81 @@ fun SettingsScreen(
                     Text("Force Import Habits (Vault -> App)")
                 }
             }
-            
+
+            // 3.5 Knowledge Vault — manual RAG indexing
+            SettingsSection(
+                title = "Knowledge Vault (RAG)",
+                icon = Icons.Default.Psychology
+            ) {
+                val indexingState by viewModel.indexingState.collectAsStateWithLifecycle()
+                val isRunning = indexingState is SettingsViewModel.IndexingState.Running ||
+                    indexingState is SettingsViewModel.IndexingState.Enqueued
+
+                Text(
+                    text = "Embedding the vault is now manual. Tap below to embed only the files that changed since your last index. Private notes are included if the vault has been unlocked.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(Modifier.height(12.dp))
+
+                Button(
+                    onClick = { viewModel.triggerVaultIndexing() },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isRunning
+                ) {
+                    if (isRunning) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            when (indexingState) {
+                                SettingsViewModel.IndexingState.Enqueued -> "Queued…"
+                                SettingsViewModel.IndexingState.Running -> "Indexing…"
+                                else -> "Working…"
+                            }
+                        )
+                    } else {
+                        Icon(Icons.Default.Memory, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Index Knowledge Vault (delta)")
+                    }
+                }
+
+                // Live status chip — reflects the terminal state of the last
+                // run; the user can dismiss it to return to a clean idle button.
+                when (val state = indexingState) {
+                    is SettingsViewModel.IndexingState.Succeeded -> {
+                        Spacer(Modifier.height(8.dp))
+                        AssistChip(
+                            onClick = { viewModel.dismissIndexingState() },
+                            label = { Text("Last run: succeeded ✓") },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Default.CheckCircle,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        )
+                    }
+                    is SettingsViewModel.IndexingState.Failed -> {
+                        Spacer(Modifier.height(8.dp))
+                        AssistChip(
+                            onClick = { viewModel.dismissIndexingState() },
+                            label = { Text("Last run failed: ${state.reason}") },
+                            colors = AssistChipDefaults.assistChipColors(
+                                labelColor = MaterialTheme.colorScheme.error
+                            )
+                        )
+                    }
+                    else -> Unit
+                }
+            }
+
             // 4. About
              SettingsSection(
                 title = "About",

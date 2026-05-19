@@ -37,7 +37,7 @@ import cloud.wafflecommons.pixelbrainreader.data.local.entity.ChoreEntity
         ChoreEntity::class, // V4.6 Home OS
         cloud.wafflecommons.pixelbrainreader.data.local.entity.ChatMessageEntity::class // Nano chat memory (RAG + CREATIVE)
     ],
-    version = 26, // Add chat_messages table for persisted Gemini Nano chat history
+    version = 27, // Add isPrivate flag on embeddings for encrypted-vault RAG
     exportSchema = false
 )
 @androidx.room.TypeConverters(RoomTypeConverters::class)

@@ -243,7 +243,6 @@ class MainViewModel @Inject constructor(
                  Log.e("MainViewModel", "Sync Error", e)
                  _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Sync Error ⚠️: ${e.message}"))
              } finally {
-                 triggerBrainOptimization()
                  _isLoading.value = false
                  _isSyncing.value = false
              }
@@ -274,7 +273,6 @@ class MainViewModel @Inject constructor(
                 
                 if (result.isSuccess) {
                     widgetSnapshotManager.updateSnapshot()
-                    triggerBrainOptimization()
                 } else {
                     val errorMsg = result.exceptionOrNull()?.localizedMessage ?: "Unknown error"
                     _error.value = "Sync Failed: $errorMsg"
@@ -872,20 +870,6 @@ class MainViewModel @Inject constructor(
             } catch (e: Exception) {
                 _isLoading.value = false
                 _error.value = "Failed to open Daily Note: ${e.message}"
-            }
-        }
-    }
-
-    private fun triggerBrainOptimization() {
-        _isIndexing.value = true
-        val workRequest = OneTimeWorkRequestBuilder<IndexingWorker>().setInputData(workDataOf("FULL_REINDEX" to true)).addTag("brain_optimization").build()
-        WorkManager.getInstance(context).enqueue(workRequest as WorkRequest)
-        viewModelScope.launch {
-            WorkManager.getInstance(context).getWorkInfoByIdFlow(workRequest.id).collect { workInfo ->
-                if (workInfo != null && workInfo.state.isFinished) {
-                    _isIndexing.value = false
-                    if(workInfo.state == androidx.work.WorkInfo.State.SUCCEEDED) _userMessage.value = "Brain Optimized 🧠"
-                }
             }
         }
     }
