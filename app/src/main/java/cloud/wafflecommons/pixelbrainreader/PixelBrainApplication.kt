@@ -6,6 +6,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.work.Configuration
+import androidx.work.WorkManager
 import cloud.wafflecommons.pixelbrainreader.data.sync.SyncOrchestrator
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
@@ -33,14 +34,13 @@ class PixelBrainApplication : Application(), Configuration.Provider {
             )
         )
         scheduleDailyBurnWork()
-        scheduleTaskSyncWorker()
-        scheduleCalendarSyncWorker()
+        cancelLegacyGoogleOutboxWorkers()
         registerForegroundSyncObserver()
     }
 
     /**
      * Registers a ProcessLifecycleOwner observer that triggers a full
-     * Git→Health→Git sync cycle every time the app comes to the foreground.
+     * Git→Health→Google→Git sync cycle every time the app comes to the foreground.
      * Cooldown/debounce is handled inside SyncOrchestrator (60s minimum interval).
      */
     private fun registerForegroundSyncObserver() {
@@ -60,12 +60,12 @@ class PixelBrainApplication : Application(), Configuration.Provider {
         val currentTime = java.time.LocalDateTime.now()
         // Target 23:00 (11:00 PM) today
         var targetTime = java.time.LocalDateTime.of(currentTime.toLocalDate(), java.time.LocalTime.of(23, 0))
-        
+
         // If it's already past 23:00 today, schedule for tomorrow
         if (currentTime.isAfter(targetTime)) {
             targetTime = targetTime.plusDays(1)
         }
-        
+
         val initialDelay = java.time.Duration.between(currentTime, targetTime).toMillis()
 
         val exportWorkRequest = androidx.work.PeriodicWorkRequestBuilder<cloud.wafflecommons.pixelbrainreader.data.workers.DailyExportWorker>(
@@ -87,59 +87,16 @@ class PixelBrainApplication : Application(), Configuration.Provider {
     }
 
     /**
-     * Periodically drains the DailyTaskEntity outbox into Google Tasks.
-     * 15-minute interval is the WorkManager minimum for PeriodicWork.
-     * Constraints: network connected + battery not low; exponential backoff
-     * on Result.retry from TaskSyncWorker.
+     * Google sync is now import-only and runs inside SyncOrchestrator's
+     * foreground cycle. The previous outbox-drain workers ("TaskSyncWorker",
+     * "CalendarSyncWorker") have been removed, but devices upgrading from an
+     * older build may still have them enqueued in WorkManager's database.
+     * Cancel by name so they don't keep firing against a class that no longer exists.
      */
-    private fun scheduleTaskSyncWorker() {
-        val constraints = androidx.work.Constraints.Builder()
-            .setRequiredNetworkType(androidx.work.NetworkType.CONNECTED)
-            .setRequiresBatteryNotLow(true)
-            .build()
-
-        val request = androidx.work.PeriodicWorkRequestBuilder<cloud.wafflecommons.pixelbrainreader.data.workers.TaskSyncWorker>(
-            15, java.util.concurrent.TimeUnit.MINUTES
-        )
-            .setConstraints(constraints)
-            .setBackoffCriteria(
-                androidx.work.BackoffPolicy.EXPONENTIAL,
-                1, java.util.concurrent.TimeUnit.MINUTES
-            )
-            .build()
-
-        androidx.work.WorkManager.getInstance(this).enqueueUniquePeriodicWork(
-            cloud.wafflecommons.pixelbrainreader.data.workers.TaskSyncWorker.UNIQUE_NAME,
-            androidx.work.ExistingPeriodicWorkPolicy.UPDATE,
-            request
-        )
-    }
-
-    /**
-     * Periodically drains the TimelineEntryEntity outbox to Google Calendar.
-     * Same constraints/backoff as the Tasks worker.
-     */
-    private fun scheduleCalendarSyncWorker() {
-        val constraints = androidx.work.Constraints.Builder()
-            .setRequiredNetworkType(androidx.work.NetworkType.CONNECTED)
-            .setRequiresBatteryNotLow(true)
-            .build()
-
-        val request = androidx.work.PeriodicWorkRequestBuilder<cloud.wafflecommons.pixelbrainreader.data.workers.CalendarSyncWorker>(
-            15, java.util.concurrent.TimeUnit.MINUTES
-        )
-            .setConstraints(constraints)
-            .setBackoffCriteria(
-                androidx.work.BackoffPolicy.EXPONENTIAL,
-                1, java.util.concurrent.TimeUnit.MINUTES
-            )
-            .build()
-
-        androidx.work.WorkManager.getInstance(this).enqueueUniquePeriodicWork(
-            cloud.wafflecommons.pixelbrainreader.data.workers.CalendarSyncWorker.UNIQUE_NAME,
-            androidx.work.ExistingPeriodicWorkPolicy.UPDATE,
-            request
-        )
+    private fun cancelLegacyGoogleOutboxWorkers() {
+        val wm = WorkManager.getInstance(this)
+        wm.cancelUniqueWork("TaskSyncWorker")
+        wm.cancelUniqueWork("CalendarSyncWorker")
     }
 
     override val workManagerConfiguration: Configuration

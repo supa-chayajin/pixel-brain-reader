@@ -439,15 +439,11 @@ class DailyNoteViewModel @Inject constructor(
 
     fun clearUserMessage() { _userMessage.value = null }
 
-    // --- V6 Sub-turn C: Google Calendar command surface ----------------------
+    // --- /event command surface ----------------------------------------------
 
     /**
-     * Parses a `/event ...` command line and queues the corresponding event
-     * for Google Calendar via the outbox. The row appears in the timeline
-     * immediately (optimistic UI); CalendarSyncWorker POSTs to Google and
-     * writes the returned googleEventId back when the device is online.
-     *
-     * Safe to call directly from UI or from [scanContentForEventCommands].
+     * Parses a `/event ...` command line and inserts the entry into today's
+     * timeline. Local-only — Google Calendar sync is now import-only.
      */
     fun createEventFromCommand(line: String, date: LocalDate = _selectedDate.value) {
         val parsed = cloud.wafflecommons.pixelbrainreader.data.utils.MarkdownCommandParser
@@ -457,25 +453,19 @@ class DailyNoteViewModel @Inject constructor(
                 return
             }
         viewModelScope.launch(Dispatchers.IO) {
-            dashboardRepository.queueTimelineEvent(
+            dashboardRepository.addTimelineEntry(
                 date = parsed.startsAt.toLocalDate(),
-                time = parsed.startsAt.toLocalTime(),
-                content = parsed.title
+                content = parsed.title,
+                time = parsed.startsAt.toLocalTime()
             )
-            _userMessage.value = "📅 Event queued: ${parsed.title}"
+            _userMessage.value = "📅 Event added: ${parsed.title}"
         }
     }
 
-    /**
-     * Deletes a timeline entry through the outbox. The repository decides
-     * whether to defer (Google-linked rows are flagged pendingDeletion for
-     * CalendarSyncWorker) or hard-delete (purely local rows).
-     */
     fun deleteTimelineEvent(entry: TimelineEntryEntity) {
         viewModelScope.launch(Dispatchers.IO) {
             dashboardRepository.deleteTimelineEntry(entry.id)
-            _userMessage.value = if (entry.googleEventId != null)
-                "Event removal queued" else "Event removed"
+            _userMessage.value = "Event removed"
         }
     }
 

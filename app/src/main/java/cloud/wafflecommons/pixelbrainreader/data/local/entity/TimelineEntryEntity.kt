@@ -2,6 +2,7 @@ package cloud.wafflecommons.pixelbrainreader.data.local.entity
 
 import androidx.room.Entity
 import androidx.room.ForeignKey
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import java.time.LocalDate
 import java.time.LocalTime
@@ -9,6 +10,9 @@ import java.util.UUID
 
 /**
  * Represents a chronological event in the "Timeline" section.
+ *
+ * `googleEventId` is uniquely indexed: SQLite treats multiple NULLs as distinct,
+ * so local-only rows are unaffected while Google-imported rows can never duplicate.
  */
 @Entity(
     tableName = "timeline_entries",
@@ -20,7 +24,10 @@ import java.util.UUID
             onDelete = ForeignKey.CASCADE
         )
     ],
-    indices = [androidx.room.Index(value = ["date"])]
+    indices = [
+        Index(value = ["date"]),
+        Index(value = ["googleEventId"], unique = true)
+    ]
 )
 data class TimelineEntryEntity(
     @PrimaryKey
@@ -30,8 +37,5 @@ data class TimelineEntryEntity(
     val content: String,
     // Store original line to preserve formatting if needed during burn-back
     val originalMarkdown: String? = null,
-    val googleEventId: String? = null, // For duplicate detection in Google Calendar sync
-    // V6: outbox flags drained by CalendarSyncWorker
-    val isDirty: Boolean = false,
-    val pendingDeletion: Boolean = false
+    val googleEventId: String? = null // For duplicate detection in Google Calendar sync
 )
