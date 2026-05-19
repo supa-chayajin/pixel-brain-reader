@@ -26,19 +26,18 @@ class NoteRepository @Inject constructor(
     suspend fun getNoteContent(path: String): String? = withContext(Dispatchers.IO) {
         try {
             val file = safeFileProvider.getSafeFile(path)
-            Log.d("FileAudit", "Reading file at: ${file.absolutePath}")
-            
+            // Absolute paths and filenames intentionally NOT logged — note
+            // filenames can be sensitive (especially private vault). Log.d
+            // is stripped in release by ProGuard but Log.w/e survive, so
+            // keep release-visible logs path-free.
             if (file.exists()) {
                 if (file.isDirectory) return@withContext null
-                val content = file.readText()
-                Log.d("FileAudit", "Read ${content.length} bytes from ${file.name}")
-                content
+                file.readText()
             } else {
-                Log.w("FileAudit", "File not found: ${file.absolutePath}")
                 null
             }
         } catch (e: SecurityException) {
-            Log.e("SecurityAudit", "Access Denied: ${e.message}")
+            Log.e("SecurityAudit", "Access denied to vault file")
             null
         }
     }

@@ -48,6 +48,11 @@ class GoogleCalendarRepository @Inject constructor(
                 if (response.statusCode == 401 && supportsRetry) {
                     Log.w(TAG, "401 from Calendar API; invalidating cached token and retrying once")
                     authRepository.invalidateAccessToken()
+                    // CONTRACT: this handler is only ever invoked by the Google
+                    // HTTP client from inside the surrounding
+                    // withContext(Dispatchers.IO) block in [syncTodayEvents].
+                    // runBlocking on IO ⇒ no ANR. Do NOT call buildService(...)
+                    // from a Main-dispatched coroutine — keep all callers on IO.
                     val fresh = runBlocking { authRepository.getValidAccessToken() }
                     if (fresh != null) {
                         req.headers.authorization = "Bearer $fresh"

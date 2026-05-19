@@ -1,10 +1,7 @@
 package cloud.wafflecommons.pixelbrainreader.data.local.security
 
-import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
-import java.security.KeyStore
 import javax.crypto.Cipher
-import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 import javax.inject.Inject
@@ -13,6 +10,8 @@ import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.PBEKeySpec
 import javax.crypto.spec.SecretKeySpec
 import java.security.SecureRandom
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Singleton
 class CryptoManager @Inject constructor() {
@@ -35,56 +34,48 @@ class CryptoManager @Inject constructor() {
      * Encrypts plaintext using AES-256-GCM.
      * Generates a random salt and IV.
      * The output format is [Salt (16)] + [IV (12)] + [Encrypted Data].
+     *
+     * Suspending + Dispatchers.Default because PBKDF2 (10k iterations) is
+     * CPU-bound. Callers no longer need to wrap in withContext themselves.
      */
-    fun encrypt(plaintext: String, password: CharArray): ByteArray {
-        // 1. Generate Salt
-        val salt = ByteArray(SALT_SIZE_BYTES)
-        SecureRandom().nextBytes(salt)
+    suspend fun encrypt(plaintext: String, password: CharArray): ByteArray =
+        withContext(Dispatchers.Default) {
+            val salt = ByteArray(SALT_SIZE_BYTES)
+            SecureRandom().nextBytes(salt)
 
-        // 2. Derive Key
-        val secretKey = deriveKey(password, salt)
+            val secretKey = deriveKey(password, salt)
 
-        // 3. Generate IV
-        val iv = ByteArray(IV_SIZE_BYTES)
-        SecureRandom().nextBytes(iv)
+            val iv = ByteArray(IV_SIZE_BYTES)
+            SecureRandom().nextBytes(iv)
 
-        // 4. Initialize Cipher
-        val cipher = Cipher.getInstance(TRANSFORMATION)
-        val spec = GCMParameterSpec(128, iv)
-        cipher.init(Cipher.ENCRYPT_MODE, secretKey, spec)
+            val cipher = Cipher.getInstance(TRANSFORMATION)
+            val spec = GCMParameterSpec(128, iv)
+            cipher.init(Cipher.ENCRYPT_MODE, secretKey, spec)
 
-        // 5. Encrypt
-        val ciphertext = cipher.doFinal(plaintext.toByteArray(Charsets.UTF_8))
+            val ciphertext = cipher.doFinal(plaintext.toByteArray(Charsets.UTF_8))
 
-        // 6. Pack: Salt + IV + Ciphertext
-        return salt + iv + ciphertext
-    }
+            salt + iv + ciphertext
+        }
 
     /**
      * Decrypts the packed byte array.
      * Extracts Salt and IV, derives the key, and decrypts.
      */
-    fun decrypt(fileData: ByteArray, password: CharArray): String {
-        // 1. Extract Salt
-        val salt = fileData.copyOfRange(0, SALT_SIZE_BYTES)
-        
-        // 2. Extract IV
-        val iv = fileData.copyOfRange(SALT_SIZE_BYTES, SALT_SIZE_BYTES + IV_SIZE_BYTES)
-        
-        // 3. Extract Ciphertext (The rest)
-        val ciphertext = fileData.copyOfRange(SALT_SIZE_BYTES + IV_SIZE_BYTES, fileData.size)
+    suspend fun decrypt(fileData: ByteArray, password: CharArray): String =
+        withContext(Dispatchers.Default) {
+            val salt = fileData.copyOfRange(0, SALT_SIZE_BYTES)
+            val iv = fileData.copyOfRange(SALT_SIZE_BYTES, SALT_SIZE_BYTES + IV_SIZE_BYTES)
+            val ciphertext = fileData.copyOfRange(SALT_SIZE_BYTES + IV_SIZE_BYTES, fileData.size)
 
-        // 4. Derive Key (Must match encryption key)
-        val secretKey = deriveKey(password, salt)
+            val secretKey = deriveKey(password, salt)
 
-        // 5. Decrypt
-        val cipher = Cipher.getInstance(TRANSFORMATION)
-        val spec = GCMParameterSpec(128, iv)
-        cipher.init(Cipher.DECRYPT_MODE, secretKey, spec)
+            val cipher = Cipher.getInstance(TRANSFORMATION)
+            val spec = GCMParameterSpec(128, iv)
+            cipher.init(Cipher.DECRYPT_MODE, secretKey, spec)
 
-        val plaintextBytes = cipher.doFinal(ciphertext)
-        return String(plaintextBytes, Charsets.UTF_8)
-    }
+            val plaintextBytes = cipher.doFinal(ciphertext)
+            String(plaintextBytes, Charsets.UTF_8)
+        }
 
     /**
      * Derives a 256-bit AES key from the password and salt using PBKDF2.

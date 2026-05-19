@@ -31,6 +31,15 @@ class PixelBrainApplication : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
+        // CrashActivity runs in a separate `:crash` process (see manifest);
+        // that process boots its own Application instance. Skip all of the
+        // main-process init for it: no point scheduling workers / running
+        // reconciles in a process whose only job is to show the crash UI,
+        // and an exception inside that init would crash-loop the dialog.
+        if (!isMainProcess()) {
+            return
+        }
+
         Thread.setDefaultUncaughtExceptionHandler(
             cloud.wafflecommons.pixelbrainreader.ui.crash.GlobalExceptionHandler(
                 this,
@@ -41,6 +50,20 @@ class PixelBrainApplication : Application(), Configuration.Provider {
         cancelLegacyGoogleOutboxWorkers()
         runStartupReconcile()
         registerForegroundSyncObserver()
+    }
+
+    /** True only inside the default app process (excludes `:crash`). */
+    private fun isMainProcess(): Boolean {
+        val current = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            Application.getProcessName()
+        } else {
+            val pid = android.os.Process.myPid()
+            (getSystemService(ACTIVITY_SERVICE) as? android.app.ActivityManager)
+                ?.runningAppProcesses
+                ?.firstOrNull { it.pid == pid }
+                ?.processName
+        }
+        return current == packageName
     }
 
     /**
@@ -111,6 +134,7 @@ class PixelBrainApplication : Application(), Configuration.Provider {
             .setConstraints(
                 androidx.work.Constraints.Builder()
                     .setRequiresBatteryNotLow(true)
+                    .setRequiresDeviceIdle(true)
                     .build()
             )
             .build()

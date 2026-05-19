@@ -33,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import cloud.wafflecommons.pixelbrainreader.BuildConfig
 import cloud.wafflecommons.pixelbrainreader.MainActivity
 import kotlin.system.exitProcess
 
@@ -110,29 +111,36 @@ class CrashActivity : ComponentActivity() {
                     Text("Redémarrer l'application")
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                // Technical details are ONLY visible in debug builds. In
+                // release the panel is hidden entirely — stack traces can
+                // leak file paths, class names, and exception messages that
+                // may include sensitive context (vault paths, error strings
+                // formatted from user data, etc.).
+                if (BuildConfig.DEBUG) {
+                    Spacer(modifier = Modifier.height(16.dp))
 
-                OutlinedButton(
-                    onClick = { showDetails = !showDetails },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(if (showDetails) "Masquer les détails techniques" else "Afficher les détails techniques")
-                }
+                    OutlinedButton(
+                        onClick = { showDetails = !showDetails },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(if (showDetails) "Masquer les détails techniques" else "Afficher les détails techniques")
+                    }
 
-                AnimatedVisibility(visible = showDetails) {
-                    Column(modifier = Modifier.padding(top = 16.dp)) {
-                        Text(
-                            text = "Stack Trace:",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = stackTrace,
-                            style = MaterialTheme.typography.bodySmall,
-                            fontFamily = FontFamily.Monospace,
-                            color = MaterialTheme.colorScheme.error
-                        )
+                    AnimatedVisibility(visible = showDetails) {
+                        Column(modifier = Modifier.padding(top = 16.dp)) {
+                            Text(
+                                text = "Stack Trace:",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = stackTrace,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = FontFamily.Monospace,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
                     }
                 }
             }
