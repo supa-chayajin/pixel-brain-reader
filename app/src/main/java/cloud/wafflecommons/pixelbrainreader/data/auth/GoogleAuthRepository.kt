@@ -228,17 +228,37 @@ class GoogleAuthRepository @Inject constructor(
 
     /**
      * Returns a valid access token, refreshing silently via [authorize] when
-     * the cached one is near expiry. Returns null when a fresh UI consent is
-     * required — background callers (SyncOrchestrator, workers) must skip
-     * silently in that case; the UI re-triggers consent on next foreground.
+     * the cache is empty OR near expiry. Returns null only when a fresh UI
+     * consent is required (Google's AuthorizationClient returned NeedsUserConsent)
+     * or when authorize() fails entirely — background callers (SyncOrchestrator,
+     * workers) must skip silently in that case; the UI re-triggers consent on
+     * the next foreground "Connect Google" action.
+     *
+     * Attempting silent authorize() on an empty cache is what self-heals every
+     * common loss-of-token scenario: 401-driven invalidation, a sign-out that
+     * cleared local state but not server-side scope consent, EncryptedSharedPreferences
+     * being wiped, or a fresh install on a device whose Google account has
+     * already granted the scopes.
      */
     suspend fun getValidAccessToken(): String? {
-        val cached = secretManager.getGoogleAccessToken() ?: return null
-        val (token, expiresAt) = cached
-        if (System.currentTimeMillis() < expiresAt - TOKEN_SKEW_MS) return token
+        val cached = secretManager.getGoogleAccessToken()
+        if (cached != null) {
+            val (token, expiresAt) = cached
+            if (System.currentTimeMillis() < expiresAt - TOKEN_SKEW_MS) return token
+            Log.i(TAG, "Cached token near expiry; attempting silent re-authorize")
+        } else {
+            Log.i(TAG, "No cached token; attempting silent authorize (consent may still be on file with Google)")
+        }
         return when (val outcome = authorize().getOrNull()) {
             is AuthorizationOutcome.Authorized -> outcome.accessToken
-            else -> null
+            is AuthorizationOutcome.NeedsUserConsent -> {
+                Log.w(TAG, "Silent authorize returned NeedsUserConsent; user must re-tap Connect Google")
+                null
+            }
+            null -> {
+                Log.w(TAG, "Silent authorize failed entirely; cannot acquire token in background")
+                null
+            }
         }
     }
 

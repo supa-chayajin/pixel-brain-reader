@@ -63,9 +63,12 @@ class GoogleCalendarRepository @Inject constructor(
 
     suspend fun syncTodayEvents(today: LocalDate = LocalDate.now()): Result<Int> =
         withContext(Dispatchers.IO) {
-            if (!userPreferences.isGoogleSyncEnabled.first()) return@withContext Result.success(0)
+            if (!userPreferences.isGoogleSyncEnabled.first()) {
+                Log.w(TAG, "syncTodayEvents skipped: Google sync is disabled in settings")
+                return@withContext Result.success(0)
+            }
             val token = authRepository.getValidAccessToken() ?: run {
-                Log.w(TAG, "No valid token; skipping calendar import")
+                Log.w(TAG, "syncTodayEvents skipped: no valid access token (sign in to Google?)")
                 return@withContext Result.success(0)
             }
             try {
@@ -79,6 +82,7 @@ class GoogleCalendarRepository @Inject constructor(
                 val offsetMinutes = zone.rules.getOffset(startInstant).totalSeconds / 60
                 val timeMin = DateTime(startInstant.toEpochMilli(), offsetMinutes)
                 val timeMax = DateTime(endInstant.toEpochMilli(), offsetMinutes)
+                Log.i(TAG, "syncTodayEvents window: $timeMin .. $timeMax (zone=$zone)")
 
                 // FK guard: timeline_entries(date) -> daily_dashboard(date). Insert
                 // the parent dashboard row first (IGNORE on conflict) so the
@@ -94,7 +98,9 @@ class GoogleCalendarRepository @Inject constructor(
                 dailyDashboardDao.purgeGoogleTimelineForDate(today)
 
                 var total = 0
-                for (cal in service.calendarList().list().execute().items.orEmpty()) {
+                val calendars = service.calendarList().list().execute().items.orEmpty()
+                Log.i(TAG, "Calendars discovered: ${calendars.size} -> ${calendars.map { it.summary ?: it.id }}")
+                for (cal in calendars) {
                     val events = service.events().list(cal.id)
                         .setTimeMin(timeMin)
                         .setTimeMax(timeMax)
@@ -105,7 +111,9 @@ class GoogleCalendarRepository @Inject constructor(
                         .setTimeZone(zone.id)
                         .setOrderBy("startTime")
                         .execute()
-                    events.items.orEmpty().forEach { evt ->
+                    val items = events.items.orEmpty()
+                    Log.i(TAG, "  '${cal.summary ?: cal.id}': ${items.size} event(s) in window")
+                    items.forEach { evt ->
                         val existing = dailyDashboardDao
                             .getTimelineEntryByGoogleEventId(evt.id)
                         val entity = TimelineEntryEntity(
@@ -119,6 +127,7 @@ class GoogleCalendarRepository @Inject constructor(
                         total++
                     }
                 }
+                Log.i(TAG, "syncTodayEvents complete: imported $total event(s)")
                 Result.success(total)
             } catch (e: Exception) {
                 Log.e(TAG, "Calendar import failed", e)
