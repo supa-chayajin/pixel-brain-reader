@@ -129,11 +129,18 @@ class SyncOrchestrator @Inject constructor(
             // Phase 2.5: Google Ecosystem Sync (non-fatal)
             Log.i(TAG, "Phase 2.5: Google Ecosystem sync...")
             try {
-                googleCalendarRepository.syncTodayEvents()
-                googleTaskRepository.syncPendingTasks()
-                Log.i(TAG, "Phase 2.5: Google sync OK")
+                val calRes = googleCalendarRepository.syncTodayEvents()
+                val taskRes = googleTaskRepository.syncPendingTasks()
+                calRes.fold(
+                    onSuccess = { Log.i(TAG, "Phase 2.5: Calendar import returned $it event(s)") },
+                    onFailure = { Log.w(TAG, "Phase 2.5: Calendar import failed", it) }
+                )
+                taskRes.fold(
+                    onSuccess = { Log.i(TAG, "Phase 2.5: Tasks import returned $it task(s)") },
+                    onFailure = { Log.w(TAG, "Phase 2.5: Tasks import failed", it) }
+                )
             } catch (e: Exception) {
-                Log.w(TAG, "Phase 2.5: Google sync failed (non-fatal)", e)
+                Log.w(TAG, "Phase 2.5: Google sync threw (non-fatal)", e)
             }
 
             // Phase 3: Git Add + Commit + Push

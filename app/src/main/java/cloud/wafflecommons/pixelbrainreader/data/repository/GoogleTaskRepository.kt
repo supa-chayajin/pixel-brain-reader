@@ -64,9 +64,12 @@ class GoogleTaskRepository @Inject constructor(
 
     suspend fun syncPendingTasks(today: LocalDate = LocalDate.now()): Result<Int> =
         withContext(Dispatchers.IO) {
-            if (!userPreferences.isGoogleSyncEnabled.first()) return@withContext Result.success(0)
+            if (!userPreferences.isGoogleSyncEnabled.first()) {
+                Log.w(TAG, "syncPendingTasks skipped: Google sync is disabled in settings")
+                return@withContext Result.success(0)
+            }
             val token = authRepository.getValidAccessToken() ?: run {
-                Log.w(TAG, "No valid token; skipping tasks import")
+                Log.w(TAG, "syncPendingTasks skipped: no valid access token (sign in to Google?)")
                 return@withContext Result.success(0)
             }
             try {
@@ -84,8 +87,11 @@ class GoogleTaskRepository @Inject constructor(
                 // batch is the truth (handles user deletions / completion flips on Google's side).
                 taskDao.purgeGoogleTasksForDate(today.toString())
 
+                Log.i(TAG, "syncPendingTasks window: $dueMin .. $dueMax (zone=$zone)")
                 var total = 0
-                for (list in service.tasklists().list().execute().items.orEmpty()) {
+                val lists = service.tasklists().list().execute().items.orEmpty()
+                Log.i(TAG, "Task lists discovered: ${lists.size} -> ${lists.map { it.title ?: it.id }}")
+                for (list in lists) {
                     val tasks = service.tasks().list(list.id)
                         // Include completed + hidden so today's done tasks are imported with
                         // their real status preserved (Rule 3).
@@ -101,10 +107,12 @@ class GoogleTaskRepository @Inject constructor(
                     //   - future tasks (dueLocal > today)
                     // Also defends against the server's dueMin/dueMax returning
                     // boundary rows due to RFC 3339 / time-zone quirks.
+                    val rawCount = tasks.items.orEmpty().size
                     val todayOnly = tasks.items.orEmpty().filter { gt ->
                         val dueLocal = parseDueToLocalDate(gt.due, zone)
                         dueLocal != null && dueLocal == today
                     }
+                    Log.i(TAG, "  '${list.title ?: list.id}': $rawCount returned, ${todayOnly.size} match today after strict filter")
 
                     todayOnly.forEach { gt ->
                         val isCompleted = gt.status == "completed"
@@ -121,6 +129,7 @@ class GoogleTaskRepository @Inject constructor(
                         total++
                     }
                 }
+                Log.i(TAG, "syncPendingTasks complete: imported $total task(s)")
                 Result.success(total)
             } catch (e: Exception) {
                 Log.e(TAG, "Tasks import failed", e)
