@@ -17,6 +17,13 @@ interface ChoreDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertChore(chore: ChoreEntity)
 
+    // Blocking variants for use inside database.withTransaction { ... }.
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    fun insertChoresBlocking(chores: List<ChoreEntity>)
+
+    @Query("DELETE FROM chores")
+    fun deleteAllChoresBlocking()
+
     @Query("UPDATE chores SET lastDoneDate = :date WHERE id = :choreId")
     suspend fun updateLastDoneDate(choreId: String, date: String)
 

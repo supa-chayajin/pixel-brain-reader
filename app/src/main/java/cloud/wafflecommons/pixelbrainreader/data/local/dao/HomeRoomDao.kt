@@ -23,6 +23,13 @@ interface HomeRoomDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertRoom(room: HomeRoomEntity)
 
+    // Blocking variants for use inside database.withTransaction { ... }.
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    fun insertRoomsBlocking(rooms: List<HomeRoomEntity>)
+
+    @Query("DELETE FROM home_rooms")
+    fun deleteAllRoomsBlocking()
+
     @Delete
     suspend fun deleteRoom(room: HomeRoomEntity)
 

@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import cloud.wafflecommons.pixelbrainreader.data.repository.ChoreRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.HabitRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.MoodRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.VaultDiscoveryRepository
@@ -23,6 +24,7 @@ class IndexingWorker @AssistedInject constructor(
     private val vaultDiscoveryRepository: VaultDiscoveryRepository,
     private val moodRepository: MoodRepository,
     private val habitRepository: HabitRepository,
+    private val choreRepository: ChoreRepository,
     private val vectorSearchEngine: cloud.wafflecommons.pixelbrainreader.data.ai.VectorSearchEngine,
     private val embeddingDao: cloud.wafflecommons.pixelbrainreader.data.local.dao.EmbeddingDao,
     private val fileDao: cloud.wafflecommons.pixelbrainreader.data.local.dao.FileDao,
@@ -74,7 +76,8 @@ class IndexingWorker @AssistedInject constructor(
             // Sync Moods/Habits (Can run after or parallel, let's await them for "Indexing Complete" correctness)
             val otherSyncs = listOf(
                 async { try { moodRepository.syncWithFileSystem() } catch (e: Exception) { Log.e("IndexingWorker", "Mood Sync Failed", e) } },
-                async { try { habitRepository.syncWithFileSystem() } catch (e: Exception) { Log.e("IndexingWorker", "Habit Sync Failed", e) } }
+                async { try { habitRepository.syncWithFileSystem() } catch (e: Exception) { Log.e("IndexingWorker", "Habit Sync Failed", e) } },
+                async { try { choreRepository.syncWithFileSystem() } catch (e: Exception) { Log.e("IndexingWorker", "Chore Sync Failed", e) } }
             )
             otherSyncs.awaitAll()
             
