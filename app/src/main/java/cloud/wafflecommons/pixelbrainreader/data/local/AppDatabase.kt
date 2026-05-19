@@ -34,9 +34,10 @@ import cloud.wafflecommons.pixelbrainreader.data.local.entity.ChoreEntity
         cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyBriefingEntity::class,
         cloud.wafflecommons.pixelbrainreader.data.local.entity.GratitudeEntity::class, // RFC-009
         cloud.wafflecommons.pixelbrainreader.data.local.entity.HomeRoomEntity::class, // V4.6.1 Home Config
-        ChoreEntity::class // V4.6 Home OS
-    ], 
-    version = 25, // Google sync becomes import-only: drop isDirty/pendingDeletion + add unique index on googleEventId/googleTaskId
+        ChoreEntity::class, // V4.6 Home OS
+        cloud.wafflecommons.pixelbrainreader.data.local.entity.ChatMessageEntity::class // Nano chat memory (RAG + CREATIVE)
+    ],
+    version = 26, // Add chat_messages table for persisted Gemini Nano chat history
     exportSchema = false
 )
 @androidx.room.TypeConverters(RoomTypeConverters::class)
@@ -55,4 +56,5 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun taskDao(): cloud.wafflecommons.pixelbrainreader.data.local.dao.TaskDao
     abstract fun choreDao(): ChoreDao
     abstract fun homeRoomDao(): cloud.wafflecommons.pixelbrainreader.data.local.dao.HomeRoomDao
+    abstract fun chatDao(): cloud.wafflecommons.pixelbrainreader.data.local.dao.ChatDao
 }

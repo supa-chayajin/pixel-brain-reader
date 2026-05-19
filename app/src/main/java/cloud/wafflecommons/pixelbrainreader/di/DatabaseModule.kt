@@ -111,4 +111,10 @@ object DatabaseModule {
     fun provideHomeRoomDao(database: AppDatabase): cloud.wafflecommons.pixelbrainreader.data.local.dao.HomeRoomDao {
         return database.homeRoomDao()
     }
+
+    @Provides
+    @Singleton
+    fun provideChatDao(database: AppDatabase): cloud.wafflecommons.pixelbrainreader.data.local.dao.ChatDao {
+        return database.chatDao()
+    }
 }
