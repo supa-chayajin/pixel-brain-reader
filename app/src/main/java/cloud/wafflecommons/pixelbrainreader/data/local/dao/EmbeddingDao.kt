@@ -17,6 +17,9 @@ interface EmbeddingDao {
     @Query("SELECT * FROM embeddings")
     suspend fun getAllEmbeddings(): List<EmbeddingEntity>
 
+    @Query("SELECT COUNT(*) FROM embeddings")
+    suspend fun count(): Int
+
     @Query("DELETE FROM embeddings WHERE fileId = :fileId")
     suspend fun deleteByFileId(fileId: String)
     

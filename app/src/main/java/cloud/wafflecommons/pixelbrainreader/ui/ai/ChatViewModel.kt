@@ -1,5 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.ui.ai
 
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -192,6 +193,13 @@ class ChatViewModel @Inject constructor(
                 ragContext = hits.takeIf { it.isNotEmpty() }
                     ?.joinToString(separator = "\n---\n") { it.content }
                 sources = hits.map { it.fileId }.distinct()
+                Log.i(
+                    "RAG_DEBUG",
+                    "ChatViewModel.sendMessage(ORACLE): hits=${hits.size} " +
+                        "sources=$sources contextLen=${ragContext?.length ?: 0}"
+                )
+            } else {
+                Log.d("RAG_DEBUG", "ChatViewModel.sendMessage(SCRIBE): RAG search skipped")
             }
 
             // 4. Nano call. Single persona covers both modes — the persona's

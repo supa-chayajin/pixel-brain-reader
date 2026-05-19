@@ -20,6 +20,7 @@ import androidx.health.connect.client.time.TimeRangeFilter
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
@@ -30,6 +31,7 @@ import javax.inject.Singleton
 
 data class HeartRatePoint(val timestamp: Instant, val avgBpm: Double)
 
+@Serializable
 data class DailyHealthMetrics(
     val date: String,
     val steps: Long,

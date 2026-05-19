@@ -106,10 +106,15 @@ class VectorSearchEngine @Inject constructor(
      */
     suspend fun embed(text: String): FloatArray = withContext(Dispatchers.Default) {
         val embedder = getEmbedderSafe() ?: throw IllegalStateException("Vector Engine not ready (Asset missing or Init failed)")
-        
+
         val embeddingResult = embedder.embed(text)
         val embedding = embeddingResult.embeddingResult().embeddings().first()
-        embedding.floatEmbedding()
+        val vector = embedding.floatEmbedding()
+        Log.d(
+            "RAG_DEBUG",
+            "embed: textLen=${text.length} -> dim=${vector.size}; head=${vector.take(3).map { "%.3f".format(it) }}"
+        )
+        vector
     }
 
     /**
@@ -117,10 +122,12 @@ class VectorSearchEngine @Inject constructor(
      * Returns empty list safely if engine is unavailable.
      */
     suspend fun search(query: String, limit: Int = 3): List<EmbeddingEntity> = withContext(Dispatchers.IO) {
+        Log.d("RAG_DEBUG", "search: query='${query.take(80).replace("\n", " ")}' (len=${query.length})")
+
         // 1. Safe Embed (Fail Soft)
         val embedder = getEmbedderSafe()
         if (embedder == null) {
-            Log.w("Cortex", "Search skipped: Vector Engine not ready.")
+            Log.w("RAG_DEBUG", "search skipped: Vector Engine not ready")
             return@withContext emptyList()
         }
 
@@ -128,22 +135,32 @@ class VectorSearchEngine @Inject constructor(
             val result = embedder.embed(query)
             result.embeddingResult().embeddings().first().floatEmbedding()
         } catch (e: Exception) {
-            Log.w("Cortex", "Query embedding failed: ${e.message}")
+            Log.w("RAG_DEBUG", "Query embedding failed: ${e.message}")
             return@withContext emptyList()
         }
+        Log.d("RAG_DEBUG", "search: query embedded to ${queryVector.size}-dim vector")
 
         // 2. Load all embeddings (Brute-force Local RAG)
         val allEmbeddings = embeddingDao.getAllEmbeddings()
+        Log.d("RAG_DEBUG", "search: ${allEmbeddings.size} embedding(s) in DB to compare against")
+        if (allEmbeddings.isEmpty()) {
+            Log.w("RAG_DEBUG", "search: embeddings table is EMPTY — IndexingWorker has not produced any embeddings yet")
+            return@withContext emptyList()
+        }
 
         // 3. Calculate Similarity & Sort
-        val results = allEmbeddings.map { entity ->
-            val entityVector = entity.vector.toFloatArray() // List<Float> -> FloatArray
+        val scored = allEmbeddings.map { entity ->
+            val entityVector = entity.vector.toFloatArray()
             val similarity = cosineSimilarity(queryVector, entityVector)
             entity to similarity
-        }
-        .sortedByDescending { it.second }
-        .take(limit)
-        .map { it.first }
+        }.sortedByDescending { it.second }
+
+        val results = scored.take(limit).map { it.first }
+        val topScores = scored.take(limit).map { "%.3f".format(it.second) }
+        Log.d(
+            "RAG_DEBUG",
+            "search: top-$limit similarities=$topScores; returning ${results.size} chunk(s) from files=${results.map { it.fileId }.distinct()}"
+        )
 
         return@withContext results
     }
