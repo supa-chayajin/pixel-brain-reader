@@ -35,7 +35,25 @@ class PixelBrainApplication : Application(), Configuration.Provider {
         )
         scheduleDailyBurnWork()
         cancelLegacyGoogleOutboxWorkers()
+        enqueueStartupReindex()
         registerForegroundSyncObserver()
+    }
+
+    /**
+     * One-shot IndexingWorker enqueue on app start. Reconciles Mood/Habit/Chore
+     * JSON files in the vault into Room — important after a destructive Room
+     * migration (e.g. a schema bump) when the foreground sync hasn't run yet.
+     * Unique-named so repeated launches don't pile up.
+     */
+    private fun enqueueStartupReindex() {
+        val request = androidx.work.OneTimeWorkRequestBuilder<cloud.wafflecommons.pixelbrainreader.data.workers.IndexingWorker>()
+            .addTag("startup_reconcile")
+            .build()
+        androidx.work.WorkManager.getInstance(this).enqueueUniqueWork(
+            "StartupReindex",
+            androidx.work.ExistingWorkPolicy.KEEP,
+            request
+        )
     }
 
     /**
