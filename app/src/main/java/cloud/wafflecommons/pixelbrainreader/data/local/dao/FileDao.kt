@@ -84,6 +84,21 @@ abstract class FileDao {
     @Query("SELECT COUNT(*) > 0 FROM files WHERE path = :path")
     abstract suspend fun exists(path: String): Boolean
 
+    /**
+     * Backfill query for RAG indexing. Returns every markdown file row that
+     * has no corresponding row in the embeddings table — i.e. files the
+     * IndexingWorker has never embedded (or that lost their embeddings to
+     * a destructive Room migration). The delta scan ignores these because
+     * their lastModified() is older than lastIndexTime; this query is what
+     * lets the worker heal a cold embeddings table.
+     */
+    @Query(
+        "SELECT * FROM files " +
+            "WHERE type = 'file' AND path LIKE '%.md' " +
+            "AND path NOT IN (SELECT DISTINCT fileId FROM embeddings)"
+    )
+    abstract suspend fun getFilesWithoutEmbeddings(): List<FileEntity>
+
     @Query("SELECT COUNT(*) > 0 FROM files WHERE path = :path")
     abstract fun existsBlocking(path: String): Boolean
 }

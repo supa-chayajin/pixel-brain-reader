@@ -8,7 +8,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkRequest
 import androidx.work.workDataOf
-import cloud.wafflecommons.pixelbrainreader.data.ai.IndexingWorker
+import cloud.wafflecommons.pixelbrainreader.data.workers.IndexingWorker
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
