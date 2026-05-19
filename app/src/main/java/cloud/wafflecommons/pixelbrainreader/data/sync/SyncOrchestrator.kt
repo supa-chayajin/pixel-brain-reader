@@ -2,13 +2,9 @@ package cloud.wafflecommons.pixelbrainreader.data.sync
 
 import android.content.Context
 import android.util.Log
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
-import androidx.work.workDataOf
 import cloud.wafflecommons.pixelbrainreader.data.remote.JGitProvider
 import cloud.wafflecommons.pixelbrainreader.data.remote.SyncResult
 import cloud.wafflecommons.pixelbrainreader.data.usecase.SyncHealthDataUseCase
-import cloud.wafflecommons.pixelbrainreader.data.workers.IndexingWorker
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -47,7 +43,10 @@ class SyncOrchestrator @Inject constructor(
     private val syncHealthDataUseCase: SyncHealthDataUseCase,
     private val googleCalendarRepository: cloud.wafflecommons.pixelbrainreader.data.repository.GoogleCalendarRepository,
     private val googleTaskRepository: cloud.wafflecommons.pixelbrainreader.data.repository.GoogleTaskRepository,
-    private val vaultDiscoveryRepository: cloud.wafflecommons.pixelbrainreader.data.repository.VaultDiscoveryRepository
+    private val vaultDiscoveryRepository: cloud.wafflecommons.pixelbrainreader.data.repository.VaultDiscoveryRepository,
+    private val moodRepository: cloud.wafflecommons.pixelbrainreader.data.repository.MoodRepository,
+    private val habitRepository: cloud.wafflecommons.pixelbrainreader.data.repository.HabitRepository,
+    private val choreRepository: cloud.wafflecommons.pixelbrainreader.data.repository.ChoreRepository
 ) {
     companion object {
         private const val TAG = "SyncOrchestrator"
@@ -166,17 +165,19 @@ class SyncOrchestrator @Inject constructor(
             runCatching { vaultDiscoveryRepository.reindexAll(0L) }
                 .onFailure { Log.w(TAG, "Post-push reindex failed (non-fatal)", it) }
 
-            // Phase 4: Enqueue IndexingWorker so Mood/Habit/Chore JSON files
-            // pulled from Git get reconciled into Room. SyncOrchestrator only
-            // owns the git + FileEntity index — the per-feature JSON->Room
-            // bridges live inside IndexingWorker.
-            Log.i(TAG, "Phase 4: Enqueueing IndexingWorker for Mood/Habit/Chore reconciliation...")
-            runCatching {
-                val request = OneTimeWorkRequestBuilder<IndexingWorker>()
-                    .addTag("post_sync_reconcile")
-                    .build()
-                WorkManager.getInstance(context).enqueue(request)
-            }.onFailure { Log.w(TAG, "IndexingWorker enqueue failed (non-fatal)", it) }
+            // Phase 4: Reconcile Mood / Habit / Chore JSON files (newly pulled
+            // from git) back into Room. Cheap local I/O — done inline rather
+            // than via WorkManager so we can guarantee the UI sees freshly
+            // synced state before this method returns. Embedding indexing is
+            // intentionally NOT triggered here: it's now exclusively under
+            // user control via Settings → "Index Knowledge Vault".
+            Log.i(TAG, "Phase 4: Inline Mood/Habit/Chore JSON → Room reconcile...")
+            runCatching { moodRepository.syncWithFileSystem() }
+                .onFailure { Log.w(TAG, "Phase 4: Mood reconcile failed (non-fatal)", it) }
+            runCatching { habitRepository.syncWithFileSystem() }
+                .onFailure { Log.w(TAG, "Phase 4: Habit reconcile failed (non-fatal)", it) }
+            runCatching { choreRepository.syncWithFileSystem() }
+                .onFailure { Log.w(TAG, "Phase 4: Chore reconcile failed (non-fatal)", it) }
 
             Log.i(TAG, "=== Full Sync Cycle Complete ===")
             _syncState.value = SyncState.Success

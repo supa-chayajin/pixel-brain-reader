@@ -7,6 +7,11 @@ import android.content.IntentSender
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
+import cloud.wafflecommons.pixelbrainreader.data.workers.IndexingWorker
 import cloud.wafflecommons.pixelbrainreader.data.ai.LocalAiManager
 import cloud.wafflecommons.pixelbrainreader.data.ai.NanoState
 import cloud.wafflecommons.pixelbrainreader.data.auth.GoogleAuthRepository
@@ -88,6 +93,75 @@ class SettingsViewModel @Inject constructor(
 
     private val _nanoModelEvents = MutableSharedFlow<NanoModelEvent>(extraBufferCapacity = 4)
     val nanoModelEvents = _nanoModelEvents.asSharedFlow()
+
+    /**
+     * Live state of the manual RAG indexing job.
+     *
+     * Reflects WorkManager's view of [IndexingWorker.UNIQUE_WORK_NAME] across
+     * process death: if the user backgrounds the app while indexing is
+     * running and comes back, we re-attach to the same WorkInfo flow and
+     * keep showing the running state until the worker actually finishes.
+     */
+    sealed class IndexingState {
+        data object Idle : IndexingState()
+        data object Enqueued : IndexingState()
+        data object Running : IndexingState()
+        data object Succeeded : IndexingState()
+        data class Failed(val reason: String) : IndexingState()
+    }
+
+    private val _indexingState = MutableStateFlow<IndexingState>(IndexingState.Idle)
+    val indexingState: StateFlow<IndexingState> = _indexingState.asStateFlow()
+
+    init {
+        // Re-attach to any in-flight indexing job (e.g. after process death
+        // while a previous user-triggered indexing was still running).
+        observeIndexingWork()
+    }
+
+    private fun observeIndexingWork() {
+        viewModelScope.launch {
+            WorkManager.getInstance(context)
+                .getWorkInfosForUniqueWorkFlow(IndexingWorker.UNIQUE_WORK_NAME)
+                .collect { infos ->
+                    val latest = infos.firstOrNull()
+                    _indexingState.value = when (latest?.state) {
+                        WorkInfo.State.ENQUEUED -> IndexingState.Enqueued
+                        WorkInfo.State.RUNNING -> IndexingState.Running
+                        WorkInfo.State.SUCCEEDED -> IndexingState.Succeeded
+                        WorkInfo.State.FAILED -> IndexingState.Failed(
+                            latest.outputData.getString("error") ?: "Indexing failed"
+                        )
+                        WorkInfo.State.CANCELLED -> IndexingState.Failed("Indexing cancelled")
+                        WorkInfo.State.BLOCKED, null -> IndexingState.Idle
+                    }
+                }
+        }
+    }
+
+    /**
+     * User-triggered manual delta indexing. Enqueued as unique work so
+     * mashing the button doesn't pile up duplicate runs — KEEP policy
+     * means a request issued while one is already running is a no-op.
+     */
+    fun triggerVaultIndexing() {
+        val request = OneTimeWorkRequestBuilder<IndexingWorker>()
+            .addTag("manual_indexing")
+            .build()
+        WorkManager.getInstance(context).enqueueUniqueWork(
+            IndexingWorker.UNIQUE_WORK_NAME,
+            ExistingWorkPolicy.KEEP,
+            request
+        )
+    }
+
+    /** Acknowledge a terminal state (success/failure) so the UI returns to Idle. */
+    fun dismissIndexingState() {
+        val current = _indexingState.value
+        if (current is IndexingState.Succeeded || current is IndexingState.Failed) {
+            _indexingState.value = IndexingState.Idle
+        }
+    }
 
     val moodEmojiMapping: StateFlow<Map<Int, String>> = gamificationPrefs.moodEmojiMappingFlow
         .stateIn(

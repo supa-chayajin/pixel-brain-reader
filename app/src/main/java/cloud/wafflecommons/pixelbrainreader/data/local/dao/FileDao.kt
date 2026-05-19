@@ -81,23 +81,43 @@ abstract class FileDao {
     @Query("SELECT path, sha FROM files")
     abstract suspend fun getAllFileShas(): List<FileShaTuple>
 
+    /**
+     * Snapshot of the fingerprint columns needed by the reindex delta logic.
+     * Lets us decide "REPLACE row vs. UPDATE mtime vs. skip" without loading
+     * tags/metadata blobs we never read in the scan path.
+     */
+    @Query("SELECT path, sha, localModifiedTimestamp FROM files")
+    abstract suspend fun getAllFileFingerprints(): List<FileFingerprintTuple>
+
     @Query("SELECT COUNT(*) > 0 FROM files WHERE path = :path")
     abstract suspend fun exists(path: String): Boolean
 
     /**
-     * Backfill query for RAG indexing. Returns every markdown file row that
-     * has no corresponding row in the embeddings table — i.e. files the
-     * IndexingWorker has never embedded (or that lost their embeddings to
-     * a destructive Room migration). The delta scan ignores these because
+     * Backfill query for RAG indexing. Returns every markdown file row
+     * (both public `.md` and private `.md.enc`) that has no corresponding
+     * row in the embeddings table — i.e. files the IndexingWorker has never
+     * embedded (or that lost their embeddings to a destructive Room migration
+     * or to the FK CASCADE wipe path). The delta scan ignores these because
      * their lastModified() is older than lastIndexTime; this query is what
      * lets the worker heal a cold embeddings table.
      */
     @Query(
         "SELECT * FROM files " +
-            "WHERE type = 'file' AND path LIKE '%.md' " +
+            "WHERE type = 'file' " +
+            "AND (path LIKE '%.md' OR path LIKE '%.md.enc') " +
             "AND path NOT IN (SELECT DISTINCT fileId FROM embeddings)"
     )
     abstract suspend fun getFilesWithoutEmbeddings(): List<FileEntity>
+
+    /**
+     * Refresh the stored mtime for a file whose content fingerprint matched
+     * but whose on-disk mtime drifted (e.g. after a `git pull` that rewrote
+     * the file with identical content). UPDATE — not REPLACE — so the FK
+     * CASCADE on EmbeddingEntity does NOT fire and the existing embeddings
+     * are preserved. Wiping them here would re-trigger a full re-embed cycle.
+     */
+    @Query("UPDATE files SET localModifiedTimestamp = :mtime WHERE path = :path")
+    abstract suspend fun updateMtime(path: String, mtime: Long)
 
     @Query("SELECT COUNT(*) > 0 FROM files WHERE path = :path")
     abstract fun existsBlocking(path: String): Boolean
@@ -106,4 +126,10 @@ abstract class FileDao {
 data class FileShaTuple(
     @androidx.room.ColumnInfo(name = "path") val path: String,
     @androidx.room.ColumnInfo(name = "sha") val sha: String?
+)
+
+data class FileFingerprintTuple(
+    @androidx.room.ColumnInfo(name = "path") val path: String,
+    @androidx.room.ColumnInfo(name = "sha") val sha: String?,
+    @androidx.room.ColumnInfo(name = "localModifiedTimestamp") val localModifiedTimestamp: Long?
 )

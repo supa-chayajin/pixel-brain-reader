@@ -42,40 +42,58 @@ class VaultDiscoveryRepository @Inject constructor(
         val start = System.currentTimeMillis()
         if (!rootDir.exists()) rootDir.mkdirs()
 
-        // 1. Get DB State
-        val dbFilesMap = fileDao.getAllFileShas().associate { it.path to it }
+        // 1. Snapshot existing FileEntity rows (path + sha + mtime).
+        val dbFilesMap = fileDao.getAllFileFingerprints().associateBy { it.path }
         val dbPaths = dbFilesMap.keys
 
         // 2. Walk FS
         val fsPaths = mutableSetOf<String>()
         val changedFiles = mutableListOf<FileEntity>()
-        val newFiles = mutableListOf<FileEntity>() // To be inserted into DB
+        val newFiles = mutableListOf<FileEntity>()       // REPLACE-inserted (triggers FK CASCADE)
+        val mtimeRefreshes = mutableListOf<Pair<String, Long>>() // UPDATE-only (no CASCADE)
 
         rootDir.walkTopDown().forEach { file ->
             if (file.isDirectory && file.name == ".git") return@forEach
-            
+
             val relativePath = file.relativeTo(rootDir).path
             if (relativePath.isEmpty()) return@forEach
-            
+
             fsPaths.add(relativePath)
-            
-            val lastMod = file.lastModified()
-            val isModified = lastMod > sinceTimestamp
-            
-            if (!dbPaths.contains(relativePath)) {
-                // NEW FILE (Automatically "Modified" compared to 0 or missing)
+
+            val dbEntity = dbFilesMap[relativePath]
+            val onDiskMtime = file.lastModified()
+
+            if (dbEntity == null) {
+                // NEW FILE — must compute fingerprint and insert.
                 val entity = createFileEntity(file, relativePath)
                 newFiles.add(entity)
                 changedFiles.add(entity)
-            } else {
-                // EXISTING
-                if (isModified) {
-                    // Update Metadata in DB + Mark for Embedding
-                    val entity = createFileEntity(file, relativePath)
-                    newFiles.add(entity) // Will Replace in DB
-                    changedFiles.add(entity)
-                }
+                return@forEach
             }
+
+            // EXISTING FILE — fast path: mtime unchanged ⇒ content unchanged.
+            // Skip without recomputing the SHA. This is the steady-state path.
+            if (dbEntity.localModifiedTimestamp == onDiskMtime && dbEntity.sha != null) {
+                return@forEach
+            }
+
+            // mtime drifted (or sha was null from a legacy row).
+            // Compute a content fingerprint and compare.
+            val newEntity = createFileEntity(file, relativePath)
+            if (newEntity.sha != null && newEntity.sha == dbEntity.sha) {
+                // Content identical — bump stored mtime via UPDATE so we hit the
+                // fast path next time. Critically, this is NOT a REPLACE, so the
+                // FK CASCADE on EmbeddingEntity does not fire and the existing
+                // embeddings for this file are preserved.
+                mtimeRefreshes.add(relativePath to onDiskMtime)
+                return@forEach
+            }
+
+            // Content actually changed — REPLACE-insert. This will (correctly)
+            // cascade-delete this file's old embeddings; IndexingWorker will
+            // re-embed it on its next pass.
+            newFiles.add(newEntity)
+            changedFiles.add(newEntity)
         }
 
         // 3. Batch Updates to DB
@@ -83,15 +101,23 @@ class VaultDiscoveryRepository @Inject constructor(
             fileDao.insertAll(newFiles)
             Log.i("VaultDiscovery", "Indexed ${newFiles.size} new/modified items.")
         }
-        
+        if (mtimeRefreshes.isNotEmpty()) {
+            mtimeRefreshes.forEach { (path, mtime) -> fileDao.updateMtime(path, mtime) }
+            Log.d("VaultDiscovery", "Refreshed mtime for ${mtimeRefreshes.size} unchanged item(s).")
+        }
+
         val toDelete = dbPaths.minus(fsPaths)
         if (toDelete.isNotEmpty()) {
             fileDao.deleteFiles(toDelete.toList())
             Log.i("VaultDiscovery", "Pruned ${toDelete.size} deleted items.")
         }
-        
-        Log.d("VaultDiscovery", "Scan took ${System.currentTimeMillis() - start}ms. Found ${changedFiles.size} changed items since $sinceTimestamp")
-        
+
+        Log.d(
+            "VaultDiscovery",
+            "Scan took ${System.currentTimeMillis() - start}ms. Found ${changedFiles.size} actually-changed item(s); " +
+                "${mtimeRefreshes.size} mtime-only drift(s) absorbed."
+        )
+
         return@withContext changedFiles
     }
     
@@ -114,43 +140,53 @@ class VaultDiscoveryRepository @Inject constructor(
     private fun createFileEntity(file: File, path: String): FileEntity {
          var tags: String? = null
          var metaBlob: String? = null
-         
+         var contentSha: String? = null
+
          if (file.isFile && file.extension.equals("md", ignoreCase = true)) {
              try {
-                 // Metadata Extraction
-                 // Limit read to first 2KB for performance
-                 val content = file.reader().use { it.readText() } // read full for robust regex? Or partial.
-                 // Kaml FrontmatterManager expects full content to parse safely usually.
-                 // Let's read full, files are small.
-                 
+                 val content = file.reader().use { it.readText() }
+
                  val metadata = FrontmatterManager.extractMetadata(content)
                  if (metadata.tags.isNotEmpty()) {
                      tags = metadata.tags.joinToString(",")
                  }
-                 // Store other useful things? mood?
-                 // Create a mini-JSON for rawMetadata using Gson map
                  val extra = mutableMapOf<String, Any>()
                  if (metadata.aliases.isNotEmpty()) extra["aliases"] = metadata.aliases
-                 // We could store mood here too if we want file list to show it?
-                 // For now, tags are the requirement.
-                 
                  if (extra.isNotEmpty()) {
                      metaBlob = gson.toJson(extra)
                  }
+
+                 contentSha = sha1Of(content.toByteArray(Charsets.UTF_8))
              } catch (e: Exception) {
                  // Log.w("VaultDiscovery", "Failed to extract metadata for $path")
              }
+         } else if (file.isFile) {
+             // Binary or encrypted file (e.g. .md.enc). Hash the raw bytes so
+             // delta-scan can detect real changes without inspecting plaintext.
+             try {
+                 contentSha = sha1Of(file.readBytes())
+             } catch (e: Exception) {
+                 // Leave SHA null; the reindex falls back to mtime comparison.
+             }
          }
-         
+
          return FileEntity(
             path = path,
             name = file.name,
             type = if (file.isDirectory) "dir" else "file",
+            sha = contentSha,
             downloadUrl = null,
             isDirty = true,
             localModifiedTimestamp = file.lastModified(),
             tags = tags,
             rawMetadata = metaBlob
         )
+    }
+
+    private fun sha1Of(bytes: ByteArray): String {
+        val digest = java.security.MessageDigest.getInstance("SHA-1").digest(bytes)
+        val sb = StringBuilder(digest.size * 2)
+        digest.forEach { b -> sb.append(String.format("%02x", b)) }
+        return sb.toString()
     }
 }

@@ -21,6 +21,10 @@ class PixelBrainApplication : Application(), Configuration.Provider {
 
     @Inject lateinit var workerFactory: HiltWorkerFactory
     @Inject lateinit var syncOrchestrator: SyncOrchestrator
+    @Inject lateinit var vaultDiscoveryRepository: cloud.wafflecommons.pixelbrainreader.data.repository.VaultDiscoveryRepository
+    @Inject lateinit var moodRepository: cloud.wafflecommons.pixelbrainreader.data.repository.MoodRepository
+    @Inject lateinit var habitRepository: cloud.wafflecommons.pixelbrainreader.data.repository.HabitRepository
+    @Inject lateinit var choreRepository: cloud.wafflecommons.pixelbrainreader.data.repository.ChoreRepository
 
     /** Application-scoped coroutine scope — survives Activity recreation. */
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -35,25 +39,39 @@ class PixelBrainApplication : Application(), Configuration.Provider {
         )
         scheduleDailyBurnWork()
         cancelLegacyGoogleOutboxWorkers()
-        enqueueStartupReindex()
+        runStartupReconcile()
         registerForegroundSyncObserver()
     }
 
     /**
-     * One-shot IndexingWorker enqueue on app start. Reconciles Mood/Habit/Chore
-     * JSON files in the vault into Room — important after a destructive Room
-     * migration (e.g. a schema bump) when the foreground sync hasn't run yet.
-     * Unique-named so repeated launches don't pile up.
+     * Local-only reconcile that runs every cold start. Distinct from RAG
+     * indexing (which is now manual) — this only rebuilds derived Room state
+     * from on-disk vault files:
+     *  - FileEntity table (so the file browser has something to show).
+     *  - Mood / Habit / Chore tables (read from their JSON vault files).
+     * Cheap: no embeddings, no network, no Health Connect, no Google.
+     * Necessary after a destructive Room migration so the UI doesn't sit on
+     * an empty database waiting for the foreground SyncOrchestrator to pull.
      */
-    private fun enqueueStartupReindex() {
-        val request = androidx.work.OneTimeWorkRequestBuilder<cloud.wafflecommons.pixelbrainreader.data.workers.IndexingWorker>()
-            .addTag("startup_reconcile")
-            .build()
-        androidx.work.WorkManager.getInstance(this).enqueueUniqueWork(
-            "StartupReindex",
-            androidx.work.ExistingWorkPolicy.KEEP,
-            request
-        )
+    private fun runStartupReconcile() {
+        appScope.launch {
+            try {
+                vaultDiscoveryRepository.reindexAll(0L)
+            } catch (e: Exception) {
+                Log.w("PixelBrainApp", "Startup file reindex failed", e)
+            }
+            // Mood/Habit/Chore JSON → Room. Each is independent; failures are logged
+            // and don't block the others.
+            try { moodRepository.syncWithFileSystem() } catch (e: Exception) {
+                Log.w("PixelBrainApp", "Startup mood reconcile failed", e)
+            }
+            try { habitRepository.syncWithFileSystem() } catch (e: Exception) {
+                Log.w("PixelBrainApp", "Startup habit reconcile failed", e)
+            }
+            try { choreRepository.syncWithFileSystem() } catch (e: Exception) {
+                Log.w("PixelBrainApp", "Startup chore reconcile failed", e)
+            }
+        }
     }
 
     /**
