@@ -17,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import cloud.wafflecommons.pixelbrainreader.ui.theme.SemanticPalette
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -91,7 +92,7 @@ fun ChoreDashboardScreen(
                                     Icon(
                                         Icons.Rounded.CheckCircle,
                                         contentDescription = null,
-                                        tint = Color(0xFF4CAF50).copy(alpha = 0.6f)
+                                        tint = SemanticPalette.Success.copy(alpha = 0.6f)
                                     )
                                     Spacer(Modifier.width(12.dp))
                                     Text(
@@ -154,8 +155,8 @@ fun RoomHeader(roomName: String, urgentCount: Int) {
 @Composable
 fun ChoreCard(chore: ChoreUiModel, onDoItClick: () -> Unit) {
     val barColor = when (chore.statusColor) {
-        StatusColor.GREEN -> Color(0xFF4CAF50)
-        StatusColor.YELLOW -> Color(0xFFFFC107)
+        StatusColor.GREEN -> SemanticPalette.Success
+        StatusColor.YELLOW -> SemanticPalette.Warning
         StatusColor.RED -> MaterialTheme.colorScheme.error
     }
 

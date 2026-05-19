@@ -21,6 +21,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cloud.wafflecommons.pixelbrainreader.ui.daily.DailyMoodPoint
+import cloud.wafflecommons.pixelbrainreader.ui.theme.ChartPalette
 
 @Composable
 fun MoodTrendsCard(
@@ -130,7 +131,7 @@ private fun MoodSparklineContent(trend: List<DailyMoodPoint>) {
             if (!hrPath.isEmpty) {
                 drawPath(
                     path = hrPath,
-                    color = Color(0xFFFF5252).copy(alpha = 0.7f),
+                    color = ChartPalette.HeartRate.copy(alpha = 0.7f),
                     style = Stroke(
                         width = 2.dp.toPx(), 
                         cap = StrokeCap.Round, 
@@ -159,7 +160,7 @@ private fun MoodSparklineContent(trend: List<DailyMoodPoint>) {
                 if (point.avgBpm > 0) {
                     val yHr = getHrY(point.avgBpm)
                     val hrText = "${point.avgBpm}"
-                    val hrStyle = TextStyle(color = Color(0xFFFF5252), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    val hrStyle = TextStyle(color = ChartPalette.HeartRate, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     val hrLayout = textMeasurer.measure(text = hrText, style = hrStyle)
                     
                     drawText(

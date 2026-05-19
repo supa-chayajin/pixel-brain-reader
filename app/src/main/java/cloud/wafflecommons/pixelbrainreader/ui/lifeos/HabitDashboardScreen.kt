@@ -32,6 +32,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cloud.wafflecommons.pixelbrainreader.data.model.HabitConfig
 import cloud.wafflecommons.pixelbrainreader.data.model.HabitStatus
 import cloud.wafflecommons.pixelbrainreader.data.model.HabitType
+import cloud.wafflecommons.pixelbrainreader.ui.theme.SemanticPalette
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -184,7 +185,7 @@ fun HabitStreakRow(habit: HabitWithStats) {
                 Text(
                     "🔥 ${habit.currentStreak} day streak", 
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (habit.currentStreak > 2) Color(0xFFFF9800) else MaterialTheme.colorScheme.onSurfaceVariant
+                    color = if (habit.currentStreak > 2) SemanticPalette.StreakAccent else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }

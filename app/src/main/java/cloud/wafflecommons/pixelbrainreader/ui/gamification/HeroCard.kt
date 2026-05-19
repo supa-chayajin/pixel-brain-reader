@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import cloud.wafflecommons.pixelbrainreader.data.gamification.Attribute
 import cloud.wafflecommons.pixelbrainreader.data.gamification.GamificationState
 import cloud.wafflecommons.pixelbrainreader.R
+import cloud.wafflecommons.pixelbrainreader.ui.theme.SemanticPalette
 
 @Composable
 fun HeroCard(
@@ -78,7 +79,7 @@ fun HeroCard(
                 LinearProgressIndicator(
                     progress = { progress },
                     modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
-                    color = Color(0xFFFFD700), // Gold
+                    color = SemanticPalette.XpGold,
                     trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha=0.1f),
                 )
                 Text(
@@ -111,14 +112,14 @@ fun HeroCard(
                 Icon(
                     imageVector = androidx.compose.material.icons.Icons.Default.Face,
                     contentDescription = "Buff Active",
-                    tint = Color(0xFF4CAF50),
+                    tint = SemanticPalette.Success,
                     modifier = Modifier.size(16.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = "Endurance Buff Active (+50 XP)",
                     style = MaterialTheme.typography.labelMedium,
-                    color = Color(0xFF4CAF50),
+                    color = SemanticPalette.Success,
                     fontWeight = FontWeight.Bold
                 )
             }

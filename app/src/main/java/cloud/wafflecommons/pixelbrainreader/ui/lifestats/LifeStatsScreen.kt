@@ -29,6 +29,7 @@ import cloud.wafflecommons.pixelbrainreader.data.sync.SyncState
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cloud.wafflecommons.pixelbrainreader.ui.components.MoodTrendsCard
 import cloud.wafflecommons.pixelbrainreader.ui.daily.DailyMoodPoint
+import cloud.wafflecommons.pixelbrainreader.ui.theme.ChartPalette
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -116,12 +117,12 @@ private fun MoodVsHeartRateChartCard(moodHistory: List<LifeStatsMoodPoint>) {
 private fun HealthSummaryCard(uiState: LifeStatsUiState) {
     DashboardCard(title = "Health Summary (7 Days)") {
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth()) {
-            HealthMetricItem(Modifier.weight(1f), "Calories", "${uiState.totalCalories} kcal", Icons.Default.LocalFireDepartment, Color(0xFFFFA726))
-            HealthMetricItem(Modifier.weight(1f), "Meditation", "${uiState.totalMeditationMinutes} min", Icons.Default.SelfImprovement, Color(0xFF29B6F6))
+            HealthMetricItem(Modifier.weight(1f), "Calories", "${uiState.totalCalories} kcal", Icons.Default.LocalFireDepartment, ChartPalette.Calories)
+            HealthMetricItem(Modifier.weight(1f), "Meditation", "${uiState.totalMeditationMinutes} min", Icons.Default.SelfImprovement, ChartPalette.Meditation)
         }
         Spacer(Modifier.height(16.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth()) {
-            HealthMetricItem(Modifier.weight(1f), "Avg Heart Rate", "${uiState.avgHeartRate} BPM", Icons.Default.Favorite, Color(0xFFFF5252))
+            HealthMetricItem(Modifier.weight(1f), "Avg Heart Rate", "${uiState.avgHeartRate} BPM", Icons.Default.Favorite, ChartPalette.HeartRate)
             Spacer(Modifier.weight(1f))
         }
     }
@@ -149,8 +150,8 @@ private fun HealthOverviewCard(uiState: LifeStatsUiState) {
     DashboardCard(title = "Health Overview (Today)") {
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
             val distFormatted = String.format(java.util.Locale.US, "%.1f", uiState.todayDistanceKm)
-            HealthProgressRow("Distance", "$distFormatted km", (uiState.todayDistanceKm / 5.0).toFloat(), Color(0xFF4CAF50))
-            HealthProgressRow("Active Minutes", "${uiState.todayActiveMinutes} min", uiState.todayActiveMinutes.toFloat() / 30f, Color(0xFFFF9800))
+            HealthProgressRow("Distance", "$distFormatted km", (uiState.todayDistanceKm / 5.0).toFloat(), ChartPalette.Distance)
+            HealthProgressRow("Active Minutes", "${uiState.todayActiveMinutes} min", uiState.todayActiveMinutes.toFloat() / 30f, ChartPalette.ActiveMinutes)
         }
     }
 }
@@ -190,11 +191,11 @@ private fun CompletionRingsCard(uiState: LifeStatsUiState) {
             }
             Spacer(Modifier.width(24.dp))
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                LegendItem("Tasks", Color(0xFFE91E63), "${(uiState.taskCompletionRate * 100).toInt()}%")
-                LegendItem("Habits", Color(0xFF8BC34A), "${(uiState.habitCompletionRate * 100).toInt()}%")
+                LegendItem("Tasks", ChartPalette.Tasks, "${(uiState.taskCompletionRate * 100).toInt()}%")
+                LegendItem("Habits", ChartPalette.Habits, "${(uiState.habitCompletionRate * 100).toInt()}%")
                 val totalChores = uiState.criticalChoresCount + uiState.cleanChoresCount
                 val choreRate = if (totalChores > 0) uiState.cleanChoresCount.toFloat() / totalChores.toFloat() else 0f
-                LegendItem("Clean Chores", Color(0xFF03A9F4), "${(choreRate * 100).toInt()}%")
+                LegendItem("Clean Chores", ChartPalette.Chores, "${(choreRate * 100).toInt()}%")
             }
         }
     }
@@ -234,9 +235,9 @@ private fun ActivityRings(tasksProgress: Float, habitsProgress: Float, choresPro
             )
         }
         
-        drawRing(size.width / 2 - strokeW / 2, animTask, Color(0xFFE91E63))
-        drawRing(size.width / 2 - strokeW / 2 - spacing, animHabit, Color(0xFF8BC34A))
-        drawRing(size.width / 2 - strokeW / 2 - (spacing * 2), animChore, Color(0xFF03A9F4))
+        drawRing(size.width / 2 - strokeW / 2, animTask, ChartPalette.Tasks)
+        drawRing(size.width / 2 - strokeW / 2 - spacing, animHabit, ChartPalette.Habits)
+        drawRing(size.width / 2 - strokeW / 2 - (spacing * 2), animChore, ChartPalette.Chores)
     }
 }
 
@@ -252,7 +253,7 @@ private fun DualInsightCards(sleepDurationMinutes: Long, globalCompletion: Float
             colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Icon(Icons.Default.Bedtime, contentDescription = "Sleep", tint = Color(0xFF673AB7), modifier = Modifier.size(28.dp))
+                Icon(Icons.Default.Bedtime, contentDescription = "Sleep", tint = ChartPalette.Sleep, modifier = Modifier.size(28.dp))
                 Spacer(Modifier.height(12.dp))
                 Text("Sleep & Recovery", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 
@@ -270,7 +271,7 @@ private fun DualInsightCards(sleepDurationMinutes: Long, globalCompletion: Float
             colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Icon(Icons.Default.TaskAlt, contentDescription = "Completion", tint = Color(0xFF4CAF50), modifier = Modifier.size(28.dp))
+                Icon(Icons.Default.TaskAlt, contentDescription = "Completion", tint = ChartPalette.Completion, modifier = Modifier.size(28.dp))
                 Spacer(Modifier.height(12.dp))
                 Text("Productivité Globale", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 

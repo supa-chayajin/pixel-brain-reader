@@ -469,10 +469,13 @@ private fun SkeletonBox(
     height: androidx.compose.ui.unit.Dp,
     shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(4.dp)
 ) {
+    // Shimmer derives from onSurfaceVariant so the skeleton reads correctly in
+    // both themes — Color.Gray was nearly invisible on the pure-black dark surface.
+    val shimmerBase = MaterialTheme.colorScheme.onSurfaceVariant
     val shimmerColors = listOf(
-        Color.Gray.copy(alpha = 0.3f),
-        Color.Gray.copy(alpha = 0.5f),
-        Color.Gray.copy(alpha = 0.3f),
+        shimmerBase.copy(alpha = 0.3f),
+        shimmerBase.copy(alpha = 0.5f),
+        shimmerBase.copy(alpha = 0.3f),
     )
     val transition = rememberInfiniteTransition(label = "shimmer")
     val translateAnim = transition.animateFloat(
