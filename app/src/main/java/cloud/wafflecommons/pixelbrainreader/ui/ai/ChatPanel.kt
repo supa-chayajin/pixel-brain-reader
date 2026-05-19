@@ -81,9 +81,18 @@ fun ChatPanel(
         }
     }
 
+    // Mode brand routed through MaterialTheme. ORACLE (RAG) = primary, SCRIBE
+    // (Creative) = tertiary — both adapt to Material You. We also animate the
+    // matched on-color so contrast against the accent is always guaranteed.
     val modeColor by animateColorAsState(
-        targetValue = if (currentMode == ChatMode.ORACLE) Color(0xFF9C27B0) else Color(0xFFFF9800), // Purple vs Orange
+        targetValue = if (currentMode == ChatMode.ORACLE) MaterialTheme.colorScheme.primary
+                      else MaterialTheme.colorScheme.tertiary,
         label = "modeColor"
+    )
+    val modeContentColor by animateColorAsState(
+        targetValue = if (currentMode == ChatMode.ORACLE) MaterialTheme.colorScheme.onPrimary
+                      else MaterialTheme.colorScheme.onTertiary,
+        label = "modeContentColor"
     )
 
     val nanoState by viewModel.nanoState.collectAsStateWithLifecycle()
@@ -105,7 +114,8 @@ fun ChatPanel(
                 BrainModeSwitch(
                     currentMode = currentMode,
                     onModeChanged = { viewModel.toggleMode() },
-                    activeColor = modeColor
+                    activeColor = modeColor,
+                    activeContentColor = modeContentColor
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
@@ -171,7 +181,8 @@ fun ChatPanel(
                     },
                     isLoading = viewModel.loadingStage != null,
                     hint = if (currentMode == ChatMode.ORACLE) "Ask your Second Brain..." else "Spark a creative idea...",
-                    accentColor = modeColor
+                    accentColor = modeColor,
+                    accentContentColor = modeContentColor
                 )
             }
         }
@@ -184,8 +195,13 @@ fun ChatPanel(
 fun BrainModeSwitch(
     currentMode: ChatMode,
     onModeChanged: () -> Unit,
-    activeColor: Color
+    activeColor: Color,
+    activeContentColor: Color
 ) {
+    // Color of an inactive pill's icon + label — theme-aware, readable on the
+    // surfaceContainerHighest track behind both pills.
+    val inactiveContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -205,18 +221,19 @@ fun BrainModeSwitch(
                 .clickable { if (currentMode != ChatMode.ORACLE) onModeChanged() },
             contentAlignment = Alignment.Center
         ) {
+            val contentTint = if (currentMode == ChatMode.ORACLE) activeContentColor else inactiveContentColor
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
-                    Icons.Rounded.Psychology, 
-                    contentDescription = null, 
-                    tint = if (currentMode == ChatMode.ORACLE) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                    Icons.Rounded.Psychology,
+                    contentDescription = null,
+                    tint = contentTint,
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
                     "Cortex (RAG)",
                     style = MaterialTheme.typography.labelLarge,
-                    color = if (currentMode == ChatMode.ORACLE) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                    color = contentTint
                 )
             }
         }
@@ -231,18 +248,19 @@ fun BrainModeSwitch(
                 .clickable { if (currentMode != ChatMode.SCRIBE) onModeChanged() },
             contentAlignment = Alignment.Center
         ) {
+            val contentTint = if (currentMode == ChatMode.SCRIBE) activeContentColor else inactiveContentColor
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
-                    Icons.Rounded.AutoAwesome, 
-                    contentDescription = null, 
-                    tint = if (currentMode == ChatMode.SCRIBE) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                    Icons.Rounded.AutoAwesome,
+                    contentDescription = null,
+                    tint = contentTint,
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
                     "Spark (Creative)",
                     style = MaterialTheme.typography.labelLarge,
-                    color = if (currentMode == ChatMode.SCRIBE) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                    color = contentTint
                 )
             }
         }
@@ -263,10 +281,18 @@ fun ChatBubble(
         RoundedCornerShape(20.dp, 20.dp, 20.dp, 4.dp)
     }
 
+    // M3 contrast pairs:
+    //   User bubble: primary / onPrimary           (high-contrast brand chip)
+    //   AI bubble:   surfaceVariant / onSurfaceVariant  (low-contrast surface)
     val containerColor = if (isUser) {
-        MaterialTheme.colorScheme.primaryContainer
+        MaterialTheme.colorScheme.primary
     } else {
-        MaterialTheme.colorScheme.surfaceContainerHigh
+        MaterialTheme.colorScheme.surfaceVariant
+    }
+    val contentColor = if (isUser) {
+        MaterialTheme.colorScheme.onPrimary
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
     }
 
     Column(
@@ -276,23 +302,24 @@ fun ChatBubble(
         Surface(
             shape = bubbleShape,
             color = containerColor,
+            contentColor = contentColor,
             modifier = Modifier.widthIn(max = 340.dp)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                
+
                 // Message Content
                 Text(
                     text = message.content,
                     style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = contentColor
                 )
-                
-                // SOURCES SECTION (RAG CITATIONS)
+
+                // SOURCES SECTION (RAG CITATIONS) — AI bubble only
                 if (!isUser && message.sources.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(12.dp))
-                    HorizontalDivider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     Spacer(modifier = Modifier.height(8.dp))
-                    
+
                     Text(
                         "Sources:",
                         style = MaterialTheme.typography.labelSmall,
@@ -300,7 +327,7 @@ fun ChatBubble(
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(modifier = Modifier.height(4.dp))
-                    
+
                     @OptIn(ExperimentalLayoutApi::class)
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -309,13 +336,13 @@ fun ChatBubble(
                         message.sources.forEach { source ->
                             AssistChip(
                                 onClick = { /* TODO: Navigate to File */ },
-                                label = { 
+                                label = {
                                     Text(
-                                        source.substringAfterLast("/"), 
+                                        source.substringAfterLast("/"),
                                         style = MaterialTheme.typography.labelSmall,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
-                                    ) 
+                                    )
                                 },
                                 leadingIcon = {
                                     Icon(
@@ -324,8 +351,10 @@ fun ChatBubble(
                                         modifier = Modifier.size(12.dp)
                                     )
                                 },
+                                // Chips sit inside an AI bubble (surfaceVariant);
+                                // surfaceContainerHigh makes them pop against that.
                                 colors = AssistChipDefaults.assistChipColors(
-                                    containerColor = MaterialTheme.colorScheme.surface,
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                                     labelColor = MaterialTheme.colorScheme.onSurface
                                 ),
                                 border = AssistChipDefaults.assistChipBorder(true)
@@ -354,7 +383,8 @@ fun StealthInputBar(
     onSend: () -> Unit,
     isLoading: Boolean,
     hint: String,
-    accentColor: Color
+    accentColor: Color,
+    accentContentColor: Color
 ) {
     val context = LocalContext.current
     var lastClickTime by remember { mutableLongStateOf(0L) }
@@ -430,12 +460,16 @@ fun StealthInputBar(
                         .background(if (isEnabled) accentColor else MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape)
                 ) {
                     if (isLoading) {
-                        CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = accentContentColor,
+                            strokeWidth = 2.dp
+                        )
                     } else {
                          Icon(
                             if (textState.text.isBlank()) Icons.Rounded.Mic else Icons.AutoMirrored.Rounded.Send,
                             contentDescription = null,
-                            tint = if (isEnabled) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                            tint = if (isEnabled) accentContentColor else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }

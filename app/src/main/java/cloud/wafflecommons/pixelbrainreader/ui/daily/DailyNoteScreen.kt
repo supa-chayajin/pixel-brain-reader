@@ -365,7 +365,7 @@ fun DailyNoteScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.55f))
+                        .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.55f))
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null

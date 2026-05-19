@@ -1,5 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.ui.lifeos
 
+import cloud.wafflecommons.pixelbrainreader.ui.theme.SemanticPalette
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
@@ -110,12 +111,15 @@ fun HabitCard(
     onUpdateValue: (Double) -> Unit
 ) {
     val config = habit.config
-    // Parse Color
-    val themeColor = remember(config.color) {
+    // Parse Color. Fallback routed through MaterialTheme so an unparseable
+    // habit color adopts the active theme's primary instead of a stale
+    // Material Purple hex.
+    val fallbackColor = MaterialTheme.colorScheme.primary
+    val themeColor = remember(config.color, fallbackColor) {
         try {
             Color(android.graphics.Color.parseColor(config.color))
         } catch (e: Exception) {
-            Color(0xFF6750A4) // Fallback Primary
+            fallbackColor
         }
     }
 
@@ -261,7 +265,7 @@ fun HabitCard(
                 Text(
                     text = "🔥 ${habit.currentStreak}",
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (habit.currentStreak > 2) Color(0xFFFF9800) else MaterialTheme.colorScheme.onSurfaceVariant
+                    color = if (habit.currentStreak > 2) SemanticPalette.StreakAccent else MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 
                 // Status / Action Hint
