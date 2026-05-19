@@ -242,27 +242,35 @@ class LocalAiManager @Inject constructor(
         chatHistory: List<ChatMessageEntity>,
         currentQuery: String
     ): String = buildString {
-        append("[SYSTEM]\n")
+        // Scaffolding labels are intentionally in French — the surrounding
+        // structural language is a strong steer for Gemini Nano to keep the
+        // generated response in French too, complementing the explicit
+        // instruction inside [systemPrompt].
+        append("[SYSTÈME]\n")
         append(systemPrompt.trim())
         append("\n\n")
 
+        // Phase 3: omit the references block entirely when context is empty.
+        // Showing an empty block confuses the model into refusing to chat.
         if (!ragContext.isNullOrBlank()) {
-            append("[REFERENCE INFORMATION]\n")
-            append("Use the following context from the user's notes to ground your answer. ")
-            append("If the answer is not in these references, say so plainly.\n\n")
+            append("[INFORMATIONS DE RÉFÉRENCE]\n")
+            append("Utilise les extraits ci-dessous, issus des notes de l'utilisateur, ")
+            append("pour répondre avec précision. Si la réponse n'y figure pas, dis-le clairement.\n\n")
             append(ragContext.trim())
             append("\n\n")
         }
 
-        append("[CONVERSATION]\n")
+        append("[HISTORIQUE DE CONVERSATION]\n")
         chatHistory.forEach { msg ->
-            val label = if (msg.role == "USER") "User" else "Model"
+            val label = if (msg.role == "USER") "Utilisateur" else "Assistant"
             append(label).append(": ").append(msg.content.trim()).append('\n')
         }
-        append("User: ").append(currentQuery.trim()).append('\n')
+        append('\n')
+        append("[QUESTION DE L'UTILISATEUR]\n")
+        append("Utilisateur: ").append(currentQuery.trim()).append('\n')
         // Trailing cue — Nano completes after this label, which keeps the response
         // role-anchored even when chat history is empty.
-        append("Model:")
+        append("Assistant:")
     }
 
     private companion object {
