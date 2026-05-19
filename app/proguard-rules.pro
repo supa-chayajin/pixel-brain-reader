@@ -1,72 +1,265 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
+# ============================================================================
+# Pixel Brain Reader — R8 / ProGuard rules
 #
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
+# Layout: each section keeps just what the runtime touches reflectively or
+# via ServiceLoader. Everything else is fair game for R8 to shrink/obfuscate.
+# ============================================================================
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# -----------------------------------------------------------------------------
+# Crash / debugging
+# -----------------------------------------------------------------------------
+# Keep stack traces useful when symbolicated. SourceFile is renamed to "SourceFile"
+# so the obfuscation map (in build/outputs/mapping/release/mapping.txt) is the
+# only way to deobfuscate — i.e. attackers reading a crash log can't recover
+# original class names from stack traces alone.
+-keepattributes SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
-
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
-
-# --- Stabilization Pack Rules ---
-
-# 1. Serialization (GSON)
-# Critical: Keep model classes to prevent JSON parsing failures
--keep class cloud.wafflecommons.pixelbrainreader.data.model.** { *; }
--keep class cloud.wafflecommons.pixelbrainreader.data.gamification.model.** { *; }
-
-# Gson specific
+# Reflection metadata used by every Kotlin reflective lookup (serialization,
+# Hilt, Room, etc.). Cheap; required.
 -keepattributes Signature
 -keepattributes *Annotation*
--keep class sun.misc.Unsafe { *; }
--keep class com.google.gson.stream.** { *; }
+-keepattributes InnerClasses
+-keepattributes EnclosingMethod
+-keepattributes RuntimeVisibleAnnotations,RuntimeVisibleParameterAnnotations,RuntimeVisibleTypeAnnotations,AnnotationDefault
+-keepattributes Exceptions
 
-# 2. KeyStore & Security
-# Keep SecretManager to ensure reflection-based encryption works if needed (usually safe, but defensive)
--keep class cloud.wafflecommons.pixelbrainreader.data.local.security.** { *; }
-
-# 3. Networking (Retrofit)
-# Retrofit uses reflection to generate implementation of interfaces
--keep class cloud.wafflecommons.pixelbrainreader.data.remote.** { *; }
--keepattributes RuntimeVisibleAnnotations, RuntimeVisibleParameterAnnotations
--keepclassmembers,allowobfuscation interface * {
-    @retrofit2.http.* <methods>;
+# -----------------------------------------------------------------------------
+# Log stripping (release builds only — debug runs untouched)
+# -----------------------------------------------------------------------------
+# The default `proguard-android-optimize.txt` does NOT strip Log.d / Log.v.
+# We do it ourselves so RAG_DEBUG / FileAudit / Cortex traces never reach
+# the release-build Logcat. Log.i / Log.w / Log.e are preserved — code that
+# logs sensitive paths at Log.i must be downgraded to Log.d first.
+-assumenosideeffects class android.util.Log {
+    public static *** v(...);
+    public static *** d(...);
 }
 
-# 4. Dependency Injection (Hilt/Dagger)
+# -----------------------------------------------------------------------------
+# kotlinx.serialization
+# -----------------------------------------------------------------------------
+# @Serializable classes have compile-time-generated `$serializer` companions
+# that the runtime locates by reflection. Without these rules R8 obfuscates
+# the companion names and decodeFromString explodes with MissingFieldException.
+-keepattributes RuntimeVisibleAnnotations,AnnotationDefault
+
+# Keep every kotlinx.serialization generated companion + serializer for our app.
+-keepclassmembers @kotlinx.serialization.Serializable class ** {
+    static **$* *;
+}
+-keepclasseswithmembers class **$$serializer {
+    *** descriptor;
+}
+-keepclassmembers class kotlinx.serialization.json.** {
+    *** Companion;
+}
+-keep,includedescriptorclasses class kotlinx.serialization.** { *; }
+-dontwarn kotlinx.serialization.**
+
+# Keep our serializable DTOs explicitly (defensive — we have a lot of them
+# scattered across packages).
+-keep @kotlinx.serialization.Serializable class cloud.wafflecommons.pixelbrainreader.** { *; }
+-keep class cloud.wafflecommons.pixelbrainreader.**$$serializer { *; }
+
+# -----------------------------------------------------------------------------
+# Gson (legacy paths in HabitRepository + a few caches)
+# -----------------------------------------------------------------------------
+-keep class cloud.wafflecommons.pixelbrainreader.data.model.** { *; }
+-keep class cloud.wafflecommons.pixelbrainreader.data.gamification.model.** { *; }
+-keep class sun.misc.Unsafe { *; }
+-keep class com.google.gson.** { *; }
+-keep class com.google.gson.stream.** { *; }
+-dontwarn com.google.gson.**
+# Generic TypeToken support
+-keep class * extends com.google.gson.reflect.TypeToken
+-keepclassmembers,allowobfuscation class * {
+    @com.google.gson.annotations.SerializedName <fields>;
+}
+
+# -----------------------------------------------------------------------------
+# Room
+# -----------------------------------------------------------------------------
+# Entity field names map directly to SQLite columns. R8 renaming them breaks
+# the schema. Keep all entities and their constructors; Room's generated
+# Impl classes are kept automatically because they're directly referenced.
+-keep class * extends androidx.room.RoomDatabase
+-keep @androidx.room.Entity class * { *; }
+-keep @androidx.room.Dao interface * { *; }
+-keep @androidx.room.TypeConverter class * { *; }
+-keepclassmembers class * {
+    @androidx.room.TypeConverter *;
+}
+-keepclassmembers @androidx.room.Entity class * {
+    <init>(...);
+    <fields>;
+}
+-keep class androidx.room.** { *; }
+-dontwarn androidx.room.paging.**
+
+# Our entity package — defensive shotgun keep for column-name stability.
+-keep class cloud.wafflecommons.pixelbrainreader.data.local.entity.** { *; }
+
+# -----------------------------------------------------------------------------
+# Hilt / Dagger
+# -----------------------------------------------------------------------------
 -keep class dagger.hilt.** { *; }
+-keep class * extends dagger.hilt.android.internal.managers.ApplicationComponentManager
 -keep class javax.inject.** { *; }
--keep class * extends dagger.hilt.internal.define.ComponentProcessor
--keep class * extends dagger.hilt.internal.define.ComponentBuilder
+-keep class * extends dagger.hilt.android.internal.lifecycle.HiltViewModelFactory
+-keep @dagger.hilt.android.lifecycle.HiltViewModel class * { *; }
+-keepclassmembers class * {
+    @javax.inject.Inject <init>(...);
+    @javax.inject.Inject <fields>;
+    @javax.inject.Inject <methods>;
+}
 
-# 5. Connect Health (Google Health)
+# WorkManager + Hilt's @HiltWorker factory binding — runtime reflective lookup.
+-keep @androidx.hilt.work.HiltWorker class * { *; }
+-keep class * extends androidx.work.CoroutineWorker { <init>(...); }
+-keep class * extends androidx.work.ListenableWorker { <init>(...); }
+-keep class androidx.hilt.work.HiltWorkerFactory { *; }
+-keepclassmembers class * {
+    @dagger.assisted.AssistedInject <init>(...);
+}
+
+# -----------------------------------------------------------------------------
+# Jetpack Compose (mostly handled by AGP — defensive only)
+# -----------------------------------------------------------------------------
+-keep class androidx.compose.runtime.** { *; }
+-keepclassmembers class * {
+    @androidx.compose.runtime.Composable <methods>;
+}
+-keep @androidx.compose.runtime.Stable class *
+-keep @androidx.compose.runtime.Immutable class *
+-dontwarn androidx.compose.**
+
+# -----------------------------------------------------------------------------
+# Retrofit (we use it for a couple of REST clients)
+# -----------------------------------------------------------------------------
+-keepclassmembers,allowshrinking,allowobfuscation interface * {
+    @retrofit2.http.* <methods>;
+}
+-keep class retrofit2.** { *; }
+-dontwarn retrofit2.**
+-dontwarn javax.annotation.**
+-dontwarn org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement
+
+# Keep our DTOs / Retrofit interfaces for safety (these are deserialized).
+-keep class cloud.wafflecommons.pixelbrainreader.data.remote.model.** { *; }
+-keep interface cloud.wafflecommons.pixelbrainreader.data.remote.api.** { *; }
+
+# -----------------------------------------------------------------------------
+# Security (EncryptedSharedPreferences / CryptoManager)
+# -----------------------------------------------------------------------------
+-keep class cloud.wafflecommons.pixelbrainreader.data.local.security.** { *; }
+-keep class androidx.security.crypto.** { *; }
+-keep class com.google.crypto.tink.** { *; }
+-dontwarn com.google.crypto.tink.**
+
+# -----------------------------------------------------------------------------
+# Health Connect
+# -----------------------------------------------------------------------------
 -keep class androidx.health.connect.** { *; }
+-keep class androidx.health.platform.** { *; }
+-dontwarn androidx.health.**
 
-# 6. Graphs & Charts (Vico)
+# -----------------------------------------------------------------------------
+# JGit (Eclipse) — uses java.util.ServiceLoader for transport providers
+# -----------------------------------------------------------------------------
+-keep class org.eclipse.jgit.** { *; }
+-keep interface org.eclipse.jgit.** { *; }
+-keepnames class org.eclipse.jgit.transport.**
+# ServiceLoader entries are resources, not classes — preserve them.
+# (AGP's resource shrinker can drop META-INF/services without this).
+-keep class * implements org.eclipse.jgit.transport.Transport
+-keep class * implements org.eclipse.jgit.lib.ConfigConstants
+-dontwarn org.eclipse.jgit.**
+-dontwarn org.slf4j.**
+-dontwarn org.ietf.jgss.**
+
+# -----------------------------------------------------------------------------
+# MediaPipe Tasks (TFLite text embedder)
+# -----------------------------------------------------------------------------
+-keep class com.google.mediapipe.** { *; }
+-keep interface com.google.mediapipe.** { *; }
+-keep class com.google.protobuf.** { *; }
+-dontwarn com.google.mediapipe.**
+-dontwarn com.google.protobuf.**
+
+# -----------------------------------------------------------------------------
+# Google ML Kit GenAI (Gemini Nano) + Google AI Edge AICore
+# -----------------------------------------------------------------------------
+-keep class com.google.mlkit.** { *; }
+-keep interface com.google.mlkit.** { *; }
+-keep class com.google.ai.edge.aicore.** { *; }
+-dontwarn com.google.mlkit.**
+-dontwarn com.google.ai.edge.aicore.**
+
+# Google AI client (cloud Gemini fallback)
+-keep class com.google.ai.client.generativeai.** { *; }
+-dontwarn com.google.ai.client.generativeai.**
+
+# -----------------------------------------------------------------------------
+# Google Auth / Identity / Calendar / Tasks
+# -----------------------------------------------------------------------------
+-keep class com.google.android.gms.** { *; }
+-keep class com.google.android.libraries.identity.** { *; }
+-keep class com.google.api.client.** { *; }
+-keep class com.google.api.services.calendar.** { *; }
+-keep class com.google.api.services.tasks.** { *; }
+-keep class com.google.api.client.googleapis.** { *; }
+-keepclassmembers class com.google.api.** {
+    @com.google.api.client.util.Key <fields>;
+}
+-dontwarn com.google.api.**
+-dontwarn com.google.android.gms.**
+-dontwarn com.google.android.libraries.identity.**
+
+# -----------------------------------------------------------------------------
+# kaml (Kotlin YAML — built on kotlinx.serialization + SnakeYAML)
+# -----------------------------------------------------------------------------
+-keep class com.charleskorn.kaml.** { *; }
+-keep class org.yaml.snakeyaml.** { *; }
+-dontwarn org.yaml.snakeyaml.**
+-dontwarn com.charleskorn.kaml.**
+
+# -----------------------------------------------------------------------------
+# Vico charts (has its own consumer rules; keep for safety)
+# -----------------------------------------------------------------------------
 -keep class com.patrykandpatrick.vico.** { *; }
+-dontwarn com.patrykandpatrick.vico.**
 
-# 7. Coroutines & Debugging
+# -----------------------------------------------------------------------------
+# Markwon (Markdown rendering)
+# -----------------------------------------------------------------------------
+-keep class io.noties.markwon.** { *; }
+-keep class io.noties.prism4j.** { *; }
+-dontwarn io.noties.**
+
+# -----------------------------------------------------------------------------
+# Coroutines internals (defensive — most rules ship via consumer-proguard)
+# -----------------------------------------------------------------------------
 -keepnames class kotlinx.coroutines.internal.MainDispatcherFactory {}
 -keepnames class kotlinx.coroutines.CoroutineExceptionHandler {}
 -keepclassmembers class kotlinx.coroutines.CoroutineExceptionHandler {
     <init>(...);
 }
+-dontwarn kotlinx.coroutines.**
 
-# 8. JGit (Reflection used in some parts)
--keep class org.eclipse.jgit.** { *; }
-
-# 9. General Safety
+# -----------------------------------------------------------------------------
+# Misc warnings to silence (clean log on R8 pass)
+# -----------------------------------------------------------------------------
 -dontwarn javax.annotation.**
 -dontwarn sun.misc.**
+-dontwarn org.bouncycastle.**
+-dontwarn org.conscrypt.**
+-dontwarn org.openjsse.**
+
+# Desktop JDK classes referenced by Google API Client / AutoValue transitive
+# deps but never invoked at runtime on Android. R8 errors on them by default.
+-dontwarn javax.lang.model.**
+-dontwarn javax.naming.**
+-dontwarn autovalue.shaded.**
+-dontwarn com.google.auto.value.**
+-dontwarn org.apache.http.**

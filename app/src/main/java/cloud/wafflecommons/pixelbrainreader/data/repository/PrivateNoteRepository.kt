@@ -46,44 +46,42 @@ class PrivateNoteRepository @Inject constructor(
     suspend fun createNote(filename: String, content: String, password: CharArray) = withContext(Dispatchers.IO) {
         val safeName = if (filename.endsWith(".md.enc")) filename else "$filename.md.enc"
         
-        // 1. Force Directory Creation & Log
+        // 1. Force Directory Creation
         if (!vaultDir.exists()) {
-             val created = vaultDir.mkdirs()
-             Log.d("PrivateRepo", "Creating vault dir: ${vaultDir.absolutePath} -> Success: $created")
+             vaultDir.mkdirs()
         }
 
         // 2. Encrypt & Write
         try {
             val encryptedBytes = cryptoManager.encrypt(content, password)
             val file = File(vaultDir, safeName)
-            
+
             FileOutputStream(file).use { fos ->
                 fos.write(encryptedBytes)
             }
-            Log.i("PrivateRepo", "File written successfully: ${file.absolutePath}, Size: ${file.length()}")
+            // No filename/path/size logging — private files leak identifying
+            // info through any of those (the filename IS the note title).
 
             // 3. Auto-Sync (Refactored for robustness)
             try {
-                val message = "Secure: Update Private Vault ($safeName)"
+                val message = "Secure: Update Private Vault"
 
                 // 1. Commit (Locally)
-                gitProvider.commit(message) // Now handles staging & detached head
+                gitProvider.commit(message)
 
                 // 2. Push (Remote)
                 val token = secretManager.getToken()
                 if (!token.isNullOrBlank()) {
-                    gitProvider.push() // Uses internal token handling, defaulting to "origin"
-                    Log.i("PrivateRepo", "Private note pushed successfully.")
-                } else {
-                    Log.w("PrivateRepo", "Cannot push: No auth token.")
+                    gitProvider.push()
                 }
+                // Intentionally no success log — confirms private activity to anyone reading logs.
             } catch (e: Exception) {
-                Log.e("PrivateRepo", "Sync failed after save (File is safe locally)", e)
+                Log.w("PrivateRepo", "Private sync failed (file is safe locally)")
                 // Do NOT re-throw. Local save success is what matters to the UI.
             }
 
         } catch (e: Exception) {
-            Log.e("PrivateRepo", "Failed to write private note", e)
+            Log.e("PrivateRepo", "Failed to write private note")
             throw e // Propagate write failures to ViewModel
         }
     }

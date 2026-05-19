@@ -6,11 +6,19 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
 import cloud.wafflecommons.pixelbrainreader.data.repository.AppThemeConfig
 import cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
@@ -19,6 +27,8 @@ import cloud.wafflecommons.pixelbrainreader.ui.main.MainScreen
 import cloud.wafflecommons.pixelbrainreader.ui.main.MainViewModel
 import cloud.wafflecommons.pixelbrainreader.ui.theme.PixelBrainReaderTheme
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -32,24 +42,18 @@ class MainActivity : FragmentActivity() {
 
     private val viewModel: MainViewModel by viewModels()
 
-    // State for UI
-    private var isUserLoggedIn by mutableStateOf(false)
+    /**
+     * Tri-state login resolution. Null = still resolving (first
+     * EncryptedSharedPreferences access takes 50-200 ms on cold start —
+     * we don't want to block the main thread for that).
+     */
+    private var loginState by mutableStateOf<Boolean?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
-        // 1. Synchronous Initialization logic
-        isUserLoggedIn = secretManager.getToken() != null
-        
+
         enableEdgeToEdge()
         androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
-
-        // Privacy Curtain (SecOps) - Kept as good practice even without bio, but removing Flag Secure might be desired if bio is gone? 
-        // User asked to remove Biometric Authentication. Privacy Curtain (FLAG_SECURE) prevents screenshots.
-        // It wasn't explicitly asked to be removed, but often goes hand in hand. 
-        // I will keep it for now as "Security" != "Biometric Auth". But likely user wants standard app behavior.
-        // Re-reading prompt: "COMPLETELY REMOVE the Biometric Authentication feature... This includes the Locked Screen..."
-        // I will keep FLAG_SECURE only if !DEBUG, as it was.
 
         if (!BuildConfig.DEBUG) {
             window.setFlags(
@@ -59,39 +63,54 @@ class MainActivity : FragmentActivity() {
         }
 
         setContent {
-            // Observe the theme from the repository directly
             val themeConfig by userPrefs.themeConfig.collectAsStateWithLifecycle(initialValue = AppThemeConfig.FOLLOW_SYSTEM)
-            
+
             val useDarkTheme = when (themeConfig) {
                 AppThemeConfig.DARK -> true
                 AppThemeConfig.LIGHT -> false
                 AppThemeConfig.FOLLOW_SYSTEM -> isSystemInDarkTheme()
             }
-            
+
+            // Resolve login state off the main thread. Keystore-backed
+            // EncryptedSharedPreferences first-access is non-trivial; doing
+            // it on the main thread blocks the first frame.
+            LaunchedEffect(Unit) {
+                if (loginState == null) {
+                    val hasToken = withContext(Dispatchers.IO) {
+                        secretManager.getToken() != null
+                    }
+                    loginState = hasToken
+                    if (savedInstanceState == null && hasToken) {
+                        viewModel.performInitialSync()
+                    }
+                }
+            }
+
             PixelBrainReaderTheme(darkTheme = useDarkTheme) {
-                if (isUserLoggedIn) {
-                    MainScreen(
+                when (val state = loginState) {
+                    null -> SplashScreen()
+                    true -> MainScreen(
                         viewModel = viewModel,
                         onLogout = {
-                            isUserLoggedIn = false
+                            loginState = false
                             secretManager.clear()
                         },
-                        onExitApp = {
-                            finishAffinity()
-                        }
+                        onExitApp = { finishAffinity() }
                     )
-                } else {
-                    LoginScreen(onLoginSuccess = {
-                        isUserLoggedIn = true
-                    })
+                    false -> LoginScreen(onLoginSuccess = { loginState = true })
                 }
             }
         }
 
         handleIntent(intent)
-        
-        if (savedInstanceState == null && isUserLoggedIn) {
-            viewModel.performInitialSync()
+    }
+
+    @androidx.compose.runtime.Composable
+    private fun SplashScreen() {
+        Surface(modifier = Modifier.fillMaxSize()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
         }
     }
 

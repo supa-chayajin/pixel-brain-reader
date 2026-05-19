@@ -24,8 +24,10 @@ android {
         minSdk = 36
         compileSdk = 36
         targetSdkPreview = "36"
-        versionCode = 610
-        versionName = "6.1.0"
+        // V7 milestone: Private-Vault RAG security model, manual indexing,
+        // content-fingerprint reindex, vault-rooted health sync.
+        versionCode = 700
+        versionName = "7.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -35,15 +37,48 @@ android {
         buildConfigField("String", "geminiApiKey", "\"$key\"")
     }
 
-    // ... buildTypes ...
+    // Local release signing — credentials come from local.properties (gitignored).
+    // Required keys: storeFile, storePassword, keyAlias, keyPassword.
+    // Falls back to debug signing if any field is missing so debug builds keep working.
+    signingConfigs {
+        create("release") {
+            val storeFilePath = localProperties.getProperty("storeFile")
+            val storePwd = localProperties.getProperty("storePassword")
+            val alias = localProperties.getProperty("keyAlias")
+            val keyPwd = localProperties.getProperty("keyPassword")
+            if (!storeFilePath.isNullOrBlank() && !storePwd.isNullOrBlank()
+                && !alias.isNullOrBlank() && !keyPwd.isNullOrBlank()
+            ) {
+                storeFile = file(storeFilePath)
+                storePassword = storePwd
+                keyAlias = alias
+                keyPassword = keyPwd
+                enableV1Signing = false
+                enableV2Signing = true
+                enableV3Signing = true
+                enableV4Signing = true
+            }
+        }
+    }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // If local.properties supplies signing credentials, use them; else
+            // AGP falls back to the debug keystore (clearly logged at build time).
+            val releaseConfig = signingConfigs.getByName("release")
+            signingConfig = if (releaseConfig.storeFile != null) releaseConfig
+                            else signingConfigs.getByName("debug")
+        }
+        debug {
+            // Debug builds stay unminified for fast iteration.
+            isMinifyEnabled = false
+            isShrinkResources = false
         }
     }
     compileOptions {
@@ -56,9 +91,6 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
-    }
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.1"
     }
     packaging {
         jniLibs {
@@ -82,13 +114,10 @@ android {
         }
     }
 
-    // AI Models (TFLite) must not be compressed
+    // AI Models (TFLite) must not be compressed. MediaPipe loads from the
+    // APK asset path directly — compressing would break it.
     androidResources {
         noCompress += "tflite"
-    }
-    // Fallback for asset compression
-    aaptOptions {
-        noCompress("tflite")
     }
 }
 

@@ -70,7 +70,7 @@ class SettingsViewModel @Inject constructor(
         val paneWidth: Float = 360f,
         val themeConfig: AppThemeConfig = AppThemeConfig.FOLLOW_SYSTEM,
         val currentAiModel: cloud.wafflecommons.pixelbrainreader.data.model.AiModel = cloud.wafflecommons.pixelbrainreader.data.model.AiModel.GEMINI_FLASH,
-        val appVersion: String = "6.1.0",
+        val appVersion: String = "7.0.0",
         val repoOwner: String? = null,
         val repoName: String? = null,
         // AI Config (Advanced/Internal)
