@@ -1,9 +1,15 @@
 package cloud.wafflecommons.pixelbrainreader.data.sync
 
+import android.content.Context
 import android.util.Log
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.workDataOf
 import cloud.wafflecommons.pixelbrainreader.data.remote.JGitProvider
 import cloud.wafflecommons.pixelbrainreader.data.remote.SyncResult
 import cloud.wafflecommons.pixelbrainreader.data.usecase.SyncHealthDataUseCase
+import cloud.wafflecommons.pixelbrainreader.data.workers.IndexingWorker
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -36,6 +42,7 @@ sealed class SyncState {
  */
 @Singleton
 class SyncOrchestrator @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val jGitProvider: JGitProvider,
     private val syncHealthDataUseCase: SyncHealthDataUseCase,
     private val googleCalendarRepository: cloud.wafflecommons.pixelbrainreader.data.repository.GoogleCalendarRepository,
@@ -151,6 +158,18 @@ class SyncOrchestrator @Inject constructor(
             Log.i(TAG, "Phase 3.5: Reindexing Room (post-push)...")
             runCatching { vaultDiscoveryRepository.reindexAll(0L) }
                 .onFailure { Log.w(TAG, "Post-push reindex failed (non-fatal)", it) }
+
+            // Phase 4: Enqueue IndexingWorker so Mood/Habit/Chore JSON files
+            // pulled from Git get reconciled into Room. SyncOrchestrator only
+            // owns the git + FileEntity index — the per-feature JSON->Room
+            // bridges live inside IndexingWorker.
+            Log.i(TAG, "Phase 4: Enqueueing IndexingWorker for Mood/Habit/Chore reconciliation...")
+            runCatching {
+                val request = OneTimeWorkRequestBuilder<IndexingWorker>()
+                    .addTag("post_sync_reconcile")
+                    .build()
+                WorkManager.getInstance(context).enqueue(request)
+            }.onFailure { Log.w(TAG, "IndexingWorker enqueue failed (non-fatal)", it) }
 
             Log.i(TAG, "=== Full Sync Cycle Complete ===")
             _syncState.value = SyncState.Success
