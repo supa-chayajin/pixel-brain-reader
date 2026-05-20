@@ -20,6 +20,7 @@ local.properties
 .opencode/
 .project-memory/
 .tooling-venv/
+.venv/
 graphify-out/
 scripts/
 CLAUDE.md
