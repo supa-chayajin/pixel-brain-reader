@@ -52,9 +52,16 @@ class VaultDiscoveryRepository @Inject constructor(
         val newFiles = mutableListOf<FileEntity>()       // REPLACE-inserted (triggers FK CASCADE)
         val mtimeRefreshes = mutableListOf<Pair<String, Long>>() // UPDATE-only (no CASCADE)
 
-        rootDir.walkTopDown().forEach { file ->
-            if (file.isDirectory && file.name == ".git") return@forEach
-
+        // Prune at descent time, NOT inside the loop. `walkTopDown().forEach`
+        // with a name check is `continue`, not `prune` — by the time we react,
+        // the walker has already queued every child of `.git`. The result is
+        // that `.git/refs/heads`, `.git/objects/...`, etc. get treated as
+        // vault files. Using `.onEnter` keeps the entire subtree out of the
+        // scan in the first place. Mirrors Obsidian's own "what is a note"
+        // convention — anything that's app/runtime state, not user content.
+        rootDir.walkTopDown().onEnter { dir ->
+            dir.name !in EXCLUDED_DIRS
+        }.forEach { file ->
             val relativePath = file.relativeTo(rootDir).path
             if (relativePath.isEmpty()) return@forEach
 
@@ -180,6 +187,18 @@ class VaultDiscoveryRepository @Inject constructor(
             localModifiedTimestamp = file.lastModified(),
             tags = tags,
             rawMetadata = metaBlob
+        )
+    }
+
+    private companion object {
+        /** Directories never indexed: git internals + Obsidian app state. */
+        val EXCLUDED_DIRS = setOf(
+            ".git",
+            ".obsidian",
+            ".trash",
+            ".devtool",
+            ".idea",
+            ".opencode",
         )
     }
 

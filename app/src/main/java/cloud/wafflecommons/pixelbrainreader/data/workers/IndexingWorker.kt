@@ -37,6 +37,7 @@ class IndexingWorker @AssistedInject constructor(
     private val vaultDiscoveryRepository: VaultDiscoveryRepository,
     private val vectorSearchEngine: cloud.wafflecommons.pixelbrainreader.data.ai.VectorSearchEngine,
     private val embeddingDao: cloud.wafflecommons.pixelbrainreader.data.local.dao.EmbeddingDao,
+    private val fileDao: cloud.wafflecommons.pixelbrainreader.data.local.dao.FileDao,
     private val database: cloud.wafflecommons.pixelbrainreader.data.local.AppDatabase,
     private val userPrefs: cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository,
     private val cryptoManager: CryptoManager,
@@ -48,10 +49,26 @@ class IndexingWorker @AssistedInject constructor(
             val startTime = System.currentTimeMillis()
             val embeddingsBefore = runCatching { embeddingDao.count() }.getOrDefault(-1)
             val lastTime = userPrefs.lastIndexTime.first()
+            val lastTimeHuman = if (lastTime == 0L) "never" else java.text.SimpleDateFormat(
+                "yyyy-MM-dd HH:mm:ss",
+                java.util.Locale.US
+            ).format(java.util.Date(lastTime))
             Log.i(
                 "RAG_DEBUG",
-                "IndexingWorker start: lastTime=$lastTime embeddings_in_db=$embeddingsBefore"
+                "IndexingWorker start: lastTime=$lastTime ($lastTimeHuman) embeddings_in_db=$embeddingsBefore"
             )
+
+            // Fail-fast: probe the embedder BEFORE walking the vault. Without
+            // this, a broken MediaPipe init silently turns every chunk into a
+            // per-chunk catch with "embed failed" — the job "succeeds" but
+            // inserts zero embeddings, which looks like "indexing is broken".
+            val probe = try {
+                vectorSearchEngine.embed("vector engine readiness probe")
+            } catch (e: Exception) {
+                Log.e("RAG_DEBUG", "IndexingWorker ABORT: vector engine init failed: ${e.message}", e)
+                return@withContext Result.failure()
+            }
+            Log.i("RAG_DEBUG", "IndexingWorker: embedder OK (dim=${probe.size})")
 
             // Vault scan: reindexAll uses content-SHA comparison and returns ONLY
             // files whose stored fingerprint differs from on-disk content. Files
@@ -68,10 +85,30 @@ class IndexingWorker @AssistedInject constructor(
 
             Log.i("RAG_DEBUG", "IndexingWorker: ${deltaFiles.size} file(s) changed since last index")
 
-            if (deltaFiles.isNotEmpty()) {
-                processEmbeddings(deltaFiles)
+            // Backfill: union the delta with markdown files that exist in the
+            // `files` table but have NO embedding row. Without this, files
+            // indexed by a previous worker run that died before embedding
+            // (e.g. when the .git walker drowned us in dir entries) stay
+            // permanently unembedded — their mtime never drifts, so the
+            // delta scan keeps skipping them. The DAO query already exists
+            // for exactly this case; it just wasn't wired here.
+            val unembedded = try {
+                fileDao.getFilesWithoutEmbeddings()
+            } catch (e: Exception) {
+                Log.w("RAG_DEBUG", "getFilesWithoutEmbeddings failed: ${e.message}")
+                emptyList()
+            }
+            val unionFiles = (deltaFiles + unembedded).distinctBy { it.path }
+            Log.i(
+                "RAG_DEBUG",
+                "IndexingWorker: delta=${deltaFiles.size} unembedded-backfill=${unembedded.size} " +
+                    "union=${unionFiles.size}"
+            )
+
+            if (unionFiles.isNotEmpty()) {
+                processEmbeddings(unionFiles)
             } else {
-                Log.d("IndexingWorker", "No file changes — nothing to embed.")
+                Log.d("IndexingWorker", "No file changes and no unembedded backlog — nothing to embed.")
             }
 
             userPrefs.setLastIndexTime(startTime)
@@ -101,6 +138,23 @@ class IndexingWorker @AssistedInject constructor(
             !it.path.contains("99_System")           // SHIELD: system isolation
         }
         Log.i("RAG_DEBUG", "processEmbeddings: ${files.size} changed file(s) -> ${candidates.size} embedding candidate(s) after filter")
+
+        // Visibility for the "269 in, 0 out" failure mode: print a breakdown of
+        // what was rejected so we don't have to grep blind ever again.
+        if (candidates.isEmpty() && files.isNotEmpty()) {
+            val byType = files.groupingBy { it.type }.eachCount()
+            val mdCount = files.count { it.path.endsWith(".md", ignoreCase = true) }
+            val mdEncCount = files.count { it.path.endsWith(".md.enc", ignoreCase = true) }
+            val droppedToday = files.count { it.path == todayPath }
+            val droppedSystem = files.count { it.path.contains("99_System") }
+            val firstFive = files.take(5).map { "${it.type}:${it.path}" }
+            Log.w(
+                "RAG_DEBUG",
+                "processEmbeddings: 0 candidates from ${files.size} changed items.  " +
+                    "byType=$byType  .md=$mdCount  .md.enc=$mdEncCount  todaySkipped=$droppedToday  " +
+                    "systemSkipped=$droppedSystem.  First 5: $firstFive"
+            )
+        }
 
         // Cache the vault password ONCE per worker run. Returns null when the
         // user has never unlocked the vault on this install; in that case all

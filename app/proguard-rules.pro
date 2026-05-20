@@ -217,6 +217,52 @@
 -dontwarn com.google.android.libraries.identity.**
 
 # -----------------------------------------------------------------------------
+# Credential Manager (androidx.credentials) + Sign in with Google (googleid)
+# -----------------------------------------------------------------------------
+# CredentialManager resolves provider implementations REFLECTIVELY:
+#   1. ServiceLoader scans META-INF/services for CredentialProvider entries,
+#      which point at androidx.credentials.playservices.CredentialProviderPlayServicesImpl.
+#   2. GoogleIdTokenCredential.createFrom(Bundle) matches the response by class
+#      name + reads BUNDLE_KEY_* constants via reflection.
+# When R8 obfuscates ANY of these, release builds fail with one of:
+#   - NoCredentialException("No credentials available")
+#   - GetCredentialUnknownException
+#   - IllegalArgumentException inside createFrom(...) -> credential decoding
+#   - "Failed to load provider" at CredentialManager.getCredential
+# Debug builds never see this because R8 is off there.
+-keep class androidx.credentials.** { *; }
+-keep interface androidx.credentials.** { *; }
+-keep class androidx.credentials.playservices.** { *; }
+-keep interface androidx.credentials.playservices.** { *; }
+-dontwarn androidx.credentials.**
+
+# GetGoogleIdOption / GetSignInWithGoogleOption / GoogleIdTokenCredential.
+# The static `createFrom` factories and the BUNDLE_KEY_* / TYPE_* string
+# constants are read reflectively from the credential response Bundle.
+-keep class com.google.android.libraries.identity.googleid.** { *; }
+-keep interface com.google.android.libraries.identity.googleid.** { *; }
+-keepclassmembers class com.google.android.libraries.identity.googleid.** {
+    public static *** createFrom(...);
+    public static final java.lang.String BUNDLE_KEY_*;
+    public static final java.lang.String TYPE_*;
+    <init>(...);
+}
+-dontwarn com.google.android.libraries.identity.googleid.**
+
+# CredentialManager exception classes are matched by FQN by the framework
+# to translate Binder errors back into typed exceptions. R8 renaming them
+# turns every failure into "Unknown".
+-keep class androidx.credentials.exceptions.** { *; }
+
+# Play Services Auth subsurfaces explicitly (covered by the gms.** wildcard
+# above, but the Credential Manager ↔ Play Services bridge reads these by
+# FQN so they're worth pinning).
+-keep class com.google.android.gms.auth.** { *; }
+-keep class com.google.android.gms.auth.api.identity.** { *; }
+-keep class com.google.android.gms.common.api.** { *; }
+-keep class com.google.android.gms.tasks.** { *; }
+
+# -----------------------------------------------------------------------------
 # kaml (Kotlin YAML — built on kotlinx.serialization + SnakeYAML)
 # -----------------------------------------------------------------------------
 -keep class com.charleskorn.kaml.** { *; }

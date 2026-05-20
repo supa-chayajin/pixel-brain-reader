@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.flatMapLatest
 import androidx.compose.runtime.Immutable
 import cloud.wafflecommons.pixelbrainreader.data.repository.TaskRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.ChoreRepository
@@ -68,7 +69,8 @@ class LifeStatsViewModel @Inject constructor(
     private val calculateChoreEntropyUseCase: CalculateChoreEntropyUseCase,
     gamificationPreferences: cloud.wafflecommons.pixelbrainreader.data.local.preferences.GamificationPreferences,
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context,
-    private val syncOrchestrator: cloud.wafflecommons.pixelbrainreader.data.sync.SyncOrchestrator
+    private val syncOrchestrator: cloud.wafflecommons.pixelbrainreader.data.sync.SyncOrchestrator,
+    private val healthMetricsRepository: cloud.wafflecommons.pixelbrainreader.data.repository.HealthMetricsRepository
 ) : ViewModel() {
 
     // Dummy flow to trigger refresh when date changes
@@ -76,12 +78,18 @@ class LifeStatsViewModel @Inject constructor(
         emit(LocalDate.now())
     }
 
+    private val healthMetricsFlow = syncOrchestrator.syncState
+        .flatMapLatest { healthMetricsRepository.getMetricsHistoryFlow(LocalDate.now(), 7) }
+
     val uiState: StateFlow<LifeStatsUiState> = combine(
         moodRepository.getMoodFlow(),
         habitRepository.getLogsForYearFlow(LocalDate.now().year),
         choreRepository.getAllChoresStream(),
-        combine(todayFlow, habitRepository.getHabitConfigsFlow()) { today, configs -> today to configs }
-    ) { moods, habitLogsMap, chores, (today, configs) ->
+        combine(todayFlow, habitRepository.getHabitConfigsFlow()) { today, configs -> today to configs },
+        healthMetricsFlow
+    ) { moods, habitLogsMap, chores, todayAndConfigs, healthMetricsList ->
+        val today = todayAndConfigs.first
+        val configs = todayAndConfigs.second
         
         // --- Mental Health (Mood) ---
         val mood7Days = moods.filter { it.date >= today.minusDays(7).toString() }
@@ -109,30 +117,23 @@ class LifeStatsViewModel @Inject constructor(
             val d = today.minusDays(offset.toLong())
             
             // Read JSON exactly as DailyNoteViewModel
-            val metricsFile = File(context.filesDir, "10_Journal/data/health/metrics/$d.json")
             var dayAvgBpm = 0
-            if (metricsFile.exists()) {
-                try {
-                    val dhm = com.google.gson.Gson().fromJson(metricsFile.readText(), DailyHealthMetrics::class.java)
-                    dayAvgBpm = dhm?.averageHeartRate ?: 0
-                    totalCalories += (dhm?.caloriesConsumed ?: 0.0)
-                    totalMeditation += (dhm?.mindfulnessMinutes?.toInt() ?: 0)
-                    if (dayAvgBpm > 0) {
-                        totalHrSum += dayAvgBpm
-                        hrDaysCount++
-                    }
-                    distanceHistory.add(dhm?.distanceKm?.toFloat() ?: 0f)
-                    activeMinHistory.add(dhm?.activeMinutes?.toFloat() ?: 0f)
-                    sleepHistory.add(dhm?.sleepDurationMinutes?.toFloat() ?: 0f)
-                    if (offset == 0) {
-                        todayDistanceKm = dhm?.distanceKm ?: 0.0
-                        todayActiveMinutes = dhm?.activeMinutes ?: 0L
-                        todaySleepMinutes = dhm?.sleepDurationMinutes ?: 0L
-                    }
-                } catch (e: Exception) {
-                    distanceHistory.add(0f)
-                    activeMinHistory.add(0f)
-                    sleepHistory.add(0f)
+            val dhm = healthMetricsList.find { it.date == d.toString() }
+            if (dhm != null) {
+                dayAvgBpm = dhm.averageHeartRate
+                totalCalories += dhm.caloriesConsumed
+                totalMeditation += dhm.mindfulnessMinutes.toInt()
+                if (dayAvgBpm > 0) {
+                    totalHrSum += dayAvgBpm
+                    hrDaysCount++
+                }
+                distanceHistory.add(dhm.distanceKm.toFloat())
+                activeMinHistory.add(dhm.activeMinutes.toFloat())
+                sleepHistory.add(dhm.sleepDurationMinutes.toFloat())
+                if (offset == 0) {
+                    todayDistanceKm = dhm.distanceKm
+                    todayActiveMinutes = dhm.activeMinutes
+                    todaySleepMinutes = dhm.sleepDurationMinutes
                 }
             } else {
                 distanceHistory.add(0f)

@@ -42,6 +42,8 @@ jsoup = "1.17.2"
 flexmark = "0.64.8"
 markwonHtml = "4.6.2"
 mediaPipeText = "0.10.14"
+tensorflowLite = "2.16.1"
+djlTokenizers = "0.33.0"
 coroutinesGuava = "1.10.2"
 glance = "1.1.0"
 mockk = "1.13.8"
@@ -151,6 +153,15 @@ markwon-html = { group = "io.noties.markwon", name = "html", version.ref = "mark
 
 # AI Core & MediaPipe
 mediapipe-tasks-text = { group = "com.google.mediapipe", name = "tasks-text", version.ref = "mediaPipeText" }
+# Local sentence embeddings (multilingual MiniLM): raw TFLite Interpreter +
+# HuggingFace-format tokenizer via DJL. Replaces the MediaPipe TextEmbedder
+# path which was locked to the 100-dim English-only USE-Lite model.
+tensorflow-lite = { group = "org.tensorflow", name = "tensorflow-lite", version.ref = "tensorflowLite" }
+djl-huggingface-tokenizers = { group = "ai.djl.huggingface", name = "tokenizers", version.ref = "djlTokenizers" }
+# The base `tokenizers` JAR only carries JNI bindings + native .so for desktop
+# ABIs (linux/osx). The Android .so live in this companion AAR — without it,
+# the first encode() call throws UnsatisfiedLinkError on-device.
+djl-android-tokenizer-native = { group = "ai.djl.android", name = "tokenizer-native", version.ref = "djlTokenizers" }
 kotlinx-coroutines-guava = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-guava", version.ref = "coroutinesGuava" }
 
 # Jetpack Glance
