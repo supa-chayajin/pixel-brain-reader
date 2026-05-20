@@ -1,29 +1,28 @@
 package cloud.wafflecommons.pixelbrainreader.domain.gamification
 
-import android.content.Context
 import android.util.Log
 import cloud.wafflecommons.pixelbrainreader.data.health.DailyHealthMetrics
+import cloud.wafflecommons.pixelbrainreader.data.repository.FileRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.HabitRepository
 import com.google.gson.Gson
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.io.File
 import java.time.LocalDate
 import javax.inject.Inject
 
 class AutomateHabitsUseCase @Inject constructor(
     private val habitRepository: HabitRepository,
-    @ApplicationContext private val context: Context
+    private val fileRepository: FileRepository
 ) {
     suspend operator fun invoke(date: LocalDate) = withContext(Dispatchers.IO) {
-        val file = File(context.filesDir, "10_Journal/data/health/metrics/$date.json")
-        if (!file.exists()) {
+        // Vault-rooted read. Post-JGit refactor, health metrics live at
+        // `filesDir/vault/10_Journal/...`, not the pre-refactor `filesDir/10_Journal/...`.
+        val json = fileRepository.readFile("10_Journal/data/health/metrics/$date.json")
+        if (json.isNullOrBlank()) {
             Log.d("AutomateHabitsUseCase", "No health metrics found for $date")
             return@withContext
         }
 
-        val json = try { file.readText() } catch (e: Exception) { return@withContext }
         val metrics = try {
             Gson().fromJson(json, DailyHealthMetrics::class.java)
         } catch (e: Exception) {

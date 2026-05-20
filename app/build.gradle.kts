@@ -19,6 +19,12 @@ if (localPropertiesFile.exists()) {
 android {
     namespace = "cloud.wafflecommons.pixelbrainreader"
 
+    // NDK r26d. The actual native code in this project is a no-op stub
+    // (`src/main/cpp/stub.cpp`). It exists ONLY to make AGP bundle
+    // libc++_shared.so, which DJL's `libdjl_tokenizer.so` dynamically
+    // links against. AGP auto-installs this NDK on first build if missing.
+    ndkVersion = "26.3.11579264"
+
     defaultConfig {
         applicationId = "cloud.wafflecommons.pixelbrainreader"
         minSdk = 36
@@ -35,6 +41,31 @@ android {
         }
         val key = localProperties.getProperty("geminiApiKey") ?: ""
         buildConfigField("String", "geminiApiKey", "\"$key\"")
+
+        // The stub native library at src/main/cpp triggers libc++_shared.so
+        // packaging. We only ship for the four ABIs Android currently supports
+        // — without this filter, AGP would also try to build for emulator
+        // variants we don't care about.
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
+        }
+        externalNativeBuild {
+            cmake {
+                cppFlags += "-std=c++17"
+                // Force dynamic linkage against the C++ STL. With the default
+                // c++_static, AGP doesn't bundle libc++_shared.so — and our
+                // stub library is too trivial to trigger automatic packaging.
+                // DJL's libdjl_tokenizer.so needs the shared STL at runtime.
+                arguments += "-DANDROID_STL=c++_shared"
+            }
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
     }
 
     // Local release signing — credentials come from local.properties (gitignored).
@@ -114,8 +145,9 @@ android {
         }
     }
 
-    // AI Models (TFLite) must not be compressed. MediaPipe loads from the
-    // APK asset path directly — compressing would break it.
+    // AI Models (TFLite) must not be compressed. We mmap them from disk
+    // after staging to cacheDir; the AAPT compression heuristic must not
+    // touch them. The tokenizer JSON is just a config blob — compressible.
     androidResources {
         noCompress += "tflite"
     }
@@ -211,6 +243,11 @@ dependencies {
     // Gemini Nano on-device (AICore) — privacy-first local inference, no silent cloud fallback
     implementation(libs.google.ai.edge.aicore)
     implementation(libs.mediapipe.tasks.text)
+    // Phase-3 local embedder: raw TFLite + HuggingFace tokenizer.
+    // Replaces MediaPipe TextEmbedder for the multilingual MiniLM model.
+    implementation(libs.tensorflow.lite)
+    implementation(libs.djl.huggingface.tokenizers)
+    implementation(libs.djl.android.tokenizer.native)
     implementation(libs.kotlinx.coroutines.guava)
     implementation(libs.mlkit.genai.prompt)
     implementation(libs.mlkit.genai.proofreading)

@@ -94,7 +94,8 @@ class DailyNoteViewModel @Inject constructor(
     private val dailyNoteRepository: cloud.wafflecommons.pixelbrainreader.data.repository.DailyNoteRepository,
     private val taskRepository: cloud.wafflecommons.pixelbrainreader.data.repository.TaskRepository,
     private val syncOrchestrator: cloud.wafflecommons.pixelbrainreader.data.sync.SyncOrchestrator,
-    private val googleCalendarRepository: cloud.wafflecommons.pixelbrainreader.data.repository.GoogleCalendarRepository
+    private val googleCalendarRepository: cloud.wafflecommons.pixelbrainreader.data.repository.GoogleCalendarRepository,
+    private val healthMetricsRepository: cloud.wafflecommons.pixelbrainreader.data.repository.HealthMetricsRepository
 ) : ViewModel() {
 
     /**
@@ -146,49 +147,44 @@ class DailyNoteViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    private val _healthMetrics = _selectedDate.flatMapLatest { date ->
-        flow {
-            val metricsFile = File(context.filesDir, "10_Journal/data/health/metrics/$date.json")
-            if (metricsFile.exists()) {
-                 try {
-                    emit(com.google.gson.Gson().fromJson(metricsFile.readText(), cloud.wafflecommons.pixelbrainreader.data.health.DailyHealthMetrics::class.java))
-                 } catch (e: Exception) { emit(null) }
-            } else emit(null)
+    private val _healthMetrics = combine(_selectedDate, syncOrchestrator.syncState) { date, _ -> date }
+        .flatMapLatest { date ->
+            healthMetricsRepository.getMetricsFlow(date)
         }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    private val _moodTrend = combine(_selectedDate, moodRepository.getMoodFlow()) { date, moods ->
-        val recentMoods = mutableListOf<DailyMoodPoint>()
-        (6 downTo 0).forEach { offset ->
-            val d = date.minusDays(offset.toLong())
-            val dayMoods = moods.filter { it.date == d.toString() }
-            
-            val metricsFile = File(context.filesDir, "10_Journal/data/health/metrics/$d.json")
-            var avgBpm = 0
-            if (metricsFile.exists()) {
-                try {
-                    val dhm = com.google.gson.Gson().fromJson(metricsFile.readText(), cloud.wafflecommons.pixelbrainreader.data.health.DailyHealthMetrics::class.java)
-                    avgBpm = dhm?.averageHeartRate ?: 0
-                } catch (e: Exception) {}
-            }
-            
-            if (dayMoods.isNotEmpty()) {
-                val avg = dayMoods.map { it.score }.average()
-                val emoji = when {
-                    avg < 1.8 -> "😫"
-                    avg.isNaN() -> "😐"
-                    avg < 2.6 -> "😞"
-                    avg < 3.4 -> "😐"
-                    avg < 4.2 -> "🙂"
-                    else -> "🤩"
+    private val _moodTrend = combine(_selectedDate, syncOrchestrator.syncState) { date, _ -> date }
+        .flatMapLatest { date ->
+            combine(
+                moodRepository.getMoodFlow(),
+                healthMetricsRepository.getMetricsHistoryFlow(date, 7)
+            ) { moods, healthMetricsList ->
+                val recentMoods = mutableListOf<DailyMoodPoint>()
+                (6 downTo 0).forEach { offset ->
+                    val d = date.minusDays(offset.toLong())
+                    val dayMoods = moods.filter { it.date == d.toString() }
+                    
+                    val dhm = healthMetricsList.find { it.date == d.toString() }
+                    val avgBpm = dhm?.averageHeartRate ?: 0
+                    
+                    if (dayMoods.isNotEmpty()) {
+                        val avg = dayMoods.map { it.score }.average()
+                        val emoji = when {
+                            avg < 1.8 -> "😫"
+                            avg.isNaN() -> "😐"
+                            avg < 2.6 -> "😞"
+                            avg < 3.4 -> "😐"
+                            avg < 4.2 -> "🙂"
+                            else -> "🤩"
+                        }
+                        recentMoods.add(DailyMoodPoint(d, avg.toFloat(), emoji, avgBpm))
+                    } else {
+                        recentMoods.add(DailyMoodPoint(d, 0f, "∅", avgBpm))
+                    }
                 }
-                recentMoods.add(DailyMoodPoint(d, avg.toFloat(), emoji, avgBpm))
-            } else {
-                recentMoods.add(DailyMoodPoint(d, 0f, "∅", avgBpm))
+                recentMoods
             }
-        }
-        recentMoods
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // Weather Flow (Reactive).
     // The previous version caught Exception (which includes CancellationException)

@@ -46,7 +46,8 @@ class SyncOrchestrator @Inject constructor(
     private val vaultDiscoveryRepository: cloud.wafflecommons.pixelbrainreader.data.repository.VaultDiscoveryRepository,
     private val moodRepository: cloud.wafflecommons.pixelbrainreader.data.repository.MoodRepository,
     private val habitRepository: cloud.wafflecommons.pixelbrainreader.data.repository.HabitRepository,
-    private val choreRepository: cloud.wafflecommons.pixelbrainreader.data.repository.ChoreRepository
+    private val choreRepository: cloud.wafflecommons.pixelbrainreader.data.repository.ChoreRepository,
+    private val automateHabitsUseCase: cloud.wafflecommons.pixelbrainreader.domain.gamification.AutomateHabitsUseCase
 ) {
     companion object {
         private const val TAG = "SyncOrchestrator"
@@ -124,6 +125,14 @@ class SyncOrchestrator @Inject constructor(
             } catch (e: Exception) {
                 Log.w(TAG, "Phase 2: Health sync exception (non-fatal)", e)
             }
+
+            // Phase 2.6: Habit automation — read freshly-written health metrics
+            // from the vault and propagate into habit_logs (+ JSON log files)
+            // BEFORE the push, so the same commit ships both metrics and the
+            // derived habit progress. Non-fatal.
+            Log.i(TAG, "Phase 2.6: Habit automation (health → habits)...")
+            runCatching { automateHabitsUseCase(java.time.LocalDate.now()) }
+                .onFailure { Log.w(TAG, "Phase 2.6: Habit automation failed (non-fatal)", it) }
 
             // Phase 2.5: Google Ecosystem Sync (non-fatal)
             Log.i(TAG, "Phase 2.5: Google Ecosystem sync...")
