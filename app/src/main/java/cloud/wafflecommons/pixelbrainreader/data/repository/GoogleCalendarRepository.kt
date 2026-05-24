@@ -104,7 +104,7 @@ class GoogleCalendarRepository @Inject constructor(
 
                 var total = 0
                 val calendars = service.calendarList().list().execute().items.orEmpty()
-                Log.i(TAG, "Calendars discovered: ${calendars.size} -> ${calendars.map { it.summary ?: it.id }}")
+                Log.d(TAG, "Calendars discovered: ${calendars.size} -> ${calendars.map { it.summary ?: it.id }}")
                 for (cal in calendars) {
                     val events = service.events().list(cal.id)
                         .setTimeMin(timeMin)
@@ -117,7 +117,7 @@ class GoogleCalendarRepository @Inject constructor(
                         .setOrderBy("startTime")
                         .execute()
                     val items = events.items.orEmpty()
-                    Log.i(TAG, "  '${cal.summary ?: cal.id}': ${items.size} event(s) in window")
+                    Log.d(TAG, "  '${cal.summary ?: cal.id}': ${items.size} event(s) in window")
                     items.forEach { evt ->
                         val existing = dailyDashboardDao
                             .getTimelineEntryByGoogleEventId(evt.id)

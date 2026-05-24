@@ -51,6 +51,7 @@ fun LoginScreen(
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
     val isTokenValid by viewModel.isTokenValid.collectAsStateWithLifecycle()
     val loginSuccess by viewModel.loginSuccess.collectAsStateWithLifecycle()
+    val errorMessage by viewModel.errorMessage.collectAsStateWithLifecycle()
 
     LaunchedEffect(loginSuccess) {
         if (loginSuccess) {
@@ -153,6 +154,17 @@ fun LoginScreen(
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(horizontal = 16.dp)
             )
+
+            errorMessage?.let { error ->
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = error,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+                )
+            }
 
             Spacer(modifier = Modifier.height(32.dp))
 

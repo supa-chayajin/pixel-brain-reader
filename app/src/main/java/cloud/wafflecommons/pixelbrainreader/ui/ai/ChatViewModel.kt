@@ -193,7 +193,7 @@ class ChatViewModel @Inject constructor(
                 ragContext = hits.takeIf { it.isNotEmpty() }
                     ?.joinToString(separator = "\n---\n") { it.content }
                 sources = hits.map { it.fileId }.distinct()
-                Log.i(
+                Log.d(
                     "RAG_DEBUG",
                     "ChatViewModel.sendMessage(ORACLE): hits=${hits.size} " +
                         "sources=$sources contextLen=${ragContext?.length ?: 0}"

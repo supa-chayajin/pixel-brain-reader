@@ -7,6 +7,7 @@ import android.content.IntentSender
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.work.Constraints
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkInfo
@@ -145,8 +146,17 @@ class SettingsViewModel @Inject constructor(
      * means a request issued while one is already running is a no-op.
      */
     fun triggerVaultIndexing() {
+        // Manual, user-initiated indexing: gate on battery only. Requiring
+        // device-idle here would defer the job until the phone enters Doze, so
+        // tapping "Index Knowledge Vault" while actively using the device would
+        // appear to do nothing. (The periodic DailyExportWorker keeps deviceIdle.)
+        val constraints = Constraints.Builder()
+            .setRequiresBatteryNotLow(true)
+            .build()
+
         val request = OneTimeWorkRequestBuilder<IndexingWorker>()
             .addTag("manual_indexing")
+            .setConstraints(constraints)
             .build()
         WorkManager.getInstance(context).enqueueUniqueWork(
             IndexingWorker.UNIQUE_WORK_NAME,

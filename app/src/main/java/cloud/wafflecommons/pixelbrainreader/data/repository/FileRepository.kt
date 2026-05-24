@@ -59,7 +59,10 @@ class FileRepository @Inject constructor(
     suspend fun syncRepository(owner: String? = null, repo: String? = null, branch: String = "main"): Result<Unit> {
         // 1. Setup/Clone
          val remoteUrl = if (owner != null && repo != null) "https://github.com/$owner/$repo.git" else null
-         jGitProvider.setupRepository(remoteUrl)
+         jGitProvider.setupRepository(remoteUrl).onFailure { error ->
+             Log.e("FileRepository", "Setup repository failed during sync", error)
+             return Result.failure(error)
+         }
          
          // 2. Commit
          jGitProvider.addAll()

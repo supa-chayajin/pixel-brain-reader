@@ -9,6 +9,7 @@ import androidx.credentials.ClearCredentialStateRequest
 import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
+import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.credentials.exceptions.GetCredentialException
 import androidx.credentials.exceptions.NoCredentialException
 import cloud.wafflecommons.pixelbrainreader.R
@@ -78,32 +79,52 @@ class GoogleAuthRepository @Inject constructor(
     suspend fun signIn(activity: Activity): Result<String> {
         return try {
             tryGetCredential(activity, filterAuthorized = true)
-        } catch (silent: NoCredentialException) {
-            Log.i(TAG, "Silent attempt returned NoCredentialException; showing full picker", silent)
-            try {
-                tryGetCredential(activity, filterAuthorized = false)
-            } catch (full: NoCredentialException) {
-                // NoCredentialException with filter=false on a device that HAS Google accounts
-                // almost always indicates Cloud Console misconfiguration:
-                //  - Web Client ID in strings.xml doesn't match a Web OAuth client in the project
-                //  - Android OAuth client missing this app's package + SHA-1
-                //  - Web and Android clients live in different Cloud projects
-                // Run `./gradlew signingReport` and verify against Cloud Console → Credentials.
-                Log.e(TAG, "Credential Manager refused with filter=false. " +
-                        "Type=${full.type}; errorMessage=${full.errorMessage}", full)
-                Result.failure(
-                    IllegalStateException(
-                        "Credential Manager refused (${full.type}). " +
-                        "Likely cause: Web Client ID or SHA-1 not registered in Cloud Console."
-                    )
-                )
-            } catch (e: GetCredentialException) {
-                Log.e(TAG, "Credential Manager failure (full): type=${e.type}; msg=${e.errorMessage}", e)
+        } catch (e: GetCredentialException) {
+            // Step 2: On NoCredentialException (silent failure), retry with filterAuthorized = false
+            // to surface the full account picker. We check both the exception type and the
+            // type string because framework-to-jetpack conversion isn't always
+            // subclass-perfect on all Android versions/devices.
+            val isNoCredential = (e is NoCredentialException || 
+                    e.type == "android.credentials.GetCredentialException.TYPE_NO_CREDENTIAL")
+            val isCancellation = (e is GetCredentialCancellationException ||
+                    e.type == "android.credentials.GetCredentialException.TYPE_USER_CANCELED")
+
+            if (isNoCredential) {
+                Log.i(TAG, "Silent attempt returned NoCredentialException; showing full picker", e)
+                try {
+                    tryGetCredential(activity, filterAuthorized = false)
+                } catch (full: GetCredentialException) {
+                    val isFullNoCredential = (full is NoCredentialException || 
+                            full.type == "android.credentials.GetCredentialException.TYPE_NO_CREDENTIAL")
+                    val isFullCancellation = (full is GetCredentialCancellationException ||
+                            full.type == "android.credentials.GetCredentialException.TYPE_USER_CANCELED")
+
+                    if (isFullNoCredential) {
+                        // Device genuinely has no Google accounts OR Cloud Console misconfiguration.
+                        Log.e(TAG, "Credential Manager refused with filter=false. " +
+                                "Type=${full.type}; errorMessage=${full.errorMessage}", full)
+                        Result.failure(
+                            IllegalStateException(
+                                "Credential Manager refused (${full.type}). " +
+                                "Likely cause: Web Client ID or SHA-1 not registered in Cloud Console."
+                            )
+                        )
+                    } else if (isFullCancellation) {
+                        Log.i(TAG, "User cancelled the account picker")
+                        Result.failure(full)
+                    } else {
+                        Log.e(TAG, "Credential Manager failure (full): type=${full.type}; msg=${full.errorMessage}", full)
+                        Result.failure(full)
+                    }
+                }
+            } else if (isCancellation) {
+                // User cancelled or dismissed the UI (if any was shown during silent attempt)
+                Log.i(TAG, "User cancelled during silent attempt")
+                Result.failure(e)
+            } else {
+                Log.e(TAG, "Credential Manager failure (silent): type=${e.type}; msg=${e.errorMessage}", e)
                 Result.failure(e)
             }
-        } catch (e: GetCredentialException) {
-            Log.e(TAG, "Credential Manager failure (silent): type=${e.type}; msg=${e.errorMessage}", e)
-            Result.failure(e)
         } catch (e: Exception) {
             Log.e(TAG, "Sign-in failure", e)
             Result.failure(e)

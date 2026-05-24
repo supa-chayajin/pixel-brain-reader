@@ -130,12 +130,20 @@ class MainActivity : FragmentActivity() {
         // Deep Link (pixelbrain://import?url=...)
         if (intent.action == Intent.ACTION_VIEW && intent.scheme == "pixelbrain" && intent.data?.host == "import") {
              val url = intent.data?.getQueryParameter("url")
-             if (!url.isNullOrBlank()) {
+             // ImportWorker fetches this URL server-side (Jsoup), so only accept
+             // http(s) targets — reject file://, content://, javascript:, etc. so
+             // the public deep link can't become an arbitrary-URL fetch primitive.
+             if (url != null && (url.startsWith("http://") || url.startsWith("https://"))) {
+                 // Wait for connectivity rather than failing the import when offline.
+                 val constraints = androidx.work.Constraints.Builder()
+                     .setRequiredNetworkType(androidx.work.NetworkType.CONNECTED)
+                     .build()
                  val workRequest = androidx.work.OneTimeWorkRequestBuilder<cloud.wafflecommons.pixelbrainreader.data.workers.ImportWorker>()
                      .setInputData(androidx.work.workDataOf("url" to url))
+                     .setConstraints(constraints)
                      .build()
                  androidx.work.WorkManager.getInstance(this).enqueue(workRequest)
-                 
+
                  android.widget.Toast.makeText(this, "Importing Article...", android.widget.Toast.LENGTH_SHORT).show()
              }
         }
