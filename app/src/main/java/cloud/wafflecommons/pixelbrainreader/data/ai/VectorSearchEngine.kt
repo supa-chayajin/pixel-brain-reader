@@ -309,7 +309,7 @@ class VectorSearchEngine @Inject constructor(
         val srcIds = encoding.ids
         val srcMask = encoding.attentionMask
 
-        val inputIds = Array(1) { IntArray(MAX_SEQ_LEN) }
+        val inputIds = Array(1) { IntArray(MAX_SEQ_LEN) { 1 } }
         val attentionMask = Array(1) { IntArray(MAX_SEQ_LEN) }
         val len = minOf(srcIds.size, MAX_SEQ_LEN)
         for (i in 0 until len) {
@@ -371,7 +371,7 @@ class VectorSearchEngine @Inject constructor(
             return@withContext emptyList()
         }
         val queryMag = magnitude(queryVector)
-        Log.i(
+        Log.d(
             "RAG_DEBUG",
             "search: query embedded -> dim=${queryVector.size} mag=${"%.4f".format(queryMag)} " +
                 "head=${queryVector.take(3).map { "%.3f".format(it) }}"
@@ -430,7 +430,7 @@ class VectorSearchEngine @Inject constructor(
         val sMax = scored.first().second
         val sMean = scored.sumOf { it.second.toDouble() } / scored.size
         val spread = sMax - sMin
-        Log.i(
+        Log.d(
             "RAG_DEBUG",
             "search: score dist over ${scored.size} chunks  min=${"%.3f".format(sMin)} " +
                 "mean=${"%.3f".format(sMean)} max=${"%.3f".format(sMax)} spread=${"%.3f".format(spread)}"
@@ -446,14 +446,14 @@ class VectorSearchEngine @Inject constructor(
             )
             return@withContext emptyList()
         }
-        Log.i("RAG_DEBUG", "search: TOP-5 candidates (pre-decrypt, pre-limit):")
+        Log.d("RAG_DEBUG", "search: TOP-5 candidates (pre-decrypt, pre-limit):")
         scored.take(5).forEachIndexed { idx, (entity, sim, mag) ->
             val preview = if (entity.isPrivate) {
                 "[ciphertext ${entity.content.length} chars — JIT-decrypt at resolution]"
             } else {
                 entity.content.take(120).replace("\n", " ")
             }
-            Log.i(
+            Log.d(
                 "RAG_DEBUG",
                 "  #${idx + 1} sim=${"%.3f".format(sim)} chunkMag=${"%.4f".format(mag)} " +
                     "private=${entity.isPrivate} id=${entity.id.take(8)} file=${entity.fileId}\n      '$preview'"

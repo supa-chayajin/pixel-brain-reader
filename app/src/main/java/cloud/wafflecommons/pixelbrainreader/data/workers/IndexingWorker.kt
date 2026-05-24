@@ -148,7 +148,7 @@ class IndexingWorker @AssistedInject constructor(
             val droppedToday = files.count { it.path == todayPath }
             val droppedSystem = files.count { it.path.contains("99_System") }
             val firstFive = files.take(5).map { "${it.type}:${it.path}" }
-            Log.w(
+            Log.d(
                 "RAG_DEBUG",
                 "processEmbeddings: 0 candidates from ${files.size} changed items.  " +
                     "byType=$byType  .md=$mdCount  .md.enc=$mdEncCount  todaySkipped=$droppedToday  " +
@@ -175,7 +175,7 @@ class IndexingWorker @AssistedInject constructor(
                     entity.path.endsWith(".md.enc", ignoreCase = true)
 
                 if (isPrivate && vaultPassword.isNullOrBlank()) {
-                    Log.w("RAG_DEBUG", "  skip ${entity.path}: vault locked (no password cached)")
+                    Log.d("RAG_DEBUG", "  skip ${entity.path}: vault locked (no password cached)")
                     privateSkippedLocked++
                     skippedFiles++
                     return@forEach
@@ -183,7 +183,7 @@ class IndexingWorker @AssistedInject constructor(
 
                 val file = java.io.File(vaultRoot, entity.path)
                 if (!file.exists()) {
-                    Log.w("RAG_DEBUG", "  skip ${entity.path}: file not on disk")
+                    Log.d("RAG_DEBUG", "  skip ${entity.path}: file not on disk")
                     skippedFiles++
                     return@forEach
                 }
@@ -193,7 +193,7 @@ class IndexingWorker @AssistedInject constructor(
                     try {
                         cryptoManager.decrypt(file.readBytes(), pwd)
                     } catch (e: Exception) {
-                        Log.w("RAG_DEBUG", "  decrypt failed for ${entity.path}: ${e.message}")
+                        Log.d("RAG_DEBUG", "  decrypt failed for ${entity.path}: ${e.message}")
                         skippedFiles++
                         return@forEach
                     } finally {
@@ -240,13 +240,13 @@ class IndexingWorker @AssistedInject constructor(
                             isPrivate = isPrivate
                         )
                     } catch (e: Exception) {
-                        Log.w("RAG_DEBUG", "  embed/encrypt failed for a chunk of ${entity.path}: ${e.message}")
+                        Log.d("RAG_DEBUG", "  embed/encrypt failed for a chunk of ${entity.path}: ${e.message}")
                         null
                     }
                 }
 
                 if (embeddingEntities.isEmpty()) {
-                    Log.w("RAG_DEBUG", "  ${entity.path}: 0 embeddings produced — skipping DB write")
+                    Log.d("RAG_DEBUG", "  ${entity.path}: 0 embeddings produced — skipping DB write")
                     return@forEach
                 }
 
@@ -258,7 +258,7 @@ class IndexingWorker @AssistedInject constructor(
                 if (isPrivate) privateProcessed++
                 Log.d("RAG_DEBUG", "  ${entity.path}: inserted ${embeddingEntities.size} embedding(s) (private=$isPrivate)")
             } catch (e: Exception) {
-                Log.e("RAG_DEBUG", "Failed to embed ${entity.path}", e)
+                Log.d("RAG_DEBUG", "Failed to embed ${entity.path}", e)
             }
         }
 

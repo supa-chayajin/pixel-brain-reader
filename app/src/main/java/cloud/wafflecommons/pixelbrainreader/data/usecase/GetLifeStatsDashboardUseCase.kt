@@ -81,8 +81,8 @@ class GetLifeStatsDashboardUseCase @Inject constructor(
         
         // E. Weekly Correlation (HR vs Mood)
         // Weekly HR (Daily Avg)
-        // We can use readHeartRateHistory with 1 day bucket
-        val weeklyHrPoints = healthConnectManager.readHeartRateHistory(startInstant, endInstant, Duration.ofDays(1))
+        // We use readDailyHeartRateHistory to align buckets with local calendar days
+        val weeklyHrPoints = healthConnectManager.readDailyHeartRateHistory(startInstant, endInstant)
         // Map date -> bpm
         val weeklyHrMap = weeklyHrPoints.associate { point ->
             val d = point.timestamp.atZone(zone).toLocalDate()

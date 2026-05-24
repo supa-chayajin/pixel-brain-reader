@@ -36,9 +36,11 @@ class JGitProvider @Inject constructor(
     private val conflictResolver: ConflictResolver
 ) {
 
-    init {
-        cleanStaleLocks()
-    }
+    // Stale .git/*.lock cleanup is deliberately NOT done in the constructor: as a
+    // @Singleton, first injection can land on the main thread (e.g. a ViewModel
+    // built during composition), and walking the .git tree there is main-thread
+    // disk I/O. Every git operation below calls cleanStaleLocks() under gitMutex,
+    // which already covers the crashed-with-held-lock recovery case.
 
     /**
      * Serializes every JGit write across all callers (HabitRepository background
@@ -90,51 +92,53 @@ class JGitProvider @Inject constructor(
      * 3. If repo missing & No URL -> Init new local repo.
      */
     suspend fun setupRepository(remoteUrl: String?, branch: String = "main"): Result<Unit> = withContext(Dispatchers.IO) {
-        try {
-            if (isReady()) {
-                // Already initialized
-                return@withContext Result.success(Unit)
-            }
-
-            if (!remoteUrl.isNullOrEmpty()) {
-                // CLONE STRATEGY
-                Log.i("JGitProvider", "Starting fresh clone from $remoteUrl branch: $branch")
-                val token = secretManager.getToken() ?: throw Exception("Clone requires API Token")
-                val provider = UsernamePasswordCredentialsProvider("token", token)
-
-                // Ensure clean slate
-                if (rootDir.exists()) {
-                    rootDir.deleteRecursively()
+        gitMutex.withLock {
+            cleanStaleLocks()
+            try {
+                if (isReady()) {
+                    // Already initialized
+                    return@withLock Result.success(Unit)
                 }
-                rootDir.mkdirs()
 
-                try {
-                    Git.cloneRepository()
-                        .setURI(remoteUrl)
-                        .setDirectory(rootDir)
-                        .setBranch(branch)
-                        .setCredentialsProvider(provider)
-                        .setProgressMonitor(AndroidLogProgressMonitor())
-                        .call()
-                        .close() // Close Git instance
-                    
-                    Log.i("JGitProvider", "Clone successful.")
+                if (!remoteUrl.isNullOrEmpty()) {
+                    // CLONE STRATEGY
+                    Log.i("JGitProvider", "Starting fresh clone from $remoteUrl branch: $branch")
+                    val provider = getCredentialsProvider(remoteUrl) ?: throw Exception("Clone requires API Token")
+
+                    // Ensure clean slate
+                    if (rootDir.exists()) {
+                        rootDir.deleteRecursively()
+                    }
+                    rootDir.mkdirs()
+
+                    try {
+                        Git.cloneRepository()
+                            .setURI(remoteUrl)
+                            .setDirectory(rootDir)
+                            .setBranch(branch)
+                            .setCredentialsProvider(provider)
+                            .setProgressMonitor(AndroidLogProgressMonitor())
+                            .call()
+                            .close() // Close Git instance
+
+                        Log.i("JGitProvider", "Clone successful.")
+                        Result.success(Unit)
+                    } catch (e: Exception) {
+                        Log.e("JGitProvider", "Clone failed. Cleaning up.", e)
+                        // ATOMICITY: Delete broken repo to avoid "corrupted" state on next run
+                        rootDir.deleteRecursively()
+                        throw e
+                    }
+                } else {
+                    // INIT STRATEGY (Local-only start)
+                    Log.i("JGitProvider", "Initializing new local repository.")
+                    rootDir.mkdirs()
+                    Git.init().setDirectory(rootDir).call().close()
                     Result.success(Unit)
-                } catch (e: Exception) {
-                    Log.e("JGitProvider", "Clone failed. Cleaning up.", e)
-                    // ATOMICITY: Delete broken repo to avoid "corrupted" state on next run
-                    rootDir.deleteRecursively()
-                    throw e
                 }
-            } else {
-                // INIT STRATEGY (Local-only start)
-                Log.i("JGitProvider", "Initializing new local repository.")
-                rootDir.mkdirs()
-                Git.init().setDirectory(rootDir).call().close()
-                Result.success(Unit)
+            } catch (e: Exception) {
+                Result.failure(e)
             }
-        } catch (e: Exception) {
-            Result.failure(e)
         }
     }
 
@@ -251,8 +255,7 @@ class JGitProvider @Inject constructor(
         gitMutex.withLock {
             cleanStaleLocks()
             try {
-                val token = secretManager.getToken() ?: return@withContext Result.failure(Exception("No API Token found"))
-                val provider = UsernamePasswordCredentialsProvider("token", token)
+                val provider = getCredentialsProvider() ?: return@withContext Result.failure(Exception("No API Token found"))
 
                 Git.open(rootDir).use { git ->
                     git.push()
@@ -282,8 +285,7 @@ class JGitProvider @Inject constructor(
             try {
                 ensureCriticalDirectories() // Defensive check before pulling
 
-            val token = secretManager.getToken() ?: return@withContext SyncResult.Error(Exception("No API Token found"))
-            val provider = UsernamePasswordCredentialsProvider("token", token)
+            val provider = getCredentialsProvider() ?: return@withContext SyncResult.Error(Exception("No API Token found"))
 
             Git.open(rootDir).use { git ->
                 val pullResult = git.pull()
@@ -378,40 +380,63 @@ class JGitProvider @Inject constructor(
     suspend fun commitAndForcePush(message: String): Result<Unit> = withContext(Dispatchers.IO) {
         Log.w("GitSync", "Starting EMERGENCY FORCE PUSH")
         if (!isReady()) return@withContext Result.failure(Exception("Repository not initialized"))
-        
-        try {
-            val token = secretManager.getToken() ?: return@withContext Result.failure(Exception("No API Token found"))
-            val provider = UsernamePasswordCredentialsProvider("token", token)
 
-            Git.open(rootDir).use { git ->
-                // Step A: Add All
-                git.add().addFilepattern(".").call()
-                git.add().addFilepattern(".").setUpdate(true).call()
-                
-                // Step B: Commit
-                val status = git.status().call()
-                if (status.hasUncommittedChanges()) {
-                    git.commit()
-                        .setMessage(message)
-                        .setAuthor("PixelBrain User", "user@pixelbrain.local")
+        gitMutex.withLock {
+            cleanStaleLocks()
+            try {
+                val provider = getCredentialsProvider() ?: return@withLock Result.failure(Exception("No API Token found"))
+
+                Git.open(rootDir).use { git ->
+                    // Step A: Add All
+                    git.add().addFilepattern(".").call()
+                    git.add().addFilepattern(".").setUpdate(true).call()
+
+                    // Step B: Commit
+                    val status = git.status().call()
+                    if (status.hasUncommittedChanges()) {
+                        git.commit()
+                            .setMessage(message)
+                            .setAuthor("PixelBrain User", "user@pixelbrain.local")
+                            .call()
+                        Log.i("GitSync", "Emergency Commit Created")
+                    }
+
+                    // Step C: Force Push
+                    git.push()
+                        .setRemote("origin")
+                        .setCredentialsProvider(provider)
+                        .setForce(true) // FORCE PUSH
+                        .setProgressMonitor(AndroidLogProgressMonitor())
                         .call()
-                    Log.i("GitSync", "Emergency Commit Created")
                 }
-
-                // Step C: Force Push
-                git.push()
-                    .setRemote("origin")
-                    .setCredentialsProvider(provider)
-                    .setForce(true) // FORCE PUSH
-                    .setProgressMonitor(AndroidLogProgressMonitor())
-                    .call()
+                Log.w("GitSync", "EMERGENCY FORCE PUSH COMPLETED")
+                Result.success(Unit)
+            } catch (e: Exception) {
+                Log.e("GitSync", "Force Push Failed", e)
+                Result.failure(e)
             }
-            Log.w("GitSync", "EMERGENCY FORCE PUSH COMPLETED")
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Log.e("GitSync", "Force Push Failed", e)
-            Result.failure(e)
         }
+    }
+
+    /**
+     * Resolves a [UsernamePasswordCredentialsProvider] using the stored token and owner.
+     * If owner is not explicitly stored, attempts to extract it from the remote URL.
+     * Falling back to "token" as username if all else fails (compatible with some PATs).
+     */
+    private fun getCredentialsProvider(remoteUrl: String? = null): UsernamePasswordCredentialsProvider? {
+        val token = secretManager.getToken() ?: return null
+        val providerType = secretManager.getProvider()
+
+        // Using "token" as the username is the standard, most robust way to authenticate via HTTPS with a PAT
+        // on GitHub, and "oauth2" for GitLab, especially when the repository is owned by an organization or a different user.
+        val finalUsername = if (providerType.equals("gitlab", ignoreCase = true)) {
+            "oauth2"
+        } else {
+            "token"
+        }
+
+        Log.d("JGitProvider", "Using username: $finalUsername for authentication")
+        return UsernamePasswordCredentialsProvider(finalUsername, token)
     }
 
     /**

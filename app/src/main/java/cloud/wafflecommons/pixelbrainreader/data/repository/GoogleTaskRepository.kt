@@ -90,7 +90,7 @@ class GoogleTaskRepository @Inject constructor(
                 Log.i(TAG, "syncPendingTasks window: $dueMin .. $dueMax (zone=$zone)")
                 var total = 0
                 val lists = service.tasklists().list().execute().items.orEmpty()
-                Log.i(TAG, "Task lists discovered: ${lists.size} -> ${lists.map { it.title ?: it.id }}")
+                Log.d(TAG, "Task lists discovered: ${lists.size} -> ${lists.map { it.title ?: it.id }}")
                 for (list in lists) {
                     val tasks = service.tasks().list(list.id)
                         // Include completed + hidden so today's done tasks are imported with
@@ -112,7 +112,7 @@ class GoogleTaskRepository @Inject constructor(
                         val dueLocal = parseDueToLocalDate(gt.due, zone)
                         dueLocal != null && dueLocal == today
                     }
-                    Log.i(TAG, "  '${list.title ?: list.id}': $rawCount returned, ${todayOnly.size} match today after strict filter")
+                    Log.d(TAG, "  '${list.title ?: list.id}': $rawCount returned, ${todayOnly.size} match today after strict filter")
 
                     todayOnly.forEach { gt ->
                         val isCompleted = gt.status == "completed"

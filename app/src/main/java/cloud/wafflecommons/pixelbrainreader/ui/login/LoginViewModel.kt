@@ -33,13 +33,16 @@ class LoginViewModel @Inject constructor(
     private val _loginSuccess = MutableStateFlow(false)
     val loginSuccess: StateFlow<Boolean> = _loginSuccess.asStateFlow()
 
+    private val _errorMessage = MutableStateFlow<String?>(null)
+    val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
+
     fun onTokenChanged(newToken: String) {
         _token.value = newToken
         checkValidity()
     }
 
     fun onRepoUrlChanged(newUrl: String) {
-        _repoUrl.value = newUrl
+        _repoUrl.value = newUrl.trim()
         checkValidity()
     }
 
@@ -79,10 +82,19 @@ class LoginViewModel @Inject constructor(
     fun onConnectClick() {
         if (!_isTokenValid.value) return
 
-        val (owner, repo, provider) = validateRepoUrl(_repoUrl.value) ?: return
+        val (owner, repo, provider) = validateRepoUrl(_repoUrl.value) ?: run {
+            _errorMessage.value = "Invalid Repository URL"
+            return
+        }
+
+        if (_repoUrl.value.startsWith("git@") || _repoUrl.value.startsWith("ssh://")) {
+            _errorMessage.value = "SSH URLs are not supported. Please use HTTPS."
+            return
+        }
 
         viewModelScope.launch {
             _isLoading.value = true
+            _errorMessage.value = null
             
             // 1. Secure Storage (Vault)
             secretManager.saveToken(_token.value.replace("\n", "").replace("\r", "").trim())
@@ -97,11 +109,17 @@ class LoginViewModel @Inject constructor(
                _loginSuccess.value = true
                Log.d("StartLogin", "Vault sealed and Database primed.")
             } else {
-                Log.e("StartLogin", "Login failed: ${result.exceptionOrNull()?.message}")
-                // In a real app, we would show an error message here.
-                // For now, if we fail to sync, we assume credentials *might* be wrong or network is down.
-                // But specifically for Login, we probably want to block success if we can't verify.
-                // However, offline login? Not possible for first run.
+                val error = result.exceptionOrNull()
+                Log.e("StartLogin", "Login failed: ${error?.message}")
+                
+                val userFriendlyMessage = when {
+                    error?.message?.contains("not authorized", ignoreCase = true) == true -> 
+                        "Authentication failed. Please check your Token and its permissions (repo scope)."
+                    error?.message?.contains("not found", ignoreCase = true) == true ->
+                        "Repository not found. Please check the URL."
+                    else -> error?.message ?: "An unexpected error occurred during sync."
+                }
+                _errorMessage.value = userFriendlyMessage
             }
 
             _isLoading.value = false

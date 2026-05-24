@@ -368,4 +368,31 @@ class HealthConnectManager @Inject constructor(
             emptyList()
         }
     }
+
+    suspend fun readDailyHeartRateHistory(start: Instant, end: Instant): List<HeartRatePoint> = withContext(Dispatchers.IO) {
+        try {
+            val zone = ZoneId.systemDefault()
+            val localStart = java.time.LocalDateTime.ofInstant(start, zone)
+            val localEnd = java.time.LocalDateTime.ofInstant(end, zone)
+
+            val response = healthConnectClient.aggregateGroupByPeriod(
+                androidx.health.connect.client.request.AggregateGroupByPeriodRequest(
+                    metrics = setOf(HeartRateRecord.BPM_AVG),
+                    timeRangeFilter = TimeRangeFilter.between(localStart, localEnd),
+                    timeRangeSlicer = java.time.Period.ofDays(1)
+                )
+            )
+            response.mapNotNull { result ->
+                val avg = result.result[HeartRateRecord.BPM_AVG]
+                if (avg != null) {
+                    HeartRatePoint(
+                        timestamp = result.startTime.atZone(zone).toInstant(),
+                        avgBpm = avg.toDouble()
+                    )
+                } else null
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
 }

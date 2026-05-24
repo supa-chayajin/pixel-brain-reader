@@ -188,6 +188,26 @@
 -dontwarn com.google.protobuf.**
 
 # -----------------------------------------------------------------------------
+# On-device RAG embedder: TensorFlow Lite interpreter + DJL HuggingFace tokenizer
+# -----------------------------------------------------------------------------
+# Both cross a JNI boundary (libtensorflowlite_jni.so / libdjl_tokenizer.so) and
+# resolve Java classes + methods by fully-qualified NAME from native code; DJL
+# additionally uses java.util.ServiceLoader for engine/tokenizer discovery. R8
+# renaming those classes breaks the native lookup and throws UnsatisfiedLinkError
+# / NoSuchMethodError ONLY in release (debug has R8 off). VectorSearchEngine.kt
+# depends on both, so without these keeps the entire local RAG pipeline (indexing
+# + Oracle search) crashes after minification. TFLite 2.16.1 ships partial
+# consumer rules; we pin it explicitly anyway as zero-risk insurance.
+-keep class org.tensorflow.lite.** { *; }
+-keepclasseswithmembernames class org.tensorflow.lite.** { native <methods>; }
+-dontwarn org.tensorflow.**
+
+-keep class ai.djl.** { *; }
+-keep interface ai.djl.** { *; }
+-keepclasseswithmembernames class ai.djl.** { native <methods>; }
+-dontwarn ai.djl.**
+
+# -----------------------------------------------------------------------------
 # Google ML Kit GenAI (Gemini Nano) + Google AI Edge AICore
 # -----------------------------------------------------------------------------
 -keep class com.google.mlkit.** { *; }
@@ -234,6 +254,13 @@
 -keep interface androidx.credentials.** { *; }
 -keep class androidx.credentials.playservices.** { *; }
 -keep interface androidx.credentials.playservices.** { *; }
+-keep class * extends androidx.credentials.Credential { *; }
+-keep class * extends androidx.credentials.CredentialOption { *; }
+# NOTE: `-keepresources` is NOT a valid R8/ProGuard option — it hard-fails the
+# release build ("Unknown option"). The META-INF/services/CredentialProvider
+# ServiceLoader entry is preserved automatically: R8 models ServiceLoader.load()
+# and keeps the service file as long as the implementation class is kept with its
+# original name, which the `androidx.credentials.playservices.**` keep above does.
 -dontwarn androidx.credentials.**
 
 # GetGoogleIdOption / GetSignInWithGoogleOption / GoogleIdTokenCredential.
@@ -309,3 +336,8 @@
 -dontwarn autovalue.shaded.**
 -dontwarn com.google.auto.value.**
 -dontwarn org.apache.http.**
+
+# commons-compress (transitive via JGit) references commons-lang3 in its tar
+# archiver code path, which we neither bundle nor invoke. R8 errors on the
+# missing class by default; this acknowledges it is intentionally absent.
+-dontwarn org.apache.commons.lang3.**
