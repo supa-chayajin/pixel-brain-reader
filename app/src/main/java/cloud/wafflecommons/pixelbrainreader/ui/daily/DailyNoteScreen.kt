@@ -28,6 +28,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyTaskEntity
@@ -100,6 +103,26 @@ fun DailyNoteScreen(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    // Weather needs a coarse location. The app previously NEVER requested it at
+    // runtime, so WeatherRepository.getLastKnownLocation() always saw
+    // PERMISSION_DENIED and the card stayed stuck on "Loading...". Ask once when
+    // the daily note is shown; refresh weather the instant it's granted (the
+    // ON_RESUME observer above also re-triggers it after the system dialog closes).
+    val locationContext = LocalContext.current
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) viewModel.refreshWeather()
+    }
+    LaunchedEffect(Unit) {
+        val granted = androidx.core.content.ContextCompat.checkSelfPermission(
+            locationContext, android.Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (!granted) {
+            locationPermissionLauncher.launch(android.Manifest.permission.ACCESS_COARSE_LOCATION)
         }
     }
 

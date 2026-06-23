@@ -75,11 +75,17 @@ class GoogleTaskRepository @Inject constructor(
             try {
                 val service = buildService(token)
                 val zone = ZoneId.systemDefault()
-                val startInstant = today.atStartOfDay(zone).toInstant()
-                val endInstant = today.plusDays(1).atStartOfDay(zone).toInstant()
+                // Google Tasks stores `due` as DATE-ONLY, serialized at UTC midnight
+                // (e.g. 2026-06-23T00:00:00.000Z). With a tight one-day local window the
+                // server-side dueMin/dueMax could drop a legitimately-"today" task on
+                // devices whose UTC offset pushes that midnight across the boundary —
+                // a likely reason Tasks appeared to "not sync at all". Pad the window by
+                // a day on each side (covers every real UTC offset); the strict
+                // client-side `dueLocal == today` filter below still narrows to exactly
+                // today and excludes undated tasks (the user's chosen behavior).
+                val startInstant = today.minusDays(1).atStartOfDay(zone).toInstant()
+                val endInstant = today.plusDays(2).atStartOfDay(zone).toInstant()
                 val offsetMinutes = zone.rules.getOffset(startInstant).totalSeconds / 60
-                // Server-side narrowing. RFC 3339 with the explicit local offset
-                // bounds match the user's actual "today", not a UTC-shifted day.
                 val dueMin = DateTime(startInstant.toEpochMilli(), offsetMinutes).toStringRfc3339()
                 val dueMax = DateTime(endInstant.toEpochMilli(), offsetMinutes).toStringRfc3339()
 
@@ -97,6 +103,9 @@ class GoogleTaskRepository @Inject constructor(
                         // their real status preserved (Rule 3).
                         .setShowCompleted(true)
                         .setShowHidden(true)
+                        // The padded 3-day window can exceed the default page size (20);
+                        // 100 is the API max and is plenty for ~3 days of tasks per list.
+                        .setMaxResults(100)
                         .setDueMin(dueMin)
                         .setDueMax(dueMax)
                         .execute()
@@ -132,7 +141,23 @@ class GoogleTaskRepository @Inject constructor(
                 Log.i(TAG, "syncPendingTasks complete: imported $total task(s)")
                 Result.success(total)
             } catch (e: Exception) {
-                Log.e(TAG, "Tasks import failed", e)
+                // A 403 here almost always means the Google Tasks API is not enabled in
+                // this app's Cloud project (Calendar can work while Tasks 403 — they are
+                // separate APIs), or the granted token lacks the Tasks scope. Surface it
+                // explicitly so it's actionable instead of a generic failure.
+                val msg = e.message.orEmpty()
+                if ("403" in msg || "Forbidden" in msg || "SERVICE_DISABLED" in msg ||
+                    "insufficient" in msg.lowercase() || "has not been used" in msg
+                ) {
+                    Log.e(
+                        TAG,
+                        "Tasks import failed with 403/insufficient access — enable the Google " +
+                            "Tasks API for this Cloud project and/or re-consent to the Tasks scope.",
+                        e
+                    )
+                } else {
+                    Log.e(TAG, "Tasks import failed", e)
+                }
                 Result.failure(e)
             }
         }

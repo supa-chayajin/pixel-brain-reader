@@ -32,8 +32,8 @@ android {
         targetSdkPreview = "36"
         // V7 milestone: Private-Vault RAG security model, manual indexing,
         // content-fingerprint reindex, vault-rooted health sync.
-        versionCode = 700
-        versionName = "7.0.0"
+        versionCode = 701
+        versionName = "7.0.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

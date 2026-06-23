@@ -58,6 +58,29 @@ fun PremiumWeatherCard(
                         color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
                     )
                 }
+            } else if (weather.code == -2) {
+                // Unavailable State (code -2, set by DailyNoteViewModel.weatherUnavailable):
+                // distinct from loading so the card never spins forever when location is
+                // denied or the network/parse fails.
+                Icon(
+                    imageVector = Icons.Rounded.CloudOff,
+                    contentDescription = "Weather unavailable",
+                    modifier = Modifier.size(64.dp),
+                    tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                )
+                Column {
+                    Text(
+                        text = "Weather unavailable",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                    Text(
+                        text = weather.location ?: "Check location permission",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                    )
+                }
             } else {
                 val (icon, condition) = mapWeatherCode(weather.code)
                 
