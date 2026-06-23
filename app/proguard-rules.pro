@@ -149,6 +149,13 @@
 -keep class cloud.wafflecommons.pixelbrainreader.data.remote.model.** { *; }
 -keep interface cloud.wafflecommons.pixelbrainreader.data.remote.api.** { *; }
 
+# OpenMeteo weather DTOs live DIRECTLY in data.remote (not data.remote.model),
+# so the wildcards above miss them. Gson maps the JSON keys (daily, weathercode,
+# temperature_2m_max, …) to these fields by reflection; without an explicit keep,
+# R8 renames them and parsing silently yields null → weather fails in RELEASE only.
+-keep class cloud.wafflecommons.pixelbrainreader.data.remote.OpenMeteoResponse { *; }
+-keep class cloud.wafflecommons.pixelbrainreader.data.remote.DailyUnits { *; }
+
 # -----------------------------------------------------------------------------
 # Security (EncryptedSharedPreferences / CryptoManager)
 # -----------------------------------------------------------------------------

@@ -186,6 +186,17 @@ class DailyNoteViewModel @Inject constructor(
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    // Sentinel emitted when weather can't be resolved (location denied, no fix,
+    // or the fetch failed). temperature is intentionally NOT "--°C" so the card
+    // renders an "unavailable" state instead of spinning forever; code = -2 flags it.
+    private val weatherUnavailable = cloud.wafflecommons.pixelbrainreader.data.repository.WeatherData(
+        emoji = "⚠️",
+        temperature = "—",
+        location = "Location or network unavailable",
+        description = "Unavailable",
+        code = -2
+    )
+
     // Weather Flow (Reactive).
     // The previous version caught Exception (which includes CancellationException)
     // and tried emit(null). When flatMapLatest cancelled mid-fetch, the catch
@@ -215,7 +226,9 @@ class DailyNoteViewModel @Inject constructor(
                     null
                 }
                 Log.d("WeatherFlow", "Emitting $result for $date")
-                emit(result)
+                // Emit the unavailable sentinel instead of null so the UI leaves the
+                // loading spinner and shows an actionable state.
+                emit(result ?: weatherUnavailable)
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), cloud.wafflecommons.pixelbrainreader.data.repository.WeatherData(
             emoji = "⌛",
