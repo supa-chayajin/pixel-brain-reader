@@ -193,12 +193,9 @@ class MainViewModel @Inject constructor(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), UiState(isLoading = true))
 
 
-    private var isInitialSyncDone = false
     private val _autoSaveTriggerFlow = MutableStateFlow<String?>(null)
 
     init {
-        performInitialSync()
-
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             widgetSnapshotManager.updateSnapshot()
         }
@@ -214,40 +211,6 @@ class MainViewModel @Inject constructor(
             .launchIn(viewModelScope)
     }
 
-
-    fun performInitialSync() {
-        if (isInitialSyncDone) return
-        isInitialSyncDone = true
-        
-        val (owner, repo) = secretManager.getRepoInfo()
-        if (owner == null || repo == null) {
-             _isLoading.value = false
-            return
-        }
-
-        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-             _isLoading.value = true
-             _isSyncing.value = true
-             
-             try {
-                 // Delegate to the global SyncOrchestrator for the strict Git→Health→Git cycle
-                 val didSync = syncOrchestrator.executeFullSyncCycle()
-                 
-                 if (didSync) {
-                     _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Sync Complete ✅"))
-                     loadFolder(_currentPath.value)
-                 } else {
-                     Log.w("MainViewModel", "Initial sync was skipped (cooldown or in-progress)")
-                 }
-             } catch (e: Exception) {
-                 Log.e("MainViewModel", "Sync Error", e)
-                 _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Sync Error ⚠️: ${e.message}"))
-             } finally {
-                 _isLoading.value = false
-                 _isSyncing.value = false
-             }
-        }
-    }
 
     fun updateListPaneWidth(width: Float) {
        viewModelScope.launch {

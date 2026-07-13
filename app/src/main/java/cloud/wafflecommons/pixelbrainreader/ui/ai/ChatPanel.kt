@@ -34,6 +34,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cloud.wafflecommons.pixelbrainreader.data.ai.NanoState
+import cloud.wafflecommons.pixelbrainreader.ui.main.MarkwonContent
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -128,6 +129,9 @@ fun ChatPanel(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
+                // Consume the scaffold insets so imePadding() adds only (ime − navBar)
+                // rather than stacking the nav-bar inset again → no gap above keyboard.
+                .consumeWindowInsets(innerPadding)
                 .imePadding()
         ) {
             // Chat Content
@@ -145,7 +149,12 @@ fun ChatPanel(
                             ChatBubble(
                                 message = msg,
                                 onInsert = if (!msg.isUser) onInsertContent else null,
-                                accentColor = modeColor
+                                accentColor = modeColor,
+                                // Offer a full cloud answer only on the latest assistant
+                                // reply — that's the one Nano may have truncated.
+                                onExpandToCloud = if (!msg.isUser && msg.id == displayedMessages.last().id) {
+                                    { viewModel.regenerateLastWithCloud() }
+                                } else null
                             )
                         }
                     }
@@ -269,9 +278,10 @@ fun BrainModeSwitch(
 
 @Composable
 fun ChatBubble(
-    message: ChatMessage, 
+    message: ChatMessage,
     onInsert: ((String) -> Unit)?,
-    accentColor: Color
+    accentColor: Color,
+    onExpandToCloud: (() -> Unit)? = null
 ) {
     val isUser = message.isUser
 
@@ -299,23 +309,44 @@ fun ChatBubble(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
     ) {
-        Surface(
-            shape = bubbleShape,
-            color = containerColor,
-            contentColor = contentColor,
-            modifier = Modifier.widthIn(max = 340.dp)
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-
-                // Message Content
+        if (isUser) {
+            // User prompt keeps the high-contrast bubble.
+            Surface(
+                shape = bubbleShape,
+                color = containerColor,
+                contentColor = contentColor,
+                modifier = Modifier.widthIn(max = 340.dp)
+            ) {
                 Text(
                     text = message.content,
                     style = MaterialTheme.typography.bodyLarge,
-                    color = contentColor
+                    color = contentColor,
+                    modifier = Modifier.padding(16.dp)
                 )
+            }
+        } else {
+            // Assistant reply renders as full-width Markdown (no bubble), so the
+            // persona's headings/bold/lists show formatted instead of as raw text.
+            Column(modifier = Modifier.fillMaxWidth()) {
 
-                // SOURCES SECTION (RAG CITATIONS) — AI bubble only
-                if (!isUser && message.sources.isNotEmpty()) {
+                if (message.content.isNotBlank()) {
+                    if (message.isStreaming) {
+                        // While streaming (cloud path), render plain text: re-parsing
+                        // Markdown + rebuilding Markwon every ~16ms frame janks, and
+                        // partial markup shows half-formatted. Switches to Markdown on
+                        // the final paint once streaming completes.
+                        Text(
+                            text = message.content,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    } else {
+                        MarkwonContent(content = message.content, onWikiLinkClick = {})
+                    }
+                }
+
+                // SOURCES SECTION (RAG CITATIONS)
+                if (message.sources.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(12.dp))
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     Spacer(modifier = Modifier.height(8.dp))
@@ -351,8 +382,6 @@ fun ChatBubble(
                                         modifier = Modifier.size(12.dp)
                                     )
                                 },
-                                // Chips sit inside an AI bubble (surfaceVariant);
-                                // surfaceContainerHigh makes them pop against that.
                                 colors = AssistChipDefaults.assistChipColors(
                                     containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                                     labelColor = MaterialTheme.colorScheme.onSurface
@@ -365,12 +394,24 @@ fun ChatBubble(
             }
         }
 
-        if (onInsert != null && !message.isStreaming && message.content.isNotBlank()) {
-            Spacer(Modifier.height(8.dp))
-            TextButton(onClick = { onInsert(message.content) }) {
-                Icon(Icons.Outlined.SaveAlt, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(4.dp))
-                Text("Save to Inbox")
+        if (!message.isStreaming && message.content.isNotBlank() && (onInsert != null || onExpandToCloud != null)) {
+            Spacer(Modifier.height(4.dp))
+            @OptIn(ExperimentalLayoutApi::class)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (onInsert != null) {
+                    TextButton(onClick = { onInsert(message.content) }) {
+                        Icon(Icons.Outlined.SaveAlt, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Save to Inbox")
+                    }
+                }
+                if (onExpandToCloud != null) {
+                    TextButton(onClick = onExpandToCloud) {
+                        Icon(Icons.Rounded.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Full answer (cloud)")
+                    }
+                }
             }
         }
     }
@@ -406,8 +447,7 @@ fun StealthInputBar(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(16.dp)
-            .navigationBarsPadding(),
+            .padding(16.dp),
         contentAlignment = Alignment.Center
     ) {
         Surface(

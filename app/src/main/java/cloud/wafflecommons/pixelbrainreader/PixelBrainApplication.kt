@@ -2,12 +2,8 @@ package cloud.wafflecommons.pixelbrainreader
 
 import android.app.Application
 import android.util.Log
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.work.Configuration
 import androidx.work.WorkManager
-import cloud.wafflecommons.pixelbrainreader.data.sync.SyncOrchestrator
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
 import androidx.hilt.work.HiltWorkerFactory
@@ -20,7 +16,6 @@ import kotlinx.coroutines.launch
 class PixelBrainApplication : Application(), Configuration.Provider {
 
     @Inject lateinit var workerFactory: HiltWorkerFactory
-    @Inject lateinit var syncOrchestrator: SyncOrchestrator
     @Inject lateinit var vaultDiscoveryRepository: cloud.wafflecommons.pixelbrainreader.data.repository.VaultDiscoveryRepository
     @Inject lateinit var moodRepository: cloud.wafflecommons.pixelbrainreader.data.repository.MoodRepository
     @Inject lateinit var habitRepository: cloud.wafflecommons.pixelbrainreader.data.repository.HabitRepository
@@ -49,7 +44,6 @@ class PixelBrainApplication : Application(), Configuration.Provider {
         scheduleDailyBurnWork()
         cancelLegacyGoogleOutboxWorkers()
         runStartupReconcile()
-        registerForegroundSyncObserver()
     }
 
     /** True only inside the default app process (excludes `:crash`). */
@@ -95,24 +89,6 @@ class PixelBrainApplication : Application(), Configuration.Provider {
                 Log.w("PixelBrainApp", "Startup chore reconcile failed", e)
             }
         }
-    }
-
-    /**
-     * Registers a ProcessLifecycleOwner observer that triggers a full
-     * Git→Health→Google→Git sync cycle every time the app comes to the foreground.
-     * Cooldown/debounce is handled inside SyncOrchestrator (60s minimum interval).
-     */
-    private fun registerForegroundSyncObserver() {
-        ProcessLifecycleOwner.get().lifecycle.addObserver(
-            LifecycleEventObserver { _, event ->
-                if (event == Lifecycle.Event.ON_RESUME) {
-                    Log.d("PixelBrainApp", "ON_RESUME detected — launching sync cycle")
-                    appScope.launch {
-                        syncOrchestrator.executeFullSyncCycle()
-                    }
-                }
-            }
-        )
     }
 
     private fun scheduleDailyBurnWork() {

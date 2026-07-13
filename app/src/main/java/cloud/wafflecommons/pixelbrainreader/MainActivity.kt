@@ -80,9 +80,6 @@ class MainActivity : FragmentActivity() {
                         secretManager.getToken() != null
                     }
                     loginState = hasToken
-                    if (savedInstanceState == null && hasToken) {
-                        viewModel.performInitialSync()
-                    }
                 }
             }
 

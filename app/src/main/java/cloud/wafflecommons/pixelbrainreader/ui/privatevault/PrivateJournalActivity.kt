@@ -454,8 +454,10 @@ fun PrivateEditor(
                 }
             )
         },
-        // IMPORTANT: Prevent Content from being covered by Keyboard
-        contentWindowInsets = WindowInsets.ime
+        // Inset content from BOTH the keyboard and the system bars: the editor's
+        // bounded height then lets BasicTextField follow the caret, and content no
+        // longer slides under the status bar.
+        contentWindowInsets = WindowInsets.systemBars.union(WindowInsets.ime)
     ) { padding ->
         Box(modifier = Modifier.padding(padding).fillMaxSize().padding(horizontal = 16.dp)) {
             ComposeCortexEditor(

@@ -896,7 +896,9 @@ private fun QuickCaptureSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(20.dp)
-                .navigationBarsPadding()
+                // imePadding only: the ModalBottomSheet already insets for the nav bar,
+                // so adding navigationBarsPadding() double-counts it and leaves a gap
+                // above the keyboard.
                 .imePadding(),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {

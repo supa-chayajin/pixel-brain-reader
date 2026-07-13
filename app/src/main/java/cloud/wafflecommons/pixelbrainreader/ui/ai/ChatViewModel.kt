@@ -253,6 +253,18 @@ class ChatViewModel @Inject constructor(
     }
 
     /**
+     * Re-run the last user query through the cloud (Gemini) path to get a full,
+     * untruncated answer. Gemini Nano has a fixed on-device output budget, so long
+     * ORACLE/SCRIBE replies come back clipped; tapping "Full answer (cloud)" on the
+     * latest reply escalates to the streaming cloud path. The explicit tap IS the
+     * consent, so this deliberately bypasses the fallback dialog.
+     */
+    fun regenerateLastWithCloud() {
+        val lastUserQuery = chatHistory.value.lastOrNull { it.isUser }?.content ?: return
+        runCloudGeneration(lastUserQuery)
+    }
+
+    /**
      * Cloud fallback. Streams tokens into a transient [streamingMessage] overlay
      * so the UI has live feedback; persists the final aggregated response to Room
      * on completion so it's preserved across app kill and mode-toggles.

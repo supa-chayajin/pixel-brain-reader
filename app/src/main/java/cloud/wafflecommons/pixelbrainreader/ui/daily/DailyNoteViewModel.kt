@@ -258,7 +258,9 @@ class DailyNoteViewModel @Inject constructor(
         _weather,
         _isLoading,
         _userMessage,
-        userPrefs.isBriefingExpanded.map { it ?: true }
+        userPrefs.isBriefingExpanded.map { it ?: true },
+        _ideasUpdates,
+        _notesUpdates
     ) { args ->
         val date = args[0] as LocalDate
         val dashboard = args[1] as? cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyDashboardEntity
@@ -273,9 +275,12 @@ class DailyNoteViewModel @Inject constructor(
         val userMsg = args[10] as? String
         val isExpanded = args[11] as Boolean
 
-        // Shield ideas and notes during active typing
-        val currentIdeasUpdates = _ideasUpdates.value
-        val currentNotesUpdates = _notesUpdates.value
+        // Shield ideas and notes during active typing. _ideasUpdates/_notesUpdates
+        // are combine SOURCES (not bare .value reads) so every keystroke re-emits
+        // uiState immediately, instead of the field appearing frozen until the
+        // 1500 ms debounce persists to Room and the dashboard flow re-emits.
+        val currentIdeasUpdates = args[12] as? String
+        val currentNotesUpdates = args[13] as? String
         
         val shieldedIdeas = if (currentIdeasUpdates != null && currentIdeasUpdates != dashboard?.ideasContent) {
             currentIdeasUpdates
