@@ -14,6 +14,24 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.ui.draw.clip
+import androidx.compose.material3.Surface
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material.icons.Icons
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.composable
@@ -29,7 +47,7 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.rounded.Visibility
 
 import androidx.compose.material.icons.rounded.Psychology
-import androidx.compose.material.icons.rounded.Today
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.DateRange
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.filled.SearchOff
@@ -59,6 +77,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -84,6 +103,152 @@ object Screen {
     const val MoodTracker = "mood"
     const val Stats = "stats"
     const val ROUTE_HOME_CONFIG = "home_config"
+}
+
+/**
+ * Material 3 Expressive floating navigation bar modeled on the new Google Finance
+ * app: a rounded floating group of regular tabs + a separate, emphasized "Daily"
+ * button (Finance's "Ask" equivalent). Folded shows Repo/Habits/Chores; unfolded
+ * reveals all. The active tab shows a spring-animated pill behind its icon.
+ */
+@Composable
+private fun ExpressiveNavBar(
+    currentRoute: String?,
+    isViewingDailyNote: Boolean,
+    isLargeScreen: Boolean,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    data class NavDest(val route: String, val icon: ImageVector, val label: String, val selected: Boolean)
+
+    // First three = the folded set (Repo, Habits, Chores). Unfolded reveals the rest.
+    val allRegular = listOf(
+        NavDest(Screen.Home, Icons.Rounded.Dashboard, "Repo", currentRoute == Screen.Home && !isViewingDailyNote),
+        NavDest("habits", Icons.Rounded.DateRange, "Habits", currentRoute == "habits"),
+        NavDest(Screen.HomeOS, Icons.Rounded.CleaningServices, "Chores", currentRoute == Screen.HomeOS),
+        NavDest(Screen.Chat, Icons.Rounded.Psychology, "Chat", currentRoute == Screen.Chat),
+        NavDest(Screen.MoodTracker, Icons.Default.Mood, "Mood", currentRoute == Screen.MoodTracker),
+        NavDest(Screen.Stats, Icons.Default.Star, "Stats", currentRoute == Screen.Stats)
+    )
+    val regular = if (isLargeScreen) allRegular else allRegular.take(3)
+    val dailySelected = currentRoute == Screen.DailyNote
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Shared geometry so the group, the Daily button and the selection pill
+        // are all concentric: outerRadius on the bar, (outerRadius - innerPad) on
+        // the selection pill so it looks like it FILLS the bar's inner area.
+        val barRadius = 28.dp
+        val innerPad = 6.dp
+        val pillRadius = barRadius - innerPad
+
+        // --- Main floating group of regular tabs ---
+        // SOLID pill (elevated surface) so it reads as a defined floating bar;
+        // the page shows through around it (nav floats over content).
+        Surface(
+            shape = RoundedCornerShape(barRadius),
+            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+            shadowElevation = 6.dp,
+            modifier = Modifier.weight(1f).height(64.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxSize().padding(innerPad),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                regular.forEach { item ->
+                    NavPiece(
+                        icon = item.icon,
+                        label = item.label,
+                        selected = item.selected,
+                        pillRadius = pillRadius,
+                        onClick = { if (!item.selected) onSelect(item.route) },
+                        modifier = Modifier.weight(1f).fillMaxHeight()
+                    )
+                }
+            }
+        }
+
+        // --- Separate, emphasized "Daily" button (à la Finance's "Ask") ---
+        // Same radius + same dark surface as the group, distinguished only by a
+        // green GLOW (colored shadow + accent border), like Finance's Ask button.
+        val accent = MaterialTheme.colorScheme.primary
+        val surfaceHi = MaterialTheme.colorScheme.surfaceContainerHighest
+        Box(
+            modifier = Modifier
+                .height(64.dp)
+                .clip(RoundedCornerShape(barRadius))
+                // Opaque dark base so no content bleeds through the pill...
+                .background(surfaceHi)
+                // ...then a green glow on top: a radial gradient fading to transparent
+                // so it stays CONTAINED (brightest centre, dark surface at the edges).
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(
+                            accent.copy(alpha = if (dailySelected) 0.45f else 0f),
+                            Color.Transparent
+                        )
+                    )
+                )
+                .border(
+                    BorderStroke(1.5.dp, accent.copy(alpha = if (dailySelected) 0.9f else 0.5f)),
+                    RoundedCornerShape(barRadius)
+                )
+                .clickable { if (!dailySelected) onSelect(Screen.DailyNote) }
+                .padding(horizontal = 28.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(Icons.Rounded.AutoAwesome, contentDescription = "Daily", tint = accent, modifier = Modifier.size(24.dp))
+                Spacer(Modifier.height(3.dp))
+                Text("Daily", style = MaterialTheme.typography.labelMedium, color = accent, maxLines = 1)
+            }
+        }
+    }
+}
+
+@Composable
+private fun NavPiece(
+    icon: ImageVector,
+    label: String,
+    selected: Boolean,
+    pillRadius: androidx.compose.ui.unit.Dp,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val pill by animateColorAsState(
+        targetValue = if (selected) MaterialTheme.colorScheme.secondaryContainer
+            else androidx.compose.ui.graphics.Color.Transparent,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label = "navPill"
+    )
+    val tint = if (selected) MaterialTheme.colorScheme.onSecondaryContainer
+        else MaterialTheme.colorScheme.onSurfaceVariant
+    // The selection pill FILLS the cell (full inner height, concentric radius),
+    // so it looks nested inside the bar rather than floating behind the icon.
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(pillRadius))
+            .background(pill)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.height(2.dp))
+            Text(label, style = MaterialTheme.typography.labelSmall, color = tint, maxLines = 1)
+        }
+    }
 }
 
 @OptIn(
@@ -210,9 +375,8 @@ fun MainScreen(
     // room to type); the nav returns when the keyboard closes.
     val navLayoutType = if (WindowInsets.isImeVisible) {
         androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType.None
-    } else if (isLargeScreen) {
-        androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType.NavigationRail
     } else {
+        // Custom ExpressiveNavBar is a bottom bar in all sizes (Finance-style).
         androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType.NavigationBar
     }
 
@@ -348,113 +512,10 @@ fun MainScreen(
         )
     }
 
-    androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold(
-        layoutType = navLayoutType,
-        navigationSuiteItems = {
-            item(
-                selected = currentRoute == Screen.Home && !isViewingDailyNote,
-                onClick = { 
-                    navController.navigate(Screen.Home) {
-                        popUpTo(navController.graph.findStartDestination().id) {
-                            saveState = true
-                        }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                },
-                icon = { Icon(Icons.Rounded.Dashboard, contentDescription = "Home") },
-                label = { Text("Repo") }
-            )
-            item(
-                selected = currentRoute == Screen.Chat,
-                onClick = { 
-                    navController.navigate(Screen.Chat) {
-                        popUpTo(navController.graph.findStartDestination().id) {
-                            saveState = true
-                        }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                },
-                icon = { Icon(Icons.Rounded.Psychology, contentDescription = "Brain") },
-                label = { Text("Chat") }
-            )
-            item(
-                 selected = currentRoute == Screen.DailyNote, 
-                 onClick = { 
-                     navController.navigate(Screen.DailyNote) {
-                        popUpTo(navController.graph.findStartDestination().id) {
-                            saveState = true
-                        }
-                        launchSingleTop = true
-                        restoreState = true
-                     }
-                 },
-                 icon = { Icon(Icons.Rounded.Today, contentDescription = "Today") },
-                 label = { Text("Daily") }
-            )
-            item(
-                selected = currentRoute == "habits",
-                onClick = { 
-                    navController.navigate("habits") {
-                        popUpTo(navController.graph.findStartDestination().id) {
-                            saveState = true
-                        }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                },
-                icon = { Icon(Icons.Rounded.DateRange, contentDescription = "Habits") },
-                label = { Text("Habits") }
-            )
-            item(
-                selected = currentRoute == Screen.HomeOS,
-                onClick = { 
-                    navController.navigate(Screen.HomeOS) {
-                        popUpTo(navController.graph.findStartDestination().id) {
-                            saveState = true
-                        }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                },
-                icon = { Icon(Icons.Rounded.CleaningServices, contentDescription = "Chores") },
-                label = { Text("Chores") }
-            )
-
-            
-            if (isLargeScreen) {
-                item(
-                    selected = currentRoute == Screen.MoodTracker,
-                    onClick = {
-                        navController.navigate(Screen.MoodTracker) {
-                            popUpTo(navController.graph.findStartDestination().id) {
-                                saveState = true
-                            }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    },
-                    icon = { Icon(Icons.Default.Mood, contentDescription = "Mood") },
-                    label = { Text("Mood") }
-                )
-                item(
-                    selected = currentRoute == Screen.Stats,
-                    onClick = {
-                        navController.navigate(Screen.Stats) {
-                            popUpTo(navController.graph.findStartDestination().id) {
-                                saveState = true
-                            }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    },
-                    icon = { Icon(Icons.Default.Star, contentDescription = "Stats") },
-                    label = { Text("Stats") }
-                )
-            }
-        }
-    ) {
+    // The nav bar FLOATS over the content (Finance-style): content fills the whole
+    // screen and the bar is overlaid at the bottom, so the page shows through around
+    // and behind it — no reserved dark strip. (Content behind the bar is accepted.)
+    Box(modifier = Modifier.fillMaxSize()) {
         Box(modifier = Modifier.fillMaxSize()) {
             androidx.navigation.compose.NavHost(
             navController = navController,
@@ -867,6 +928,25 @@ fun MainScreen(
             )
         }
     }
+
+        // --- Floating nav bar, overlaid on the content (Finance-style) ---
+        // Hidden while the keyboard is open (navLayoutType == None) so it doesn't
+        // float above the IME on text surfaces.
+        if (navLayoutType != androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType.None) {
+            ExpressiveNavBar(
+                currentRoute = currentRoute,
+                isViewingDailyNote = isViewingDailyNote,
+                isLargeScreen = isLargeScreen,
+                onSelect = { route ->
+                    navController.navigate(route) {
+                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
+                modifier = Modifier.align(Alignment.BottomCenter)
+            )
+        }
     }
 }
 
