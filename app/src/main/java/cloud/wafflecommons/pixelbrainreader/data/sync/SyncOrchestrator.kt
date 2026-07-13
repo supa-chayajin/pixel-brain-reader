@@ -93,6 +93,15 @@ class SyncOrchestrator @Inject constructor(
             _syncState.value = SyncState.Syncing
             Log.i(TAG, "=== Starting Full Sync Cycle ===")
 
+            // Phase 0: Commit any pending local edits BEFORE the pull. JGit's
+            // rebase (pull --rebase) requires a clean working tree; a dirty tree
+            // aborts the whole cycle at Phase 1. Mirrors FileRepository's
+            // commit-before-pull ordering. commit() self-stages and is a no-op
+            // when there is nothing to commit, so this is safe and non-fatal.
+            Log.i(TAG, "Phase 0: Pre-pull commit of local edits...")
+            jGitProvider.commit("Auto-sync: local edits before pull")
+                .onFailure { Log.w(TAG, "Phase 0: Pre-pull commit failed (non-fatal)", it) }
+
             // Phase 1: Git Pull (Rebase)
             Log.i(TAG, "Phase 1: Pull (rebase)...")
             val pullResult = jGitProvider.pull()

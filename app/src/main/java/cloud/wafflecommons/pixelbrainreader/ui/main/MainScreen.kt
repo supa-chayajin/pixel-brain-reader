@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.material.icons.Icons
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.composable
@@ -85,7 +86,11 @@ object Screen {
     const val ROUTE_HOME_CONFIG = "home_config"
 }
 
-@OptIn(ExperimentalMaterial3AdaptiveApi::class, ExperimentalMaterial3Api::class)
+@OptIn(
+    ExperimentalMaterial3AdaptiveApi::class,
+    ExperimentalMaterial3Api::class,
+    androidx.compose.foundation.layout.ExperimentalLayoutApi::class
+)
 @Composable
 fun MainScreen(
     onLogout: () -> Unit,
@@ -198,6 +203,19 @@ fun MainScreen(
     val windowSizeClass = windowAdaptiveInfo.windowSizeClass
     val isLargeScreen = windowSizeClass.windowWidthSizeClass != WindowWidthSizeClass.COMPACT
 
+    // Hide the navigation bar while the keyboard is open. NavigationSuiteScaffold
+    // otherwise reserves the app nav-bar height for content, and because imePadding
+    // uses the full IME inset, the input floats a nav-bar-height above the keyboard
+    // on EVERY text surface. layoutType = None reclaims that space (and gives more
+    // room to type); the nav returns when the keyboard closes.
+    val navLayoutType = if (WindowInsets.isImeVisible) {
+        androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType.None
+    } else if (isLargeScreen) {
+        androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType.NavigationRail
+    } else {
+        androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType.NavigationBar
+    }
+
     // Smart Active State Logic
     val todayName = remember {
         val now = LocalDateTime.now()
@@ -215,7 +233,7 @@ fun MainScreen(
         )
     } else {
         baseDirective.copy(
-            horizontalPartitionSpacerSize = 24.dp,
+            horizontalPartitionSpacerSize = 8.dp,
             defaultPanePreferredWidth = uiState.listPaneWidth.dp // DYNAMIC WIDTH
         )
     }
@@ -331,6 +349,7 @@ fun MainScreen(
     }
 
     androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold(
+        layoutType = navLayoutType,
         navigationSuiteItems = {
             item(
                 selected = currentRoute == Screen.Home && !isViewingDailyNote,

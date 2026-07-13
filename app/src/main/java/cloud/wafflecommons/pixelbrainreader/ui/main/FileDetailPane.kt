@@ -151,7 +151,7 @@ fun FileDetailPane(
     Surface(
         modifier = Modifier
             .fillMaxSize()
-            .then(if(isExpandedScreen) Modifier.padding(start = 12.dp, end = 12.dp) else Modifier)
+            .then(if(isExpandedScreen) Modifier.padding(start = 4.dp, end = 8.dp) else Modifier)
             .clip(shape)
             .then(if (isExpandedScreen) Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f), shape) else Modifier),
         color = MaterialTheme.colorScheme.surface,
@@ -230,50 +230,31 @@ fun FileDetailPane(
                             if (isExpandedScreen) {
                                 // --- TABLETOP MODE: Split View ---
                                 Column(Modifier.fillMaxSize()) {
-                                    // Bottom: Editor
-                                    // Tabletop: Ensure editor is safe from bottom insets/hinge
-                                    val scrollState = rememberScrollState()
-                                    Column(
+                                    // Editor fills the pane and is IME/nav-inset, so its bounded
+                                    // height lets BasicTextField scroll to the caret natively.
+                                    cloud.wafflecommons.pixelbrainreader.ui.components.ComposeCortexEditor(
+                                        content = content,
+                                        onContentChange = onContentChange,
                                         modifier = Modifier
                                             .weight(1f)
+                                            .fillMaxWidth()
                                             .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars))
-                                            .verticalScroll(scrollState)
-                                    ) {
-                                        cloud.wafflecommons.pixelbrainreader.ui.components.ComposeCortexEditor(
-                                            content = content,
-                                            onContentChange = onContentChange,
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(16.dp)
-                                        )
-                                        Spacer(Modifier.height(if (isExpandedScreen) 16.dp else 8.dp))
-                                    }
+                                            .padding(16.dp)
+                                    )
                                 }
                             } else {
                                 // --- STANDARD MODE: Reactive & Optimized ---
-                                val scrollState = rememberScrollState()
-                                val isFolded = !isExpandedScreen
-
                                 Column(Modifier.fillMaxSize()) {
-                                    // Bottom: Editor
-                                    Column(
+                                    // Editor fills the pane and is IME/nav-inset, so its bounded
+                                    // height lets BasicTextField scroll to the caret natively.
+                                    cloud.wafflecommons.pixelbrainreader.ui.components.ComposeCortexEditor(
+                                        content = content,
+                                        onContentChange = onContentChange,
                                         modifier = Modifier
-                                            .fillMaxWidth()
+                                            .fillMaxSize()
                                             .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars))
-                                            .verticalScroll(scrollState)
-                                    ) {
-                                        cloud.wafflecommons.pixelbrainreader.ui.components.ComposeCortexEditor(
-                                            content = content,
-                                            onContentChange = onContentChange,
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(horizontal = 16.dp, vertical = 8.dp)
-                                        )
-
-                                        // Use a MINIMAL fixed buffer purely for visual comfort at the end of a long file.
-                                        // This is NOT for keyboard avoidance.
-                                        Spacer(Modifier.height(if (isFolded) 16.dp else 32.dp))
-                                    }
+                                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                                    )
                                 }
                             }
                         } else {

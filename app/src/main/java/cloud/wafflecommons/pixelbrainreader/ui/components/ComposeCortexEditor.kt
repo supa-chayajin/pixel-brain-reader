@@ -1,21 +1,11 @@
 package cloud.wafflecommons.pixelbrainreader.ui.components
 
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.ime
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.relocation.BringIntoViewRequester
-import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.AnnotatedString
@@ -30,8 +20,6 @@ import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -51,36 +39,15 @@ fun ComposeCortexEditor(
         MarkdownVisualTransformation(textColor, primaryColor, codeBackgroundColor)
     }
 
-    val bringIntoViewRequester = remember { BringIntoViewRequester() }
-    val scope = rememberCoroutineScope()
-    val imeInsets = androidx.compose.foundation.layout.WindowInsets.ime
-    val density = androidx.compose.ui.platform.LocalDensity.current
-    val isImeVisible by remember(imeInsets) {
-        androidx.compose.runtime.derivedStateOf { 
-            imeInsets.getBottom(density) > 0 
-        }
-    }
-
-    LaunchedEffect(isImeVisible) {
-        if (isImeVisible) {
-            delay(300) // Allow layout to resize (adjustResize) before scrolling
-            bringIntoViewRequester.bringIntoView()
-        }
-    }
-
+    // Caret-follow is handled natively by BasicTextField: hosts give this editor
+    // a height-bounded, IME-inset container (FileDetailPane / PrivateJournalActivity),
+    // so the field's built-in vertical scroll keeps the cursor above the keyboard.
+    // The previous whole-field BringIntoView + fixed-delay hack scrolled the field's
+    // bounding box (never the caret) and raced adjustResize, so it's removed.
     BasicTextField(
         value = content,
         onValueChange = onContentChange,
-        modifier = modifier
-            .bringIntoViewRequester(bringIntoViewRequester)
-            .onFocusChanged {
-                if (it.isFocused) {
-                    scope.launch {
-                        delay(200) 
-                        bringIntoViewRequester.bringIntoView()
-                    }
-                }
-            },
+        modifier = modifier,
         readOnly = readOnly,
         enabled = enabled,
         textStyle = TextStyle(
@@ -92,9 +59,6 @@ fun ComposeCortexEditor(
         cursorBrush = SolidColor(primaryColor),
         visualTransformation = visualTransformation
     )
-    
-    // Auto-scroll when cursor position moves or content changes changes (optional, usually native behavior is enough)
-    // But forcing it on focus is key for the "Hidden behind keyboard" bug.
 }
 
 /**
