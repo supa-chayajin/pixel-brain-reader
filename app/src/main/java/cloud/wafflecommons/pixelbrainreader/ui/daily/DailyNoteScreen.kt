@@ -204,11 +204,14 @@ fun DailyNoteScreen(
                 }
             )
 
-            CortexExpandableFAB(
-                expanded = fabExpanded,
-                onExpandedChange = { fabExpanded = it },
-                items = fabItems
-            )
+            // Lift the FAB to sit just above the floating nav bar (which overlays content).
+            Box(modifier = Modifier.padding(bottom = 66.dp)) {
+                CortexExpandableFAB(
+                    expanded = fabExpanded,
+                    onExpandedChange = { fabExpanded = it },
+                    items = fabItems
+                )
+            }
         }
     ) { padding ->
         cloud.wafflecommons.pixelbrainreader.ui.components.PullToRefreshBox(

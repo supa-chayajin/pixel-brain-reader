@@ -3,7 +3,9 @@ package cloud.wafflecommons.pixelbrainreader.ui.theme
 import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
@@ -83,29 +85,39 @@ fun PixelBrainReaderTheme(
     dynamicColor: Boolean = true,
     content: @Composable () -> Unit
 ) {
+    // Dark-first app: always resolve to a DARK scheme. The foldable inner display
+    // can report day/light mode, which washed the whole UI out — pinning dark keeps
+    // it consistent and vibrant. We keep Material You (dynamic) but force its dark
+    // variant, falling back to the designed "Pixel Sage" dark palette.
     val colorScheme = when {
-        // Si dynamicColor est activé et qu'on est sur Android 12+ (S), on utilise les couleurs système
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+            dynamicDarkColorScheme(context)
         }
-        // Sinon, on utilise votre palette personnalisée "Pixel Sage"
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
+        else -> DarkColorScheme
     }
 
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            // La barre d'état s'adapte à la luminosité du thème
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
+            // Dark background → light status-bar icons.
+            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = false
         }
     }
 
     MaterialTheme(
         colorScheme = colorScheme,
-        typography = Typography,
-        content = content
-    )
+        typography = Typography
+    ) {
+        // Paint the theme background across the whole window so the system window
+        // background (light on the foldable inner display in day mode) never shows
+        // through — this is what kept the app looking "not dark".
+        Surface(
+            modifier = androidx.compose.ui.Modifier.fillMaxSize(),
+            color = colorScheme.background
+        ) {
+            content()
+        }
+    }
 }
