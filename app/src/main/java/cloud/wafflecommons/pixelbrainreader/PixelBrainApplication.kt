@@ -44,6 +44,32 @@ class PixelBrainApplication : Application(), Configuration.Provider {
         scheduleDailyBurnWork()
         cancelLegacyGoogleOutboxWorkers()
         runStartupReconcile()
+        scheduleVaultIndexing()
+    }
+
+    /**
+     * Backfill RAG embeddings in the background. IndexingWorker only embeds files
+     * that changed or have no embedding row yet and returns early (no model load)
+     * when there's nothing to do — so this is a near-noop once the index is warm.
+     * Its job is to rebuild embeddings automatically after a destructive Room
+     * migration or an EMBEDDER_SCHEMA_VERSION bump (both wipe the embeddings table),
+     * instead of waiting for the user to press Settings → "Index Knowledge Vault".
+     * Shares that button's unique name with KEEP so a manual/in-flight index isn't
+     * disturbed.
+     */
+    private fun scheduleVaultIndexing() {
+        val request = androidx.work.OneTimeWorkRequestBuilder<cloud.wafflecommons.pixelbrainreader.data.workers.IndexingWorker>()
+            .setConstraints(
+                androidx.work.Constraints.Builder()
+                    .setRequiresBatteryNotLow(true)
+                    .build()
+            )
+            .build()
+        WorkManager.getInstance(this).enqueueUniqueWork(
+            cloud.wafflecommons.pixelbrainreader.data.workers.IndexingWorker.UNIQUE_WORK_NAME,
+            androidx.work.ExistingWorkPolicy.KEEP,
+            request
+        )
     }
 
     /** True only inside the default app process (excludes `:crash`). */

@@ -271,7 +271,7 @@ class VectorSearchEngine @Inject constructor(
      * Bump [EMBEDDER_SCHEMA_VERSION] whenever the model or its output
      * shape changes — that's the migration signal.
      */
-    private suspend fun ensureSchemaVersion() {
+    suspend fun ensureSchemaVersion() {
         if (schemaCheckDone) return
         schemaCheckDone = true
 
@@ -354,7 +354,7 @@ class VectorSearchEngine @Inject constructor(
      * Private chunks are decrypted just-in-time using the cached vault password;
      * if the vault is locked, those hits are dropped from the result.
      */
-    suspend fun search(query: String, limit: Int = 3): List<SearchHit> = withContext(Dispatchers.IO) {
+    suspend fun search(query: String, limit: Int = 6): List<SearchHit> = withContext(Dispatchers.IO) {
         Log.d("RAG_DEBUG", "search: query='${query.take(80).replace("\n", " ")}' (len=${query.length})")
         ensureSchemaVersion()
 
@@ -460,11 +460,25 @@ class VectorSearchEngine @Inject constructor(
             )
         }
 
+        // Relevance floor: only inject chunks that actually resemble the query.
+        // Without this, top-K was ALWAYS handed to the LLM even when the vault has
+        // nothing on-topic — the "answers on irrelevant context" symptom. Sorted
+        // desc, so this keeps just the genuinely-similar chunks.
+        val relevant = scored.filter { it.second >= MIN_SIMILARITY }
+        if (relevant.isEmpty()) {
+            Log.i(
+                "RAG_DEBUG",
+                "search: no chunk cleared MIN_SIMILARITY=$MIN_SIMILARITY (best=${"%.3f".format(sMax)}); " +
+                    "returning empty so the LLM answers without stale context"
+            )
+            return@withContext emptyList()
+        }
+
         val vaultPassword = secretManager.getVaultPassword()
         var privateDecrypted = 0
         var privateDropped = 0
         val hits = mutableListOf<SearchHit>()
-        for ((entity, _, _) in scored) {
+        for ((entity, _, _) in relevant) {
             if (hits.size >= limit) break
 
             if (entity.isPrivate) {
@@ -535,7 +549,7 @@ class VectorSearchEngine @Inject constructor(
          * a one-shot `embeddings` table wipe; IndexingWorker then re-embeds
          * every `.md` via the existing `getFilesWithoutEmbeddings` backfill.
          */
-        const val EMBEDDER_SCHEMA_VERSION = "minilm-multilingual-v1"
+        const val EMBEDDER_SCHEMA_VERSION = "minilm-multilingual-v2-chunk400"
         private const val PREFS_NAME = "embedder_state"
         private const val PREFS_KEY_VERSION = "schema_version"
 
@@ -555,5 +569,14 @@ class VectorSearchEngine @Inject constructor(
          * nearly equally and top-K becomes ordering noise. Bail in that case.
          */
         private const val MIN_SCORE_SPREAD = 0.01f
+
+        /**
+         * Absolute cosine floor a chunk must clear to count as relevant context.
+         * paraphrase-multilingual-MiniLM lands genuinely-related query/chunk pairs
+         * ~0.4+ and unrelated ones ~0.1–0.3, so ~0.35 filters noise without dropping
+         * real matches. Below this, search returns empty rather than feeding the LLM
+         * off-topic chunks as "notes".
+         */
+        private const val MIN_SIMILARITY = 0.35f
     }
 }

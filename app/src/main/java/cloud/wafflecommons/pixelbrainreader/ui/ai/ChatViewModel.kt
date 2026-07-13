@@ -55,8 +55,10 @@ private fun ChatMessageEntity.toUi(): ChatMessage = ChatMessage(
 // Sliding window size injected into the Nano prompt. 6 messages = 3 turns.
 // Higher values risk REQUEST_TOO_LARGE on long messages, especially with RAG context.
 private const val NANO_WINDOW_SIZE = 6
-// Top-K vector hits for RAG grounding.
-private const val RAG_TOP_K = 3
+// Top-K vector hits for RAG grounding. Raised from 3 now that VectorSearchEngine
+// applies a MIN_SIMILARITY floor — more genuinely-relevant chunks reach the prompt
+// without low-similarity noise slipping in.
+private const val RAG_TOP_K = 6
 
 /**
  * Single persona used for BOTH chat surfaces (Cortex / RAG and Spark / Creative).

@@ -16,19 +16,21 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 
 /**
- * RAG embedding worker — manual-only.
+ * RAG embedding worker.
  *
- * Enqueued exclusively by Settings → "Index Knowledge Vault". Each run:
- *   1. Reindexes the vault filesystem into the `files` Room table and
- *      returns the set of files whose content fingerprint changed since
- *      the last scan (delta).
- *   2. Embeds + stores chunks ONLY for that delta. No full backfill, no
- *      mood/habit/chore reconcile — those are handled elsewhere
+ * Enqueued by Settings → "Index Knowledge Vault" AND automatically on app start
+ * (PixelBrainApplication.scheduleVaultIndexing, unique + KEEP). Each run:
+ *   1. Reindexes the vault filesystem into the `files` Room table and returns the
+ *      set of files whose content fingerprint changed since the last scan (delta).
+ *   2. Unions that delta with markdown files that have no embedding row yet
+ *      (getFilesWithoutEmbeddings backfill), and embeds + stores chunks for them.
+ *      No mood/habit/chore reconcile — that's handled elsewhere
  *      (PixelBrainApplication.runStartupReconcile + SyncOrchestrator Phase 4).
  *
- * This worker is NEVER enqueued automatically. If embeddings are missing
- * (e.g. after a destructive Room migration), the user has to press the
- * button to rebuild them.
+ * When there is nothing to embed it returns early WITHOUT loading the model, so
+ * the startup enqueue is a cheap no-op once the index is warm. This is what
+ * rebuilds embeddings automatically after a destructive Room migration or an
+ * EMBEDDER_SCHEMA_VERSION bump (both wipe the embeddings table).
  */
 @HiltWorker
 class IndexingWorker @AssistedInject constructor(
@@ -58,17 +60,11 @@ class IndexingWorker @AssistedInject constructor(
                 "IndexingWorker start: lastTime=$lastTime ($lastTimeHuman) embeddings_in_db=$embeddingsBefore"
             )
 
-            // Fail-fast: probe the embedder BEFORE walking the vault. Without
-            // this, a broken MediaPipe init silently turns every chunk into a
-            // per-chunk catch with "embed failed" — the job "succeeds" but
-            // inserts zero embeddings, which looks like "indexing is broken".
-            val probe = try {
-                vectorSearchEngine.embed("vector engine readiness probe")
-            } catch (e: Exception) {
-                Log.e("RAG_DEBUG", "IndexingWorker ABORT: vector engine init failed: ${e.message}", e)
-                return@withContext Result.failure()
-            }
-            Log.i("RAG_DEBUG", "IndexingWorker: embedder OK (dim=${probe.size})")
+            // Apply any embedder schema-version migration (cheap — a pref check +
+            // table wipe, no model load) BEFORE the backfill query below, so a
+            // bumped EMBEDDER_SCHEMA_VERSION wipes stale embeddings first and
+            // getFilesWithoutEmbeddings then returns everything to re-embed.
+            vectorSearchEngine.ensureSchemaVersion()
 
             // Vault scan: reindexAll uses content-SHA comparison and returns ONLY
             // files whose stored fingerprint differs from on-disk content. Files
@@ -105,11 +101,26 @@ class IndexingWorker @AssistedInject constructor(
                     "union=${unionFiles.size}"
             )
 
-            if (unionFiles.isNotEmpty()) {
-                processEmbeddings(unionFiles)
-            } else {
+            // Nothing to embed → return WITHOUT loading the ~470MB model, so the
+            // now-automatic startup enqueue is a cheap no-op once the index is warm.
+            if (unionFiles.isEmpty()) {
                 Log.d("IndexingWorker", "No file changes and no unembedded backlog — nothing to embed.")
+                userPrefs.setLastIndexTime(startTime)
+                return@withContext Result.success()
             }
+
+            // Fail-fast: probe the embedder before embedding. A broken init would
+            // otherwise turn every chunk into a per-chunk catch — the job "succeeds"
+            // but inserts zero embeddings, which looks like "indexing is broken".
+            val probe = try {
+                vectorSearchEngine.embed("vector engine readiness probe")
+            } catch (e: Exception) {
+                Log.e("RAG_DEBUG", "IndexingWorker ABORT: vector engine init failed: ${e.message}", e)
+                return@withContext Result.failure()
+            }
+            Log.i("RAG_DEBUG", "IndexingWorker: embedder OK (dim=${probe.size})")
+
+            processEmbeddings(unionFiles)
 
             userPrefs.setLastIndexTime(startTime)
 
@@ -269,16 +280,49 @@ class IndexingWorker @AssistedInject constructor(
         )
     }
 
-    private fun chunkText(text: String, windowSize: Int = 1000, overlap: Int = 200): List<String> {
-        if (text.length <= windowSize) return listOf(text)
+    /**
+     * Sentence/paragraph-aware chunker. The TFLite embedder truncates at
+     * MAX_SEQ_LEN (256 tokens); the old fixed 1000-char window routinely exceeded
+     * that, so each chunk's tail was silently dropped from its vector. We now split
+     * on sentence terminators + blank lines and greedily pack units into
+     * ~[targetSize]-char chunks that stay within the token window and don't cut
+     * mid-thought. A single oversized unit is hard-split as a fallback.
+     */
+    private fun chunkText(text: String, targetSize: Int = 400): List<String> {
+        val trimmed = text.trim()
+        if (trimmed.isEmpty()) return emptyList()
+        if (trimmed.length <= targetSize) return listOf(trimmed)
+
+        val units = trimmed
+            .split(Regex("(?<=[.!?。！？])\\s+|\\n+"))
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
 
         val chunks = mutableListOf<String>()
-        var start = 0
-        while (start < text.length) {
-            val end = (start + windowSize).coerceAtMost(text.length)
-            chunks.add(text.substring(start, end))
-            start += (windowSize - overlap)
+        val current = StringBuilder()
+        for (unit in units) {
+            // Hard-split any single unit that alone exceeds the target.
+            if (unit.length > targetSize) {
+                if (current.isNotEmpty()) {
+                    chunks.add(current.toString().trim())
+                    current.setLength(0)
+                }
+                var s = 0
+                while (s < unit.length) {
+                    val e = (s + targetSize).coerceAtMost(unit.length)
+                    chunks.add(unit.substring(s, e))
+                    s = e
+                }
+                continue
+            }
+            if (current.isNotEmpty() && current.length + unit.length + 1 > targetSize) {
+                chunks.add(current.toString().trim())
+                current.setLength(0)
+            }
+            if (current.isNotEmpty()) current.append(' ')
+            current.append(unit)
         }
+        if (current.isNotBlank()) chunks.add(current.toString().trim())
         return chunks
     }
 
