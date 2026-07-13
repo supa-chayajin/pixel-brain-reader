@@ -764,7 +764,14 @@ fun MainScreen(
                 SettingsScreen(
                     onBack = { navController.popBackStack() },
                     onNavigateToHabitConfig = { navController.navigate("habit_config") },
-                    onNavigateToHomeConfig = { navController.navigate(Screen.ROUTE_HOME_CONFIG) }
+                    onNavigateToHomeConfig = { navController.navigate(Screen.ROUTE_HOME_CONFIG) },
+                    onNavigateToReminders = { navController.navigate("reminders") }
+                )
+            }
+
+            composable("reminders") {
+                cloud.wafflecommons.pixelbrainreader.ui.settings.RemindersScreen(
+                    onBack = { navController.popBackStack() }
                 )
             }
 
