@@ -481,7 +481,7 @@ fun MainScreen(
                 BackHandler(enabled = isBackHandlerEnabled) {
                     when {
                         uiState.isFocusMode -> viewModel.toggleFocusMode()
-                        canNavigateBack -> navigator.navigateBack()
+                        canNavigateBack -> scope.launch { navigator.navigateBack() }
                         isSubFolder -> viewModel.navigateUp()
                     }
                 }
@@ -592,7 +592,7 @@ fun MainScreen(
                                             onClick = {
                                                 viewModel.closeFile()
                                                 if (navigator.canNavigateBack()) {
-                                                    navigator.navigateBack()
+                                                    scope.launch { navigator.navigateBack() }
                                                 }
                                             },
                                             colors = IconButtonDefaults.filledTonalIconButtonColors(
