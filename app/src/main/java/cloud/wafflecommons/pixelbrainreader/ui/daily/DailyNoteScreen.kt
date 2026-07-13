@@ -747,7 +747,8 @@ private fun AddTimelineDialog(onDismiss: () -> Unit, onConfirm: (String, LocalTi
         initialMinute = LocalTime.now().minute,
         is24Hour = true
     )
-    
+    val contentFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Add Moment") },
@@ -757,10 +758,13 @@ private fun AddTimelineDialog(onDismiss: () -> Unit, onConfirm: (String, LocalTi
                     value = content,
                     onValueChange = { content = it },
                     label = { Text("What happened?") },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth().focusRequester(contentFocus)
                 )
                 TimeInput(state = timePickerState) // Or TimePicker for full dial
             }
+            // Focus the text field (not the TimeInput, which otherwise grabs focus)
+            // when the dialog opens.
+            LaunchedEffect(Unit) { contentFocus.requestFocus() }
         },
         confirmButton = {
             Button(onClick = { 
