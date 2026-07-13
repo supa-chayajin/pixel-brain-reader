@@ -1,10 +1,16 @@
 package cloud.wafflecommons.pixelbrainreader
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -80,6 +86,24 @@ class MainActivity : FragmentActivity() {
                         secretManager.getToken() != null
                     }
                     loginState = hasToken
+                }
+            }
+
+            // Ask for POST_NOTIFICATIONS once the user is in (API 33+). Reminders
+            // degrade gracefully if denied — NotificationHelper checks the grant
+            // before every post.
+            val notifPermissionLauncher = rememberLauncherForActivityResult(
+                ActivityResultContracts.RequestPermission()
+            ) { /* result ignored */ }
+            LaunchedEffect(loginState) {
+                if (loginState == true &&
+                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                    ContextCompat.checkSelfPermission(
+                        this@MainActivity,
+                        Manifest.permission.POST_NOTIFICATIONS
+                    ) != PackageManager.PERMISSION_GRANTED
+                ) {
+                    notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                 }
             }
 

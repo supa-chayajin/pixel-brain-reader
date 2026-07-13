@@ -20,6 +20,7 @@ class PixelBrainApplication : Application(), Configuration.Provider {
     @Inject lateinit var moodRepository: cloud.wafflecommons.pixelbrainreader.data.repository.MoodRepository
     @Inject lateinit var habitRepository: cloud.wafflecommons.pixelbrainreader.data.repository.HabitRepository
     @Inject lateinit var choreRepository: cloud.wafflecommons.pixelbrainreader.data.repository.ChoreRepository
+    @Inject lateinit var reminderScheduler: cloud.wafflecommons.pixelbrainreader.data.notifications.ReminderScheduler
 
     /** Application-scoped coroutine scope — survives Activity recreation. */
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -45,6 +46,9 @@ class PixelBrainApplication : Application(), Configuration.Provider {
         cancelLegacyGoogleOutboxWorkers()
         runStartupReconcile()
         scheduleVaultIndexing()
+        // (Re)schedule reminder notifications from the saved preferences. Also
+        // creates the notification channels. Cheap; runs off the main thread.
+        appScope.launch { runCatching { reminderScheduler.reschedule() } }
     }
 
     /**

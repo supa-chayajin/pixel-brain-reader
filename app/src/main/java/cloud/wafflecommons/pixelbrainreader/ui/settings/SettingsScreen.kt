@@ -19,6 +19,7 @@ import androidx.compose.material.icons.rounded.HomeWork
 import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material3.*
 import kotlinx.coroutines.launch
@@ -55,6 +56,7 @@ fun SettingsScreen(
     onBack: () -> Unit,
     onNavigateToHabitConfig: () -> Unit = {},
     onNavigateToHomeConfig: () -> Unit = {},
+    onNavigateToReminders: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -341,7 +343,13 @@ fun SettingsScreen(
                     headlineContent = { Text("Manage House & Chores") },
                     leadingContent = { Icon(Icons.Rounded.CleaningServices, contentDescription = null) }
                 )
-                
+
+                ListItem(
+                    modifier = Modifier.clickable { onNavigateToReminders() },
+                    headlineContent = { Text("Reminders & Notifications") },
+                    leadingContent = { Icon(Icons.Filled.Notifications, contentDescription = null) }
+                )
+
                 Spacer(Modifier.height(8.dp))
                 
                 val isSyncingConfigs by viewModel.isSyncingConfigs.collectAsStateWithLifecycle()

@@ -153,4 +153,47 @@ class UserPreferencesRepository @Inject constructor(
             preferences[KEY_GOOGLE_SYNC_ENABLED] = enabled
         }
     }
+
+    // --- Reminders (Phase 3) ---
+    private val KEY_VAULT_REMINDER_ENABLED =
+        androidx.datastore.preferences.core.booleanPreferencesKey("vault_reminder_enabled")
+    private val KEY_VAULT_REMINDER_TIME = stringPreferencesKey("vault_reminder_time")
+    private val KEY_CHORES_REMINDER_ENABLED =
+        androidx.datastore.preferences.core.booleanPreferencesKey("chores_reminder_enabled")
+    // Comma-joined "HH:mm" window list, e.g. "09:00,14:00,20:00".
+    private val KEY_CHORES_REMINDER_WINDOWS = stringPreferencesKey("chores_reminder_windows")
+
+    val vaultReminderEnabled: Flow<Boolean> = context.dataStore.data
+        .map { it[KEY_VAULT_REMINDER_ENABLED] ?: false }
+
+    val vaultReminderTime: Flow<String> = context.dataStore.data
+        .map { it[KEY_VAULT_REMINDER_TIME] ?: "20:00" }
+
+    val choresReminderEnabled: Flow<Boolean> = context.dataStore.data
+        .map { it[KEY_CHORES_REMINDER_ENABLED] ?: false }
+
+    val choresReminderWindows: Flow<List<String>> = context.dataStore.data
+        .map { prefs ->
+            (prefs[KEY_CHORES_REMINDER_WINDOWS] ?: "09:00,14:00,20:00")
+                .split(",")
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+        }
+
+    suspend fun setVaultReminderEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_VAULT_REMINDER_ENABLED] = enabled }
+    }
+
+    suspend fun setVaultReminderTime(hhmm: String) {
+        context.dataStore.edit { it[KEY_VAULT_REMINDER_TIME] = hhmm }
+    }
+
+    suspend fun setChoresReminderEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_CHORES_REMINDER_ENABLED] = enabled }
+    }
+
+    suspend fun setChoresReminderWindows(windows: List<String>) {
+        val cleaned = windows.map { it.trim() }.filter { it.isNotBlank() }.distinct().sorted()
+        context.dataStore.edit { it[KEY_CHORES_REMINDER_WINDOWS] = cleaned.joinToString(",") }
+    }
 }
