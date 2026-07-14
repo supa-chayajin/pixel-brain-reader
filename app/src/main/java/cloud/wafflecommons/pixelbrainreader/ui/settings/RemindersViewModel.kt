@@ -41,11 +41,11 @@ class RemindersViewModel @Inject constructor(
         userPrefs.setChoresReminderWindows(userPrefs.choresReminderWindows.first() - hhmm)
     }
 
-    /** Persist the change, then reschedule so WorkManager reflects it immediately. */
+    /** Persist the change, then force a reschedule so WorkManager reflects the new time. */
     private fun update(block: suspend () -> Unit) {
         viewModelScope.launch {
             block()
-            reminderScheduler.reschedule()
+            reminderScheduler.reschedule(force = true)
         }
     }
 }
