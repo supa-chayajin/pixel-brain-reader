@@ -1,5 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.ui.main
 
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.foundation.background
@@ -8,7 +9,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Description
@@ -35,6 +35,8 @@ import cloud.wafflecommons.pixelbrainreader.ui.theme.NavBarClearance
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import cloud.wafflecommons.pixelbrainreader.data.remote.model.GithubFileDto
+
+private enum class FileListState { Loading, Error, Empty, Content }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -67,13 +69,13 @@ fun FileListPane(
         AlertDialog(
             onDismissRequest = { showRenameDialog = null },
             title = { Text("Rename File") },
-            shape = RoundedCornerShape(28.dp),
+            shape = MaterialTheme.shapes.extraLarge,
             text = {
                 OutlinedTextField(
                     value = newName,
                     onValueChange = { newName = it },
                     singleLine = true,
-                    shape = RoundedCornerShape(16.dp)
+                    shape = MaterialTheme.shapes.medium
                 )
             },
             confirmButton = {
@@ -94,12 +96,26 @@ fun FileListPane(
         modifier = Modifier.fillMaxSize()
     ) {
         // Content
-        if ((isLoading || isRefreshing) && files.isEmpty()) {
-             // Skeleton State
-             cloud.wafflecommons.pixelbrainreader.ui.components.SkeletonFileList()
-        } else if (error != null && files.isEmpty()) {
+        val listState = when {
+            (isLoading || isRefreshing) && files.isEmpty() -> FileListState.Loading
+            error != null && files.isEmpty() -> FileListState.Error
+            files.isEmpty() -> FileListState.Empty
+            else -> FileListState.Content
+        }
+        Crossfade(
+            targetState = listState,
+            label = "file_list_state",
+            modifier = Modifier.fillMaxSize()
+        ) { state ->
+            when (state) {
+                FileListState.Loading -> {
+                    // Skeleton State
+                    cloud.wafflecommons.pixelbrainreader.ui.components.SkeletonFileList()
+                }
+                FileListState.Error -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
              Column(
-                modifier = Modifier.align(Alignment.Center).padding(16.dp),
+                modifier = Modifier.padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Icon(Icons.Default.Folder, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(48.dp))
@@ -118,7 +134,9 @@ fun FileListPane(
                     Text("Retry")
                 }
             }
-        } else if (files.isEmpty()) {
+                    }
+                }
+                FileListState.Empty -> {
              if (searchQuery.isNotEmpty()) {
                  // NO RESULTS STATE
                  Column(
@@ -183,7 +201,8 @@ fun FileListPane(
                     }
                 }
              }
-        } else {
+                }
+                FileListState.Content -> {
             cloud.wafflecommons.pixelbrainreader.ui.components.PullToRefreshBox(
                 isRefreshing = isRefreshing,
                 onRefresh = {
@@ -265,7 +284,7 @@ fun FileListPane(
                                 Box(
                                     Modifier
                                         .fillMaxSize()
-                                        .clip(RoundedCornerShape(24.dp))
+                                        .clip(MaterialTheme.shapes.large)
                                         .background(color)
                                         .padding(horizontal = 24.dp),
                                     contentAlignment = alignment
@@ -286,6 +305,8 @@ fun FileListPane(
                     }
                 }
             }
+                }
+            }
         }
 
 
@@ -297,7 +318,7 @@ fun FileItemCard(file: GithubFileDto, onClick: () -> Unit) {
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
+        shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         ),

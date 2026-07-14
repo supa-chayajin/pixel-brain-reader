@@ -318,18 +318,21 @@ fun SettingsScreen(
                 title = "Interface",
                 icon = Icons.Default.BrightnessMedium
             ) {
-                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                 SingleChoiceSegmentedButtonRow(
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    AppThemeConfig.entries.forEach { config ->
-                        FilterChip(
+                    AppThemeConfig.entries.forEachIndexed { index, config ->
+                        SegmentedButton(
                             selected = (uiState.themeConfig == config),
                             onClick = {
                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 viewModel.updateTheme(config)
                             },
-                            label = { 
+                            shape = SegmentedButtonDefaults.itemShape(
+                                index = index,
+                                count = AppThemeConfig.entries.size
+                            ),
+                            label = {
                                 Text(
                                     when(config) {
                                         AppThemeConfig.FOLLOW_SYSTEM -> "System"

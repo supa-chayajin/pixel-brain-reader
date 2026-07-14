@@ -8,6 +8,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -21,6 +23,7 @@ fun AddChoreBottomSheet(
     viewModel: ChoreViewModel
 ) {
     val allRooms by viewModel.allRooms.collectAsStateWithLifecycle()
+    val haptic = LocalHapticFeedback.current
 
     var name by remember { mutableStateOf("") }
     var selectedRoomId by remember { mutableStateOf("") }
@@ -97,6 +100,7 @@ fun AddChoreBottomSheet(
                             DropdownMenuItem(
                                 text = { Text(existingRoom.name) },
                                 onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                     selectedRoomId = existingRoom.id
                                     isExpanded = false
                                 }
@@ -139,6 +143,7 @@ fun AddChoreBottomSheet(
 
             Button(
                 onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     val finalFreq = frequencyDays.toIntOrNull() ?: 1
                     viewModel.addChoreWithRoomId(
                         name = name,

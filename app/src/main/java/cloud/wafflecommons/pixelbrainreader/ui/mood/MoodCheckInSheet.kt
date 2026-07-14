@@ -1,17 +1,14 @@
 package cloud.wafflecommons.pixelbrainreader.ui.mood
 
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
@@ -38,6 +35,7 @@ fun MoodCheckInSheet(
     viewModel: MoodViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val haptic = LocalHapticFeedback.current
     var selectedMood by remember { mutableIntStateOf(3) }
     val selectedActivities = remember { mutableStateListOf<String>() }
     var noteText by remember { mutableStateOf("") }
@@ -108,6 +106,7 @@ fun MoodCheckInSheet(
             
             Surface(
                 onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     val datePickerDialog = android.app.DatePickerDialog(
                         context,
                         { _, year, month, dayOfMonth ->
@@ -131,7 +130,7 @@ fun MoodCheckInSheet(
                     )
                     datePickerDialog.show()
                 },
-                shape = RoundedCornerShape(12.dp),
+                shape = MaterialTheme.shapes.small,
                 color = MaterialTheme.colorScheme.surfaceVariant,
                 modifier = Modifier.padding(bottom = 8.dp)
             ) {
@@ -188,6 +187,7 @@ fun MoodCheckInSheet(
                             FilterChip(
                                 selected = isSelected,
                                 onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                     if (isSelected) selectedActivities.remove(item.label)
                                     else selectedActivities.add(item.label)
                                 },
@@ -217,13 +217,14 @@ fun MoodCheckInSheet(
 
             Button(
                 onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     viewModel.addMoodEntry(selectedMood, selectedActivities.toList(), noteText, selectedDateTime)
                     onDismiss()
                 },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
-                shape = RoundedCornerShape(16.dp)
+                shape = MaterialTheme.shapes.medium
             ) {
                 if (uiState.isLoading) {
                     CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary)
@@ -235,6 +236,7 @@ fun MoodCheckInSheet(
     }
 }
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun MoodSelector(
     selectedMood: Int,
@@ -251,7 +253,7 @@ fun MoodSelector(
         val segmentWidth = maxWidth / segmentCount
         val indicatorOffset by animateDpAsState(
             targetValue = segmentWidth * (selectedMood - 1),
-            animationSpec = spring(stiffness = Spring.StiffnessLow),
+            animationSpec = MaterialTheme.motionScheme.fastSpatialSpec(),
             label = "indicatorOffset"
         )
 
@@ -276,7 +278,7 @@ fun MoodSelector(
                 val isSelected = selectedMood == score
                 val scale by animateFloatAsState(
                     targetValue = if (isSelected) 1.5f else 0.9f,
-                    animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+                    animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
                     label = "scale"
                 )
 

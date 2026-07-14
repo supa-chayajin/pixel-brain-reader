@@ -20,6 +20,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -37,6 +39,7 @@ fun HomeConfigScreen(
     onNavigateBack: () -> Unit,
     viewModel: HomeConfigViewModel = hiltViewModel()
 ) {
+    val haptic = LocalHapticFeedback.current
     val rooms by viewModel.allRooms.collectAsStateWithLifecycle()
     val choresByRoom by viewModel.choresByRoom.collectAsStateWithLifecycle()
 
@@ -63,13 +66,19 @@ fun HomeConfigScreen(
         floatingActionButton = {
             Column(horizontalAlignment = Alignment.End) {
                 SmallFloatingActionButton(
-                    onClick = { showCreateRoomDialog = true },
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        showCreateRoomDialog = true
+                    },
                     modifier = Modifier.padding(bottom = 8.dp)
                 ) {
                     Icon(Icons.Rounded.Home, contentDescription = "Add Room")
                 }
                 ExtendedFloatingActionButton(
-                    onClick = { showCreateChoreSheet = true },
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        showCreateChoreSheet = true
+                    },
                     icon = { Icon(Icons.Rounded.Add, contentDescription = "Add Chore") },
                     text = { Text("Add Chore") }
                 )
@@ -100,7 +109,10 @@ fun HomeConfigScreen(
                     item {
                         InputChip(
                             selected = false,
-                            onClick = { showCreateRoomDialog = true },
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                showCreateRoomDialog = true
+                            },
                             label = { Text("Add") },
                             leadingIcon = { Icon(Icons.Rounded.Add, "Add", Modifier.size(18.dp)) }
                         )
@@ -110,7 +122,10 @@ fun HomeConfigScreen(
                         val choreCount = choresByRoom[room.id]?.size ?: 0
                         FilterChip(
                             selected = true,
-                            onClick = { showRoomDialog = room },
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                showRoomDialog = room
+                            },
                             modifier = Modifier.animateItem(),
                             label = { Text("${room.name} ($choreCount)") },
                             trailingIcon = {
@@ -178,7 +193,10 @@ fun HomeConfigScreen(
                                 }
                             },
                             modifier = Modifier
-                                .clickable { showChoreSheet = chore }
+                                .clickable {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    showChoreSheet = chore
+                                }
                                 .animateItem()
                         )
                     }

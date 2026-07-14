@@ -48,17 +48,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.AssistChip
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.FilledTonalIconButton
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material.icons.filled.Save
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -74,6 +69,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -143,7 +140,7 @@ fun FileDetailPane(
     }
 
     val shape = if (isExpandedScreen) {
-        RoundedCornerShape(24.dp)
+        MaterialTheme.shapes.large
     } else {
         RoundedCornerShape(0.dp)
     }
@@ -328,6 +325,7 @@ fun FileDetailPane(
 
 @Composable
 fun WelcomeState(onCreateNew: () -> Unit) {
+    val haptic = LocalHapticFeedback.current
     Column(
         modifier = Modifier.fillMaxSize().padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -353,7 +351,10 @@ fun WelcomeState(onCreateNew: () -> Unit) {
             textAlign = TextAlign.Center
         )
         Spacer(Modifier.height(32.dp))
-        Button(onClick = onCreateNew) {
+        Button(onClick = {
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            onCreateNew()
+        }) {
             Icon(Icons.Default.Add, null)
             Spacer(Modifier.width(8.dp))
             Text("Create new file")
@@ -366,7 +367,7 @@ fun WelcomeState(onCreateNew: () -> Unit) {
 fun MetadataHeader(metadata: Map<String, String>, tags: List<String>) {
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainerHighest,
-        shape = RoundedCornerShape(12.dp),
+        shape = MaterialTheme.shapes.small,
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp)

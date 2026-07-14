@@ -17,6 +17,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -36,6 +38,7 @@ fun HabitConfigScreen(
 ) {
     val habits by viewModel.habits.collectAsStateWithLifecycle()
     val activeHabits = habits.filter { !it.archived }.sortedBy { it.sortOrder }
+    val haptic = LocalHapticFeedback.current
 
     var editingHabit by remember { mutableStateOf<HabitConfig?>(null) }
     var isSheetOpen by remember { mutableStateOf(false) }
@@ -58,6 +61,7 @@ fun HabitConfigScreen(
         },
         floatingActionButton = {
             FloatingActionButton(onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 editingHabit = HabitConfig(
                     id = UUID.randomUUID().toString(),
                     title = "",
@@ -76,7 +80,8 @@ fun HabitConfigScreen(
         ) {
             items(activeHabits, key = { it.id }) { habit ->
                 ElevatedCard(
-                    onClick = { 
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         editingHabit = habit
                         isSheetOpen = true
                     },
@@ -152,7 +157,8 @@ fun HabitEditorForm(
     var unit by remember { mutableStateOf(initialHabit.unit) }
     var frequency by remember { mutableStateOf(initialHabit.frequency.toSet()) }
     var autoSource by remember { mutableStateOf(initialHabit.autoSource ?: "None (Manual)") }
-    
+    val haptic = LocalHapticFeedback.current
+
     val autoSources = listOf(
         "None (Manual)",
         "health_connect_steps", 
@@ -239,7 +245,8 @@ fun HabitEditorForm(
             days.forEach { day ->
                 FilterChip(
                     selected = frequency.contains(day),
-                    onClick = { 
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         if (frequency.contains(day)) frequency -= day
                         else frequency += day
                     },
@@ -282,7 +289,10 @@ fun HabitEditorForm(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             TextButton(
-                onClick = onDelete,
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onDelete()
+                },
                 colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
             ) {
                 Icon(Icons.Filled.Delete, contentDescription = "Delete")
@@ -290,8 +300,12 @@ fun HabitEditorForm(
                 Text("Delete")
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = onCancel) { Text("Cancel") }
+                TextButton(onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onCancel()
+                }) { Text("Cancel") }
                 Button(onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     val finalSource = if (autoSource == "None (Manual)") null else autoSource
                     val target = targetValue.toDoubleOrNull() ?: 0.0
                     val updated = initialHabit.copy(

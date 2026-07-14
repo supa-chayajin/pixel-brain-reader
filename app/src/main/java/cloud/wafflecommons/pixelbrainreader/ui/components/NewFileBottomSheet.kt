@@ -12,6 +12,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -23,16 +25,17 @@ fun NewFileBottomSheet(
 ) {
     // Expressive: Allow partial expansion (half-height)
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+    val haptic = LocalHapticFeedback.current
     var filename by remember { mutableStateOf("") }
     var selectedTemplate by remember { mutableStateOf<String?>(null) } // null = Blank
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        // Expressive Shape: Rounded top corners (28dp)
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(
-            topStart = 28.dp, 
-            topEnd = 28.dp
+        // Expressive Shape: Rounded top corners (extraLarge token, top-only)
+        shape = MaterialTheme.shapes.extraLarge.copy(
+            bottomStart = androidx.compose.foundation.shape.CornerSize(0.dp),
+            bottomEnd = androidx.compose.foundation.shape.CornerSize(0.dp)
         ),
         // Ensure DragHandle is shown (it is default, but explicit for clarity if needed, or just leave default)
         dragHandle = { BottomSheetDefaults.DragHandle() }
@@ -58,7 +61,7 @@ fun NewFileBottomSheet(
                 placeholder = { Text("New file name (e.g. Project/Note)") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                shape = MaterialTheme.shapes.medium,
                 leadingIcon = { Icon(Icons.Outlined.Description, contentDescription = null) }
             )
             Spacer(modifier = Modifier.height(24.dp))
@@ -104,7 +107,10 @@ fun NewFileBottomSheet(
 
             // 3. Create Action
             Button(
-                onClick = { onCreate(filename, selectedTemplate) },
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onCreate(filename, selectedTemplate)
+                },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Create Note")
@@ -122,6 +128,7 @@ private fun TemplateListItem(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     onClick: () -> Unit
 ) {
+    val haptic = LocalHapticFeedback.current
     ListItem(
         headlineContent = { Text(displayName) },
         leadingContent = {
@@ -140,7 +147,10 @@ private fun TemplateListItem(
         modifier = Modifier
             .padding(horizontal = 4.dp, vertical = 2.dp)
             .clip(androidx.compose.foundation.shape.RoundedCornerShape(50)) // Enforce Pill Highlight
-            .clickable(onClick = onClick)
+            .clickable {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onClick()
+            }
     )
 }
 

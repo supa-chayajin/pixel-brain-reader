@@ -23,6 +23,8 @@ import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -48,6 +50,7 @@ fun MorningBriefingSection(
     modifier: Modifier = Modifier
 ) {
     // var isExpanded by remember { mutableStateOf(true) } // DELETED: Stateless now
+    val haptic = LocalHapticFeedback.current
 
     Card(
         modifier = modifier
@@ -56,12 +59,15 @@ fun MorningBriefingSection(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
         ),
-        shape = RoundedCornerShape(16.dp)
+        shape = MaterialTheme.shapes.medium
     ) {
         Column(
             modifier = Modifier
                 .padding(16.dp)
-                .clickable { onToggle() } // Use callback
+                .clickable {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onToggle()
+                } // Use callback
         ) {
             // Header Row
             Row(
@@ -187,7 +193,7 @@ private fun NewsCard(article: cloud.wafflecommons.pixelbrainreader.data.local.en
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
-        shape = RoundedCornerShape(12.dp),
+        shape = MaterialTheme.shapes.small,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         modifier = Modifier.fillMaxWidth().clickable {
@@ -467,7 +473,7 @@ private fun BriefingSkeleton() {
 private fun SkeletonBox(
     width: androidx.compose.ui.unit.Dp,
     height: androidx.compose.ui.unit.Dp,
-    shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(4.dp)
+    shape: androidx.compose.ui.graphics.Shape = MaterialTheme.shapes.extraSmall
 ) {
     // Shimmer derives from onSurfaceVariant so the skeleton reads correctly in
     // both themes — Color.Gray was nearly invisible on the pure-black dark surface.
