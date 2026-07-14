@@ -1,7 +1,12 @@
 package cloud.wafflecommons.pixelbrainreader.ui.settings
 
-import androidx.compose.foundation.clickable
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -14,22 +19,29 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.rounded.CleaningServices
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material3.BasicAlertDialog
-import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.InputChip
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
@@ -42,6 +54,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -57,6 +74,7 @@ fun RemindersScreen(
     val vaultTime by viewModel.vaultTime.collectAsStateWithLifecycle()
     val choresEnabled by viewModel.choresEnabled.collectAsStateWithLifecycle()
     val choresWindows by viewModel.choresWindows.collectAsStateWithLifecycle()
+    val haptic = LocalHapticFeedback.current
 
     // When set, holds the initial "HH:mm" and the callback to run on confirm.
     var timePicker by remember { mutableStateOf<Pair<String, (String) -> Unit>?>(null) }
@@ -79,66 +97,59 @@ fun RemindersScreen(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(24.dp)
+            verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             // --- Private vault reminder ---
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    RowSwitch(
-                        title = "🔒 Private vault reminder",
-                        subtitle = "Daily nudge to write — skipped if you already wrote today.",
-                        checked = vaultEnabled,
-                        onCheckedChange = viewModel::setVaultEnabled
-                    )
-                    if (vaultEnabled) {
-                        ListItem(
-                            modifier = Modifier.clickable {
-                                timePicker = vaultTime to { hhmm -> viewModel.setVaultTime(hhmm) }
+            ReminderSection(
+                icon = Icons.Rounded.Lock,
+                iconTint = MaterialTheme.colorScheme.primary,
+                title = "Private vault reminder",
+                subtitle = "A daily nudge to journal at your chosen time — always fires, never skipped.",
+                checked = vaultEnabled,
+                onCheckedChange = viewModel::setVaultEnabled
+            ) {
+                TimeRow(
+                    label = "Reminder time",
+                    time = vaultTime,
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        timePicker = vaultTime to { hhmm -> viewModel.setVaultTime(hhmm) }
+                    }
+                )
+            }
+
+            // --- Chores & habits reminder ---
+            ReminderSection(
+                icon = Icons.Rounded.CleaningServices,
+                iconTint = MaterialTheme.colorScheme.tertiary,
+                title = "Chores & habits reminder",
+                subtitle = "At each window, a summary of due chores and unfinished habits.",
+                checked = choresEnabled,
+                onCheckedChange = viewModel::setChoresEnabled
+            ) {
+                Text("Time windows", style = MaterialTheme.typography.labelLarge)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    choresWindows.forEach { win ->
+                        InputChip(
+                            selected = false,
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                viewModel.removeChoresWindow(win)
                             },
-                            headlineContent = { Text("Reminder time") },
-                            trailingContent = {
-                                Text(vaultTime, style = MaterialTheme.typography.titleMedium)
+                            label = { Text(win) },
+                            trailingIcon = {
+                                Icon(Icons.Default.Close, contentDescription = "Remove $win", modifier = Modifier.size(16.dp))
                             }
                         )
                     }
                 }
-            }
-
-            // --- Chores & habits reminder ---
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    RowSwitch(
-                        title = "🧹 Chores & habits reminder",
-                        subtitle = "At each window, get a summary of due chores and unfinished habits.",
-                        checked = choresEnabled,
-                        onCheckedChange = viewModel::setChoresEnabled
-                    )
-                    if (choresEnabled) {
-                        Text("Time windows", style = MaterialTheme.typography.labelLarge)
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            choresWindows.forEach { win ->
-                                InputChip(
-                                    selected = false,
-                                    onClick = { viewModel.removeChoresWindow(win) },
-                                    label = { Text(win) },
-                                    trailingIcon = {
-                                        Icon(
-                                            Icons.Default.Close,
-                                            contentDescription = "Remove $win",
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    }
-                                )
-                            }
-                        }
-                        OutlinedButton(onClick = {
-                            timePicker = "09:00" to { hhmm -> viewModel.addChoresWindow(hhmm) }
-                        }) {
-                            Icon(Icons.Default.Add, contentDescription = null)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Add window")
-                        }
-                    }
+                FilledTonalButton(onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    timePicker = "09:00" to { hhmm -> viewModel.addChoresWindow(hhmm) }
+                }) {
+                    Icon(Icons.Default.Add, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Add window")
                 }
             }
         }
@@ -156,23 +167,87 @@ fun RemindersScreen(
     }
 }
 
+/** An Expressive settings card: icon badge + title + switch, with a spring-revealed body. */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun RowSwitch(
+private fun ReminderSection(
+    icon: ImageVector,
+    iconTint: Color,
     title: String,
     subtitle: String,
     checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
+    onCheckedChange: (Boolean) -> Unit,
+    content: @Composable () -> Unit
 ) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
+    val haptic = LocalHapticFeedback.current
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+    ) {
+        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(shape = CircleShape, color = iconTint.copy(alpha = 0.15f), modifier = Modifier.size(44.dp)) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(24.dp))
+                    }
+                }
+                Spacer(Modifier.width(16.dp))
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f)
+                )
+                Switch(
+                    checked = checked,
+                    onCheckedChange = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onCheckedChange(it)
+                    },
+                    thumbContent = if (checked) {
+                        { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(SwitchDefaults.IconSize)) }
+                    } else null
+                )
+            }
             Text(
                 subtitle,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            AnimatedVisibility(
+                visible = checked,
+                enter = expandVertically(MaterialTheme.motionScheme.defaultSpatialSpec()) +
+                    fadeIn(MaterialTheme.motionScheme.defaultEffectsSpec()),
+                exit = shrinkVertically(MaterialTheme.motionScheme.defaultSpatialSpec()) +
+                    fadeOut(MaterialTheme.motionScheme.defaultEffectsSpec())
+            ) {
+                Column(
+                    modifier = Modifier.padding(top = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) { content() }
+            }
         }
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+/** Clickable time selector row — a tonal surface showing the current time. */
+@Composable
+private fun TimeRow(label: String, time: String, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerHighest
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Rounded.Schedule, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.width(12.dp))
+            Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+            Text(time, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+        }
     }
 }
 
@@ -184,6 +259,7 @@ private fun TimePickerDialog(
     onConfirm: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val haptic = LocalHapticFeedback.current
     val parts = initial.split(":")
     val state = rememberTimePickerState(
         initialHour = parts.getOrNull(0)?.toIntOrNull() ?: 20,
@@ -216,6 +292,7 @@ private fun TimePickerDialog(
                     TextButton(onClick = onDismiss) { Text("Cancel") }
                     Spacer(Modifier.width(8.dp))
                     TextButton(onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         onConfirm("%02d:%02d".format(state.hour, state.minute))
                     }) { Text("OK") }
                 }
