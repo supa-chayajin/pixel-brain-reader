@@ -306,7 +306,12 @@ fun FileDetailPane(
                                 Spacer(Modifier.height(8.dp))
 
                                 MarkwonContent(content = displayContent, onWikiLinkClick = onWikiLinkClick)
-                            } 
+
+                                // Reserve bottom space for the floating ExpressiveNavBar, which
+                                // overlays the content and reserves no layout space. Without this
+                                // the last markdown lines scroll under the bar and are unreadable.
+                                Spacer(Modifier.height(ExpressiveNavBarClearance))
+                            }
                             // End View Mode Box
                         }
                     }
