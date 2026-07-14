@@ -242,6 +242,7 @@ fun FileListPane(
 
                         SwipeToDismissBox(
                             state = dismissState,
+                            modifier = Modifier.animateItem(),
                             backgroundContent = {
                                 val direction = dismissState.dismissDirection
                                 val color by animateColorAsState(

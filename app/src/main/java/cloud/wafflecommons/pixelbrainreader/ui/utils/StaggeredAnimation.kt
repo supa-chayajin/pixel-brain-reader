@@ -2,8 +2,9 @@ package cloud.wafflecommons.pixelbrainreader.ui.utils
 
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -15,6 +16,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun StaggeredEntry(
     index: Int,
@@ -33,12 +35,12 @@ fun StaggeredEntry(
 
     val animAlpha by animateFloatAsState(
         targetValue = if (isVisible) 1f else 0f,
-        animationSpec = tween(300),
+        animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
         label = "alpha"
     )
     val animTranslationY by animateDpAsState(
         targetValue = if (isVisible) 0.dp else 50.dp,
-        animationSpec = tween(300),
+        animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
         label = "translationY"
     )
 

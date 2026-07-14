@@ -85,7 +85,7 @@ fun AddChoreBottomSheet(
                         label = { Text("Room") },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .menuAnchor(androidx.compose.material3.MenuAnchorType.PrimaryNotEditable),
+                            .menuAnchor(androidx.compose.material3.ExposedDropdownMenuAnchorType.PrimaryNotEditable),
                         colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
                     )
 

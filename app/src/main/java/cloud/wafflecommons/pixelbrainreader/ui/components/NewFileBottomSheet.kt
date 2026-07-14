@@ -89,12 +89,14 @@ fun NewFileBottomSheet(
                 // Option B: Templates
                 items(availableTemplates, key = { it }) { templateName ->
                     val displayName = formatTemplateName(templateName)
-                    TemplateListItem(
-                        displayName = displayName,
-                        isSelected = selectedTemplate == templateName,
-                        icon = Icons.Outlined.Description,
-                        onClick = { selectedTemplate = templateName }
-                    )
+                    Box(Modifier.animateItem()) {
+                        TemplateListItem(
+                            displayName = displayName,
+                            isSelected = selectedTemplate == templateName,
+                            icon = Icons.Outlined.Description,
+                            onClick = { selectedTemplate = templateName }
+                        )
+                    }
                 }
             }
             

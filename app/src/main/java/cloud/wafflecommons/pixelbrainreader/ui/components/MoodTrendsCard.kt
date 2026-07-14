@@ -1,11 +1,17 @@
 package cloud.wafflecommons.pixelbrainreader.ui.components
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -38,8 +44,17 @@ fun MoodTrendsCard(
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun MoodSparklineContent(trend: List<DailyMoodPoint>) {
+    var started by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { started = true }
+    val revealProgress by animateFloatAsState(
+        targetValue = if (started) 1f else 0f,
+        animationSpec = MaterialTheme.motionScheme.slowSpatialSpec(),
+        label = "moodTrendReveal"
+    )
+
     val primaryColor = MaterialTheme.colorScheme.primary
     val surfaceColor = MaterialTheme.colorScheme.surface
     val onSurfaceColor = MaterialTheme.colorScheme.onSurface
@@ -70,7 +85,7 @@ private fun MoodSparklineContent(trend: List<DailyMoodPoint>) {
             fun getY(score: Float): Float {
                  val normalized = (score - 1f) / 4f
                  val clamped = normalized.coerceIn(0f, 1f)
-                 return (topPadding + graphHeight) - (clamped * graphHeight)
+                 return (topPadding + graphHeight) - (clamped * graphHeight * revealProgress)
             }
 
             trend.forEachIndexed { index, point ->
@@ -110,7 +125,7 @@ private fun MoodSparklineContent(trend: List<DailyMoodPoint>) {
                  val maxBpm = 130f
                  val normalized = (bpm.toFloat() - minBpm) / (maxBpm - minBpm)
                  val clamped = normalized.coerceIn(0f, 1f)
-                 return (topPadding + graphHeight) - (clamped * graphHeight)
+                 return (topPadding + graphHeight) - (clamped * graphHeight * revealProgress)
             }
             
             val hrPath = Path()

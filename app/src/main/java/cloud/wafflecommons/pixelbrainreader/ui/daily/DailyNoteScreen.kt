@@ -36,6 +36,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyTaskEntity
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.TimelineEntryEntity
+import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
 import cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar
 import cloud.wafflecommons.pixelbrainreader.ui.components.MarkdownVisualTransformation
 import cloud.wafflecommons.pixelbrainreader.ui.journal.DailyNoteHeader
@@ -697,7 +698,7 @@ private fun TaskItem(task: DailyTaskEntity, onToggle: (String, Boolean) -> Unit,
             modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(
+            CortexIconButton(
                 onClick = { onToggle(task.id, !task.isDone) },
                 modifier = Modifier.size(24.dp)
             ) {
@@ -883,13 +884,8 @@ private fun QuickCaptureSheet(
     onSave: (String, Int) -> Unit
 ) {
     var content by remember { mutableStateOf("") }
-    val colors = listOf(
-        MaterialTheme.colorScheme.surfaceVariant,
-        Color(0xFFFFB4AB), // Pastel Red
-        Color(0xFFC2E7FF), // Pastel Blue
-        Color(0xFFD3EBCD), // Pastel Green
-        Color(0xFFF3E5F5)  // Pastel Purple
-    )
+    val colors = listOf(MaterialTheme.colorScheme.surfaceVariant) +
+        cloud.wafflecommons.pixelbrainreader.ui.theme.NotePastels.swatches
     var selectedColor by remember { mutableStateOf(colors[0]) }
     val focusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
 
@@ -990,7 +986,9 @@ private fun ScratchpadWidget(
             contentPadding = PaddingValues(end = 16.dp)
         ) {
             items(scraps, key = { it.id }) { scrap ->
-                ScratchItem(scrap, onDelete, onPromote)
+                Box(Modifier.animateItem()) {
+                    ScratchItem(scrap, onDelete, onPromote)
+                }
             }
         }
     }
@@ -1027,7 +1025,7 @@ private fun ScratchItem(
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = { onDelete(scrap) }) {
+                CortexIconButton(onClick = { onDelete(scrap) }) {
                     Icon(
                         imageVector = Icons.Outlined.Delete,
                         contentDescription = "Delete",
@@ -1035,7 +1033,7 @@ private fun ScratchItem(
                         tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                     )
                 }
-                IconButton(onClick = { onPromote(scrap) }) {
+                CortexIconButton(onClick = { onPromote(scrap) }) {
                     Icon(
                         imageVector = Icons.Default.Upgrade,
                         contentDescription = "Promote to Ideas",

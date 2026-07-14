@@ -23,6 +23,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cloud.wafflecommons.pixelbrainreader.data.model.HabitConfig
 import cloud.wafflecommons.pixelbrainreader.data.model.HabitType
+import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.util.UUID
@@ -46,7 +47,7 @@ fun HabitConfigScreen(
             TopAppBar(
                 title = { Text("Manage Habits & Automations") },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
+                    CortexIconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
@@ -76,7 +77,7 @@ fun HabitConfigScreen(
                         editingHabit = habit
                         isSheetOpen = true
                     },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth().animateItem()
                 ) {
                     Column(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -254,7 +255,7 @@ fun HabitEditorForm(
                 readOnly = true,
                 label = { Text("Auto Source (Health Connect)") },
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedAutoSource) },
-                modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable, true).fillMaxWidth()
+                modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, true).fillMaxWidth()
             )
             ExposedDropdownMenu(
                 expanded = expandedAutoSource,

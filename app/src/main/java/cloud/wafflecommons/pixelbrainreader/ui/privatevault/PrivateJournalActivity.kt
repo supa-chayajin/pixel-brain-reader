@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import cloud.wafflecommons.pixelbrainreader.ui.components.ComposeCortexEditor
+import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
 import cloud.wafflecommons.pixelbrainreader.ui.theme.PixelBrainReaderTheme
 import dagger.hilt.android.AndroidEntryPoint
 import java.io.File
@@ -191,7 +192,11 @@ fun PrivateVaultScreen(
         )
     }
     
-    if (state.isLocked) {
+    AnimatedVisibility(
+        visible = state.isLocked,
+        enter = fadeIn() + slideInVertically(),
+        exit = fadeOut() + slideOutVertically()
+    ) {
         // --- Locked Screen ---
         Box(
             modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface), 
@@ -260,7 +265,12 @@ fun PrivateVaultScreen(
                 }
             }
         }
-    } else {
+    }
+    AnimatedVisibility(
+        visible = !state.isLocked,
+        enter = fadeIn() + slideInVertically(),
+        exit = fadeOut() + slideOutVertically()
+    ) {
         // --- Unlocked Content ---
         if (state.selectedFile != null) {
              // Editor Mode
@@ -294,7 +304,7 @@ fun PrivateVaultScreen(
                              }
                          },
                          navigationIcon = {
-                             IconButton(onClick = onBack) {
+                             CortexIconButton(onClick = onBack) {
                                  Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
                              }
                          }
@@ -339,7 +349,9 @@ fun PrivateVaultScreen(
                          horizontalArrangement = Arrangement.spacedBy(16.dp)
                      ) {
                          items(state.files, key = { it.name }) { file ->
-                             VaultFileItem(file = file, onClick = { viewModel.openNote(file) })
+                             Box(Modifier.animateItem()) {
+                                 VaultFileItem(file = file, onClick = { viewModel.openNote(file) })
+                             }
                          }
                      }
                  }
@@ -442,7 +454,7 @@ fun PrivateEditor(
                     ) 
                 },
                 navigationIcon = {
-                    IconButton(onClick = onClose) {
+                    CortexIconButton(onClick = onClose) {
                          Icon(Icons.Default.Close, "Close")
                     }
                 },

@@ -2,7 +2,6 @@ package cloud.wafflecommons.pixelbrainreader.ui.lifestats
 
 import android.graphics.Paint
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -28,6 +27,7 @@ import cloud.wafflecommons.pixelbrainreader.data.model.RpgAttribute
 import kotlin.math.cos
 import kotlin.math.sin
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun RadarChart(
     stats: Map<RpgAttribute, Float>,
@@ -38,11 +38,12 @@ fun RadarChart(
 ) {
     // Animate values from 0f to target
     val animatedProgress = remember { Animatable(0f) }
-    
+    val polygonSpec = MaterialTheme.motionScheme.slowSpatialSpec<Float>()
+
     LaunchedEffect(stats) {
         animatedProgress.animateTo(
             targetValue = 1f,
-            animationSpec = tween(durationMillis = 1000)
+            animationSpec = polygonSpec
         )
     }
 
