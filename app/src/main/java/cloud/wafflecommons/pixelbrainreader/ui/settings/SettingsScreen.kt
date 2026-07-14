@@ -355,27 +355,30 @@ fun SettingsScreen(
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         onNavigateToHabitConfig()
                     },
-                    headlineContent = { Text("Manage Habits & Automations") },
                     leadingContent = { Icon(Icons.Rounded.DateRange, contentDescription = null) }
-                )
+                ) {
+                    Text("Manage Habits & Automations")
+                }
 
                 ListItem(
                     modifier = Modifier.clickable {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         onNavigateToHomeConfig()
                     },
-                    headlineContent = { Text("Manage House & Chores") },
                     leadingContent = { Icon(Icons.Rounded.CleaningServices, contentDescription = null) }
-                )
+                ) {
+                    Text("Manage House & Chores")
+                }
 
                 ListItem(
                     modifier = Modifier.clickable {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         onNavigateToReminders()
                     },
-                    headlineContent = { Text("Reminders & Notifications") },
                     leadingContent = { Icon(Icons.Filled.Notifications, contentDescription = null) }
-                )
+                ) {
+                    Text("Reminders & Notifications")
+                }
 
                 Spacer(Modifier.height(8.dp))
                 
