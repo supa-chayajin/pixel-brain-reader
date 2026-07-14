@@ -1,9 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.ui.main
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -116,6 +113,18 @@ object Screen {
     const val ROUTE_HOME_CONFIG = "home_config"
 }
 
+/** Height of the floating [ExpressiveNavBar]'s tab surface (single source of truth). */
+internal val ExpressiveNavBarHeight = 64.dp
+
+/**
+ * Bottom clearance that scrollable content must reserve so its last lines are not
+ * occluded by the floating [ExpressiveNavBar]. The bar floats over content and
+ * reserves no layout space, so = bar height + its 16.dp vertical padding + 8.dp
+ * breathing room. The system nav-bar inset is NOT included here (it is already
+ * applied by the Home Scaffold's content padding).
+ */
+internal val ExpressiveNavBarClearance = ExpressiveNavBarHeight + 24.dp
+
 /**
  * Material 3 Expressive floating navigation bar modeled on the new Google Finance
  * app: a rounded floating group of regular tabs + a separate, emphasized "Daily"
@@ -168,7 +177,7 @@ private fun ExpressiveNavBar(
             color = MaterialTheme.colorScheme.surfaceContainerHighest,
             modifier = Modifier
                 .weight(1f)
-                .height(64.dp)
+                .height(ExpressiveNavBarHeight)
                 // Theme-coloured (primary) elevation shadow. The default BLACK shadow gets
                 // inverted into an ugly white halo under a device force-dark override, so we
                 // set the spot/ambient colours explicitly to the accent.
@@ -381,7 +390,30 @@ fun MainScreen(
     moodViewModel: cloud.wafflecommons.pixelbrainreader.ui.mood.MoodViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val navigator = rememberListDetailPaneScaffoldNavigator<Any>()
+
+    // Window size + pane directive are computed BEFORE the navigator so its
+    // scaffoldValue is derived from the SAME (focus-aware) directive the scaffold
+    // uses. Otherwise focus mode sets maxHorizontalPartitions=1 on the scaffold only,
+    // while the navigator keeps the base 2-partition directive → both panes stay
+    // Expanded and the detail never takes the full width.
+    val windowAdaptiveInfo: WindowAdaptiveInfo = currentWindowAdaptiveInfo()
+    val windowSizeClass = windowAdaptiveInfo.windowSizeClass
+    val isLargeScreen = windowSizeClass.isWidthAtLeastBreakpoint(WindowSizeClass.WIDTH_DP_MEDIUM_LOWER_BOUND)
+    val baseDirective = calculatePaneScaffoldDirective(windowAdaptiveInfo)
+    val finalDirective = if (uiState.isFocusMode && isLargeScreen) {
+        baseDirective.copy(
+            maxHorizontalPartitions = 1,
+            horizontalPartitionSpacerSize = 0.dp,
+            verticalPartitionSpacerSize = 0.dp
+        )
+    } else {
+        baseDirective.copy(
+            horizontalPartitionSpacerSize = 8.dp,
+            defaultPanePreferredWidth = uiState.listPaneWidth.dp // DYNAMIC WIDTH
+        )
+    }
+
+    val navigator = rememberListDetailPaneScaffoldNavigator<Any>(scaffoldDirective = finalDirective)
     val scope = rememberCoroutineScope()
     // context is used for Toasts and Activity control. Ensure single declaration.
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -482,10 +514,6 @@ fun MainScreen(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
-    val windowAdaptiveInfo: WindowAdaptiveInfo = currentWindowAdaptiveInfo()
-    val windowSizeClass = windowAdaptiveInfo.windowSizeClass
-    val isLargeScreen = windowSizeClass.isWidthAtLeastBreakpoint(WindowSizeClass.WIDTH_DP_MEDIUM_LOWER_BOUND)
-
     // Hide the navigation bar while the keyboard is open. NavigationSuiteScaffold
     // otherwise reserves the app nav-bar height for content, and because imePadding
     // uses the full IME inset, the input floats a nav-bar-height above the keyboard
@@ -505,20 +533,6 @@ fun MainScreen(
         "${now.format(formatter)}.md"
     }
     val isViewingDailyNote = uiState.selectedFileName == todayName
-
-    val baseDirective = calculatePaneScaffoldDirective(windowAdaptiveInfo)
-    val finalDirective = if (uiState.isFocusMode && isLargeScreen) {
-        baseDirective.copy(
-            maxHorizontalPartitions = 1,
-            horizontalPartitionSpacerSize = 0.dp,
-            verticalPartitionSpacerSize = 0.dp
-        )
-    } else {
-        baseDirective.copy(
-            horizontalPartitionSpacerSize = 8.dp,
-            defaultPanePreferredWidth = uiState.listPaneWidth.dp // DYNAMIC WIDTH
-        )
-    }
 
     // -- NAVIGATION LOGIC --
     // Mobile (Compact): Default to List. Navigate to Detail only if file selected.
@@ -844,12 +858,11 @@ fun MainScreen(
                                 directive = finalDirective,
                                 value = navigator.scaffoldValue,
                                 listPane = {
+                                    // The scaffold's directive/scaffoldValue now hide this pane
+                                    // entirely in focus mode (List = AdaptStrategy.Hide), so the
+                                    // AnimatedPane transition is all that's needed — no inner
+                                    // AnimatedVisibility (which would double the exit animation).
                                     AnimatedPane {
-                                    AnimatedVisibility(
-                                        visible = !uiState.isFocusMode || !isLargeScreen,
-                                        enter = slideInHorizontally(),
-                                        exit = slideOutHorizontally()
-                                    ) {
                                         Row(modifier = Modifier.fillMaxSize()) {
                                             Box(modifier = Modifier.weight(1f)) {
                                                 FileListPane(
@@ -888,7 +901,6 @@ fun MainScreen(
                                                 )
                                             }
                                         }
-                                    }
                                     }
                                 },
                                 detailPane = {
