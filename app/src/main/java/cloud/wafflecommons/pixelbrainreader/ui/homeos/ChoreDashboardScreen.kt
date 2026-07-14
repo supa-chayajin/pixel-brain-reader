@@ -17,10 +17,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
 import cloud.wafflecommons.pixelbrainreader.ui.theme.SemanticPalette
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import cloud.wafflecommons.pixelbrainreader.ui.theme.NavBarClearance
@@ -37,7 +36,6 @@ fun ChoreDashboardScreen(
     val isRefreshing = syncState is SyncState.Syncing
 
     val configuration = LocalConfiguration.current
-    val haptic = LocalHapticFeedback.current
 
     // Adaptive: More granular columns for foldables/large tablets
     val columns = when {
@@ -106,13 +104,14 @@ fun ChoreDashboardScreen(
                         }
                     } else {
                         items(chores, key = { it.entity.id }) { choreModel ->
-                            ChoreCard(
-                                chore = choreModel,
-                                onDoItClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    viewModel.doChore(choreModel.entity.id)
-                                }
-                            )
+                            Box(Modifier.animateItem()) {
+                                ChoreCard(
+                                    chore = choreModel,
+                                    onDoItClick = {
+                                        viewModel.doChore(choreModel.entity.id)
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -209,9 +208,9 @@ fun ChoreCard(chore: ChoreUiModel, onDoItClick: () -> Unit) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                IconButton(
+                CortexIconButton(
                     onClick = onDoItClick,
-                    enabled = targetProgress > 0.1f 
+                    enabled = targetProgress > 0.1f
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.CheckCircle,

@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cloud.wafflecommons.pixelbrainreader.data.gamification.Attribute
+import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
 import cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar
 import cloud.wafflecommons.pixelbrainreader.ui.utils.HapticHelper.performHapticClick
 import cloud.wafflecommons.pixelbrainreader.ui.utils.HapticHelper.performHapticSuccess
@@ -41,7 +42,7 @@ fun GamificationSettingsScreen(
             CortexTopAppBar(
                 title = "RPG Engine Rules",
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
+                    CortexIconButton(onClick = onNavigateBack) {
                         Icon(Icons.Default.Close, contentDescription = "Close")
                     }
                 }
@@ -147,11 +148,11 @@ fun GamificationSettingsScreen(
                                 onClick = { },
                                 label = { Text("$tag ➡️ ${attribute.name}") },
                                 trailingIcon = {
-                                    IconButton(
+                                    CortexIconButton(
                                         modifier = Modifier.size(16.dp),
-                                        onClick = { 
+                                        onClick = {
                                             view.performHapticClick()
-                                            viewModel.removeTagMapping(tag) 
+                                            viewModel.removeTagMapping(tag)
                                         }
                                     ) {
                                         Icon(Icons.Default.Close, "Remove")
@@ -192,7 +193,7 @@ fun GamificationSettingsScreen(
                                 label = { Text("Stat") },
                                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedDropdown) },
                                 modifier = Modifier
-                                    .menuAnchor(MenuAnchorType.PrimaryNotEditable, true)
+                                    .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, true)
                                     .width(120.dp)
                             )
                             ExposedDropdownMenu(
@@ -211,7 +212,7 @@ fun GamificationSettingsScreen(
                             }
                         }
 
-                        IconButton(
+                        CortexIconButton(
                             onClick = {
                                 if (newTagText.isNotBlank()) {
                                     view.performHapticSuccess()

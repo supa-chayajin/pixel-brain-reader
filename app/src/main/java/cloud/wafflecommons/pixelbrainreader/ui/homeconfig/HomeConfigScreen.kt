@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.ChoreEntity
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.HomeRoomEntity
+import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
 import java.time.LocalDate
 import java.util.UUID
 import kotlin.math.roundToInt
@@ -53,7 +54,7 @@ fun HomeConfigScreen(
             TopAppBar(
                 title = { Text("Home Configuration") },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
+                    CortexIconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
                     }
                 }
@@ -110,9 +111,10 @@ fun HomeConfigScreen(
                         FilterChip(
                             selected = true,
                             onClick = { showRoomDialog = room },
+                            modifier = Modifier.animateItem(),
                             label = { Text("${room.name} ($choreCount)") },
                             trailingIcon = {
-                                IconButton(
+                                CortexIconButton(
                                     onClick = { roomToDelete = room },
                                     modifier = Modifier.size(18.dp)
                                 ) {
@@ -167,15 +169,17 @@ fun HomeConfigScreen(
                             supportingContent = { Text("Every ${chore.frequencyDays} days • ${chore.baseEffort} XP") },
                             trailingContent = {
                                 Row {
-                                    IconButton(onClick = { showChoreSheet = chore }) {
+                                    CortexIconButton(onClick = { showChoreSheet = chore }) {
                                         Icon(Icons.Rounded.Edit, contentDescription = "Edit Chore")
                                     }
-                                    IconButton(onClick = { choreToDelete = chore }) {
+                                    CortexIconButton(onClick = { choreToDelete = chore }) {
                                         Icon(Icons.Rounded.Delete, contentDescription = "Delete Chore", tint = MaterialTheme.colorScheme.error)
                                     }
                                 }
                             },
-                            modifier = Modifier.clickable { showChoreSheet = chore }
+                            modifier = Modifier
+                                .clickable { showChoreSheet = chore }
+                                .animateItem()
                         )
                     }
                 }
@@ -340,7 +344,7 @@ fun HomeConfigScreen(
                         label = { Text("Room") },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .menuAnchor(androidx.compose.material3.MenuAnchorType.PrimaryNotEditable),
+                            .menuAnchor(androidx.compose.material3.ExposedDropdownMenuAnchorType.PrimaryNotEditable),
                         colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
                     )
 

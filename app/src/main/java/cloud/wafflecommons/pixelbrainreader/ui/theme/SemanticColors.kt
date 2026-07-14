@@ -56,3 +56,18 @@ object ChartPalette {
     val ActiveMinutes = Color(0xFFFF9800) // Orange (matches StreakAccent — motion = momentum)
     val Completion = Color(0xFF4CAF50)   // Green (completion = positive)
 }
+
+/**
+ * Pastel swatches offered in the quick-capture note colour picker. Fixed
+ * (non-theme-adaptive) on purpose so a saved note keeps its colour across
+ * light/dark. Centralized here instead of inlined in DailyNoteScreen.
+ */
+object NotePastels {
+    val Red = Color(0xFFFFB4AB)
+    val Blue = Color(0xFFC2E7FF)
+    val Green = Color(0xFFD3EBCD)
+    val Purple = Color(0xFFF3E5F5)
+
+    /** The picker's fixed swatches (a theme surface default is prepended at the call site). */
+    val swatches = listOf(Red, Blue, Green, Purple)
+}

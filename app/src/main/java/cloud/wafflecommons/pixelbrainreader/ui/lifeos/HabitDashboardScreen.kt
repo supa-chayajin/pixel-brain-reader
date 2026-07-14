@@ -14,6 +14,7 @@ import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material3.*
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.text.style.TextAlign
@@ -35,7 +36,7 @@ import cloud.wafflecommons.pixelbrainreader.data.model.HabitStatus
 import cloud.wafflecommons.pixelbrainreader.data.model.HabitType
 import cloud.wafflecommons.pixelbrainreader.ui.theme.SemanticPalette
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun HabitDashboardScreen(
     onNavigateBack: () -> Unit,
@@ -74,16 +75,15 @@ fun HabitDashboardScreen(
     ) { padding ->
         cloud.wafflecommons.pixelbrainreader.ui.components.PullToRefreshBox(
             isRefreshing = isRefreshing,
-            onRefresh = { 
-                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                viewModel.forceSyncEverything() 
+            onRefresh = {
+                viewModel.forceSyncEverything()
             },
             modifier = Modifier.fillMaxSize().padding(padding)
         ) {
             if (state.isLoading) {
                 Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator()
+                        LoadingIndicator()
                         Spacer(Modifier.height(16.dp))
                         Text("Loading habits from Vault...")
                     }
@@ -140,10 +140,13 @@ fun HabitDashboardScreen(
                         // Habits in Category (Grid Layout)
                         items(count = habits.size, key = { index -> habits[index].config.id }) { index ->
                             val habitStats = habits[index]
-                            cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = index + 1) {
+                            cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = index + 1, modifier = Modifier.animateItem()) {
                                 HabitCard(
                                     habit = habitStats,
-                                    onToggle = { viewModel.toggleHabit(habitStats.config.id) },
+                                    onToggle = {
+                                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                                        viewModel.toggleHabit(habitStats.config.id)
+                                    },
                                     onUpdateValue = { newVal -> viewModel.updateHabitValue(habitStats.config.id, newVal) }
                                 )
                             }

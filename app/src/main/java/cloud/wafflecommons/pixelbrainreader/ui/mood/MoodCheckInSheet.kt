@@ -24,6 +24,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -236,6 +238,7 @@ fun MoodSelector(
     onMoodSelected: (Int) -> Unit,
     moods: List<Pair<Int, String>>
 ) {
+    val haptic = LocalHapticFeedback.current
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
@@ -281,7 +284,10 @@ fun MoodSelector(
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null
-                        ) { onMoodSelected(score) },
+                        ) {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onMoodSelected(score)
+                        },
                     contentAlignment = Alignment.Center
                 ) {
                     Text(

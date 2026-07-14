@@ -1,10 +1,10 @@
 package cloud.wafflecommons.pixelbrainreader.ui.components
 
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -13,6 +13,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun CortexBouncyCheckbox(
     checked: Boolean,
@@ -29,7 +30,7 @@ fun CortexBouncyCheckbox(
     
     val scale by animateFloatAsState(
         targetValue = if (checked) 1.1f else 1.0f,
-        animationSpec = tween(durationMillis = 200),
+        animationSpec = MaterialTheme.motionScheme.fastSpatialSpec(),
         label = "Checkbox Scale"
     )
 

@@ -16,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry
 
 @Composable
 fun WelcomeScreen(modifier: Modifier = Modifier) {
@@ -24,24 +25,30 @@ fun WelcomeScreen(modifier: Modifier = Modifier) {
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(
-                imageVector = Icons.Rounded.AutoAwesome,
-                contentDescription = null,
-                modifier = Modifier.size(150.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-            )
+            StaggeredEntry(index = 0) {
+                Icon(
+                    imageVector = Icons.Rounded.AutoAwesome,
+                    contentDescription = null,
+                    modifier = Modifier.size(150.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                )
+            }
             Spacer(modifier = Modifier.height(24.dp))
-            Text(
-                text = "Welcome to Pixel Brain",
-                style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.onSurface
-            )
+            StaggeredEntry(index = 1) {
+                Text(
+                    text = "Welcome to Pixel Brain",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
             Spacer(modifier = Modifier.height(16.dp))
-            Text(
-                text = "You can analyze a folder to get started.",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            StaggeredEntry(index = 2) {
+                Text(
+                    text = "You can analyze a folder to get started.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }

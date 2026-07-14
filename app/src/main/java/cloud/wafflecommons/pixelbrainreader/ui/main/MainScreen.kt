@@ -63,11 +63,14 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.IconButton
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
 import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.adaptive.WindowAdaptiveInfo
 import androidx.compose.material3.adaptive.currentWindowAdaptiveInfo
+import androidx.compose.material3.adaptive.layout.AnimatedPane
 import androidx.compose.material3.adaptive.layout.ListDetailPaneScaffold
 import androidx.compose.material3.adaptive.layout.ListDetailPaneScaffoldRole
 import androidx.compose.material3.adaptive.layout.calculatePaneScaffoldDirective
@@ -126,6 +129,7 @@ private fun ExpressiveNavBar(
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val haptic = LocalHapticFeedback.current
     data class NavDest(val route: String, val icon: ImageVector, val label: String, val selected: Boolean)
 
     // First three = the folded set (Repo, Habits, Chores). Unfolded reveals the rest.
@@ -275,7 +279,10 @@ private fun ExpressiveNavBar(
                     BorderStroke(1.5.dp, accent.copy(alpha = borderAlpha)),
                     RoundedCornerShape(barRadius)
                 )
-                .clickable { if (!dailySelected) onSelect(Screen.DailyNote) }
+                .clickable {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    if (!dailySelected) onSelect(Screen.DailyNote)
+                }
                 .padding(horizontal = 28.dp),
             contentAlignment = Alignment.Center
         ) {
@@ -296,6 +303,7 @@ private fun NavPiece(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val haptic = LocalHapticFeedback.current
     // Cross-fade the icon/label colour instead of snapping.
     val tint by animateColorAsState(
         targetValue = if (selected) MaterialTheme.colorScheme.onSecondaryContainer
@@ -318,7 +326,10 @@ private fun NavPiece(
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
-                onClick = onClick
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onClick()
+                }
             ),
         contentAlignment = Alignment.Center
     ) {
@@ -354,6 +365,7 @@ fun MainScreen(
     val scope = rememberCoroutineScope()
     // context is used for Toasts and Activity control. Ensure single declaration.
     val context = androidx.compose.ui.platform.LocalContext.current
+    val haptic = LocalHapticFeedback.current
     
     // --- Global Sensory Polish (RFC-008) ---
     // Inject via Hilt manually if not provided in constructor, or use EntryPoint. 
@@ -584,7 +596,10 @@ fun MainScreen(
             icon = { Icon(Icons.Rounded.Delete, contentDescription = null) },
             confirmButton = {
                 androidx.compose.material3.TextButton(
-                    onClick = { viewModel.confirmDeleteFile() },
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        viewModel.confirmDeleteFile()
+                    },
                     colors = androidx.compose.material3.ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 ) {
                     Text("Delete")
@@ -606,7 +621,24 @@ fun MainScreen(
             androidx.navigation.compose.NavHost(
             navController = navController,
             startDestination = Screen.DailyNote,
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxSize(),
+            // Expressive fade-through between top-level destinations (fade + subtle scale).
+            enterTransition = {
+                androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(280, 40)) +
+                    androidx.compose.animation.scaleIn(
+                        initialScale = 0.94f,
+                        animationSpec = androidx.compose.animation.core.tween(280, 40)
+                    )
+            },
+            exitTransition = { androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(180)) },
+            popEnterTransition = {
+                androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(280, 40)) +
+                    androidx.compose.animation.scaleIn(
+                        initialScale = 0.94f,
+                        animationSpec = androidx.compose.animation.core.tween(280, 40)
+                    )
+            },
+            popExitTransition = { androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(180)) }
         ) {
             composable(Screen.Home) {
                 // Home with ListDetailPaneScaffold, Breadcrumbs, and Global TopBar
@@ -667,7 +699,7 @@ fun MainScreen(
                                         // Clear/Close Icon inside the text field
                                         trailingIcon = {
                                              if (uiState.searchQuery.isNotEmpty()) {
-                                                 IconButton(onClick = { viewModel.onSearchQueryChanged("") }) {
+                                                 CortexIconButton(onClick = { viewModel.onSearchQueryChanged("") }) {
                                                      Icon(Icons.Default.SearchOff, "Clear")
                                                  }
                                              }
@@ -792,6 +824,7 @@ fun MainScreen(
                                 directive = finalDirective,
                                 value = navigator.scaffoldValue,
                                 listPane = {
+                                    AnimatedPane {
                                     AnimatedVisibility(
                                         visible = !uiState.isFocusMode || !isLargeScreen,
                                         enter = slideInHorizontally(),
@@ -836,8 +869,10 @@ fun MainScreen(
                                             }
                                         }
                                     }
+                                    }
                                 },
                                 detailPane = {
+                                    AnimatedPane {
                                     if (uiState.selectedFileName != null) {
                                         FileDetailPane(
                                             content = uiState.unsavedContent
@@ -858,6 +893,7 @@ fun MainScreen(
                                         )
                                     } else {
                                         cloud.wafflecommons.pixelbrainreader.ui.components.WelcomeScreen()
+                                    }
                                     }
                                 }
                             )

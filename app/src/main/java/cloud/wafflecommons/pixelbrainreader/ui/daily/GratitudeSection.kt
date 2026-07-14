@@ -13,6 +13,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.GratitudeEntity
+import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
 import cloud.wafflecommons.pixelbrainreader.ui.utils.HapticHelper
 
 import androidx.compose.ui.platform.LocalView
@@ -55,7 +56,7 @@ fun GratitudeSection(
                 placeholder = { Text("Un petit moment positif ?") },
                 singleLine = true,
                 trailingIcon = {
-                    IconButton(
+                    CortexIconButton(
                         onClick = {
                             if (text.isNotBlank()) {
                                 onAddGratitude(text)

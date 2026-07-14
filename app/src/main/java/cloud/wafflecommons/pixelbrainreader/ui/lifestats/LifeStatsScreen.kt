@@ -1,7 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.ui.lifestats
 
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -13,7 +12,7 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.TaskAlt
 import androidx.compose.material3.*
-import androidx.compose.material3.*
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,7 +31,7 @@ import cloud.wafflecommons.pixelbrainreader.ui.components.MoodTrendsCard
 import cloud.wafflecommons.pixelbrainreader.ui.daily.DailyMoodPoint
 import cloud.wafflecommons.pixelbrainreader.ui.theme.ChartPalette
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun LifeStatsScreen(
     onNavigateBack: () -> Unit,
@@ -43,7 +42,6 @@ fun LifeStatsScreen(
     val globalCompletion by viewModel.globalCompletionState.collectAsStateWithLifecycle()
     val syncState by viewModel.isSyncing.collectAsStateWithLifecycle()
     val isRefreshing = syncState is SyncState.Syncing
-    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
 
     Scaffold(
         topBar = {
@@ -52,15 +50,12 @@ fun LifeStatsScreen(
     ) { innerPadding ->
         cloud.wafflecommons.pixelbrainreader.ui.components.PullToRefreshBox(
             isRefreshing = isRefreshing,
-            onRefresh = { 
-                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                viewModel.triggerSync() 
-            },
+            onRefresh = { viewModel.triggerSync() },
             modifier = Modifier.fillMaxSize().padding(innerPadding)
         ) {
             if (uiState.isLoading) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
+                    LoadingIndicator()
                 }
             } else {
                 LazyVerticalGrid(
@@ -158,9 +153,16 @@ private fun HealthOverviewCard(uiState: LifeStatsUiState) {
     }
 }
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun HealthProgressRow(title: String, value: String, progress: Float, color: Color) {
-    val animatedProgress by animateFloatAsState(targetValue = progress.coerceIn(0f, 1f), animationSpec = tween(1000))
+    var progressTarget by remember { mutableStateOf(0f) }
+    LaunchedEffect(progress) { progressTarget = progress.coerceIn(0f, 1f) }
+    val animatedProgress by animateFloatAsState(
+        targetValue = progressTarget,
+        animationSpec = MaterialTheme.motionScheme.slowSpatialSpec<Float>(),
+        label = "healthProgress"
+    )
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.weight(0.4f)) {
             Text(text = title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
@@ -213,11 +215,20 @@ private fun LegendItem(label: String, color: Color, value: String) {
     }
 }
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun ActivityRings(tasksProgress: Float, habitsProgress: Float, choresProgress: Float) {
-    val animTask by animateFloatAsState(targetValue = tasksProgress, animationSpec = tween(1500))
-    val animHabit by animateFloatAsState(targetValue = habitsProgress, animationSpec = tween(1500))
-    val animChore by animateFloatAsState(targetValue = choresProgress, animationSpec = tween(1500))
+    var taskTarget by remember { mutableStateOf(0f) }
+    var habitTarget by remember { mutableStateOf(0f) }
+    var choreTarget by remember { mutableStateOf(0f) }
+    LaunchedEffect(tasksProgress, habitsProgress, choresProgress) {
+        taskTarget = tasksProgress
+        habitTarget = habitsProgress
+        choreTarget = choresProgress
+    }
+    val animTask by animateFloatAsState(targetValue = taskTarget, animationSpec = MaterialTheme.motionScheme.slowSpatialSpec<Float>(), label = "ringTask")
+    val animHabit by animateFloatAsState(targetValue = habitTarget, animationSpec = MaterialTheme.motionScheme.slowSpatialSpec<Float>(), label = "ringHabit")
+    val animChore by animateFloatAsState(targetValue = choreTarget, animationSpec = MaterialTheme.motionScheme.slowSpatialSpec<Float>(), label = "ringChore")
 
     Canvas(modifier = Modifier.fillMaxSize()) {
         val strokeW = 14.dp.toPx()

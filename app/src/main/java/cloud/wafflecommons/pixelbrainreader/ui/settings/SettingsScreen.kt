@@ -28,12 +28,16 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import cloud.wafflecommons.pixelbrainreader.data.ai.NanoState
 import cloud.wafflecommons.pixelbrainreader.data.repository.AppThemeConfig
 import cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
+import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
+import cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -65,6 +69,7 @@ fun SettingsScreen(
     val scrollState = rememberScrollState()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
 
     // Surface gating errors from the AI selection (e.g. picking Local AI before
     // the model is downloaded) as a snackbar.
@@ -131,7 +136,7 @@ fun SettingsScreen(
             cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
                 title = "Settings",
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    CortexIconButton(onClick = onBack) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back"
@@ -151,6 +156,7 @@ fun SettingsScreen(
         ) {
             
             // 0. Integrations (Health Connect)
+            StaggeredEntry(index = 0) {
             SettingsSection(
                 title = "Integrations",
                 icon = Icons.Default.HealthAndSafety
@@ -163,6 +169,7 @@ fun SettingsScreen(
                          containerColor = if (isConnected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
                      ),
                      onClick = {
+                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                          if (!isConnected) {
                              if (status == HealthConnectClient.SDK_UNAVAILABLE || status == HealthConnectClient.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED) {
                                  // Prompt install (simplified)
@@ -212,8 +219,10 @@ fun SettingsScreen(
                      }
                  }
             }
+            }
 
             // 0b. Google Ecosystem
+            StaggeredEntry(index = 1) {
             SettingsSection(
                 title = "Écosystème Google",
                 icon = Icons.Rounded.AccountCircle
@@ -226,6 +235,7 @@ fun SettingsScreen(
                         containerColor = if (isLinked) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant
                     ),
                     onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         if (!isEnabled) {
                             viewModel.connectGoogle(activity)
                         } else {
@@ -252,6 +262,7 @@ fun SettingsScreen(
                         Switch(
                             checked = isEnabled,
                             onCheckedChange = { checked ->
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 if (checked) {
                                     viewModel.connectGoogle(activity)
                                 } else {
@@ -262,8 +273,10 @@ fun SettingsScreen(
                     }
                 }
             }
+            }
 
             // 1. Intelligence Section
+            StaggeredEntry(index = 2) {
             SettingsSection(
                 title = "Intelligence",
                 icon = Icons.Default.Psychology
@@ -297,8 +310,10 @@ fun SettingsScreen(
                     }
                 }
             }
+            }
 
             // 2. Interface Section
+            StaggeredEntry(index = 3) {
             SettingsSection(
                 title = "Interface",
                 icon = Icons.Default.BrightnessMedium
@@ -310,7 +325,10 @@ fun SettingsScreen(
                     AppThemeConfig.entries.forEach { config ->
                         FilterChip(
                             selected = (uiState.themeConfig == config),
-                            onClick = { viewModel.updateTheme(config) },
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                viewModel.updateTheme(config)
+                            },
                             label = { 
                                 Text(
                                     when(config) {
@@ -324,26 +342,37 @@ fun SettingsScreen(
                     }
                 }
             }
+            }
 
             // 3. Life OS & Gamification
+            StaggeredEntry(index = 4) {
             SettingsSection(
                 title = "Life OS Automations",
                 icon = Icons.AutoMirrored.Filled.List
             ) {
                 ListItem(
-                    modifier = Modifier.clickable { onNavigateToHabitConfig() },
+                    modifier = Modifier.clickable {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onNavigateToHabitConfig()
+                    },
                     headlineContent = { Text("Manage Habits & Automations") },
                     leadingContent = { Icon(Icons.Rounded.DateRange, contentDescription = null) }
                 )
-                
+
                 ListItem(
-                    modifier = Modifier.clickable { onNavigateToHomeConfig() },
+                    modifier = Modifier.clickable {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onNavigateToHomeConfig()
+                    },
                     headlineContent = { Text("Manage House & Chores") },
                     leadingContent = { Icon(Icons.Rounded.CleaningServices, contentDescription = null) }
                 )
 
                 ListItem(
-                    modifier = Modifier.clickable { onNavigateToReminders() },
+                    modifier = Modifier.clickable {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onNavigateToReminders()
+                    },
                     headlineContent = { Text("Reminders & Notifications") },
                     leadingContent = { Icon(Icons.Filled.Notifications, contentDescription = null) }
                 )
@@ -394,8 +423,10 @@ fun SettingsScreen(
                     Text("Force Import Habits (Vault -> App)")
                 }
             }
+            }
 
             // 3.5 Knowledge Vault — manual RAG indexing
+            StaggeredEntry(index = 5) {
             SettingsSection(
                 title = "Knowledge Vault (RAG)",
                 icon = Icons.Default.Psychology
@@ -468,8 +499,10 @@ fun SettingsScreen(
                     else -> Unit
                 }
             }
+            }
 
             // 4. About
+            StaggeredEntry(index = 6) {
              SettingsSection(
                 title = "About",
                 icon = Icons.Default.Info
@@ -481,6 +514,7 @@ fun SettingsScreen(
                 )
             }
             
+            }
             Spacer(modifier = Modifier.height(32.dp))
         }
     }
@@ -521,16 +555,21 @@ fun IntelligenceOption(
     enabled: Boolean = true
 ) {
     val rowAlpha = if (enabled) 1f else 0.5f
+    val haptic = LocalHapticFeedback.current
+    val hapticOnClick = {
+        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        onClick()
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(enabled = enabled, onClick = onClick)
+            .clickable(enabled = enabled, onClick = hapticOnClick)
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         RadioButton(
             selected = selected,
-            onClick = onClick,
+            onClick = hapticOnClick,
             enabled = enabled
         )
         Spacer(modifier = Modifier.width(12.dp))
@@ -636,7 +675,7 @@ private fun NanoModelLifecyclePanel(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        IconButton(onClick = onManageStorage) {
+                        CortexIconButton(onClick = onManageStorage) {
                             Icon(
                                 imageVector = Icons.Outlined.FolderOpen,
                                 contentDescription = "Manage model storage in AICore settings"

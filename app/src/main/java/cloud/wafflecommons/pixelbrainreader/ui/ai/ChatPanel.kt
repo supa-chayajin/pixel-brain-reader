@@ -42,7 +42,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -50,6 +52,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
 import cloud.wafflecommons.pixelbrainreader.ui.theme.NavBarClearance
 import androidx.hilt.navigation.compose.hiltViewModel
 import java.time.format.DateTimeFormatter
@@ -63,6 +66,7 @@ fun ChatPanel(
 ) {
     var textState by remember { mutableStateOf(TextFieldValue("")) }
     val listState = rememberLazyListState()
+    val haptic = LocalHapticFeedback.current
 
     val currentMode by viewModel.currentMode.collectAsStateWithLifecycle()
     val persistedHistory by viewModel.chatHistory.collectAsStateWithLifecycle()
@@ -118,7 +122,7 @@ fun ChatPanel(
                 cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
                     title = "Neural Interface",
                     actions = {
-                        IconButton(
+                        CortexIconButton(
                             onClick = { showClearConfirm = true },
                             enabled = displayedMessages.isNotEmpty()
                         ) {
@@ -165,11 +169,13 @@ fun ChatPanel(
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         items(displayedMessages, key = { it.id }) { msg ->
-                            ChatBubble(
-                                message = msg,
-                                onInsert = if (!msg.isUser) onInsertContent else null,
-                                accentColor = modeColor
-                            )
+                            Box(modifier = Modifier.animateItem()) {
+                                ChatBubble(
+                                    message = msg,
+                                    onInsert = if (!msg.isUser) onInsertContent else null,
+                                    accentColor = modeColor
+                                )
+                            }
                         }
                     }
                 }
@@ -198,6 +204,9 @@ fun ChatPanel(
                     textState = textState,
                     onTextChange = { textState = it },
                     onSend = {
+                        // Fires for BOTH the send IconButton and the IME Send action,
+                        // since both route through this shared callback.
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         if (textState.text.isNotBlank()) {
                             viewModel.sendMessage(textState.text)
                             textState = TextFieldValue("")
@@ -215,6 +224,7 @@ fun ChatPanel(
 
 // --- COMPONENTS ---
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BrainModeSwitch(
     currentMode: ChatMode,
@@ -222,71 +232,32 @@ fun BrainModeSwitch(
     activeColor: Color,
     activeContentColor: Color
 ) {
-    // Color of an inactive pill's icon + label — theme-aware, readable on the
-    // surfaceContainerHighest track behind both pills.
-    val inactiveContentColor = MaterialTheme.colorScheme.onSurfaceVariant
-
-    Row(
+    // Stock M3 Expressive connected toggle (Cortex = Psychology, Spark = AutoAwesome).
+    // Only the selected segment paints activeColor, and activeColor is always the
+    // current mode's accent, so each mode shows its own colour when active.
+    val modes = listOf(
+        Triple(ChatMode.ORACLE, Icons.Rounded.Psychology, "Cortex (RAG)"),
+        Triple(ChatMode.SCRIBE, Icons.Rounded.AutoAwesome, "Spark (Creative)")
+    )
+    SingleChoiceSegmentedButtonRow(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 24.dp, vertical = 8.dp)
-            .height(48.dp)
-            .background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape)
-            .padding(4.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        // CORTEX OPTION
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight()
-                .clip(CircleShape)
-                .background(if (currentMode == ChatMode.ORACLE) activeColor else Color.Transparent)
-                .clickable { if (currentMode != ChatMode.ORACLE) onModeChanged() },
-            contentAlignment = Alignment.Center
-        ) {
-            val contentTint = if (currentMode == ChatMode.ORACLE) activeContentColor else inactiveContentColor
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Rounded.Psychology,
-                    contentDescription = null,
-                    tint = contentTint,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    "Cortex (RAG)",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = contentTint
-                )
-            }
-        }
-
-        // SPARK OPTION
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight()
-                .clip(CircleShape)
-                .background(if (currentMode == ChatMode.SCRIBE) activeColor else Color.Transparent)
-                .clickable { if (currentMode != ChatMode.SCRIBE) onModeChanged() },
-            contentAlignment = Alignment.Center
-        ) {
-            val contentTint = if (currentMode == ChatMode.SCRIBE) activeContentColor else inactiveContentColor
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Rounded.AutoAwesome,
-                    contentDescription = null,
-                    tint = contentTint,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    "Spark (Creative)",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = contentTint
-                )
-            }
+        modes.forEachIndexed { index, (mode, icon, label) ->
+            SegmentedButton(
+                selected = currentMode == mode,
+                onClick = { if (currentMode != mode) onModeChanged() },
+                shape = SegmentedButtonDefaults.itemShape(index = index, count = modes.size),
+                colors = SegmentedButtonDefaults.colors(
+                    activeContainerColor = activeColor,
+                    activeContentColor = activeContentColor
+                ),
+                icon = {
+                    Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
+                },
+                label = { Text(label, style = MaterialTheme.typography.labelLarge) }
+            )
         }
     }
 }
@@ -584,6 +555,7 @@ fun ClearChatDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val haptic = LocalHapticFeedback.current
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = {
@@ -601,7 +573,10 @@ fun ClearChatDialog(
             )
         },
         confirmButton = {
-            TextButton(onClick = onConfirm) {
+            TextButton(onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                onConfirm()
+            }) {
                 Text("Effacer", color = MaterialTheme.colorScheme.error)
             }
         },

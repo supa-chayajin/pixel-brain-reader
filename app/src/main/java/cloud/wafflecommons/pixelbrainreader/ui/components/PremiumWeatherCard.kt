@@ -2,6 +2,7 @@ package cloud.wafflecommons.pixelbrainreader.ui.components
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -13,6 +14,7 @@ import cloud.wafflecommons.pixelbrainreader.data.repository.WeatherData
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun PremiumWeatherCard(
     weather: WeatherData?,
@@ -39,9 +41,8 @@ fun PremiumWeatherCard(
                     modifier = Modifier.size(64.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    CircularProgressIndicator(
+                    LoadingIndicator(
                         modifier = Modifier.size(32.dp),
-                        strokeWidth = 3.dp,
                         color = MaterialTheme.colorScheme.onSecondaryContainer
                     )
                 }

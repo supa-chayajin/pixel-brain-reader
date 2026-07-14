@@ -25,6 +25,7 @@ import cloud.wafflecommons.pixelbrainreader.ui.theme.NavBarClearance
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import cloud.wafflecommons.pixelbrainreader.data.repository.MoodEntry
+import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -82,7 +83,9 @@ fun MoodHistoryScreen(
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     items(entries, key = { it.time }) { entry ->
-                        MoodTimelineItem(entry)
+                        Box(Modifier.animateItem()) {
+                            MoodTimelineItem(entry)
+                        }
                     }
                 }
             }
@@ -108,7 +111,7 @@ fun DateSelector(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        IconButton(onClick = { onDateSelected(selectedDate.minusDays(1)) }) {
+        CortexIconButton(onClick = { onDateSelected(selectedDate.minusDays(1)) }) {
             Icon(Icons.Outlined.ChevronLeft, contentDescription = "Previous Day")
         }
 
@@ -121,7 +124,7 @@ fun DateSelector(
             )
         }
 
-        IconButton(
+        CortexIconButton(
             onClick = { onDateSelected(selectedDate.plusDays(1)) },
             enabled = !isToday
         ) {

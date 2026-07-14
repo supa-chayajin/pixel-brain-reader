@@ -1,5 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.ui.lifestats
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.*
 
 import androidx.compose.material.icons.Icons
@@ -7,17 +8,21 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.TextStyle
 import java.util.Locale
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun MoodCalendar(
     currentMonth: YearMonth,
@@ -56,7 +61,7 @@ fun MoodCalendar(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = onPrevMonth) {
+                CortexIconButton(onClick = onPrevMonth) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Previous Month")
                 }
 
@@ -70,7 +75,7 @@ fun MoodCalendar(
                 val now = YearMonth.now()
                 val canGoForward = currentMonth.isBefore(now)
                 
-                IconButton(
+                CortexIconButton(
                     onClick = onNextMonth,
                     enabled = canGoForward
                 ) {
@@ -100,9 +105,27 @@ fun MoodCalendar(
             
             Spacer(modifier = Modifier.height(4.dp))
 
+            // Cheap draw-on: fade + subtle scale the whole grid in on first composition.
+            var appeared by remember { mutableStateOf(false) }
+            LaunchedEffect(Unit) { appeared = true }
+            val gridAlpha by animateFloatAsState(
+                targetValue = if (appeared) 1f else 0f,
+                animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
+                label = "gridAlpha"
+            )
+
             // Custom Grid for Scroll Compatibility
             val rows = calendarItems.chunked(7)
-            Column(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .graphicsLayer {
+                        alpha = gridAlpha
+                        val s = 0.96f + 0.04f * gridAlpha
+                        scaleX = s
+                        scaleY = s
+                    }
+            ) {
                 rows.forEach { week ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
