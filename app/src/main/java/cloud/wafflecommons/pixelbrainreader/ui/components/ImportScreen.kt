@@ -25,6 +25,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -35,6 +37,7 @@ fun ImportScreen(
     onDismiss: () -> Unit,
     onSave: (filename: String, folder: String, content: String) -> Unit
 ) {
+    val haptic = LocalHapticFeedback.current
     var filename by remember { mutableStateOf(initialTitle.ifBlank { "Untitled" }) }
     var folder by remember { mutableStateOf("00_Inbox") }
     var content by remember { mutableStateOf(initialContent) }
@@ -51,6 +54,7 @@ fun ImportScreen(
                 actions = {
                     Button(
                         onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             val cleanName = if (filename.endsWith(".md")) filename else "$filename.md"
                             onSave(cleanName, folder, content)
                         },

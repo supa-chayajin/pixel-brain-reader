@@ -1,5 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.ui.mood
 
+import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -72,19 +73,24 @@ fun MoodHistoryScreen(
 
             // Timeline
             val entries = uiState.moodData?.entries
-            if (entries.isNullOrEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No mood data for this day.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = NavBarClearance),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    items(entries, key = { it.time }) { entry ->
-                        Box(Modifier.animateItem()) {
-                            MoodTimelineItem(entry)
+            Crossfade(
+                targetState = entries.isNullOrEmpty(),
+                label = "moodTimelineState"
+            ) { isEmpty ->
+                if (isEmpty) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("No mood data for this day.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = NavBarClearance),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        items(entries.orEmpty(), key = { it.time }) { entry ->
+                            Box(Modifier.animateItem()) {
+                                MoodTimelineItem(entry)
+                            }
                         }
                     }
                 }

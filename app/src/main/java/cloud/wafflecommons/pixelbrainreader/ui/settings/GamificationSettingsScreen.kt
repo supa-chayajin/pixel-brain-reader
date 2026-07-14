@@ -1,5 +1,11 @@
 package cloud.wafflecommons.pixelbrainreader.ui.settings
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -17,6 +23,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cloud.wafflecommons.pixelbrainreader.data.gamification.Attribute
 import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
 import cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar
+import cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry
 import cloud.wafflecommons.pixelbrainreader.ui.utils.HapticHelper.performHapticClick
 import cloud.wafflecommons.pixelbrainreader.ui.utils.HapticHelper.performHapticSuccess
 import cloud.wafflecommons.pixelbrainreader.ui.utils.HapticHelper.performHapticTick
@@ -58,6 +65,7 @@ fun GamificationSettingsScreen(
         ) {
             
             // Goals Section
+            StaggeredEntry(index = 0) {
             ElevatedCard(modifier = Modifier.fillMaxWidth()) {
                 Column(
                     modifier = Modifier.padding(16.dp),
@@ -98,8 +106,10 @@ fun GamificationSettingsScreen(
                     }
                 }
             }
+            }
 
             // Mood Emojis Section
+            StaggeredEntry(index = 1) {
             ElevatedCard(modifier = Modifier.fillMaxWidth()) {
                 Column(
                     modifier = Modifier.padding(16.dp),
@@ -128,8 +138,10 @@ fun GamificationSettingsScreen(
                     }
                 }
             }
+            }
 
             // Mappings Section
+            StaggeredEntry(index = 2) {
             ElevatedCard(modifier = Modifier.fillMaxWidth()) {
                 Column(
                     modifier = Modifier.padding(16.dp),
@@ -143,22 +155,33 @@ fun GamificationSettingsScreen(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         tagMappings.forEach { (tag, attribute) ->
-                            InputChip(
-                                selected = true,
-                                onClick = { },
-                                label = { Text("$tag ➡️ ${attribute.name}") },
-                                trailingIcon = {
-                                    CortexIconButton(
-                                        modifier = Modifier.size(16.dp),
-                                        onClick = {
-                                            view.performHapticClick()
-                                            viewModel.removeTagMapping(tag)
-                                        }
-                                    ) {
-                                        Icon(Icons.Default.Close, "Remove")
-                                    }
+                            key(tag) {
+                                val chipVisibleState = remember {
+                                    MutableTransitionState(false).apply { targetState = true }
                                 }
-                            )
+                                AnimatedVisibility(
+                                    visibleState = chipVisibleState,
+                                    enter = fadeIn() + scaleIn(),
+                                    exit = fadeOut() + scaleOut()
+                                ) {
+                                    InputChip(
+                                        selected = true,
+                                        onClick = { },
+                                        label = { Text("$tag ➡️ ${attribute.name}") },
+                                        trailingIcon = {
+                                            CortexIconButton(
+                                                modifier = Modifier.size(16.dp),
+                                                onClick = {
+                                                    view.performHapticClick()
+                                                    viewModel.removeTagMapping(tag)
+                                                }
+                                            ) {
+                                                Icon(Icons.Default.Close, "Remove")
+                                            }
+                                        }
+                                    )
+                                }
+                            }
                         }
                     }
 
@@ -225,6 +248,7 @@ fun GamificationSettingsScreen(
                         }
                     }
                 }
+            }
             }
         }
     }

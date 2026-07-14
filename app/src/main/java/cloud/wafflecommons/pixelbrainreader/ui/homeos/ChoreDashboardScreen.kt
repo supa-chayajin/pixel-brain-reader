@@ -1,7 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.ui.homeos
 
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
@@ -152,6 +151,7 @@ fun RoomHeader(roomName: String, urgentCount: Int) {
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun ChoreCard(chore: ChoreUiModel, onDoItClick: () -> Unit) {
     val barColor = when (chore.statusColor) {
@@ -164,7 +164,7 @@ fun ChoreCard(chore: ChoreUiModel, onDoItClick: () -> Unit) {
     val targetProgress = (chore.dirtinessPercentage / 100f).coerceIn(0f, 1f)
     val animatedProgress by animateFloatAsState(
         targetValue = targetProgress,
-        animationSpec = tween(1000),
+        animationSpec = MaterialTheme.motionScheme.slowSpatialSpec(),
         label = "ProgressAnimation"
     )
 

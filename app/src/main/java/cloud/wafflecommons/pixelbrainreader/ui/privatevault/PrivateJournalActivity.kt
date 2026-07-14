@@ -35,7 +35,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -144,6 +146,7 @@ fun PrivateVaultScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
     
     // Handle One-Time Events (Toasts)
     LaunchedEffect(key1 = true) {
@@ -226,7 +229,10 @@ fun PrivateVaultScreen(
                 Spacer(modifier = Modifier.height(48.dp))
                 
                 Button(
-                    onClick = onAuthenticate,
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onAuthenticate()
+                    },
                     modifier = Modifier.fillMaxWidth().height(56.dp),
                     shape = MaterialTheme.shapes.large
                 ) {
@@ -257,7 +263,10 @@ fun PrivateVaultScreen(
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 FilledTonalButton(
-                    onClick = { viewModel.unlockWithPassword() },
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        viewModel.unlockWithPassword()
+                    },
                     enabled = state.passwordInput.isNotEmpty(),
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -312,7 +321,10 @@ fun PrivateVaultScreen(
                  },
                  floatingActionButton = {
                      FloatingActionButton(
-                         onClick = { showCreateDialog = true },
+                         onClick = {
+                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                             showCreateDialog = true
+                         },
                          containerColor = MaterialTheme.colorScheme.secondaryContainer,
                          contentColor = MaterialTheme.colorScheme.onSecondaryContainer
                      ) {
@@ -362,8 +374,12 @@ fun PrivateVaultScreen(
 
 @Composable
 fun VaultFileItem(file: File, onClick: () -> Unit) {
+    val haptic = LocalHapticFeedback.current
     ElevatedCard(
-        onClick = onClick,
+        onClick = {
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            onClick()
+        },
         colors = CardDefaults.elevatedCardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         ),

@@ -34,6 +34,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import cloud.wafflecommons.pixelbrainreader.data.model.HabitType
 import cloud.wafflecommons.pixelbrainreader.data.model.TimelineEvent
 
@@ -63,10 +65,14 @@ fun TaskTimeline(
 
 @Composable
 fun TaskTimelineItem(task: DailyTaskEntity, onToggle: (DailyTaskEntity) -> Unit) {
+    val haptic = LocalHapticFeedback.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onToggle(task) },
+            .clickable {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onToggle(task)
+            },
         verticalAlignment = Alignment.CenterVertically
     ) {
         // Time
@@ -104,6 +110,7 @@ fun TaskTimelineItem(task: DailyTaskEntity, onToggle: (DailyTaskEntity) -> Unit)
     }
 }
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun HabitCard(
     habit: HabitWithStats,
@@ -141,7 +148,8 @@ fun HabitCard(
     val isDone = habit.isCompletedToday
     // Animate Background
     val containerColor by animateColorAsState(
-        if (isDone) themeColor.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceContainer
+        if (isDone) themeColor.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceContainer,
+        animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec()
     )
 
     // Dim if not scheduled today
@@ -303,9 +311,10 @@ fun HabitEditDialog(
     onDismiss: () -> Unit,
     onConfirm: (Double) -> Unit
 ) {
+    val haptic = LocalHapticFeedback.current
     val config = habit.config
     var tempValue by remember { mutableDoubleStateOf(habit.currentValue) }
-    
+
     // Quick Add Steps (e.g. 250ml for water)
     val step = if (config.unit.lowercase() in listOf("ml", "mg", "g")) 250.0 else 1.0
 
@@ -329,14 +338,20 @@ fun HabitEditDialog(
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     FilledIconButton(
-                        onClick = { tempValue = (tempValue - step).coerceAtLeast(0.0) },
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            tempValue = (tempValue - step).coerceAtLeast(0.0)
+                        },
                         colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
                     ) {
                         Icon(Icons.Default.Remove, "-")
                     }
-                    
+
                     FilledIconButton(
-                        onClick = { tempValue = (tempValue + step) },
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            tempValue = (tempValue + step)
+                        },
                         colors = IconButtonDefaults.filledIconButtonColors(containerColor = color)
                     ) {
                         Icon(Icons.Default.Add, "+")
