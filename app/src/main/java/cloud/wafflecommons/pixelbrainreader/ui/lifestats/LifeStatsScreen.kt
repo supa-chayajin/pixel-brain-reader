@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import cloud.wafflecommons.pixelbrainreader.ui.theme.NavBarClearance
 import androidx.hilt.navigation.compose.hiltViewModel
 import cloud.wafflecommons.pixelbrainreader.data.sync.SyncState
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -64,7 +65,8 @@ fun LifeStatsScreen(
             } else {
                 LazyVerticalGrid(
                     columns = GridCells.Adaptive(minSize = 340.dp),
-                    modifier = Modifier.fillMaxSize().padding(16.dp),
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = NavBarClearance),
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {

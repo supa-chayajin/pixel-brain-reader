@@ -77,8 +77,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RadialGradientShader
+import androidx.compose.ui.graphics.Shader
+import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.unit.dp
@@ -179,25 +183,33 @@ private fun ExpressiveNavBar(
         // Same radius + same dark surface as the group, distinguished only by a
         // green GLOW (colored shadow + accent border), like Finance's Ask button.
         val accent = MaterialTheme.colorScheme.primary
+        // Dim the Daily icon + label when unselected so it doesn't read as bright as when active.
+        val dailyContent = if (dailySelected) accent else accent.copy(alpha = 0.5f)
         val surfaceHi = MaterialTheme.colorScheme.surfaceContainerHighest
+        // Green glow for the selected state, anchored to the TOP-RIGHT corner
+        // (brightest there, fading inward) rather than a centered radial.
+        val glowAlpha = if (dailySelected) 0.45f else 0f
+        val dailyGlow = remember(glowAlpha, accent) {
+            object : ShaderBrush() {
+                override fun createShader(size: Size): Shader =
+                    RadialGradientShader(
+                        center = Offset(size.width, 0f),
+                        radius = size.maxDimension,
+                        colors = listOf(accent.copy(alpha = glowAlpha), Color.Transparent)
+                    )
+            }
+        }
         Box(
             modifier = Modifier
                 .height(64.dp)
                 .clip(RoundedCornerShape(barRadius))
                 // Opaque dark base so no content bleeds through the pill...
                 .background(surfaceHi)
-                // ...then a green glow on top: a radial gradient fading to transparent
-                // so it stays CONTAINED (brightest centre, dark surface at the edges).
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(
-                            accent.copy(alpha = if (dailySelected) 0.45f else 0f),
-                            Color.Transparent
-                        )
-                    )
-                )
+                // ...then a green glow on top, anchored to the top-right corner
+                // (fading to transparent) so it reads as a directional accent.
+                .background(dailyGlow)
                 .border(
-                    BorderStroke(1.5.dp, accent.copy(alpha = if (dailySelected) 0.9f else 0.5f)),
+                    BorderStroke(1.5.dp, accent.copy(alpha = if (dailySelected) 0.9f else 0f)),
                     RoundedCornerShape(barRadius)
                 )
                 .clickable { if (!dailySelected) onSelect(Screen.DailyNote) }
@@ -205,9 +217,9 @@ private fun ExpressiveNavBar(
             contentAlignment = Alignment.Center
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(Icons.Rounded.AutoAwesome, contentDescription = "Daily", tint = accent, modifier = Modifier.size(24.dp))
+                Icon(Icons.Rounded.AutoAwesome, contentDescription = "Daily", tint = dailyContent, modifier = Modifier.size(24.dp))
                 Spacer(Modifier.height(3.dp))
-                Text("Daily", style = MaterialTheme.typography.labelMedium, color = accent, maxLines = 1)
+                Text("Daily", style = MaterialTheme.typography.labelMedium, color = dailyContent, maxLines = 1)
             }
         }
     }

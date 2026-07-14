@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import cloud.wafflecommons.pixelbrainreader.ui.theme.NavBarClearance
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalContext
@@ -234,7 +235,7 @@ fun DailyNoteScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(horizontal = 16.dp),
-                    contentPadding = PaddingValues(top = 16.dp, bottom = 100.dp),
+                    contentPadding = PaddingValues(top = 16.dp, bottom = NavBarClearance),
                     verticalArrangement = Arrangement.spacedBy(24.dp)
                 ) {
                     // 0. Weather Dashboard

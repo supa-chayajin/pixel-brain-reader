@@ -23,6 +23,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import cloud.wafflecommons.pixelbrainreader.ui.theme.NavBarClearance
 import androidx.hilt.navigation.compose.hiltViewModel
 import cloud.wafflecommons.pixelbrainreader.data.sync.SyncState
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -62,7 +63,7 @@ fun ChoreDashboardScreen(
             val horizontalPadding = if (configuration.screenWidthDp > 840) 32.dp else 16.dp
             LazyVerticalStaggeredGrid(
                 columns = StaggeredGridCells.Fixed(columns),
-                contentPadding = PaddingValues(horizontal = horizontalPadding, vertical = 16.dp),
+                contentPadding = PaddingValues(start = horizontalPadding, end = horizontalPadding, top = 16.dp, bottom = NavBarClearance),
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalItemSpacing = 16.dp,
                 modifier = Modifier
