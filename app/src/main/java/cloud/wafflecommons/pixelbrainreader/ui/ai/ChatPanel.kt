@@ -49,10 +49,11 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import cloud.wafflecommons.pixelbrainreader.ui.theme.NavBarClearance
 import androidx.hilt.navigation.compose.hiltViewModel
 import java.time.format.DateTimeFormatter
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun ChatPanel(
     modifier: Modifier = Modifier,
@@ -161,8 +162,9 @@ fun ChatPanel(
                 }
             }
 
-            // Input Area
-            Column {
+            // Input Area — lift above the floating nav bar, except while the keyboard is open
+            // (the bar hides on IME, mirroring MainScreen's navLayoutType gating).
+            Column(modifier = Modifier.padding(bottom = if (WindowInsets.isImeVisible) 0.dp else NavBarClearance)) {
                 // Nano availability indicator — proactive, always visible
                 NanoStatusIndicator(
                     state = nanoState,
