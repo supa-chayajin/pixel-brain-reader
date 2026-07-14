@@ -34,7 +34,6 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import cloud.wafflecommons.pixelbrainreader.data.ai.NanoState
-import cloud.wafflecommons.pixelbrainreader.data.repository.AppThemeConfig
 import cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
 import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
 import cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry
@@ -312,40 +311,8 @@ fun SettingsScreen(
             }
             }
 
-            // 2. Interface Section
-            StaggeredEntry(index = 3) {
-            SettingsSection(
-                title = "Interface",
-                icon = Icons.Default.BrightnessMedium
-            ) {
-                 SingleChoiceSegmentedButtonRow(
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    AppThemeConfig.entries.forEachIndexed { index, config ->
-                        SegmentedButton(
-                            selected = (uiState.themeConfig == config),
-                            onClick = {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                viewModel.updateTheme(config)
-                            },
-                            shape = SegmentedButtonDefaults.itemShape(
-                                index = index,
-                                count = AppThemeConfig.entries.size
-                            ),
-                            label = {
-                                Text(
-                                    when(config) {
-                                        AppThemeConfig.FOLLOW_SYSTEM -> "System"
-                                        AppThemeConfig.LIGHT -> "Light"
-                                        AppThemeConfig.DARK -> "Dark"
-                                    }
-                                )
-                            }
-                        )
-                    }
-                }
-            }
-            }
+            // Theme follows the system automatically (no manual selector — Android's
+            // force-dark handling makes a per-app light/dark override unreliable).
 
             // 3. Life OS & Gamification
             StaggeredEntry(index = 4) {

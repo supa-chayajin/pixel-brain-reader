@@ -29,10 +29,13 @@ android {
         minSdk = 36
         compileSdk = 37
         targetSdk = 36
-        // V7 milestone: Private-Vault RAG security model, manual indexing,
-        // content-fingerprint reindex, vault-rooted health sync.
-        versionCode = 701
-        versionName = "7.0.1"
+        // 8.0 milestone: full Material 3 Expressive redesign (theme, motion, haptics,
+        // Expressive components) + a major toolchain jump (AGP 9.2.1 / Kotlin 2.2.10 /
+        // Compose 1.12 / compileSdk 37), Life Stats revamp, reminder-notification overhaul.
+        // versionName is the single source of truth — surfaced in Settings via
+        // BuildConfig.VERSION_NAME (no more hardcoded string to drift).
+        versionCode = 800
+        versionName = "8.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
