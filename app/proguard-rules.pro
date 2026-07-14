@@ -223,10 +223,6 @@
 -dontwarn com.google.mlkit.**
 -dontwarn com.google.ai.edge.aicore.**
 
-# Google AI client (cloud Gemini fallback)
--keep class com.google.ai.client.generativeai.** { *; }
--dontwarn com.google.ai.client.generativeai.**
-
 # -----------------------------------------------------------------------------
 # Google Auth / Identity / Calendar / Tasks
 # -----------------------------------------------------------------------------

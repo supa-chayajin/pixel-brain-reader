@@ -1,21 +1,18 @@
 package cloud.wafflecommons.pixelbrainreader.ui.ai
 
-import cloud.wafflecommons.pixelbrainreader.data.ai.GeminiRagManager
-import cloud.wafflecommons.pixelbrainreader.data.ai.GeminiScribeManager
 import cloud.wafflecommons.pixelbrainreader.data.ai.LocalAiManager
 import cloud.wafflecommons.pixelbrainreader.data.ai.NanoException
 import cloud.wafflecommons.pixelbrainreader.data.ai.NanoState
-import cloud.wafflecommons.pixelbrainreader.data.ai.ScribePersona
 import cloud.wafflecommons.pixelbrainreader.data.ai.VectorSearchEngine
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.ChatMessageEntity
 import cloud.wafflecommons.pixelbrainreader.data.repository.ChatRepository
 import io.mockk.coEvery
-import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestDispatcher
@@ -24,7 +21,6 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -83,8 +79,6 @@ class ChatViewModelTest {
     @get:Rule
     val mainDispatcherRule = MainDispatcherRule()
 
-    private val ragManager: GeminiRagManager = mockk(relaxed = true)
-    private val scribeManager: GeminiScribeManager = mockk(relaxed = true)
     private val localAiManager: LocalAiManager = mockk(relaxed = true)
     private val vectorSearchEngine: VectorSearchEngine = mockk(relaxed = true)
     private val nanoStateFlow = MutableStateFlow<NanoState>(NanoState.Ready)
@@ -99,8 +93,6 @@ class ChatViewModelTest {
         coEvery { vectorSearchEngine.search(any(), any()) } returns emptyList()
         fakeRepo = FakeChatRepository()
         viewModel = ChatViewModel(
-            ragManager = ragManager,
-            scribeManager = scribeManager,
             localAiManager = localAiManager,
             chatRepository = fakeRepo.real,
             vectorSearchEngine = vectorSearchEngine
@@ -111,16 +103,14 @@ class ChatViewModelTest {
     fun `initial state is correct`() {
         assertTrue(viewModel.chatHistory.value.isEmpty())
         assertNull(viewModel.loadingStage)
-        assertFalse(viewModel.showCloudFallbackDialog)
-        assertNull(viewModel.cloudFallbackReason)
-        assertEquals(ScribePersona.TECH_WRITER, viewModel.currentPersona)
+        assertEquals(ChatMode.ORACLE, viewModel.currentMode.value)
     }
 
     @Test
-    fun `sendMessage uses local AI on success and never calls cloud`() = runTest {
-        coEvery {
-            localAiManager.generateAugmentedResponse(any(), any(), any(), "Hello")
-        } returns Result.success("On-device reply")
+    fun `sendMessage persists user and model turns on success`() = runTest {
+        every {
+            localAiManager.generateAugmentedResponseStream(any(), any(), any(), "Hello")
+        } returns flowOf("On-device reply")
 
         viewModel.sendMessage("Hello")
         advanceUntilIdle()
@@ -132,130 +122,33 @@ class ChatViewModelTest {
         assertEquals("USER", persisted[0].role)
         assertEquals("On-device reply", persisted[1].content)
         assertEquals("MODEL", persisted[1].role)
-
-        // Dialog never raised
-        assertFalse(viewModel.showCloudFallbackDialog)
-
-        // CRITICAL PRIVACY ASSERTION — cloud managers must not be invoked
-        coVerify(exactly = 0) { scribeManager.generateScribeContent(any(), any()) }
-        coVerify(exactly = 0) { ragManager.generateResponse(any(), any()) }
-        coVerify(exactly = 0) { ragManager.findSources(any()) }
     }
 
     @Test
-    fun `sendMessage on local failure raises dialog and does not call cloud`() = runTest {
-        coEvery {
-            localAiManager.generateAugmentedResponse(any(), any(), any(), "Long prompt")
-        } returns Result.failure(NanoException.ContextExceeded("token limit"))
+    fun `sendMessage persists an inline error turn on local failure`() = runTest {
+        every {
+            localAiManager.generateAugmentedResponseStream(any(), any(), any(), "Long prompt")
+        } returns flow { throw NanoException.ContextExceeded("token limit") }
 
         viewModel.sendMessage("Long prompt")
         advanceUntilIdle()
 
-        // Only the user message — no bot bubble until consent
+        // No cloud fallback: user turn + an inline error MODEL turn.
         val persisted = fakeRepo.snapshot("RAG")
-        assertEquals(1, persisted.size)
-        assertEquals("USER", persisted[0].role)
-
-        // Dialog raised with a human-readable reason
-        assertTrue(viewModel.showCloudFallbackDialog)
-        assertTrue(
-            "Reason should mention prompt length",
-            viewModel.cloudFallbackReason?.contains("too long", ignoreCase = true) == true
-        )
-
-        // CRITICAL — cloud must not be touched
-        coVerify(exactly = 0) { scribeManager.generateScribeContent(any(), any()) }
-        coVerify(exactly = 0) { ragManager.generateResponse(any(), any()) }
-        coVerify(exactly = 0) { ragManager.findSources(any()) }
-    }
-
-    @Test
-    fun `onDismissCloudFallback clears state and never calls cloud`() = runTest {
-        coEvery {
-            localAiManager.generateAugmentedResponse(any(), any(), any(), any())
-        } returns Result.failure(NanoException.Unavailable("not present"))
-
-        viewModel.sendMessage("anything")
-        advanceUntilIdle()
-        assertTrue(viewModel.showCloudFallbackDialog)
-
-        viewModel.onDismissCloudFallback()
-        advanceUntilIdle()
-
-        assertFalse(viewModel.showCloudFallbackDialog)
-        assertNull(viewModel.cloudFallbackReason)
-
-        // No cloud calls ever
-        coVerify(exactly = 0) { scribeManager.generateScribeContent(any(), any()) }
-        coVerify(exactly = 0) { ragManager.generateResponse(any(), any()) }
-        coVerify(exactly = 0) { ragManager.findSources(any()) }
-    }
-
-    @Test
-    fun `onConfirmCloudFallback calls cloud once with pending prompt in SCRIBE mode`() = runTest {
-        coEvery {
-            localAiManager.generateAugmentedResponse(any(), any(), any(), "write me a poem")
-        } returns Result.failure(NanoException.Unavailable("not present"))
-        coEvery { scribeManager.generateScribeContent("write me a poem", any()) } returns
-            flowOf("roses ", "are ", "red")
-
-        // Switch to SCRIBE so the cloud path uses scribeManager
-        viewModel.toggleMode() // ORACLE -> SCRIBE
-        assertEquals(ChatMode.SCRIBE, viewModel.currentMode.value)
-
-        viewModel.sendMessage("write me a poem")
-        advanceUntilIdle()
-        assertTrue(viewModel.showCloudFallbackDialog)
-
-        viewModel.onConfirmCloudFallback()
-        advanceUntilIdle()
-
-        assertFalse(viewModel.showCloudFallbackDialog)
-        assertNull(viewModel.cloudFallbackReason)
-
-        // Cloud was called exactly once, with the original prompt
-        coVerify(exactly = 1) { scribeManager.generateScribeContent("write me a poem", any()) }
-
-        // User msg + cloud bot msg, both persisted under "CREATIVE"
-        val persisted = fakeRepo.snapshot("CREATIVE")
         assertEquals(2, persisted.size)
         assertEquals("USER", persisted[0].role)
-        assertEquals("write me a poem", persisted[0].content)
         assertEquals("MODEL", persisted[1].role)
-        assertEquals("roses are red", persisted[1].content)
-        // Streaming overlay cleared on completion
-        assertNull(viewModel.streamingMessage.value)
-    }
-
-    @Test
-    fun `onConfirmCloudFallback uses RAG manager in ORACLE mode`() = runTest {
-        coEvery {
-            localAiManager.generateAugmentedResponse(any(), any(), any(), "find my notes")
-        } returns Result.failure(NanoException.Unavailable("not present"))
-        coEvery { ragManager.findSources("find my notes") } returns listOf("vault/a.md")
-        coEvery { ragManager.generateResponse("find my notes", useRAG = true) } returns
-            flowOf("answer")
-
-        // Default mode is ORACLE
-        assertEquals(ChatMode.ORACLE, viewModel.currentMode.value)
-
-        viewModel.sendMessage("find my notes")
-        advanceUntilIdle()
-        assertTrue(viewModel.showCloudFallbackDialog)
-
-        viewModel.onConfirmCloudFallback()
-        advanceUntilIdle()
-
-        coVerify(exactly = 1) { ragManager.generateResponse("find my notes", useRAG = true) }
-        coVerify(exactly = 1) { ragManager.findSources("find my notes") }
-        coVerify(exactly = 0) { scribeManager.generateScribeContent(any(), any()) }
+        assertTrue(
+            "Error turn should carry the warning marker",
+            persisted[1].content.startsWith("⚠️")
+        )
     }
 
     @Test
     fun `toggleMode swaps to the per-mode history bucket`() = runTest {
-        coEvery {
-            localAiManager.generateAugmentedResponse(any(), any(), any(), any())
-        } returns Result.success("reply")
+        every {
+            localAiManager.generateAugmentedResponseStream(any(), any(), any(), any())
+        } returns flowOf("reply")
 
         // ORACLE turn -> persisted under "RAG"
         viewModel.sendMessage("oracle q")
@@ -275,9 +168,9 @@ class ChatViewModelTest {
 
     @Test
     fun `resetChat clears only the active mode's history`() = runTest {
-        coEvery {
-            localAiManager.generateAugmentedResponse(any(), any(), any(), any())
-        } returns Result.success("reply")
+        every {
+            localAiManager.generateAugmentedResponseStream(any(), any(), any(), any())
+        } returns flowOf("reply")
 
         viewModel.sendMessage("oracle q")
         advanceUntilIdle()
@@ -291,12 +184,6 @@ class ChatViewModelTest {
 
         assertEquals(0, fakeRepo.snapshot("CREATIVE").size)
         assertEquals(2, fakeRepo.snapshot("RAG").size)
-    }
-
-    @Test
-    fun `switchPersona updates currentPersona`() {
-        viewModel.switchPersona(ScribePersona.CODER)
-        assertEquals(ScribePersona.CODER, viewModel.currentPersona)
     }
 
     @Test

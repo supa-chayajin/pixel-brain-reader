@@ -272,8 +272,6 @@ fun SettingsScreen(
                     val isSelected = (uiState.currentAiModel == model)
 
                     val subtitle = when(model) {
-                         cloud.wafflecommons.pixelbrainreader.data.model.AiModel.GEMINI_FLASH -> "Fast & Efficient. Requires Internet."
-                         cloud.wafflecommons.pixelbrainreader.data.model.AiModel.GEMINI_PRO -> "Maximum reasoning. Requires Internet."
                          cloud.wafflecommons.pixelbrainreader.data.model.AiModel.CORTEX_LOCAL -> "Gemini Nano. 100% Private & Offline."
                     }
 

@@ -28,6 +28,7 @@ import androidx.compose.material.icons.outlined.*
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.CloudOff
+import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Psychology
 import androidx.compose.material3.*
@@ -67,11 +68,13 @@ fun ChatPanel(
     val persistedHistory by viewModel.chatHistory.collectAsStateWithLifecycle()
     val streaming by viewModel.streamingMessage.collectAsStateWithLifecycle()
 
-    // Single source of truth for what the list renders: persisted history +
-    // optional transient streaming bubble (cloud-only — Nano is one-shot).
+    // Persisted history + the optional in-progress streaming bubble.
     val displayedMessages = remember(persistedHistory, streaming) {
         if (streaming != null) persistedHistory + streaming!! else persistedHistory
     }
+
+    // Confirmation state for the top-bar "clear conversation" action.
+    var showClearConfirm by remember { mutableStateOf(false) }
 
     // Auto-scroll on any new item — covers persisted appends AND streaming
     // token updates (size grows by 1 when streaming starts, then content grows
@@ -99,18 +102,33 @@ fun ChatPanel(
 
     val nanoState by viewModel.nanoState.collectAsStateWithLifecycle()
 
-    if (viewModel.showCloudFallbackDialog) {
-        CloudFallbackDialog(
-            reason = viewModel.cloudFallbackReason,
-            onConfirm = viewModel::onConfirmCloudFallback,
-            onDismiss = viewModel::onDismissCloudFallback
+    if (showClearConfirm) {
+        ClearChatDialog(
+            onConfirm = {
+                viewModel.resetChat()
+                showClearConfirm = false
+            },
+            onDismiss = { showClearConfirm = false }
         )
     }
 
     Scaffold(
         topBar = {
             Column(modifier = Modifier.background(MaterialTheme.colorScheme.surface)) {
-                cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(title = "Neural Interface")
+                cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
+                    title = "Neural Interface",
+                    actions = {
+                        IconButton(
+                            onClick = { showClearConfirm = true },
+                            enabled = displayedMessages.isNotEmpty()
+                        ) {
+                            Icon(
+                                Icons.Rounded.DeleteSweep,
+                                contentDescription = "Effacer la conversation"
+                            )
+                        }
+                    }
+                )
                 
                 // --- MODE SWITCHER ---
                 BrainModeSwitch(
@@ -150,12 +168,7 @@ fun ChatPanel(
                             ChatBubble(
                                 message = msg,
                                 onInsert = if (!msg.isUser) onInsertContent else null,
-                                accentColor = modeColor,
-                                // Offer a full cloud answer only on the latest assistant
-                                // reply — that's the one Nano may have truncated.
-                                onExpandToCloud = if (!msg.isUser && msg.id == displayedMessages.last().id) {
-                                    { viewModel.regenerateLastWithCloud() }
-                                } else null
+                                accentColor = modeColor
                             )
                         }
                     }
@@ -282,8 +295,7 @@ fun BrainModeSwitch(
 fun ChatBubble(
     message: ChatMessage,
     onInsert: ((String) -> Unit)?,
-    accentColor: Color,
-    onExpandToCloud: (() -> Unit)? = null
+    accentColor: Color
 ) {
     val isUser = message.isUser
 
@@ -396,23 +408,14 @@ fun ChatBubble(
             }
         }
 
-        if (!message.isStreaming && message.content.isNotBlank() && (onInsert != null || onExpandToCloud != null)) {
+        if (!message.isStreaming && message.content.isNotBlank() && onInsert != null) {
             Spacer(Modifier.height(4.dp))
             @OptIn(ExperimentalLayoutApi::class)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                if (onInsert != null) {
-                    TextButton(onClick = { onInsert(message.content) }) {
-                        Icon(Icons.Outlined.SaveAlt, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("Save to Inbox")
-                    }
-                }
-                if (onExpandToCloud != null) {
-                    TextButton(onClick = onExpandToCloud) {
-                        Icon(Icons.Rounded.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("Full answer (cloud)")
-                    }
+                TextButton(onClick = { onInsert(message.content) }) {
+                    Icon(Icons.Outlined.SaveAlt, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Save to Inbox")
                 }
             }
         }
@@ -577,8 +580,7 @@ fun NanoStatusIndicator(state: NanoState, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun CloudFallbackDialog(
-    reason: String?,
+fun ClearChatDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -586,31 +588,25 @@ fun CloudFallbackDialog(
         onDismissRequest = onDismiss,
         icon = {
             Icon(
-                imageVector = Icons.Rounded.CloudOff,
+                imageVector = Icons.Rounded.DeleteSweep,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary
+                tint = MaterialTheme.colorScheme.error
             )
         },
-        title = { Text("Local AI unavailable") },
+        title = { Text("Effacer cette conversation ?") },
         text = {
-            Column {
-                Text(
-                    reason ?: "Gemini Nano cannot process this request.",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    "Sending this prompt to the secure Cloud Gemini service means it will leave your device.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            Text(
+                "Cette action supprime définitivement les messages de ce panneau. L'autre panneau n'est pas affecté.",
+                style = MaterialTheme.typography.bodyMedium
+            )
         },
         confirmButton = {
-            TextButton(onClick = onConfirm) { Text("Use Cloud") }
+            TextButton(onClick = onConfirm) {
+                Text("Effacer", color = MaterialTheme.colorScheme.error)
+            }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss) { Text("Annuler") }
         }
     )
 }

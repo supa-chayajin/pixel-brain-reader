@@ -41,7 +41,6 @@ class SettingsViewModel @Inject constructor(
     private val userPrefs: UserPreferencesRepository,
     private val secretManager: SecretManager,
     private val vectorSearchEngine: cloud.wafflecommons.pixelbrainreader.data.ai.VectorSearchEngine,
-    private val geminiRagManager: cloud.wafflecommons.pixelbrainreader.data.ai.GeminiRagManager,
     private val healthConnectManager: cloud.wafflecommons.pixelbrainreader.data.health.HealthConnectManager,
     private val syncHealthDataUseCase: cloud.wafflecommons.pixelbrainreader.data.usecase.SyncHealthDataUseCase,
     private val habitRepository: cloud.wafflecommons.pixelbrainreader.data.repository.HabitRepository,
@@ -70,7 +69,7 @@ class SettingsViewModel @Inject constructor(
     data class SettingsUiState(
         val paneWidth: Float = 360f,
         val themeConfig: AppThemeConfig = AppThemeConfig.FOLLOW_SYSTEM,
-        val currentAiModel: cloud.wafflecommons.pixelbrainreader.data.model.AiModel = cloud.wafflecommons.pixelbrainreader.data.model.AiModel.GEMINI_FLASH,
+        val currentAiModel: cloud.wafflecommons.pixelbrainreader.data.model.AiModel = cloud.wafflecommons.pixelbrainreader.data.model.AiModel.CORTEX_LOCAL,
         val appVersion: String = "7.0.0",
         val repoOwner: String? = null,
         val repoName: String? = null,

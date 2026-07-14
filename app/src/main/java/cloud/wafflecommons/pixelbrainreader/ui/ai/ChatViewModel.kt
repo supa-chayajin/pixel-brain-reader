@@ -6,17 +6,17 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import cloud.wafflecommons.pixelbrainreader.data.ai.GeminiRagManager
-import cloud.wafflecommons.pixelbrainreader.data.ai.GeminiScribeManager
 import cloud.wafflecommons.pixelbrainreader.data.ai.LocalAiManager
 import cloud.wafflecommons.pixelbrainreader.data.ai.NanoException
 import cloud.wafflecommons.pixelbrainreader.data.ai.NanoState
-import cloud.wafflecommons.pixelbrainreader.data.ai.ScribePersona
 import cloud.wafflecommons.pixelbrainreader.data.ai.VectorSearchEngine
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.ChatMessageEntity
 import cloud.wafflecommons.pixelbrainreader.data.repository.ChatRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -24,6 +24,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
+import kotlin.coroutines.cancellation.CancellationException
 import javax.inject.Inject
 
 /** UI-shape message rendered by [ChatBubble]. */
@@ -35,7 +37,7 @@ data class ChatMessage(
     val sources: List<String> = emptyList()
 )
 
-/** Two persisted chat surfaces. ORACLE = RAG over the vault, SCRIBE = persona-creative. */
+/** Two persisted chat surfaces. ORACLE = RAG over the vault, SCRIBE = open chat. */
 enum class ChatMode { SCRIBE, ORACLE }
 
 /** Map UI enum to the storage strings agreed at the data layer boundary. */
@@ -55,50 +57,41 @@ private fun ChatMessageEntity.toUi(): ChatMessage = ChatMessage(
 // Sliding window size injected into the Nano prompt. 6 messages = 3 turns.
 // Higher values risk REQUEST_TOO_LARGE on long messages, especially with RAG context.
 private const val NANO_WINDOW_SIZE = 6
-// Top-K vector hits for RAG grounding. Raised from 3 now that VectorSearchEngine
-// applies a MIN_SIMILARITY floor — more genuinely-relevant chunks reach the prompt
-// without low-similarity noise slipping in.
+// Top-K vector hits for RAG grounding.
 private const val RAG_TOP_K = 6
+// Overall budget for a streamed on-device answer. Tokens render as they arrive, so a partial
+// answer is still shown; if nothing arrives in time we surface a timeout notice.
+private const val STREAM_TIMEOUT_MS = 120_000L
 
 /**
- * Single persona used for BOTH chat surfaces (Cortex / RAG and Spark / Creative).
+ * Single persona used for BOTH chat surfaces (Cortex / RAG and Spark / open chat).
+ * Mode only controls whether the vector store is queried, not the model's voice.
  *
- * The block itself instructs the model on when to lean on the
- * [INFORMATIONS DE RÉFÉRENCE] block vs. when to just chat — so we no longer
- * need per-mode system prompts. Mode now only controls whether the vector
- * store is queried, not the model's voice.
- *
- * Edit this string when you want to retune the persona — that's the only knob.
+ * Tuned for SHORT answers: the on-device model is one-shot, so long, heavily-formatted
+ * replies make the user wait on a spinner. Keeping answers terse makes generation prompt.
  */
 private const val PIXEL_BRAIN_PERSONA = """
 Tu es l'assistant IA de l'application Cortex. Tu dois TOUJOURS répondre en français.
 
-RÔLE ET IDENTITÉ : Tu es un assistant IA hautement analytique, structuré et bienveillant.
+RÔLE : Assistant analytique, pragmatique et bienveillant. Valide brièvement, puis ramène à la logique et aux faits. Stoppe l'overthinking.
 
-TON ET STYLE : Empathique mais pragmatique. Valide les difficultés de l'utilisateur, mais ramène-le immédiatement à la réalité, aux faits et à la logique. Stoppe net toute tendance à l'overthinking. Sois dynamique, encourageant, candide, percutant, avec un humour intelligent basé sur la logique.
+CONCISION (OBLIGATOIRE) : Réponds de façon TRÈS courte et directe — 2 à 4 phrases maximum. Va droit au but. Pas de titres ni de longues listes, sauf si l'utilisateur le demande explicitement. Un emoji occasionnel est acceptable.
 
-FORMATAGE (OBLIGATOIRE) : Structure tes réponses pour qu'elles soient scannables. Utilise des titres (###), du gras pour les mots-clés/conclusions, des listes à puces, et intègre des emojis (🚀, 🛑, 💡, 💻, 🛠️, etc...).
-
-MISSION RAG & CHAT : Traite chaque problème comme un bug à résoudre ou une architecture à optimiser en redonnant le contrôle à l'utilisateur. Utilise les INFORMATIONS DE RÉFÉRENCE en complément (si elles sont pertinents pour la demande) pour répondre avec précision aux questions sur les notes. CEPENDANT, si la question est une discussion courante, sois poli, naturel, et réponds avec ton persona sans dire que l'information est absente des notes.
+RÉFÉRENCES : Utilise les INFORMATIONS DE RÉFÉRENCE quand elles sont pertinentes pour répondre sur les notes. Si la question est une simple discussion, réponds naturellement, sans signaler que l'information est absente des notes.
 """
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class ChatViewModel @Inject constructor(
-    private val ragManager: GeminiRagManager,
-    private val scribeManager: GeminiScribeManager,
     private val localAiManager: LocalAiManager,
     private val chatRepository: ChatRepository,
     private val vectorSearchEngine: VectorSearchEngine
 ) : ViewModel() {
 
-    // --- Mode + persona (UI-only state) --------------------------------------
+    // --- Mode (UI-only state) ------------------------------------------------
 
     private val _currentMode = MutableStateFlow(ChatMode.ORACLE)
     val currentMode: StateFlow<ChatMode> = _currentMode.asStateFlow()
-
-    var currentPersona by mutableStateOf(ScribePersona.TECH_WRITER)
-        private set
 
     // --- Persisted history (per-mode Flow) -----------------------------------
 
@@ -116,21 +109,12 @@ class ChatViewModel @Inject constructor(
         )
         .let { entityFlow ->
             // Map at the boundary so the bubble composable stays Room-agnostic.
-            kotlinx.coroutines.flow.MutableStateFlow<List<ChatMessage>>(emptyList()).also { ui ->
+            MutableStateFlow<List<ChatMessage>>(emptyList()).also { ui ->
                 viewModelScope.launch {
                     entityFlow.collect { entities -> ui.value = entities.map { it.toUi() } }
                 }
             }
         }
-
-    // --- Transient streaming overlay (cloud only — Nano is one-shot) ---------
-
-    /**
-     * When the cloud fallback path is streaming, this holds the in-progress bubble
-     * appended after [chatHistory]. Cleared once the final response is persisted to Room.
-     */
-    private val _streamingMessage = MutableStateFlow<ChatMessage?>(null)
-    val streamingMessage: StateFlow<ChatMessage?> = _streamingMessage.asStateFlow()
 
     // --- Ambient state -------------------------------------------------------
 
@@ -139,15 +123,15 @@ class ChatViewModel @Inject constructor(
 
     val nanoState: StateFlow<NanoState> = localAiManager.nanoState
 
-    var showCloudFallbackDialog by mutableStateOf(false)
-        private set
-    var cloudFallbackReason: String? by mutableStateOf(null)
-        private set
-    private var pendingCloudPrompt: String? = null
+    /**
+     * Transient streaming bubble appended after [chatHistory] while a response streams in.
+     * Cleared once the final answer is persisted to Room.
+     */
+    private val _streamingMessage = MutableStateFlow<ChatMessage?>(null)
+    val streamingMessage: StateFlow<ChatMessage?> = _streamingMessage.asStateFlow()
 
-    fun switchPersona(persona: ScribePersona) {
-        currentPersona = persona
-    }
+    /** The in-flight generation launched by [sendMessage], so [resetChat] can cancel it. */
+    private var generationJob: Job? = null
 
     fun toggleMode() {
         _currentMode.value =
@@ -158,18 +142,16 @@ class ChatViewModel @Inject constructor(
 
     /**
      * 1. Persist user turn to Room (atomic — never lost on crash mid-call).
-     * 2. Fetch the last N messages including the just-saved query, then drop it
-     *    to derive the *prior* history for the sliding window.
-     * 3. If RAG mode, run a single vector search to get both grounding context
-     *    and citation file IDs.
-     * 4. Call Gemini Nano with the augmented prompt.
-     * 5. On success: persist the model turn (with sources for RAG).
-     * 6. On failure: raise the cloud-fallback consent dialog (unchanged contract).
+     * 2. Derive the *prior* sliding-window history.
+     * 3. In ORACLE mode, run one vector search for grounding context + citations.
+     * 4. Generate on-device via Gemini Nano.
+     * 5. On success: persist the model turn. On failure: persist an inline error turn
+     *    (there is no cloud fallback — the app is 100% on-device).
      */
     fun sendMessage(query: String) {
         if (query.isBlank()) return
 
-        viewModelScope.launch {
+        generationJob = viewModelScope.launch {
             val mode = _currentMode.value
             val modeStorage = mode.storage()
 
@@ -204,160 +186,95 @@ class ChatViewModel @Inject constructor(
                 Log.d("RAG_DEBUG", "ChatViewModel.sendMessage(SCRIBE): RAG search skipped")
             }
 
-            // 4. Nano call. Single persona covers both modes — the persona's
-            // own MISSION RAG & CHAT clause handles "use references when
-            // relevant, just chat otherwise". The mode only decides whether
-            // we ran a vector search above.
+            // 4. On-device Nano STREAMING call. Tokens are appended to a transient overlay
+            // bubble as they arrive; the completed answer is then persisted to Room. Single
+            // persona covers both modes — the mode only decides whether we ran RAG above.
             loadingStage = "🔒 Asking Gemini Nano (on-device)…"
-            val result = localAiManager.generateAugmentedResponse(
-                systemPrompt = PIXEL_BRAIN_PERSONA,
-                ragContext = ragContext,
-                chatHistory = priorHistory,
-                currentQuery = query
-            )
-            loadingStage = null
-
-            result.fold(
-                onSuccess = { text ->
-                    chatRepository.addMessage(
-                        ChatMessageEntity(
-                            mode = modeStorage,
-                            role = "MODEL",
-                            content = text,
-                            sources = sources
-                        )
-                    )
-                },
-                onFailure = { e ->
-                    pendingCloudPrompt = query
-                    cloudFallbackReason = describeFailure(e)
-                    showCloudFallbackDialog = true
-                }
-            )
-        }
-    }
-
-    fun onConfirmCloudFallback() {
-        val query = pendingCloudPrompt ?: run {
-            dismissDialog()
-            return
-        }
-        dismissDialog()
-        runCloudGeneration(query)
-    }
-
-    fun onDismissCloudFallback() = dismissDialog()
-
-    private fun dismissDialog() {
-        showCloudFallbackDialog = false
-        cloudFallbackReason = null
-        pendingCloudPrompt = null
-    }
-
-    /**
-     * Re-run the last user query through the cloud (Gemini) path to get a full,
-     * untruncated answer. Gemini Nano has a fixed on-device output budget, so long
-     * ORACLE/SCRIBE replies come back clipped; tapping "Full answer (cloud)" on the
-     * latest reply escalates to the streaming cloud path. The explicit tap IS the
-     * consent, so this deliberately bypasses the fallback dialog.
-     */
-    fun regenerateLastWithCloud() {
-        val lastUserQuery = chatHistory.value.lastOrNull { it.isUser }?.content ?: return
-        runCloudGeneration(lastUserQuery)
-    }
-
-    /**
-     * Cloud fallback. Streams tokens into a transient [streamingMessage] overlay
-     * so the UI has live feedback; persists the final aggregated response to Room
-     * on completion so it's preserved across app kill and mode-toggles.
-     *
-     * The user message was already persisted at the start of [sendMessage] — we
-     * don't re-persist it here.
-     */
-    private fun runCloudGeneration(query: String) {
-        val mode = _currentMode.value
-        val modeStorage = mode.storage()
-        val transientId = java.util.UUID.randomUUID().toString()
-        _streamingMessage.value = ChatMessage(
-            id = transientId, content = "", isUser = false, isStreaming = true
-        )
-
-        viewModelScope.launch {
-            var sources: List<String> = emptyList()
+            _streamingMessage.value =
+                ChatMessage(content = "", isUser = false, isStreaming = true, sources = sources)
+            val sb = StringBuilder()
             try {
-                if (mode == ChatMode.ORACLE) {
-                    loadingStage = "🔎 Searching your Second Brain (cloud)…"
-                    sources = ragManager.findSources(query)
-                    loadingStage = if (sources.isNotEmpty())
-                        "🧠 Analyzing ${sources.size} notes…" else "✨ No relevant notes; switching to open answer…"
-                } else {
-                    loadingStage = "✨ Sparking creativity…"
-                }
-
-                val flow = if (mode == ChatMode.ORACLE) {
-                    ragManager.generateResponse(query, useRAG = true)
-                } else {
-                    scribeManager.generateScribeContent(query, currentPersona)
-                }
-
-                loadingStage = "☁️ Generating answer (Cloud)…"
-
-                val sb = StringBuilder()
-                var lastUpdate = 0L
-                flow.collect { token ->
-                    sb.append(token)
-                    val now = System.currentTimeMillis()
-                    if (now - lastUpdate > 16) {
-                        lastUpdate = now
-                        _streamingMessage.value = _streamingMessage.value?.copy(
-                            content = sb.toString(), sources = sources
-                        )
+                withTimeout(STREAM_TIMEOUT_MS) {
+                    localAiManager.generateAugmentedResponseStream(
+                        systemPrompt = PIXEL_BRAIN_PERSONA,
+                        ragContext = ragContext,
+                        chatHistory = priorHistory,
+                        currentQuery = query
+                    ).collect { delta ->
+                        // First token: drop the "Asking…" label — the bubble takes over.
+                        if (loadingStage != null) loadingStage = null
+                        sb.append(delta)
+                        _streamingMessage.value = _streamingMessage.value?.copy(content = sb.toString())
                     }
                 }
-                // Final paint of the streaming overlay before we hand off to Room.
-                _streamingMessage.value = _streamingMessage.value?.copy(
-                    content = sb.toString(), sources = sources, isStreaming = false
-                )
-
-                // Persist the completed cloud response so it survives app kill /
-                // mode toggles. Room flow re-emission will render it; the overlay
-                // is cleared on the same frame to avoid a duplicate bubble.
+                loadingStage = null
+                val finalText = sb.toString()
                 chatRepository.addMessage(
                     ChatMessageEntity(
                         mode = modeStorage,
                         role = "MODEL",
-                        content = sb.toString(),
-                        sources = sources
+                        content = finalText.ifBlank { "⚠️ Le modèle on-device n'a renvoyé aucune réponse." },
+                        sources = if (finalText.isBlank()) emptyList() else sources
                     )
                 )
                 _streamingMessage.value = null
-            } catch (e: Exception) {
-                _streamingMessage.value = _streamingMessage.value?.copy(
-                    content = "Error: ${e.message}", isStreaming = false
-                )
-                // Leave the transient bubble visible so the user sees the error;
-                // it disappears on the next send or mode toggle.
-            } finally {
+            } catch (e: TimeoutCancellationException) {
                 loadingStage = null
+                val partial = sb.toString()
+                chatRepository.addMessage(
+                    ChatMessageEntity(
+                        mode = modeStorage,
+                        role = "MODEL",
+                        content = if (partial.isNotBlank()) "$partial\n\n⚠️ (réponse interrompue — délai dépassé)"
+                            else "⚠️ Gemini Nano n'a pas répondu à temps.",
+                        sources = if (partial.isBlank()) emptyList() else sources
+                    )
+                )
+                _streamingMessage.value = null
+            } catch (e: CancellationException) {
+                // e.g. resetChat cancelled us mid-stream: drop the overlay, persist nothing.
+                _streamingMessage.value = null
+                throw e
+            } catch (e: Exception) {
+                loadingStage = null
+                val partial = sb.toString()
+                chatRepository.addMessage(
+                    ChatMessageEntity(
+                        mode = modeStorage,
+                        role = "MODEL",
+                        content = if (partial.isNotBlank()) partial else "⚠️ " + describeFailure(e),
+                        sources = if (partial.isBlank()) emptyList() else sources
+                    )
+                )
+                _streamingMessage.value = null
             }
         }
     }
 
     private fun describeFailure(e: Throwable): String = when (e) {
-        is NanoException.ContextExceeded -> "Your prompt is too long for the on-device model."
-        is NanoException.Unavailable -> "Gemini Nano is unavailable on this device (${e.reason})."
-        is NanoException.BadInput -> "The on-device model rejected the prompt (${e.reason})."
-        is NanoException.EmptyResponse -> "The on-device model returned no answer."
-        is NanoException.Generation -> "Gemini Nano failed: ${e.cause?.message ?: e.message}"
-        else -> "On-device AI unavailable: ${e.message ?: "unknown error"}"
+        is NanoException.ContextExceeded -> "Ton message est trop long pour le modèle on-device."
+        is NanoException.Unavailable ->
+            "Gemini Nano est indisponible sur cet appareil (${e.reason}). Télécharge-le dans les Réglages."
+        is NanoException.BadInput -> "Le modèle on-device a refusé la requête (${e.reason})."
+        is NanoException.EmptyResponse -> "Le modèle on-device n'a renvoyé aucune réponse."
+        is NanoException.Generation -> "Gemini Nano a échoué : ${e.cause?.message ?: e.message}"
+        else -> "IA on-device indisponible : ${e.message ?: "erreur inconnue"}"
     }
 
-    /** Clear history for the active mode. The other mode's history is untouched. */
+    /**
+     * Clear the active mode's history. Cancels any in-flight generation first so a clear
+     * pressed mid-answer can't re-persist a model turn afterwards. The other mode's history
+     * is untouched (Room delete is keyed by mode).
+     */
     fun resetChat() {
         val modeStorage = _currentMode.value.storage()
+        val job = generationJob
+        generationJob = null
+        loadingStage = null
+        _streamingMessage.value = null
         viewModelScope.launch {
+            job?.cancelAndJoin()
             chatRepository.clear(modeStorage)
-            _streamingMessage.value = null
         }
     }
 }
