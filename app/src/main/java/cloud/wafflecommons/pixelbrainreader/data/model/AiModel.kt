@@ -1,11 +1,13 @@
 package cloud.wafflecommons.pixelbrainreader.data.model
 
+/**
+ * On-device AI model selection. The app is 100% on-device — the only engine is
+ * Gemini Nano via ML Kit GenAI. (Cloud Gemini Flash/Pro were removed.)
+ */
 enum class AiModel(val id: String, val displayName: String) {
-    GEMINI_FLASH("gemini-2.5-flash-lite", "Gemini 2.5 Flash Lite"),
-    GEMINI_PRO("gemini-2.5-pro", "Gemini 2.5 Pro"),
     CORTEX_LOCAL("cortex-local", "Cortex (On-Device)");
 
     companion object {
-        fun fromId(id: String): AiModel = entries.find { it.id == id } ?: GEMINI_FLASH
+        fun fromId(id: String): AiModel = entries.find { it.id == id } ?: CORTEX_LOCAL
     }
 }

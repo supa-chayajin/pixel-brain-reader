@@ -62,7 +62,7 @@ class UserPreferencesRepository @Inject constructor(
     
     val selectedAiModel: Flow<cloud.wafflecommons.pixelbrainreader.data.model.AiModel> = context.dataStore.data
         .map { preferences ->
-            val id = preferences[KEY_AI_MODEL] ?: cloud.wafflecommons.pixelbrainreader.data.model.AiModel.GEMINI_FLASH.id
+            val id = preferences[KEY_AI_MODEL] ?: cloud.wafflecommons.pixelbrainreader.data.model.AiModel.CORTEX_LOCAL.id
             cloud.wafflecommons.pixelbrainreader.data.model.AiModel.fromId(id)
         }
 

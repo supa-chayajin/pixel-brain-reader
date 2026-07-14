@@ -39,9 +39,6 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
-        val key = localProperties.getProperty("geminiApiKey") ?: ""
-        buildConfigField("String", "geminiApiKey", "\"$key\"")
-
         // The stub native library at src/main/cpp triggers libc++_shared.so
         // packaging. We only ship for the four ABIs Android currently supports
         // — without this filter, AGP would also try to build for emulator
@@ -239,7 +236,6 @@ dependencies {
 
     // AI Core & MediaPipe (V4.0: Neural Vault)
     implementation(libs.kotlinx.coroutines.play.services)
-    implementation(libs.google.ai.client)
     // Gemini Nano on-device (AICore) — privacy-first local inference, no silent cloud fallback
     implementation(libs.google.ai.edge.aicore)
     implementation(libs.mediapipe.tasks.text)

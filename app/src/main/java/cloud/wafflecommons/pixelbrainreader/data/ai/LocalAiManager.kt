@@ -19,8 +19,11 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -157,21 +160,8 @@ class LocalAiManager @Inject constructor(
         }
 
         // Strict contract: never trigger a download from the generation path.
-        if (_nanoState.value !is NanoState.Ready) {
-            val reason = when (val s = _nanoState.value) {
-                NanoState.NotDownloaded ->
-                    "model not downloaded — open Settings to download Gemini Nano"
-                is NanoState.Downloading -> {
-                    val pct = if (s.progress in 0f..1f) " (${(s.progress * 100).toInt()}%)" else ""
-                    "model is downloading$pct"
-                }
-                is NanoState.Unavailable -> s.reason
-                is NanoState.Error -> s.cause.localizedMessage ?: s.cause.message ?: "error"
-                NanoState.Checking -> "still checking on-device AI availability"
-                NanoState.Unknown -> "Gemini Nano is not ready on this device"
-                NanoState.Ready -> "unreachable"
-            }
-            return@withContext Result.failure(NanoException.Unavailable(reason))
+        modelNotReadyReason()?.let {
+            return@withContext Result.failure(NanoException.Unavailable(it))
         }
 
         sessionMutex.withLock {
@@ -236,6 +226,68 @@ class LocalAiManager @Inject constructor(
         return generateResponse(prompt)
     }
 
+    /** Human-readable reason the on-device model isn't ready, or null when it IS Ready. */
+    private fun modelNotReadyReason(): String? = when (val s = _nanoState.value) {
+        is NanoState.Ready -> null
+        NanoState.NotDownloaded -> "model not downloaded — open Settings to download Gemini Nano"
+        is NanoState.Downloading -> {
+            val pct = if (s.progress in 0f..1f) " (${(s.progress * 100).toInt()}%)" else ""
+            "model is downloading$pct"
+        }
+        is NanoState.Unavailable -> s.reason
+        is NanoState.Error -> s.cause.localizedMessage ?: s.cause.message ?: "error"
+        NanoState.Checking -> "still checking on-device AI availability"
+        NanoState.Unknown -> "Gemini Nano is not ready on this device"
+    }
+
+    /**
+     * Streaming variant of [generateAugmentedResponse]. Emits response deltas as Gemini Nano
+     * produces them (ML Kit `generateContentStream`), so the UI renders the answer incrementally
+     * instead of blocking on a single one-shot call. Never triggers a download.
+     */
+    fun generateAugmentedResponseStream(
+        systemPrompt: String,
+        ragContext: String?,
+        chatHistory: List<ChatMessageEntity>,
+        currentQuery: String
+    ): Flow<String> {
+        val prompt = buildAugmentedPrompt(systemPrompt, ragContext, chatHistory, currentQuery)
+        return generateResponseStream(prompt)
+    }
+
+    /**
+     * On-device streaming inference. Emits text deltas from Gemini Nano; throws a typed
+     * [NanoException] if the model isn't Ready or generation fails. Stream collection is
+     * cancellable — a caller timeout/cancel actually aborts it.
+     */
+    fun generateResponseStream(prompt: String): Flow<String> = flow {
+        if (prompt.isBlank()) throw NanoException.BadInput("Empty prompt")
+        modelNotReadyReason()?.let { throw NanoException.Unavailable(it) }
+
+        sessionMutex.withLock {
+            val start = System.currentTimeMillis()
+            var chunks = 0
+            var chars = 0
+            try {
+                ensureModel().generateContentStream(prompt).collect { response ->
+                    val text = response.candidates.firstOrNull()?.text
+                    chunks++
+                    if (chunks <= 5 || chunks % 25 == 0) {
+                        Log.d(tag, "stream chunk #$chunks len=${text?.length ?: 0} at ${System.currentTimeMillis() - start}ms")
+                    }
+                    if (!text.isNullOrEmpty()) {
+                        chars += text.length
+                        emit(text)
+                    }
+                }
+                Log.i(tag, "generateContentStream done: $chunks chunks, $chars chars in ${System.currentTimeMillis() - start}ms")
+            } catch (e: GenAiException) {
+                logGenAiException("generateContentStream", e)
+                throw mapGenAiException(e)
+            }
+        }
+    }.flowOn(Dispatchers.IO)
+
     private fun buildAugmentedPrompt(
         systemPrompt: String,
         ragContext: String?,
@@ -274,7 +326,9 @@ class LocalAiManager @Inject constructor(
     }
 
     private companion object {
-        const val INFERENCE_TIMEOUT_MS = 900_000L
+        // Generous — the first inference after a fresh (re)download reloads the model into
+        // memory and can take a while. Chat streaming uses its own tighter budget.
+        const val INFERENCE_TIMEOUT_MS = 120_000L
         const val AICORE_PACKAGE = "com.google.android.aicore"
     }
 
