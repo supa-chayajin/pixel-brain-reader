@@ -2,6 +2,7 @@ package cloud.wafflecommons.pixelbrainreader.data.notifications
 
 import android.Manifest
 import android.app.NotificationChannel
+import android.app.NotificationChannelGroup
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
@@ -11,6 +12,7 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.toBitmap
 import cloud.wafflecommons.pixelbrainreader.MainActivity
 import cloud.wafflecommons.pixelbrainreader.R
 import cloud.wafflecommons.pixelbrainreader.ui.privatevault.PrivateJournalActivity
@@ -25,25 +27,37 @@ object NotificationHelper {
     const val CHANNEL_VAULT = "reminder_vault"
     const val CHANNEL_CHORES = "reminder_chores_habits"
 
+    // Groups both reminder channels under one "Reminders" category in system settings.
+    private const val GROUP_REMINDERS = "reminders"
+
     private const val NOTIF_VAULT = 2001
     private const val NOTIF_CHORES = 2002
 
     fun ensureChannels(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val nm = context.getSystemService(NotificationManager::class.java) ?: return
+        // Category group first — channels below reference it so they nest under
+        // one "Reminders" heading in the system notification settings.
+        nm.createNotificationChannelGroup(NotificationChannelGroup(GROUP_REMINDERS, "Reminders"))
         nm.createNotificationChannel(
             NotificationChannel(
                 CHANNEL_VAULT,
                 "Private vault reminders",
                 NotificationManager.IMPORTANCE_DEFAULT
-            ).apply { description = "Nudges to write in your private vault" }
+            ).apply {
+                description = "Nudges to write in your private vault"
+                group = GROUP_REMINDERS
+            }
         )
         nm.createNotificationChannel(
             NotificationChannel(
                 CHANNEL_CHORES,
                 "Chores & habits reminders",
                 NotificationManager.IMPORTANCE_DEFAULT
-            ).apply { description = "Reminders for due chores and unfinished habits" }
+            ).apply {
+                description = "Reminders for due chores and unfinished habits"
+                group = GROUP_REMINDERS
+            }
         )
     }
 
@@ -75,10 +89,14 @@ object NotificationHelper {
 
     private fun baseBuilder(context: Context, channel: String, title: String, text: String) =
         NotificationCompat.Builder(context, channel)
+            // Small icon (status bar) = the Pixel Brain logo silhouette (alpha-only / monochrome).
             .setSmallIcon(R.drawable.ic_notification)
+            // Large icon (notification body) = the full-colour app launcher logo.
+            .setLargeIcon(ContextCompat.getDrawable(context, R.mipmap.ic_launcher)?.toBitmap(width = 128, height = 128))
             .setContentTitle(title)
             .setContentText(text)
             .setAutoCancel(true)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
 
     private fun activityPending(context: Context, requestCode: Int, intent: Intent): PendingIntent {

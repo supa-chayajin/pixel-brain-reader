@@ -27,36 +27,51 @@ class ReminderScheduler @Inject constructor(
     private val userPrefs: UserPreferencesRepository
 ) {
 
-    suspend fun reschedule() {
+    /**
+     * Sync WorkManager periodic reminders with the saved preferences.
+     *
+     * @param force `false` — the app-start "ensure scheduled" call — preserves any
+     *   already-scheduled run via [ExistingPeriodicWorkPolicy.KEEP]. This is CRITICAL:
+     *   WorkManager starts the app process to run a due reminder, so a cancel-then-reschedule
+     *   here (the old behavior) killed that very run at the moment it came due — the reminder
+     *   never fired. `true` — a real preference change from settings — applies the new time
+     *   via UPDATE (and clears stale chore windows).
+     */
+    suspend fun reschedule(force: Boolean = false) {
         NotificationHelper.ensureChannels(context)
         val wm = WorkManager.getInstance(context)
+        val policy = if (force) ExistingPeriodicWorkPolicy.UPDATE else ExistingPeriodicWorkPolicy.KEEP
 
-        // Vault reminder — single daily work. Cancel first so a disabled toggle stops it.
-        wm.cancelUniqueWork(VAULT_WORK)
+        // Vault reminder — single daily work.
         if (userPrefs.vaultReminderEnabled.first()) {
             wm.enqueueUniquePeriodicWork(
                 VAULT_WORK,
-                ExistingPeriodicWorkPolicy.UPDATE,
+                policy,
                 PeriodicWorkRequestBuilder<VaultReminderWorker>(24, TimeUnit.HOURS)
                     .setInitialDelay(initialDelayMillis(userPrefs.vaultReminderTime.first()), TimeUnit.MILLISECONDS)
                     .build()
             )
+        } else {
+            wm.cancelUniqueWork(VAULT_WORK)
         }
 
-        // Chores/habits — one daily work per configured window. Cancel the whole
-        // tagged group first so a removed window's stale periodic work stops firing.
-        wm.cancelAllWorkByTag(CHORES_TAG)
+        // Chores/habits — one daily work per configured window.
         if (userPrefs.choresReminderEnabled.first()) {
+            // Only on a genuine change do we clear the tagged group, so a removed
+            // window's stale periodic work stops. On app start we KEEP (see above).
+            if (force) wm.cancelAllWorkByTag(CHORES_TAG)
             userPrefs.choresReminderWindows.first().forEach { hhmm ->
                 wm.enqueueUniquePeriodicWork(
                     CHORES_WORK_PREFIX + hhmm.replace(":", ""),
-                    ExistingPeriodicWorkPolicy.UPDATE,
+                    policy,
                     PeriodicWorkRequestBuilder<ChoresHabitsReminderWorker>(24, TimeUnit.HOURS)
                         .setInitialDelay(initialDelayMillis(hhmm), TimeUnit.MILLISECONDS)
                         .addTag(CHORES_TAG)
                         .build()
                 )
             }
+        } else {
+            wm.cancelAllWorkByTag(CHORES_TAG)
         }
     }
 
