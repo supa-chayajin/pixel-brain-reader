@@ -2,7 +2,6 @@ import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.jetbrains.kotlin.android)
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.hilt.android)
     alias(libs.plugins.ksp)
@@ -28,8 +27,8 @@ android {
     defaultConfig {
         applicationId = "cloud.wafflecommons.pixelbrainreader"
         minSdk = 36
-        compileSdk = 36
-        targetSdkPreview = "36"
+        compileSdk = 37
+        targetSdk = 36
         // V7 milestone: Private-Vault RAG security model, manual indexing,
         // content-fingerprint reindex, vault-rooted health sync.
         versionCode = 701
@@ -113,9 +112,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = "17"
-    }
     buildFeatures {
         compose = true
         buildConfig = true
@@ -150,10 +146,31 @@ android {
     }
 }
 
+// Built-in Kotlin (AGP 9): compiler options live here now, not android.kotlinOptions.
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
+}
+
 // CORRECTION DU CRASH "Duplicate Class"
 configurations.all {
     resolutionStrategy {
         exclude(group = "org.jetbrains", module = "annotations-java5")
+        // material3 1.5.0-alpha23 requires Compose 1.12.0-alpha03. Force the whole
+        // Compose core to that version so BOM-pinned artifacts (ui-tooling, ui-test,
+        // etc.) don't skew against the version material3 drags in.
+        eachDependency {
+            if (requested.group in setOf(
+                    "androidx.compose.ui",
+                    "androidx.compose.foundation",
+                    "androidx.compose.runtime",
+                    "androidx.compose.animation"
+                )
+            ) {
+                useVersion("1.12.0-alpha03")
+            }
+        }
     }
 }
 

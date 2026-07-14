@@ -27,3 +27,6 @@ graphify-out/
 scripts/
 CLAUDE.md
 opencode.json
+
+# Kotlin 2.2 build cache (AGP built-in Kotlin)
+.kotlin/
