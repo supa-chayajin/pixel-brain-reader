@@ -10,12 +10,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -80,6 +82,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.RadialGradientShader
 import androidx.compose.ui.graphics.Shader
 import androidx.compose.ui.graphics.ShaderBrush
@@ -161,20 +164,58 @@ private fun ExpressiveNavBar(
             shadowElevation = 6.dp,
             modifier = Modifier.weight(1f).height(64.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxSize().padding(innerPad),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                regular.forEach { item ->
-                    NavPiece(
-                        icon = item.icon,
-                        label = item.label,
-                        selected = item.selected,
-                        pillRadius = pillRadius,
-                        onClick = { if (!item.selected) onSelect(item.route) },
-                        modifier = Modifier.weight(1f).fillMaxHeight()
-                    )
+            val selectedIndex = regular.indexOfFirst { it.selected }
+            val hasSelection = selectedIndex >= 0
+            // Park the sliding pill at the last selected slot; keep it there (faded out)
+            // while a non-group tab (Daily) is active, so it slides back correctly on return.
+            var parkedIndex by remember { mutableStateOf(selectedIndex.coerceAtLeast(0)) }
+            LaunchedEffect(selectedIndex) { if (selectedIndex >= 0) parkedIndex = selectedIndex }
+
+            BoxWithConstraints(modifier = Modifier.fillMaxSize().padding(innerPad)) {
+                val count = regular.size
+                val itemWidthPx = constraints.maxWidth.toFloat() / count
+                // The shared selection pill SLIDES to the active slot (spring) instead of
+                // each tab fading its own pill in and out.
+                val indicatorX by animateFloatAsState(
+                    targetValue = parkedIndex * itemWidthPx,
+                    // Snappy but visible glide with a gentle settle. (StiffnessMediumLow=400
+                    // finished in ~250ms and read as a snap; StiffnessLow=200 felt a touch slow.)
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioLowBouncy,
+                        stiffness = 320f
+                    ),
+                    label = "navIndicatorX"
+                )
+                val indicatorAlpha by animateFloatAsState(
+                    targetValue = if (hasSelection) 1f else 0f,
+                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                    label = "navIndicatorAlpha"
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(1f / count)
+                        .fillMaxHeight()
+                        .graphicsLayer {
+                            translationX = indicatorX
+                            alpha = indicatorAlpha
+                        }
+                        .clip(RoundedCornerShape(pillRadius))
+                        .background(MaterialTheme.colorScheme.secondaryContainer)
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    regular.forEach { item ->
+                        NavPiece(
+                            icon = item.icon,
+                            label = item.label,
+                            selected = item.selected,
+                            onClick = { if (!item.selected) onSelect(item.route) },
+                            modifier = Modifier.weight(1f).fillMaxHeight()
+                        )
+                    }
                 }
             }
         }
@@ -183,12 +224,33 @@ private fun ExpressiveNavBar(
         // Same radius + same dark surface as the group, distinguished only by a
         // green GLOW (colored shadow + accent border), like Finance's Ask button.
         val accent = MaterialTheme.colorScheme.primary
-        // Dim the Daily icon + label when unselected so it doesn't read as bright as when active.
-        val dailyContent = if (dailySelected) accent else accent.copy(alpha = 0.5f)
+        // Smoothly fade the Daily icon/label between active (bright) and idle (dimmed).
+        val dailyContent by animateColorAsState(
+            targetValue = if (dailySelected) accent else accent.copy(alpha = 0.5f),
+            animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+            label = "dailyContent"
+        )
         val surfaceHi = MaterialTheme.colorScheme.surfaceContainerHighest
-        // Green glow for the selected state, anchored to the TOP-RIGHT corner
-        // (brightest there, fading inward) rather than a centered radial.
-        val glowAlpha = if (dailySelected) 0.45f else 0f
+        // Soft spring fade-in of the top-right glow + accent border when Daily is selected,
+        // plus a gentle scale-pop — the "expressive" flourish.
+        val glowAlpha by animateFloatAsState(
+            targetValue = if (dailySelected) 0.45f else 0f,
+            animationSpec = spring(stiffness = Spring.StiffnessLow),
+            label = "dailyGlow"
+        )
+        val borderAlpha by animateFloatAsState(
+            targetValue = if (dailySelected) 0.9f else 0f,
+            animationSpec = spring(stiffness = Spring.StiffnessLow),
+            label = "dailyBorder"
+        )
+        val dailyScale by animateFloatAsState(
+            targetValue = if (dailySelected) 1.06f else 1f,
+            animationSpec = spring(
+                dampingRatio = Spring.DampingRatioMediumBouncy,
+                stiffness = Spring.StiffnessMedium
+            ),
+            label = "dailyScale"
+        )
         val dailyGlow = remember(glowAlpha, accent) {
             object : ShaderBrush() {
                 override fun createShader(size: Size): Shader =
@@ -201,6 +263,7 @@ private fun ExpressiveNavBar(
         }
         Box(
             modifier = Modifier
+                .graphicsLayer { scaleX = dailyScale; scaleY = dailyScale }
                 .height(64.dp)
                 .clip(RoundedCornerShape(barRadius))
                 // Opaque dark base so no content bleeds through the pill...
@@ -209,7 +272,7 @@ private fun ExpressiveNavBar(
                 // (fading to transparent) so it reads as a directional accent.
                 .background(dailyGlow)
                 .border(
-                    BorderStroke(1.5.dp, accent.copy(alpha = if (dailySelected) 0.9f else 0f)),
+                    BorderStroke(1.5.dp, accent.copy(alpha = borderAlpha)),
                     RoundedCornerShape(barRadius)
                 )
                 .clickable { if (!dailySelected) onSelect(Screen.DailyNote) }
@@ -230,24 +293,28 @@ private fun NavPiece(
     icon: ImageVector,
     label: String,
     selected: Boolean,
-    pillRadius: androidx.compose.ui.unit.Dp,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val pill by animateColorAsState(
-        targetValue = if (selected) MaterialTheme.colorScheme.secondaryContainer
-            else androidx.compose.ui.graphics.Color.Transparent,
+    // Cross-fade the icon/label colour instead of snapping.
+    val tint by animateColorAsState(
+        targetValue = if (selected) MaterialTheme.colorScheme.onSecondaryContainer
+            else MaterialTheme.colorScheme.onSurfaceVariant,
         animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
-        label = "navPill"
+        label = "navTint"
     )
-    val tint = if (selected) MaterialTheme.colorScheme.onSecondaryContainer
-        else MaterialTheme.colorScheme.onSurfaceVariant
-    // The selection pill FILLS the cell (full inner height, concentric radius),
-    // so it looks nested inside the bar rather than floating behind the icon.
+    // Springy scale-pop on the icon when a tab becomes active — the "expressive" bounce.
+    val iconScale by animateFloatAsState(
+        targetValue = if (selected) 1.18f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "navIconScale"
+    )
+    // No per-tab pill — the shared sliding indicator (in ExpressiveNavBar) draws it.
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(pillRadius))
-            .background(pill)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -256,7 +323,14 @@ private fun NavPiece(
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(20.dp))
+            Icon(
+                icon,
+                contentDescription = label,
+                tint = tint,
+                modifier = Modifier
+                    .size(20.dp)
+                    .graphicsLayer { scaleX = iconScale; scaleY = iconScale }
+            )
             Spacer(Modifier.height(2.dp))
             Text(label, style = MaterialTheme.typography.labelSmall, color = tint, maxLines = 1)
         }
