@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -165,8 +166,18 @@ private fun ExpressiveNavBar(
         Surface(
             shape = RoundedCornerShape(barRadius),
             color = MaterialTheme.colorScheme.surfaceContainerHighest,
-            shadowElevation = 6.dp,
-            modifier = Modifier.weight(1f).height(64.dp)
+            modifier = Modifier
+                .weight(1f)
+                .height(64.dp)
+                // Theme-coloured (primary) elevation shadow. The default BLACK shadow gets
+                // inverted into an ugly white halo under a device force-dark override, so we
+                // set the spot/ambient colours explicitly to the accent.
+                .shadow(
+                    elevation = 6.dp,
+                    shape = RoundedCornerShape(barRadius),
+                    spotColor = MaterialTheme.colorScheme.primary,
+                    ambientColor = MaterialTheme.colorScheme.primary
+                )
         ) {
             val selectedIndex = regular.indexOfFirst { it.selected }
             val hasSelection = selectedIndex >= 0
@@ -269,6 +280,15 @@ private fun ExpressiveNavBar(
             modifier = Modifier
                 .graphicsLayer { scaleX = dailyScale; scaleY = dailyScale }
                 .height(64.dp)
+                // Match the nav group with a theme-coloured (accent) elevation shadow so
+                // the emphasized Daily button doesn't read as flat — and never inverts to
+                // a white halo under force-dark.
+                .shadow(
+                    elevation = 6.dp,
+                    shape = RoundedCornerShape(barRadius),
+                    spotColor = accent,
+                    ambientColor = accent
+                )
                 .clip(RoundedCornerShape(barRadius))
                 // Opaque dark base so no content bleeds through the pill...
                 .background(surfaceHi)

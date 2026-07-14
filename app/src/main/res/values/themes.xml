@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.PixelBrainReader" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme.PixelBrainReader" parent="android:Theme.Material.Light.NoActionBar">
+        <!-- Jetpack Compose owns every colour in this app (light/dark follows the system
+             via MaterialExpressiveTheme). Opt OUT of Android's automatic "force dark",
+             which otherwise inverts our content — and mangles its shadows/elevation into
+             odd light halos — when the system (or a device force-dark override) is dark. -->
+        <item name="android:forceDarkAllowed">false</item>
+    </style>
 </resources>
