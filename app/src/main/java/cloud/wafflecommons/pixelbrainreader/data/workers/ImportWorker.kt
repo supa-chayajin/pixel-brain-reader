@@ -211,7 +211,7 @@ class ImportWorker @AssistedInject constructor(
 
         // AI summary callout
         if (!summary.isNullOrBlank()) {
-            sb.append("> [!abstract] Résumé\n")
+            sb.append("> [!abstract] Summary\n")
             summary.lines().forEach { line -> sb.append("> ${line.trimEnd()}\n") }
             sb.append("\n")
         }

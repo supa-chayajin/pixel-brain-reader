@@ -131,7 +131,7 @@ fun ChatPanel(
                         ) {
                             Icon(
                                 Icons.Rounded.DeleteSweep,
-                                contentDescription = "Effacer la conversation"
+                                contentDescription = "Clear conversation"
                             )
                         }
                     }
@@ -568,10 +568,10 @@ fun ClearChatDialog(
                 tint = MaterialTheme.colorScheme.error
             )
         },
-        title = { Text("Effacer cette conversation ?") },
+        title = { Text("Clear this conversation?") },
         text = {
             Text(
-                "Cette action supprime définitivement les messages de ce panneau. L'autre panneau n'est pas affecté.",
+                "This permanently deletes this panel's messages. The other panel is unaffected.",
                 style = MaterialTheme.typography.bodyMedium
             )
         },
@@ -580,11 +580,11 @@ fun ClearChatDialog(
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 onConfirm()
             }) {
-                Text("Effacer", color = MaterialTheme.colorScheme.error)
+                Text("Clear", color = MaterialTheme.colorScheme.error)
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Annuler") }
+            TextButton(onClick = onDismiss) { Text("Cancel") }
         }
     )
 }

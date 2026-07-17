@@ -77,7 +77,7 @@ class FileRepository @Inject constructor(
       return gitSyncCoordinator.mutex.withLock {
         try {
           // 1. Setup/Clone
-           _syncStatus.value = "Connexion au dépôt…"
+           _syncStatus.value = "Connecting to repository…"
            val remoteUrl = if (owner != null && repo != null) "https://github.com/$owner/$repo.git" else null
            jGitProvider.setupRepository(remoteUrl).onFailure { error ->
                Log.e("FileRepository", "Setup repository failed during sync", error)
@@ -85,7 +85,7 @@ class FileRepository @Inject constructor(
            }
 
            // 2. Commit
-           _syncStatus.value = "Validation locale…"
+           _syncStatus.value = "Committing locally…"
            jGitProvider.addAll()
            jGitProvider.commit("Auto-sync")
 

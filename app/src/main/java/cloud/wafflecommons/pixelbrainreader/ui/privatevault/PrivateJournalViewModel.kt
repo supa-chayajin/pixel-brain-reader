@@ -294,27 +294,27 @@ class PrivateJournalViewModel @Inject constructor(
         viewModelScope.launch {
             val prompt = when (action) {
                 AssistAction.IMPROVE -> """
-                    Tu es un assistant d'écriture bienveillant. Réécris ce texte de journal intime en
-                    français en améliorant le style, la clarté et la fluidité, SANS inventer de faits
-                    ni changer le sens, en gardant un ton personnel et naturel. Réponds uniquement
-                    avec le texte réécrit.
+                    You are a supportive writing assistant. Rewrite this private-journal text in
+                    English, improving the style, clarity and flow, WITHOUT inventing facts
+                    or changing the meaning, keeping a personal and natural tone. Reply only
+                    with the rewritten text.
 
-                    Texte :
+                    Text:
                     $content
                 """.trimIndent()
                 AssistAction.CONTINUE -> """
-                    Tu es un assistant d'écriture. Continue ce texte de journal intime en français,
-                    sur 2 à 4 phrases, dans le même ton et le même style. Réponds uniquement avec la suite.
+                    You are a writing assistant. Continue this private-journal text in English,
+                    over 2 to 4 sentences, in the same tone and style. Reply only with the continuation.
 
-                    Texte :
+                    Text:
                     $content
                 """.trimIndent()
                 AssistAction.INSPIRE -> buildString {
-                    appendLine("Propose 3 questions courtes et bienveillantes, en français, pour m'aider à")
-                    appendLine("écrire mon journal intime aujourd'hui. Une par ligne, format liste avec un tiret.")
+                    appendLine("Suggest 3 short, kind questions, in English, to help me")
+                    appendLine("write my private journal today. One per line, list format with a dash.")
                     if (content.isNotBlank()) {
                         appendLine()
-                        appendLine("Contexte de ce que j'ai déjà écrit :")
+                        appendLine("Context of what I've already written:")
                         append(content.take(1500))
                     }
                 }
@@ -322,7 +322,7 @@ class PrivateJournalViewModel @Inject constructor(
             val result = localAiManager.generateResponse(prompt)
             _assistState.value = result.fold(
                 onSuccess = { AssistState(visible = true, action = action, result = it.trim()) },
-                onFailure = { AssistState(visible = true, action = action, error = it.localizedMessage ?: "Modèle IA indisponible") }
+                onFailure = { AssistState(visible = true, action = action, error = it.localizedMessage ?: "AI model unavailable") }
             )
         }
     }

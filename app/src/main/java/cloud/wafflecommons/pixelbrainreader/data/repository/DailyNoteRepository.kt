@@ -53,9 +53,9 @@ links: []
 
 ## 📝 Journal
 
-## 🧠 Idées / Second Cerveau
+## 🧠 Ideas / Second Brain
 
-## 📑 Notes / Self-care 
+## 📑 Notes / Self-care
 """
     }
 

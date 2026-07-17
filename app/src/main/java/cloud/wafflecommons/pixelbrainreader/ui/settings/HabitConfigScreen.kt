@@ -249,11 +249,11 @@ fun HabitEditorForm(
             }
         }
 
-        Text("Planification", style = MaterialTheme.typography.titleMedium)
+        Text("Schedule", style = MaterialTheme.typography.titleMedium)
         val days = listOf("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN")
 
         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-            val modes = listOf("WEEKLY" to "Hebdo", "BIWEEKLY" to "2 sem.", "INTERVAL" to "Intervalle")
+            val modes = listOf("WEEKLY" to "Weekly", "BIWEEKLY" to "2 wk", "INTERVAL" to "Interval")
             modes.forEachIndexed { index, (mode, lbl) ->
                 SegmentedButton(
                     selected = scheduleMode == mode,
@@ -269,7 +269,7 @@ fun HabitEditorForm(
         when (scheduleMode) {
             "INTERVAL" -> {
                 Text(
-                    "Répète tous les N jours / semaines / mois depuis la dernière complétion, quel que soit le jour de la semaine.",
+                    "Repeats every N days / weeks / months since the last completion, regardless of the day of week.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -280,13 +280,13 @@ fun HabitEditorForm(
                     OutlinedTextField(
                         value = intervalCount,
                         onValueChange = { intervalCount = it.filter { c -> c.isDigit() }.take(3) },
-                        label = { Text("Tous les") },
+                        label = { Text("Every") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.width(110.dp),
                         singleLine = true
                     )
                     SingleChoiceSegmentedButtonRow {
-                        val units = listOf("DAY" to "jours", "WEEK" to "sem.", "MONTH" to "mois")
+                        val units = listOf("DAY" to "days", "WEEK" to "wk", "MONTH" to "months")
                         units.forEachIndexed { index, (u, lbl) ->
                             SegmentedButton(
                                 selected = intervalUnit == u,
@@ -299,7 +299,7 @@ fun HabitEditorForm(
             }
             "BIWEEKLY" -> {
                 listOf(1, 2).forEach { week ->
-                    Text("Semaine $week", style = MaterialTheme.typography.bodyMedium)
+                    Text("Week $week", style = MaterialTheme.typography.bodyMedium)
                     FlowRow(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)

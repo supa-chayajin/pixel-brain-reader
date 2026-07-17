@@ -84,6 +84,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
+import cloud.wafflecommons.pixelbrainreader.ui.theme.NavBarClearance
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.RadialGradientShader
 import androidx.compose.ui.graphics.Shader
@@ -142,6 +145,18 @@ private fun ExpressiveNavBar(
     modifier: Modifier = Modifier
 ) {
     val haptic = LocalHapticFeedback.current
+
+    // The floating bar's elevation shadow is tinted with the primary (sage) accent. On a dark
+    // surface that bright tint reads as an ugly glowing halo — but a shadow dimmed all the way to
+    // black just vanishes against the dark page. So on dark themes we keep the shadow COLOURED and
+    // at full elevation, only dialling its brightness partway down toward black: still clearly a
+    // shadow, just a subtler, darker green. Derived from the resolved surface luminance so it
+    // tracks the ACTUAL theme (not just the system setting).
+    val isDarkSurface = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val navShadowColor = if (isDarkSurface) lerp(MaterialTheme.colorScheme.primary, Color.Black, 0.4f)
+        else MaterialTheme.colorScheme.primary
+    val navShadowElevation = 6.dp
+
     data class NavDest(val route: String, val icon: ImageVector, val label: String, val selected: Boolean)
 
     // First three = the folded set (Repo, Habits, Chores). Unfolded reveals the rest.
@@ -188,10 +203,10 @@ private fun ExpressiveNavBar(
                 // inverted into an ugly white halo under a device force-dark override, so we
                 // set the spot/ambient colours explicitly to the accent.
                 .shadow(
-                    elevation = 6.dp,
+                    elevation = navShadowElevation,
                     shape = RoundedCornerShape(barRadius),
-                    spotColor = MaterialTheme.colorScheme.primary,
-                    ambientColor = MaterialTheme.colorScheme.primary
+                    spotColor = navShadowColor,
+                    ambientColor = navShadowColor
                 )
         ) {
             val selectedIndex = regular.indexOfFirst { it.selected }
@@ -299,10 +314,10 @@ private fun ExpressiveNavBar(
                 // the emphasized Daily button doesn't read as flat — and never inverts to
                 // a white halo under force-dark.
                 .shadow(
-                    elevation = 6.dp,
+                    elevation = navShadowElevation,
                     shape = RoundedCornerShape(barRadius),
-                    spotColor = accent,
-                    ambientColor = accent
+                    spotColor = navShadowColor,
+                    ambientColor = navShadowColor
                 )
                 .clip(RoundedCornerShape(barRadius))
                 // Opaque dark base so no content bleeds through the pill...
@@ -730,7 +745,13 @@ fun MainScreen(
 
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
-                    snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+                    snackbarHost = {
+                        // Lift above the floating ExpressiveNavBar, which would otherwise cover it.
+                        SnackbarHost(
+                            hostState = snackbarHostState,
+                            modifier = Modifier.padding(bottom = NavBarClearance)
+                        )
+                    },
                     topBar = {
                         // Local state to manage Search Bar visibility (toggles UI mode)
                         var isSearching by remember { mutableStateOf(false) }
@@ -996,7 +1017,13 @@ fun MainScreen(
                 }
                 
                 Scaffold(
-                    snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+                    snackbarHost = {
+                        // Lift above the floating ExpressiveNavBar, which would otherwise cover it.
+                        SnackbarHost(
+                            hostState = snackbarHostState,
+                            modifier = Modifier.padding(bottom = NavBarClearance)
+                        )
+                    },
                     contentWindowInsets = WindowInsets(0,0,0,0) // ChatPanel handles its own insets
                 ) { padding ->
                     Box(modifier = Modifier.padding(padding)) {

@@ -51,7 +51,7 @@ fun RequestHealthPermissions(onResult: (Boolean) -> Unit) {
         AlertDialog(
             onDismissRequest = { /* Block dismiss so user has to make a choice */ },
             title = { Text("Health Data Access") },
-            text = { Text("PixelBrainReader needs access to your Pixel Watch vitals (HRV, Sleep, Exercise), as well as your logged Hydration, and Weight. L'accès aux données de nutrition est nécessaire pour suivre automatiquement vos calories et valider vos objectifs de nutrition.") },
+            text = { Text("PixelBrainReader needs access to your Pixel Watch vitals (HRV, Sleep, Exercise), as well as your logged Hydration, and Weight. Access to nutrition data is required to automatically track your calories and validate your nutrition goals.") },
             confirmButton = {
                 Button(onClick = { permissionLauncher.launch(permissions) }) {
                     Text("Grant Access")

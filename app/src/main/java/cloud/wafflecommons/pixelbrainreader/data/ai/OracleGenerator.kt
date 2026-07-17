@@ -47,7 +47,6 @@ class OracleGenerator @Inject constructor(
             val weakAttr = gameState?.attributes?.minByOrNull { it.value }?.key ?: Attribute.VIG
             
             // 2. prompt
-            val userLanguage = java.util.Locale.getDefault().displayLanguage
             val prompt = """
                 Act as a wise, ancient Mentor for a $characterClass. 
                 The user has had ${sleepHours}h sleep (Status: $sleepStatus), walked $steps steps yesterday, and felt $mood. 
@@ -55,7 +54,7 @@ class OracleGenerator @Inject constructor(
                 Analyze the link between their physical state and mood. 
                 Give ONE concrete, epic, short quest to improve their day (max 30 words).
                 Tone: Epic, Encouraging, RPG-style.
-                 ALWAYS answer in $userLanguage language.
+                 ALWAYS answer in English.
             """.trimIndent()
             
             Log.d("OracleGenerator", "Generating insight: $prompt")

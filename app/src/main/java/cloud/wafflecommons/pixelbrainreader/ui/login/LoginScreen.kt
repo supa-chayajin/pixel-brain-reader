@@ -75,11 +75,11 @@ fun LoginScreen(
     deviceState?.let { device ->
         AlertDialog(
             onDismissRequest = { viewModel.cancelGitHubDeviceFlow() },
-            title = { Text("Se connecter avec GitHub") },
+            title = { Text("Sign in with GitHub") },
             text = {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        "Entrez ce code sur GitHub :",
+                        "Enter this code on GitHub:",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -92,7 +92,7 @@ fun LoginScreen(
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
-                        "En attente d'autorisation…",
+                        "Waiting for authorization…",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -108,10 +108,10 @@ fun LoginScreen(
                             ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
                         )
                     }
-                }) { Text("Ouvrir GitHub") }
+                }) { Text("Open GitHub") }
             },
             dismissButton = {
-                TextButton(onClick = { viewModel.cancelGitHubDeviceFlow() }) { Text("Annuler") }
+                TextButton(onClick = { viewModel.cancelGitHubDeviceFlow() }) { Text("Cancel") }
             }
         )
     }
@@ -211,7 +211,7 @@ fun LoginScreen(
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = "Le token est stocké de manière sécurisée (EncryptedSharedPreferences) et n'est jamais partagé.",
+                text = "The token is stored securely (EncryptedSharedPreferences) and is never shared.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
@@ -234,7 +234,7 @@ fun LoginScreen(
                 ) {
                     Icon(Icons.Outlined.VpnKey, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.size(8.dp))
-                    Text("Se connecter avec GitHub")
+                    Text("Sign in with GitHub")
                 }
             }
 
@@ -273,7 +273,7 @@ fun LoginScreen(
                             )
                         ) {
                             Text(
-                                "Connexion au Vault",
+                                "Connect to Vault",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )

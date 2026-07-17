@@ -32,6 +32,7 @@ import cloud.wafflecommons.pixelbrainreader.ui.login.LoginScreen
 import cloud.wafflecommons.pixelbrainreader.ui.main.MainScreen
 import cloud.wafflecommons.pixelbrainreader.ui.main.MainViewModel
 import cloud.wafflecommons.pixelbrainreader.ui.theme.PixelBrainReaderTheme
+import cloud.wafflecommons.pixelbrainreader.widget.ui.WidgetNav
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -57,6 +58,15 @@ class MainActivity : FragmentActivity() {
 
     /** A deep-linked import URL awaiting explicit user confirmation (null = none pending). */
     private var pendingImportUrl by mutableStateOf<String?>(null)
+
+    /**
+     * A widget/shortcut navigation request awaiting login. Held here (not in the ViewModel) because
+     * the NavHost only exists post-login — [applyPendingIntents] flushes these once loginState==true.
+     */
+    private var pendingDestination by mutableStateOf<String?>(null)
+
+    /** A widget/shortcut quick-capture request awaiting login (opens the new-note flow on Home). */
+    private var pendingCapture by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -110,6 +120,22 @@ class MainActivity : FragmentActivity() {
                 }
             }
 
+            // Flush any pending widget/shortcut navigation once the NavHost exists (post-login).
+            LaunchedEffect(loginState, pendingDestination, pendingCapture) {
+                if (loginState == true) {
+                    pendingDestination?.let { route ->
+                        viewModel.requestNavigation(route)
+                        pendingDestination = null
+                    }
+                    if (pendingCapture) {
+                        // The new-note dialog only renders on Home; go there, then open it.
+                        viewModel.requestNavigation("home")
+                        viewModel.openCreateFileDialog()
+                        pendingCapture = false
+                    }
+                }
+            }
+
             PixelBrainReaderTheme(darkTheme = useDarkTheme) {
                 when (val state = loginState) {
                     null -> SplashScreen()
@@ -132,17 +158,17 @@ class MainActivity : FragmentActivity() {
                         val host = remember(url) { android.net.Uri.parse(url).host ?: url }
                         androidx.compose.material3.AlertDialog(
                             onDismissRequest = { pendingImportUrl = null },
-                            title = { androidx.compose.material3.Text("Importer un article ?") },
-                            text = { androidx.compose.material3.Text("Depuis : $host") },
+                            title = { androidx.compose.material3.Text("Import an article?") },
+                            text = { androidx.compose.material3.Text("From: $host") },
                             confirmButton = {
                                 androidx.compose.material3.TextButton(onClick = {
                                     enqueueImport(url)
                                     pendingImportUrl = null
-                                }) { androidx.compose.material3.Text("Importer") }
+                                }) { androidx.compose.material3.Text("Import") }
                             },
                             dismissButton = {
                                 androidx.compose.material3.TextButton(onClick = { pendingImportUrl = null }) {
-                                    androidx.compose.material3.Text("Annuler")
+                                    androidx.compose.material3.Text("Cancel")
                                 }
                             }
                         )
@@ -177,17 +203,25 @@ class MainActivity : FragmentActivity() {
             viewModel.handleShareIntent(intent)
         }
         
-        // Deep Link (pixelbrain://import?url=...). This is a PUBLIC, BROWSABLE entry point
-        // (any web page can fire it), so it must be treated as untrusted:
-        //  - validate the URL (http/https, public host, bounded length) to stop it being an
-        //    SSRF / arbitrary-fetch primitive into the LAN or cloud metadata endpoints, and
-        //  - require explicit user confirmation before importing + pushing a note, so a
-        //    tapped link can't silently write to the vault.
-        if (intent.action == Intent.ACTION_VIEW && intent.scheme == "pixelbrain" && intent.data?.host == "import") {
-             val url = try { intent.data?.getQueryParameter("url") } catch (e: Exception) { null }
-             if (url != null && isSafeImportUrl(url)) {
-                 pendingImportUrl = url
-             }
+        // pixelbrain:// deep links. `import` is a PUBLIC, BROWSABLE entry point (any web page can
+        // fire it) so it stays untrusted: validate the URL (SSRF guard) and require explicit
+        // confirmation before writing to the vault. `open`/`capture` are fired only by our own
+        // widgets/shortcuts via EXPLICIT (component-targeted) intents — not browsable — and are
+        // navigation-only, but we still whitelist the screen key before touching the NavHost.
+        if (intent.action == Intent.ACTION_VIEW && intent.scheme == WidgetNav.SCHEME) {
+            when (intent.data?.host) {
+                WidgetNav.HOST_OPEN -> {
+                    val route = WidgetNav.screenToRoute(
+                        try { intent.data?.getQueryParameter(WidgetNav.QUERY_SCREEN) } catch (e: Exception) { null }
+                    )
+                    if (route != null) pendingDestination = route
+                }
+                WidgetNav.HOST_CAPTURE -> pendingCapture = true
+                "import" -> {
+                    val url = try { intent.data?.getQueryParameter("url") } catch (e: Exception) { null }
+                    if (url != null && isSafeImportUrl(url)) pendingImportUrl = url
+                }
+            }
         }
     }
 

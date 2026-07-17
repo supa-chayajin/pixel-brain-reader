@@ -20,13 +20,13 @@ import javax.inject.Singleton
  * pull-to-refresh indicator can show WHAT is being refreshed instead of a generic string.
  */
 enum class SyncStep(val label: String) {
-    PULLING("Récupération des notes…"),
-    INDEXING("Indexation du vault…"),
-    HEALTH("Synchronisation santé…"),
-    HABITS("Mise à jour des habitudes…"),
-    GOOGLE("Synchronisation Google…"),
-    PUSHING("Envoi des modifications…"),
-    RECONCILING("Réconciliation…")
+    PULLING("Fetching notes…"),
+    INDEXING("Indexing vault…"),
+    HEALTH("Syncing health…"),
+    HABITS("Updating habits…"),
+    GOOGLE("Syncing Google…"),
+    PUSHING("Pushing changes…"),
+    RECONCILING("Reconciling…")
 }
 
 /**
@@ -146,7 +146,7 @@ class SyncOrchestrator @Inject constructor(
                     // stalling sync forever. Stop here with an actionable state instead.
                     Log.w(TAG, "Phase 1: Pull hit ${pullResult.backedUpFilesCount} conflict(s); local backed up, manual merge needed")
                     _syncState.value = SyncState.Error(
-                        "Conflit de synchronisation : vos modifications locales ont été sauvegardées. Fusion manuelle requise."
+                        "Sync conflict: your local changes were saved. Manual merge required."
                     )
                     lastSyncTimestamp = System.currentTimeMillis()
                     return@withContext false

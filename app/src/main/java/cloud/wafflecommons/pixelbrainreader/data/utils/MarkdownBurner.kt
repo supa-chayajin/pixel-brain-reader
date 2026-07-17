@@ -44,7 +44,7 @@ object MarkdownBurner {
         // 4. Timeline Section
         sb.append("## 🗓️ Timeline\n\n")
         if (timeline.isEmpty()) {
-            sb.append("*Aucun événement*\n")
+            sb.append("*No events*\n")
         } else {
             timeline.sortedBy { it.time }.forEach { entry ->
                 val timeStr = entry.time.format(DateTimeFormatter.ofPattern("HH:mm"))
@@ -59,7 +59,7 @@ object MarkdownBurner {
         // 5. Journal / Tasks Section
         sb.append("## 📝 Journal\n\n")
         if (tasks.isEmpty()) {
-            sb.append("*Aucune tâche*\n")
+            sb.append("*No tasks*\n")
         } else {
             tasks.sortedWith(compareBy<DailyTaskEntity> { it.isDone }
                 .thenBy { it.scheduledTime == null } // Nulls last
@@ -79,7 +79,7 @@ object MarkdownBurner {
         sb.append("\n")
 
         // 6. Ideas / Second Brain
-        sb.append("## 🧠 Idées / Second Cerveau\n\n")
+        sb.append("## 🧠 Ideas / Second Brain\n\n")
         if (dashboard.ideasContent.isNotBlank()) {
             sb.append(dashboard.ideasContent)
             if (!dashboard.ideasContent.endsWith("\n")) sb.append("\n")

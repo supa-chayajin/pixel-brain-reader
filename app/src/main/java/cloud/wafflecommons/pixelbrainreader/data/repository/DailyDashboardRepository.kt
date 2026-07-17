@@ -80,7 +80,7 @@ class DailyDashboardRepository @Inject constructor(
         val weatherBriefing = if (weather != null) {
             briefingGenerator.getWeatherInsight(weather)
         } else {
-            "Météo indisponible."
+            "Weather unavailable."
         }
         
         val quote = briefingGenerator.getDailyQuote("Neutral") 

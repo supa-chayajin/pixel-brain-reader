@@ -580,6 +580,15 @@ class MainViewModel @Inject constructor(
         _navigationTrigger.value = null
     }
 
+    /**
+     * Programmatically navigate to a top-level [route], driven from a widget tap / launcher
+     * shortcut. The route is validated at the intent boundary ([cloud.wafflecommons.pixelbrainreader.widget.ui.WidgetNav.screenToRoute]);
+     * the existing `navigationTrigger` LaunchedEffect in MainScreen performs the actual navigation.
+     */
+    fun requestNavigation(route: String) {
+        _navigationTrigger.value = route
+    }
+
     
     // The file targeted by a swipe-delete. Null means "delete the currently open file"
     // (the detail-pane top-bar delete action). Kept out of uiState — the UI never reads it.
@@ -812,14 +821,14 @@ class MainViewModel @Inject constructor(
 
         viewModelScope.launch {
             _isLoading.value = true
-            _userMessage.value = "Analyse du dossier…"
+            _userMessage.value = "Analyzing folder…"
             val fileContexts = files.mapNotNull { file ->
                 val content = repository.getFileContentFlow(file.path).firstOrNull()
                 if (content != null) Pair(file.name, content) else null
             }
 
             geminiRagManager.analyzeFolder(fileContexts) { done, total ->
-                _userMessage.value = "Analyse du dossier… ($done/$total)"
+                _userMessage.value = "Analyzing folder… ($done/$total)"
             }.fold(
                 onSuccess = { rawSummary ->
                     val summary = rawSummary
@@ -827,7 +836,7 @@ class MainViewModel @Inject constructor(
                         .replace(Regex("^```\\s*", RegexOption.IGNORE_CASE), "")
                         .replace(Regex("\\s*```$"), "").trim()
                     _isLoading.value = false
-                    _userMessage.value = "Synthèse du dossier prête ✨"
+                    _userMessage.value = "Folder summary ready ✨"
                     // Folder insight is a READ-ONLY, ephemeral pseudo-document. Detach it
                     // from any real file path FIRST — otherwise saveFile()/autosave would
                     // write this summary into whatever note was previously open in the
@@ -842,8 +851,8 @@ class MainViewModel @Inject constructor(
                 onFailure = { e ->
                     // Surface the real failure — NEVER write the error text into a note body.
                     _isLoading.value = false
-                    val reason = e.localizedMessage ?: e.message ?: "modèle IA indisponible"
-                    _userMessage.value = "Échec de l'analyse : $reason"
+                    val reason = e.localizedMessage ?: e.message ?: "AI model unavailable"
+                    _userMessage.value = "Analysis failed: $reason"
                 }
             )
         }
@@ -853,14 +862,14 @@ class MainViewModel @Inject constructor(
     /** Export the whole vault as a ZIP to a user-picked SAF destination (outside the app). */
     fun exportVault(outputUri: android.net.Uri) {
         viewModelScope.launch {
-            _userMessage.value = "Export du vault…"
+            _userMessage.value = "Exporting vault…"
             vaultExportRepository.exportVaultZip(outputUri) { done, total ->
-                _userMessage.value = "Export du vault… ($done/$total)"
+                _userMessage.value = "Exporting vault… ($done/$total)"
             }.fold(
-                onSuccess = { count -> _userMessage.value = "$count fichiers exportés ✅" },
+                onSuccess = { count -> _userMessage.value = "$count files exported ✅" },
                 onFailure = { e ->
-                    val reason = e.localizedMessage ?: e.message ?: "erreur inconnue"
-                    _userMessage.value = "Échec de l'export : $reason"
+                    val reason = e.localizedMessage ?: e.message ?: "unknown error"
+                    _userMessage.value = "Export failed: $reason"
                 }
             )
         }

@@ -72,13 +72,13 @@ private const val STREAM_TIMEOUT_MS = 120_000L
  * replies make the user wait on a spinner. Keeping answers terse makes generation prompt.
  */
 private const val PIXEL_BRAIN_PERSONA = """
-Tu es l'assistant IA de l'application Cortex. Tu dois TOUJOURS répondre en français.
+You are the AI assistant of the Cortex app. You must ALWAYS answer in English.
 
-RÔLE : Assistant analytique, pragmatique et bienveillant. Valide brièvement, puis ramène à la logique et aux faits. Stoppe l'overthinking.
+ROLE: An analytical, pragmatic and supportive assistant. Briefly validate, then bring things back to logic and facts. Stop the overthinking.
 
-CONCISION (OBLIGATOIRE) : Réponds de façon TRÈS courte et directe — 2 à 4 phrases maximum. Va droit au but. Pas de titres ni de longues listes, sauf si l'utilisateur le demande explicitement. Un emoji occasionnel est acceptable.
+CONCISENESS (MANDATORY): Answer VERY briefly and directly — 2 to 4 sentences maximum. Get straight to the point. No headings or long lists unless the user explicitly asks. An occasional emoji is fine.
 
-RÉFÉRENCES : Utilise les INFORMATIONS DE RÉFÉRENCE quand elles sont pertinentes pour répondre sur les notes. Si la question est une simple discussion, réponds naturellement, sans signaler que l'information est absente des notes.
+REFERENCES: Use the REFERENCE INFORMATION when it is relevant to answer questions about the notes. If the question is just casual conversation, answer naturally, without pointing out that the information is absent from the notes.
 """
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -211,7 +211,7 @@ class ChatViewModel @Inject constructor(
                     ChatMessageEntity(
                         mode = modeStorage,
                         role = "MODEL",
-                        content = finalText.ifBlank { "⚠️ Le modèle on-device n'a renvoyé aucune réponse." },
+                        content = finalText.ifBlank { "⚠️ The on-device model returned no response." },
                         sources = if (finalText.isBlank()) emptyList() else sources
                     )
                 )
@@ -223,8 +223,8 @@ class ChatViewModel @Inject constructor(
                     ChatMessageEntity(
                         mode = modeStorage,
                         role = "MODEL",
-                        content = if (partial.isNotBlank()) "$partial\n\n⚠️ (réponse interrompue — délai dépassé)"
-                            else "⚠️ Gemini Nano n'a pas répondu à temps.",
+                        content = if (partial.isNotBlank()) "$partial\n\n⚠️ (response interrupted — timed out)"
+                            else "⚠️ Gemini Nano didn't respond in time.",
                         sources = if (partial.isBlank()) emptyList() else sources
                     )
                 )
@@ -250,13 +250,13 @@ class ChatViewModel @Inject constructor(
     }
 
     private fun describeFailure(e: Throwable): String = when (e) {
-        is NanoException.ContextExceeded -> "Ton message est trop long pour le modèle on-device."
+        is NanoException.ContextExceeded -> "Your message is too long for the on-device model."
         is NanoException.Unavailable ->
-            "Gemini Nano est indisponible sur cet appareil (${e.reason}). Télécharge-le dans les Réglages."
-        is NanoException.BadInput -> "Le modèle on-device a refusé la requête (${e.reason})."
-        is NanoException.EmptyResponse -> "Le modèle on-device n'a renvoyé aucune réponse."
-        is NanoException.Generation -> "Gemini Nano a échoué : ${e.cause?.message ?: e.message}"
-        else -> "IA on-device indisponible : ${e.message ?: "erreur inconnue"}"
+            "Gemini Nano is unavailable on this device (${e.reason}). Download it in Settings."
+        is NanoException.BadInput -> "The on-device model rejected the request (${e.reason})."
+        is NanoException.EmptyResponse -> "The on-device model returned no response."
+        is NanoException.Generation -> "Gemini Nano failed: ${e.cause?.message ?: e.message}"
+        else -> "On-device AI unavailable: ${e.message ?: "unknown error"}"
     }
 
     /**

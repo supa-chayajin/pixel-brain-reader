@@ -57,7 +57,7 @@ fun LifeStatsScreen(
     Scaffold(
         topBar = {
             cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
-                title = "Statistiques de Vie",
+                title = "Life Stats",
                 actions = {
                     FilledTonalIconButton(
                         onClick = onNavigateToHabits,
@@ -178,7 +178,7 @@ private fun RpgHeroCard(uiState: LifeStatsUiState) {
                 Spacer(Modifier.width(16.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        "Niveau ${uiState.level}",
+                        "Level ${uiState.level}",
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -217,14 +217,14 @@ private fun TodayVitalsCard(uiState: LifeStatsUiState) {
     val sleepM = uiState.todaySleepMinutes % 60
     val distFormatted = String.format(java.util.Locale.US, "%.1f", uiState.todayDistanceKm)
 
-    DashboardCard(title = "Aujourd'hui") {
+    DashboardCard(title = "Today") {
         val tiles = listOf(
-            VitalTile("Pas", "${uiState.todaySteps}", "$stepPct% du but", Icons.Default.Speed, SemanticPalette.Success),
+            VitalTile("Steps", "${uiState.todaySteps}", "$stepPct% of goal", Icons.Default.Speed, SemanticPalette.Success),
             VitalTile("Distance", "$distFormatted km", null, Icons.Default.Straighten, ChartPalette.Distance),
-            VitalTile("Actif", "${uiState.todayActiveMinutes} min", null, Icons.Default.Timer, ChartPalette.ActiveMinutes),
-            VitalTile("Calories", "${uiState.caloriesBurned} kcal", "brûlées", Icons.Default.LocalFireDepartment, ChartPalette.Calories),
-            VitalTile("Rythme card.", "${uiState.avgHeartRate} BPM", null, Icons.Default.Favorite, ChartPalette.HeartRate),
-            VitalTile("Sommeil", "${sleepH}h ${sleepM}m", null, Icons.Default.Bedtime, ChartPalette.Sleep),
+            VitalTile("Active", "${uiState.todayActiveMinutes} min", null, Icons.Default.Timer, ChartPalette.ActiveMinutes),
+            VitalTile("Calories", "${uiState.caloriesBurned} kcal", "burned", Icons.Default.LocalFireDepartment, ChartPalette.Calories),
+            VitalTile("Heart rate", "${uiState.avgHeartRate} BPM", null, Icons.Default.Favorite, ChartPalette.HeartRate),
+            VitalTile("Sleep", "${sleepH}h ${sleepM}m", null, Icons.Default.Bedtime, ChartPalette.Sleep),
         )
         tiles.chunked(2).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
@@ -257,7 +257,7 @@ private fun StatTile(modifier: Modifier, tile: VitalTile) {
 // --- 3. Mood vs Heart Rate chart ---
 @Composable
 private fun MoodVsHeartRateChartCard(moodHistory: List<LifeStatsMoodPoint>) {
-    DashboardCard(title = "Humeur vs. Rythme cardiaque (7j)") {
+    DashboardCard(title = "Mood vs. Heart Rate (7d)") {
         MoodTrendsCard(
             moodTrend = moodHistory.map {
                 DailyMoodPoint(date = it.date, score = it.score, emoji = it.emoji, avgBpm = it.avgBpm)
@@ -271,15 +271,15 @@ private fun MoodVsHeartRateChartCard(moodHistory: List<LifeStatsMoodPoint>) {
 private fun MoodSummaryCard(uiState: LifeStatsUiState) {
     val realDays = uiState.moodHistory.filter { it.score > 0f }
     val bestDay = realDays.maxByOrNull { it.score }
-    DashboardCard(title = "Humeur") {
+    DashboardCard(title = "Mood") {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(moodEmoji(uiState.avgMood7Days), style = MaterialTheme.typography.displaySmall)
             Spacer(Modifier.width(20.dp))
             Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.weight(1f)) {
-                StatLine(Icons.Default.Mood, ChartPalette.Habits, "Moyenne 7j", String.format(java.util.Locale.US, "%.1f/5", uiState.avgMood7Days))
-                StatLine(Icons.Default.Mood, ChartPalette.Meditation, "Moyenne 30j", String.format(java.util.Locale.US, "%.1f/5", uiState.avgMood30Days))
+                StatLine(Icons.Default.Mood, ChartPalette.Habits, "7-day average", String.format(java.util.Locale.US, "%.1f/5", uiState.avgMood7Days))
+                StatLine(Icons.Default.Mood, ChartPalette.Meditation, "30-day average", String.format(java.util.Locale.US, "%.1f/5", uiState.avgMood30Days))
                 if (bestDay != null) {
-                    StatLine(Icons.Default.Whatshot, SemanticPalette.Success, "Meilleur jour", "${bestDay.emoji} ${String.format(java.util.Locale.US, "%.1f", bestDay.score)}")
+                    StatLine(Icons.Default.Whatshot, SemanticPalette.Success, "Best day", "${bestDay.emoji} ${String.format(java.util.Locale.US, "%.1f", bestDay.score)}")
                 }
             }
         }
@@ -301,7 +301,7 @@ private fun StatLine(icon: ImageVector, tint: Color, label: String, value: Strin
 private fun CompletionRingsCard(uiState: LifeStatsUiState, globalCompletion: Float) {
     val totalChores = uiState.criticalChoresCount + uiState.cleanChoresCount
     val choreRate = if (totalChores > 0) uiState.cleanChoresCount.toFloat() / totalChores.toFloat() else 0f
-    DashboardCard(title = "Productivité (7j)", trailing = "${(globalCompletion * 100).toInt()}% global") {
+    DashboardCard(title = "Productivity (7d)", trailing = "${(globalCompletion * 100).toInt()}% overall") {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(contentAlignment = Alignment.Center, modifier = Modifier.size(150.dp)) {
                 ActivityRings(
@@ -312,9 +312,9 @@ private fun CompletionRingsCard(uiState: LifeStatsUiState, globalCompletion: Flo
             }
             Spacer(Modifier.width(24.dp))
             Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.weight(1f)) {
-                LegendItem("Tâches", ChartPalette.Tasks, "${(uiState.taskCompletionRate * 100).toInt()}%")
-                LegendItem("Habitudes", ChartPalette.Habits, "${(uiState.habitCompletionRate * 100).toInt()}%")
-                LegendItem("Ménage", ChartPalette.Chores, "${(choreRate * 100).toInt()}%")
+                LegendItem("Tasks", ChartPalette.Tasks, "${(uiState.taskCompletionRate * 100).toInt()}%")
+                LegendItem("Habits", ChartPalette.Habits, "${(uiState.habitCompletionRate * 100).toInt()}%")
+                LegendItem("Chores", ChartPalette.Chores, "${(choreRate * 100).toInt()}%")
             }
         }
     }
@@ -333,14 +333,14 @@ private fun LegendItem(label: String, color: Color, value: String) {
 // --- 6. Habits summary (done today / best streak / active / chores breakdown) ---
 @Composable
 private fun HabitsSummaryCard(uiState: LifeStatsUiState, sleepDurationMinutes: Long) {
-    DashboardCard(title = "Habitudes & Ménage") {
+    DashboardCard(title = "Habits & Chores") {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            StatLine(Icons.Default.Checklist, ChartPalette.Habits, "Faites aujourd'hui", "${uiState.completedHabitsToday}/${uiState.scheduledHabitsToday}")
-            StatLine(Icons.Default.Whatshot, SemanticPalette.StreakAccent, "Meilleure série", "${uiState.bestHabitStreak} 🔥")
-            StatLine(Icons.Default.Checklist, MaterialTheme.colorScheme.primary, "Habitudes actives", "${uiState.totalActiveHabits}")
+            StatLine(Icons.Default.Checklist, ChartPalette.Habits, "Done today", "${uiState.completedHabitsToday}/${uiState.scheduledHabitsToday}")
+            StatLine(Icons.Default.Whatshot, SemanticPalette.StreakAccent, "Best streak", "${uiState.bestHabitStreak} 🔥")
+            StatLine(Icons.Default.Checklist, MaterialTheme.colorScheme.primary, "Active habits", "${uiState.totalActiveHabits}")
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-            StatLine(Icons.Default.LocalFireDepartment, ChartPalette.HeartRate, "Ménage critique", "${uiState.criticalChoresCount}")
-            StatLine(Icons.Default.LocalFireDepartment, SemanticPalette.Warning, "Ménage à surveiller", "${uiState.warningChoresCount}")
+            StatLine(Icons.Default.LocalFireDepartment, ChartPalette.HeartRate, "Critical chores", "${uiState.criticalChoresCount}")
+            StatLine(Icons.Default.LocalFireDepartment, SemanticPalette.Warning, "Chores to watch", "${uiState.warningChoresCount}")
         }
     }
 }

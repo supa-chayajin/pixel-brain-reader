@@ -34,7 +34,7 @@ data class DailyNoteState(
     val healthMetrics: cloud.wafflecommons.pixelbrainreader.data.health.DailyHealthMetrics? = null,
     
     // Core Dashboard Content (Room)
-    val mantra: String = "Stay safe friend, and don't your dare go hollow!",
+    val mantra: String = "Stay safe my friend, and don't you dare go hollow!",
     val ideasContent: String = "",
     val notesContent: String = "",
     
@@ -304,7 +304,7 @@ class DailyNoteViewModel @Inject constructor(
             moodData = moodData,
             moodTrend = moodTrendData,
             healthMetrics = healthMetrics,
-            mantra = dashboard?.dailyMantra ?: "Stay safe friend, and don't your dare go hollow!",
+            mantra = dashboard?.dailyMantra ?: "Stay safe my friend, and don't you dare go hollow!",
             ideasContent = shieldedIdeas,
             notesContent = shieldedNotes,
             timelineEvents = timeline,
@@ -503,9 +503,9 @@ class DailyNoteViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 dashboardRepository.burnToDisk(_selectedDate.value)
-                _userMessage.value = "Journée exportée et clôturée avec succès"
+                _userMessage.value = "Day exported and closed successfully"
             } catch (e: Exception) {
-                _userMessage.value = "Erreur lors de l'exportation"
+                _userMessage.value = "Error during export"
             }
         }
     }

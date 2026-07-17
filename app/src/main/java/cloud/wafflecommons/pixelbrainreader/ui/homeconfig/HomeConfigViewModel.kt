@@ -42,7 +42,7 @@ class HomeConfigViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             val roomEntity = HomeRoomEntity(
                 id = UUID.randomUUID().toString(),
-                name = name.trim().takeIf { it.isNotEmpty() } ?: "Nouvelle Pièce",
+                name = name.trim().takeIf { it.isNotEmpty() } ?: "New Room",
                 icon = icon,
                 color = color
             )
@@ -52,7 +52,7 @@ class HomeConfigViewModel @Inject constructor(
 
     fun upsertRoom(id: String?, name: String, icon: String, color: String, sortOrder: Int = 0) {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            val validName = name.trim().takeIf { it.isNotEmpty() } ?: "Pièce sans nom"
+            val validName = name.trim().takeIf { it.isNotEmpty() } ?: "Unnamed room"
             val roomEntity = HomeRoomEntity(
                 id = id ?: UUID.randomUUID().toString(),
                 name = validName,

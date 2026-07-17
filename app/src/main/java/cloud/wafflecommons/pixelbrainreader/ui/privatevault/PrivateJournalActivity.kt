@@ -492,7 +492,7 @@ fun PrivateEditor(
                 },
                 actions = {
                     CortexIconButton(onClick = onOpenAssist) {
-                        Icon(Icons.Default.AutoAwesome, contentDescription = "Aide à l'écriture")
+                        Icon(Icons.Default.AutoAwesome, contentDescription = "Writing assistant")
                     }
                     cloud.wafflecommons.pixelbrainreader.ui.components.SaveStatusIndicator(
                         state = saveState,
@@ -535,9 +535,9 @@ private fun WritingAssistSheet(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text("Aide à l'écriture", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text("Writing assistant", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Text(
-                "Suggestions générées sur l'appareil, en français — rien ne quitte le téléphone.",
+                "Suggestions generated on-device, in English — nothing leaves the phone.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -546,16 +546,16 @@ private fun WritingAssistSheet(
                 androidx.compose.material3.FilledTonalButton(
                     onClick = { onAction(PrivateJournalViewModel.AssistAction.IMPROVE) },
                     modifier = Modifier.weight(1f)
-                ) { Text("✨ Améliorer") }
+                ) { Text("✨ Improve") }
                 androidx.compose.material3.FilledTonalButton(
                     onClick = { onAction(PrivateJournalViewModel.AssistAction.CONTINUE) },
                     modifier = Modifier.weight(1f)
-                ) { Text("➡️ Continuer") }
+                ) { Text("➡️ Continue") }
             }
             androidx.compose.material3.FilledTonalButton(
                 onClick = { onAction(PrivateJournalViewModel.AssistAction.INSPIRE) },
                 modifier = Modifier.fillMaxWidth()
-            ) { Text("💡 Inspire-moi") }
+            ) { Text("💡 Inspire me") }
 
             when {
                 state.isLoading -> {
@@ -579,10 +579,10 @@ private fun WritingAssistSheet(
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                         androidx.compose.material3.OutlinedButton(onClick = onAppend, modifier = Modifier.weight(1f)) {
-                            Text("Ajouter à la fin")
+                            Text("Append")
                         }
                         androidx.compose.material3.Button(onClick = onReplace, modifier = Modifier.weight(1f)) {
-                            Text("Remplacer")
+                            Text("Replace")
                         }
                     }
                 }

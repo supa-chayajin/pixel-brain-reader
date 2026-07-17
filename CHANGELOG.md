@@ -9,6 +9,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _No unreleased changes._
 
+## [9.3.0] — 2026-07-17
+
+Home-screen widget suite + app actions, a full English localization pass, and three
+dogfooding fixes.
+
+### Added
+
+- **Seven-widget home-screen suite** (Jetpack Glance). The "Pixel Dashboard" Companion
+  widget is now *responsive* (compact → full: hero + XP bar, habits/tasks/chores progress
+  rings, steps/sleep/heart-rate, vitality graph, quick-action row). Six new widgets:
+  - **Health Today** — steps goal bar + sleep / heart-rate / active / calories / distance /
+    hydration tile grid.
+  - **Mood Check-in** — one-tap emoji mood logging straight from the home screen.
+  - **Habits** — today's scheduled habits, tap to complete (writes vault + Room + XP).
+  - **Today's Tasks** — daily-note tasks, ticked off in place.
+  - **Chores Due** — chores due today, mark done to earn their effort as XP.
+  - **Quick Actions** — six deep-link buttons (capture, daily, mood, habits, chores, ask).
+- **App shortcuts.** Six launcher long-press shortcuts (Capture, Daily, Mood, Habits,
+  Chores, Ask) with custom icons, routed through a new whitelisted `pixelbrain://open` /
+  `pixelbrain://capture` deep-link contract that also backs the widget taps. Navigation is
+  deferred safely when a widget/shortcut is triggered while logged out.
+- **Richer widget snapshot.** `WidgetSnapshotManager` now aggregates full Health Connect
+  metrics plus habit/task/chore progress into the shared snapshot, and `WidgetUpdateManager`
+  refreshes the whole suite at once.
+
+### Fixed
+
+- **Gamification profile could be wiped to level 1.** `GamificationRepository.updateState`
+  mutated the in-memory state, which is only hydrated when the Habits screen opens
+  (`loadState()`). A widget quick-action (or any early caller) firing before hydration mutated
+  the *default* state and saved it over the real profile — a single widget-chore tap reset a
+  level-9 profile to level 1. `updateState` now bases every mutation on the freshest **on-disk**
+  state, and the profile is hydrated on app startup. (The vault is git-backed, so a wiped profile
+  is recoverable from history.)
+- **Widgets couldn't be resized / cropped their content.** `maxResize` was capped (~4:3);
+  it's now opened up (720×800) with `minResize` on all seven widgets, and the Companion +
+  Health widgets are responsive (`SizeMode.Responsive`) so a larger widget reveals more content
+  (rings → health → vitality graph / second tile row) instead of truncating.
+- **"Analyze Folder" produced no AI summary.** The map step aborted the entire folder
+  analysis on the first per-file failure — and Gemini Nano returns empty responses fairly
+  often — so a single miss killed the run. It now re-probes model readiness up front, skips
+  soft per-file failures (noting how many were skipped), and only fails when the model is
+  genuinely unavailable or zero files summarized.
+- **Snackbars hidden behind the floating nav bar.** Every remaining snackbar host (Daily
+  note, Home, Chat) now lifts above the `ExpressiveNavBar` via `NavBarClearance`, matching
+  the earlier Settings fix.
+- **Nav-bar shadow too bright in dark theme.** The primary-tinted elevation shadow read as a
+  glowing halo on dark surfaces; it is now dimmed toward black with lower elevation on dark
+  themes (derived from the resolved surface luminance, so it tracks the actual theme).
+
+### Changed
+
+- **Full English localization.** All remaining French user-facing text is now English —
+  dialogs, the Life Stats screen, settings, login, crash screen, and the on-device AI prompts
+  (chat persona, oracle, briefing, private-journal assist, folder insight), which now also
+  instruct the model to answer in English. The daily-note markdown burner writes an English
+  "Ideas / Second Brain" section header; the parser still accepts the legacy French header so
+  existing notes keep round-tripping.
+- Version bumped to **9.3.0** (`versionCode` 930).
+
 ## [9.2.0] — 2026-07-17
 
 Life-OS sync repair and configurability, surfaced during pre-dogfooding.
