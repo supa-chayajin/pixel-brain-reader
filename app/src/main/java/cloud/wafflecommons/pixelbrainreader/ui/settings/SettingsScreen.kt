@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.rounded.HomeWork
 import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.filled.CheckCircle
@@ -328,117 +329,8 @@ fun SettingsScreen(
             // Theme follows the system automatically (no manual selector — Android's
             // force-dark handling makes a per-app light/dark override unreliable).
 
-            // 3. Life OS & Gamification
-            StaggeredEntry(index = 4) {
-            SettingsSection(
-                title = "Life OS Automations",
-                icon = Icons.AutoMirrored.Filled.List
-            ) {
-                ListItem(
-                    modifier = Modifier.clickable {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onNavigateToHabitConfig()
-                    },
-                    leadingContent = { Icon(Icons.Rounded.DateRange, contentDescription = null) }
-                ) {
-                    Text("Manage Habits & Automations")
-                }
-
-                ListItem(
-                    modifier = Modifier.clickable {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onNavigateToHomeConfig()
-                    },
-                    leadingContent = { Icon(Icons.Rounded.CleaningServices, contentDescription = null) }
-                ) {
-                    Text("Manage House & Chores")
-                }
-
-                ListItem(
-                    modifier = Modifier.clickable {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onNavigateToReminders()
-                    },
-                    leadingContent = { Icon(Icons.Filled.Notifications, contentDescription = null) }
-                ) {
-                    Text("Reminders & Notifications")
-                }
-
-                ListItem(
-                    modifier = Modifier.clickable {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onNavigateToNavBarReorder()
-                    },
-                    leadingContent = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) }
-                ) {
-                    Text("Ordre de la barre de navigation")
-                }
-
-                ListItem(
-                    leadingContent = { Icon(Icons.Filled.VolumeUp, contentDescription = null) },
-                    trailingContent = {
-                        Switch(
-                            checked = uiState.soundEffectsEnabled,
-                            onCheckedChange = {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                viewModel.setSoundEffects(it)
-                            }
-                        )
-                    }
-                ) {
-                    Text("Effets sonores")
-                }
-
-                Spacer(Modifier.height(8.dp))
-                
-                val isSyncingConfigs by viewModel.isSyncingConfigs.collectAsStateWithLifecycle()
-
-                Button(
-                    onClick = {
-                        viewModel.syncAllConfigsToVault { success ->
-                             coroutineScope.launch {
-                                 if(success) {
-                                     snackbarHostState.showSnackbar("All configuration (Habits, Home OS) synced and pushed!")
-                                 } else {
-                                     snackbarHostState.showSnackbar("Failed to sync configurations. Check Git logs.")
-                                 }
-                             }
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !isSyncingConfigs
-                ) {
-                    if (isSyncingConfigs) {
-                        CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary)
-                    } else {
-                        Icon(Icons.Default.Sync, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Export & Sync All Configurations (Vault)")
-                    }
-                }
-
-                Spacer(Modifier.height(8.dp))
-                
-                OutlinedButton(
-                    onClick = {
-                        viewModel.forceSyncHabits {
-                            coroutineScope.launch {
-                                snackbarHostState.showSnackbar("Habit configuration pulled and imported from Vault.")
-                            }
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !isSyncingConfigs
-                ) {
-                    Icon(Icons.Default.Sync, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Force Import Habits (Vault -> App)")
-                }
-            }
-            }
-
-            // 3.5 Knowledge Vault — manual RAG indexing
-            StaggeredEntry(index = 5) {
+            // 3. Knowledge Vault — manual RAG indexing (kept beside Intelligence — both are the on-device brain)
+            StaggeredEntry(index = 3) {
             SettingsSection(
                 title = "Knowledge Vault (RAG)",
                 icon = Icons.Default.Psychology
@@ -513,7 +405,124 @@ fun SettingsScreen(
             }
             }
 
-            // 4. About
+            // 4. Life OS Automations
+            StaggeredEntry(index = 4) {
+            SettingsSection(
+                title = "Life OS Automations",
+                icon = Icons.AutoMirrored.Filled.List
+            ) {
+                ListItem(
+                    modifier = Modifier.clickable {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onNavigateToHabitConfig()
+                    },
+                    leadingContent = { Icon(Icons.Rounded.DateRange, contentDescription = null) }
+                ) {
+                    Text("Manage Habits & Automations")
+                }
+
+                ListItem(
+                    modifier = Modifier.clickable {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onNavigateToHomeConfig()
+                    },
+                    leadingContent = { Icon(Icons.Rounded.CleaningServices, contentDescription = null) }
+                ) {
+                    Text("Manage House & Chores")
+                }
+
+                ListItem(
+                    modifier = Modifier.clickable {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onNavigateToReminders()
+                    },
+                    leadingContent = { Icon(Icons.Filled.Notifications, contentDescription = null) }
+                ) {
+                    Text("Reminders & Notifications")
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                val isSyncingConfigs by viewModel.isSyncingConfigs.collectAsStateWithLifecycle()
+
+                Button(
+                    onClick = {
+                        viewModel.syncAllConfigsToVault { success ->
+                             coroutineScope.launch {
+                                 if(success) {
+                                     snackbarHostState.showSnackbar("All configuration (Habits, Home OS) synced and pushed!")
+                                 } else {
+                                     snackbarHostState.showSnackbar("Failed to sync configurations. Check Git logs.")
+                                 }
+                             }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isSyncingConfigs
+                ) {
+                    if (isSyncingConfigs) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary)
+                    } else {
+                        Icon(Icons.Default.Sync, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Export & Sync All Configurations (Vault)")
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                OutlinedButton(
+                    onClick = {
+                        viewModel.forceSyncHabits {
+                            coroutineScope.launch {
+                                snackbarHostState.showSnackbar("Habit configuration pulled and imported from Vault.")
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isSyncingConfigs
+                ) {
+                    Icon(Icons.Default.Sync, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Force Import Habits (Vault -> App)")
+                }
+            }
+            }
+
+            // 5. Interface & Sound — app-level UI preferences
+            StaggeredEntry(index = 5) {
+            SettingsSection(
+                title = "Interface & Sound",
+                icon = Icons.Default.Tune
+            ) {
+                ListItem(
+                    modifier = Modifier.clickable {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onNavigateToNavBarReorder()
+                    },
+                    leadingContent = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) }
+                ) {
+                    Text("Ordre de la barre de navigation")
+                }
+
+                ListItem(
+                    leadingContent = { Icon(Icons.Filled.VolumeUp, contentDescription = null) },
+                    trailingContent = {
+                        Switch(
+                            checked = uiState.soundEffectsEnabled,
+                            onCheckedChange = {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                viewModel.setSoundEffects(it)
+                            }
+                        )
+                    }
+                ) {
+                    Text("Effets sonores")
+                }
+            }
+            }
+
+            // 6. About
             StaggeredEntry(index = 6) {
              SettingsSection(
                 title = "About",

@@ -1042,7 +1042,12 @@ fun MainScreen(
 
 
             composable(Screen.HomeOS) {
-                cloud.wafflecommons.pixelbrainreader.ui.homeos.ChoreDashboardScreen()
+                cloud.wafflecommons.pixelbrainreader.ui.homeos.ChoreDashboardScreen(
+                    onNavigateToStats = {
+                        if (navController.previousBackStackEntry?.destination?.route == Screen.Stats) navController.popBackStack()
+                        else navController.navigate(Screen.Stats)
+                    }
+                )
             }
 
             composable(Screen.Import) {
@@ -1096,7 +1101,10 @@ fun MainScreen(
             composable("habits") {
                 cloud.wafflecommons.pixelbrainreader.ui.lifeos.HabitDashboardScreen(
                     onNavigateBack = { navController.popBackStack() },
-                    onNavigateToStats = { navController.navigate(Screen.Stats) }
+                    onNavigateToStats = {
+                        if (navController.previousBackStackEntry?.destination?.route == Screen.Stats) navController.popBackStack()
+                        else navController.navigate(Screen.Stats)
+                    }
                 )
             }
             
@@ -1106,7 +1114,15 @@ fun MainScreen(
             
             composable(Screen.Stats) {
                  cloud.wafflecommons.pixelbrainreader.ui.lifestats.LifeStatsScreen(
-                     onNavigateBack = { navController.popBackStack() }
+                     onNavigateBack = { navController.popBackStack() },
+                     onNavigateToHabits = {
+                         if (navController.previousBackStackEntry?.destination?.route == "habits") navController.popBackStack()
+                         else navController.navigate("habits")
+                     },
+                     onNavigateToChores = {
+                         if (navController.previousBackStackEntry?.destination?.route == Screen.HomeOS) navController.popBackStack()
+                         else navController.navigate(Screen.HomeOS)
+                     }
                  )
             }
             

@@ -16,6 +16,8 @@ import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Whatshot
+import androidx.compose.material.icons.rounded.CleaningServices
+import androidx.compose.material.icons.rounded.DateRange
 import androidx.compose.material3.*
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.runtime.*
@@ -42,6 +44,8 @@ import cloud.wafflecommons.pixelbrainreader.ui.theme.SemanticPalette
 @Composable
 fun LifeStatsScreen(
     onNavigateBack: () -> Unit,
+    onNavigateToHabits: () -> Unit = {},
+    onNavigateToChores: () -> Unit = {},
     viewModel: LifeStatsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.finalUiState.collectAsStateWithLifecycle()
@@ -52,7 +56,29 @@ fun LifeStatsScreen(
 
     Scaffold(
         topBar = {
-            cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(title = "Statistiques de Vie")
+            cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
+                title = "Statistiques de Vie",
+                actions = {
+                    FilledTonalIconButton(
+                        onClick = onNavigateToHabits,
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    ) {
+                        Icon(Icons.Rounded.DateRange, "Habits")
+                    }
+                    FilledTonalIconButton(
+                        onClick = onNavigateToChores,
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    ) {
+                        Icon(Icons.Rounded.CleaningServices, "Chores")
+                    }
+                }
+            )
         }
     ) { innerPadding ->
         cloud.wafflecommons.pixelbrainreader.ui.components.PullToRefreshBox(

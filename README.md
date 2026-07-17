@@ -4,7 +4,7 @@ A **native Android, local-first Markdown vault reader and life-OS** that turns a
 
 - Single Gradle module (`:app`) · Kotlin · Jetpack Compose · Material 3 (adaptive)
 - Min/compile SDK **36**, JVM target **17**, package `cloud.wafflecommons.pixelbrainreader`
-- Current version: **9.0.0** (`versionCode = 900`)
+- Current version: **9.1.0** (`versionCode = 910`)
 
 ---
 
