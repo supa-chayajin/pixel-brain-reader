@@ -82,7 +82,8 @@ class SettingsViewModel @Inject constructor(
         val healthConnectPermissionsGranted: Boolean = false,
         // Google Sync
         val isGoogleSyncEnabled: Boolean = false,
-        val isGoogleAccountLinked: Boolean = false
+        val isGoogleAccountLinked: Boolean = false,
+        val soundEffectsEnabled: Boolean = false
     )
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -211,9 +212,17 @@ class SettingsViewModel @Inject constructor(
             googleAuthManager.setAccountLinked(enabled) // Sync internal state for now
         }.launchIn(viewModelScope)
 
+        userPrefs.soundEffectsEnabled.onEach { enabled ->
+            _uiState.value = _uiState.value.copy(soundEffectsEnabled = enabled)
+        }.launchIn(viewModelScope)
+
         googleAuthManager.isAccountLinked.onEach { linked ->
             _uiState.value = _uiState.value.copy(isGoogleAccountLinked = linked)
         }.launchIn(viewModelScope)
+    }
+
+    fun setSoundEffects(enabled: Boolean) {
+        viewModelScope.launch { userPrefs.setSoundEffectsEnabled(enabled) }
     }
 
     private fun scanAssetsForModels() {

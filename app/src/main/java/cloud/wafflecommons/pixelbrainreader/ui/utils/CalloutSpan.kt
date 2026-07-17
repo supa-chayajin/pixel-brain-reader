@@ -22,8 +22,16 @@ class CalloutSpan(
     private val stripeWidth = 12
     private val padding = 40
     // Updated metrics as per request
-    private val headerHeight = 70 
+    private val headerHeight = 70
     private val bottomMargin = 40
+
+    // StaticLayout reuses ONE FontMetricsInt across all lines of a paragraph, so a mutation
+    // made on the first line persists onto every subsequent line. We snapshot the pristine
+    // ascent/top on the first line and restore them on the body lines — otherwise the
+    // first line's header inflation (headerHeight) leaks forward and stretches every line.
+    private var baseAscent = 0
+    private var baseTop = 0
+    private var capturedBase = false
 
     override fun chooseHeight(
         text: CharSequence,
@@ -31,21 +39,26 @@ class CalloutSpan(
         spanstartv: Int, v: Int,
         fm: Paint.FontMetricsInt
     ) {
-        val spanned = text as Spanned
+        val spanned = text as? Spanned ?: return
         val spanStart = spanned.getSpanStart(this)
         val spanEnd = spanned.getSpanEnd(this)
 
-        // 1. Add Top Padding ONLY for the first line (Header space)
-        // Check if the current line's start matches the span's start
-        if (start == spanStart) {
-            // Push the ascent up (negative direction) to create space above the baseline
-            fm.ascent -= headerHeight 
+        // 1. Header space is reserved ONLY on the very first line of the callout.
+        if (spanStart >= 0 && start == spanStart) {
+            // Snapshot the untouched metrics, then push the ascent up for the header.
+            baseAscent = fm.ascent
+            baseTop = fm.top
+            capturedBase = true
+            fm.ascent -= headerHeight
             fm.top -= headerHeight
+        } else if (capturedBase) {
+            // Body line: undo the header inflation carried over in the shared fm object.
+            fm.ascent = baseAscent
+            fm.top = baseTop
         }
-        
-        // 2. Add Bottom Margin ONLY for the last line
-        // Check if the current line's end matches the span's end
-        if (end >= spanEnd) {
+
+        // 2. Bottom breathing room ONLY on the exact last line of the callout.
+        if (spanEnd >= 0 && end == spanEnd) {
             fm.descent += bottomMargin
             fm.bottom += bottomMargin
         }
@@ -69,7 +82,13 @@ class CalloutSpan(
         // Draw stripe from top to bottom of the line
         c.drawRect(left, top.toFloat(), right, bottom.toFloat(), p)
 
-        if (first) {
+        // Draw the header ONLY on the true first line of the whole callout span.
+        // `first` is true for the first line of EVERY paragraph the span covers, so relying
+        // on it repeated the icon+title at the top of each paragraph (covering the body).
+        // chooseHeight() reserves the header's top space only when start == spanStart, so we
+        // key the header draw off the exact same condition to keep them in lock-step.
+        val spanStart = (text as? Spanned)?.getSpanStart(this) ?: -1
+        if (start == spanStart) {
             // Draw Icon and Title ONLY on first line, shifted up into the reserved space
             p.isFakeBoldText = true
             p.textSize = 40f 

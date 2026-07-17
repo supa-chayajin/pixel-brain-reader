@@ -2,6 +2,7 @@ package cloud.wafflecommons.pixelbrainreader.ui.settings
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.*
+import cloud.wafflecommons.pixelbrainreader.ui.theme.NavBarClearance
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -60,22 +61,25 @@ fun HabitConfigScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                editingHabit = HabitConfig(
-                    id = UUID.randomUUID().toString(),
-                    title = "",
-                    createdDate = LocalDate.now().toString()
-                )
-                isSheetOpen = true
-            }) {
-                Icon(Icons.Filled.Add, contentDescription = "Add Habit")
+            // Lift the FAB above the floating ExpressiveNavBar (which overlays content).
+            Box(modifier = Modifier.padding(bottom = 66.dp)) {
+                FloatingActionButton(onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    editingHabit = HabitConfig(
+                        id = UUID.randomUUID().toString(),
+                        title = "",
+                        createdDate = LocalDate.now().toString()
+                    )
+                    isSheetOpen = true
+                }) {
+                    Icon(Icons.Filled.Add, contentDescription = "Add Habit")
+                }
             }
         }
     ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(16.dp),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = NavBarClearance),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             items(activeHabits, key = { it.id }) { habit ->
@@ -105,14 +109,15 @@ fun HabitConfigScreen(
                             Text(habit.description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Spacer(Modifier.height(8.dp))
                         }
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            habit.frequency.forEach { day ->
-                                SuggestionChip(
-                                    onClick = { },
-                                    label = { Text(day, style = MaterialTheme.typography.labelSmall) }
+                        SuggestionChip(
+                            onClick = { },
+                            label = {
+                                Text(
+                                    cloud.wafflecommons.pixelbrainreader.domain.lifeos.HabitScheduler.describe(habit),
+                                    style = MaterialTheme.typography.labelSmall
                                 )
                             }
-                        }
+                        )
                     }
                 }
             }
@@ -155,16 +160,24 @@ fun HabitEditorForm(
     var type by remember { mutableStateOf(initialHabit.type) }
     var targetValue by remember { mutableStateOf(if (initialHabit.targetValue > 0) initialHabit.targetValue.toString() else "") }
     var unit by remember { mutableStateOf(initialHabit.unit) }
+    // For WEEKLY this set holds weekday keys ("MON"…); for BIWEEKLY it holds 2-week slots
+    // ("W1-MON", "W2-FRI"). Interpreted per the selected scheduleMode.
     var frequency by remember { mutableStateOf(initialHabit.frequency.toSet()) }
+    var scheduleMode by remember { mutableStateOf(initialHabit.scheduleMode.uppercase().ifBlank { "WEEKLY" }) }
+    var intervalCount by remember { mutableStateOf(if (initialHabit.intervalCount > 0) initialHabit.intervalCount.toString() else "2") }
+    var intervalUnit by remember { mutableStateOf(initialHabit.intervalUnit.uppercase().ifBlank { "DAY" }) }
     var autoSource by remember { mutableStateOf(initialHabit.autoSource ?: "None (Manual)") }
     val haptic = LocalHapticFeedback.current
 
     val autoSources = listOf(
         "None (Manual)",
-        "health_connect_steps", 
-        "health_connect_sleep", 
-        "health_connect_hydration", 
-        "health_connect_nutrition", 
+        "health_connect_steps",
+        "health_connect_sleep",
+        "health_connect_hydration",
+        "health_connect_nutrition",
+        "health_connect_active_minutes",
+        "health_connect_distance",
+        "health_connect_mindfulness",
         "health_connect_weight"
     )
 
@@ -236,22 +249,91 @@ fun HabitEditorForm(
             }
         }
 
-        Text("Frequency", style = MaterialTheme.typography.titleMedium)
+        Text("Planification", style = MaterialTheme.typography.titleMedium)
         val days = listOf("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN")
-        FlowRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            days.forEach { day ->
-                FilterChip(
-                    selected = frequency.contains(day),
+
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            val modes = listOf("WEEKLY" to "Hebdo", "BIWEEKLY" to "2 sem.", "INTERVAL" to "Intervalle")
+            modes.forEachIndexed { index, (mode, lbl) ->
+                SegmentedButton(
+                    selected = scheduleMode == mode,
                     onClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        if (frequency.contains(day)) frequency -= day
-                        else frequency += day
+                        scheduleMode = mode
                     },
-                    label = { Text(day) }
+                    shape = SegmentedButtonDefaults.itemShape(index = index, count = modes.size)
+                ) { Text(lbl) }
+            }
+        }
+
+        when (scheduleMode) {
+            "INTERVAL" -> {
+                Text(
+                    "Répète tous les N jours / semaines / mois depuis la dernière complétion, quel que soit le jour de la semaine.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = intervalCount,
+                        onValueChange = { intervalCount = it.filter { c -> c.isDigit() }.take(3) },
+                        label = { Text("Tous les") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.width(110.dp),
+                        singleLine = true
+                    )
+                    SingleChoiceSegmentedButtonRow {
+                        val units = listOf("DAY" to "jours", "WEEK" to "sem.", "MONTH" to "mois")
+                        units.forEachIndexed { index, (u, lbl) ->
+                            SegmentedButton(
+                                selected = intervalUnit == u,
+                                onClick = { intervalUnit = u },
+                                shape = SegmentedButtonDefaults.itemShape(index = index, count = units.size)
+                            ) { Text(lbl) }
+                        }
+                    }
+                }
+            }
+            "BIWEEKLY" -> {
+                listOf(1, 2).forEach { week ->
+                    Text("Semaine $week", style = MaterialTheme.typography.bodyMedium)
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        days.forEach { day ->
+                            val slot = "W$week-$day"
+                            FilterChip(
+                                selected = frequency.contains(slot),
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    frequency = if (frequency.contains(slot)) frequency - slot else frequency + slot
+                                },
+                                label = { Text(day) }
+                            )
+                        }
+                    }
+                }
+            }
+            else -> { // WEEKLY
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    days.forEach { day ->
+                        FilterChip(
+                            selected = frequency.contains(day),
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                frequency = if (frequency.contains(day)) frequency - day else frequency + day
+                            },
+                            label = { Text(day) }
+                        )
+                    }
+                }
             }
         }
 
@@ -314,7 +396,15 @@ fun HabitEditorForm(
                         type = type,
                         targetValue = if (type == HabitType.MEASURABLE) target else 0.0,
                         unit = unit,
-                        frequency = frequency.toList(),
+                        // Persist only the slots that belong to the selected mode.
+                        frequency = when (scheduleMode) {
+                            "BIWEEKLY" -> frequency.filter { it.startsWith("W1-") || it.startsWith("W2-") }.toList()
+                            "INTERVAL" -> emptyList()
+                            else -> frequency.filter { it in days }.toList()
+                        },
+                        scheduleMode = scheduleMode,
+                        intervalCount = intervalCount.toIntOrNull()?.coerceAtLeast(1) ?: 1,
+                        intervalUnit = intervalUnit,
                         autoSource = finalSource
                     )
                     onSave(updated)

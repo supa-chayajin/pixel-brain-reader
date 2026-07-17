@@ -60,8 +60,15 @@ class MainViewModel @Inject constructor(
     private val gamificationRepository: cloud.wafflecommons.pixelbrainreader.data.gamification.GamificationRepository,
     private val jGitProvider: cloud.wafflecommons.pixelbrainreader.data.remote.JGitProvider,
     private val syncOrchestrator: cloud.wafflecommons.pixelbrainreader.data.sync.SyncOrchestrator,
+    private val vaultExportRepository: cloud.wafflecommons.pixelbrainreader.data.repository.VaultExportRepository,
+    private val soundEffectManager: cloud.wafflecommons.pixelbrainreader.data.utils.SoundEffectManager,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
+
+    // Keep the global sound-effects flag in sync with the user's preference.
+    private val soundPrefObserver = userPrefs.soundEffectsEnabled
+        .onEach { soundEffectManager.enabled = it }
+        .launchIn(viewModelScope)
     private val _currentPath = MutableStateFlow("")
 
 
@@ -98,6 +105,22 @@ class MainViewModel @Inject constructor(
 
     // Global Sync State (observable by UI)
     val globalSyncState = syncOrchestrator.syncState
+
+    // Live label of the repo-sync sub-step (pull/push/index…) for the Repo & File-detail
+    // pull-to-refresh indicators. Null when no repo sync is running.
+    val repoSyncStatus: StateFlow<String?> = repository.syncStatus
+
+    // Persisted custom order of the regular nav-bar destinations (the "Daily" button is fixed).
+    val navBarOrder: StateFlow<List<String>> = userPrefs.navBarOrder
+        .stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5000L),
+            UserPreferencesRepository.DEFAULT_NAVBAR_ORDER
+        )
+
+    fun setNavBarOrder(order: List<String>) {
+        viewModelScope.launch { userPrefs.setNavBarOrder(order) }
+    }
 
     // Reactive File List
     private val _filesFlow = combine(_currentPath, _searchQuery) { path, query ->
@@ -543,33 +566,49 @@ class MainViewModel @Inject constructor(
     }
 
     
-    fun requestDeleteFile() {
+    // The file targeted by a swipe-delete. Null means "delete the currently open file"
+    // (the detail-pane top-bar delete action). Kept out of uiState — the UI never reads it.
+    private var pendingDeleteFile: GithubFileDto? = null
+
+    fun requestDeleteFile(file: GithubFileDto? = null) {
+        // A swipe-delete passes the row's file so we can delete it WITHOUT opening it first
+        // (opening caused the doc to flash into the detail pane before the confirm dialog).
+        pendingDeleteFile = file
         _showDeleteConfirmation.value = true
     }
 
 
     fun dismissDeleteConfirmation() {
         _showDeleteConfirmation.value = false
+        pendingDeleteFile = null
     }
 
 
     fun confirmDeleteFile() {
-        dismissDeleteConfirmation()
-        val fileName = _selectedFileName.value ?: return
-        val path = _selectedFilePath.value ?: uiState.value.files.find { it.name == fileName }?.path ?: return
+        _showDeleteConfirmation.value = false
+        val target = pendingDeleteFile
+        pendingDeleteFile = null
 
-        
+        // Prefer the explicit swipe target; otherwise fall back to the open file.
+        val path = target?.path
+            ?: _selectedFilePath.value
+            ?: _selectedFileName.value?.let { name -> uiState.value.files.find { it.name == name }?.path }
+            ?: return
+        val wasOpenFile = path == _selectedFilePath.value
+
         val (owner, repo) = secretManager.getRepoInfo()
-        
+
         viewModelScope.launch {
             _isSyncing.value = true
-            _userMessage.value = "Deleting specified file..."
-            
+            _userMessage.value = "Deleting file..."
+
             val result = repository.deleteFile(path, owner, repo)
-            
+
             if (result.isSuccess) {
-                closeFile()
-                navigateBack() // Go back to list
+                // Only close the detail pane if the deleted file was the one open. Never
+                // touch _currentPath — the user stays in the current folder's list (the
+                // Room flow drops the row after reindex), instead of jumping up a level.
+                if (wasOpenFile) closeFile()
                 _userMessage.value = "File Deleted"
                 _isSyncing.value = false
             } else {
@@ -747,7 +786,10 @@ class MainViewModel @Inject constructor(
      * Analyzes current folder contents and generates an index.
      */
     fun analyzeCurrentFolder() {
-        val files = uiState.value.files.filter { it.type == "file" }.take(10)
+        // The current listing is already the DIRECT children (no subdirectories), filtered
+        // to files — exactly the "direct folder only" scope requested. No hard 10-file cap
+        // here; GeminiRagManager bounds the work internally and summarizes file-by-file.
+        val files = uiState.value.files.filter { it.type == "file" }
         if (files.isEmpty()) {
             _userMessage.value = "No files to analyze here."
             return
@@ -755,24 +797,52 @@ class MainViewModel @Inject constructor(
 
         viewModelScope.launch {
             _isLoading.value = true
-            _userMessage.value = "AI analyzing folder..."
+            _userMessage.value = "Analyse du dossier…"
             val fileContexts = files.mapNotNull { file ->
-                val content = repository.getFileContentFlow(file.path).firstOrNull() 
+                val content = repository.getFileContentFlow(file.path).firstOrNull()
                 if (content != null) Pair(file.name, content) else null
             }
 
-            val rawSummary = geminiRagManager.analyzeFolder(fileContexts)
-            val summary = rawSummary.replace(Regex("^```markdown\\s*", RegexOption.IGNORE_CASE), "")
-                .replace(Regex("^```\\s*", RegexOption.IGNORE_CASE), "")
-                .replace(Regex("\\s*```$"), "").trim()
-            
-            _isLoading.value = false
-            _selectedFileName.value = "Folder_Insight.md"
-            _unsavedContent.value = summary
-            _isEditing.value = false
+            geminiRagManager.analyzeFolder(fileContexts) { done, total ->
+                _userMessage.value = "Analyse du dossier… ($done/$total)"
+            }.fold(
+                onSuccess = { rawSummary ->
+                    val summary = rawSummary
+                        .replace(Regex("^```markdown\\s*", RegexOption.IGNORE_CASE), "")
+                        .replace(Regex("^```\\s*", RegexOption.IGNORE_CASE), "")
+                        .replace(Regex("\\s*```$"), "").trim()
+                    _isLoading.value = false
+                    _userMessage.value = "Synthèse du dossier prête ✨"
+                    _selectedFileName.value = "Folder_Insight.md"
+                    _unsavedContent.value = summary
+                    _isEditing.value = false
+                },
+                onFailure = { e ->
+                    // Surface the real failure — NEVER write the error text into a note body.
+                    _isLoading.value = false
+                    val reason = e.localizedMessage ?: e.message ?: "modèle IA indisponible"
+                    _userMessage.value = "Échec de l'analyse : $reason"
+                }
+            )
         }
     }
 
+
+    /** Export the whole vault as a ZIP to a user-picked SAF destination (outside the app). */
+    fun exportVault(outputUri: android.net.Uri) {
+        viewModelScope.launch {
+            _userMessage.value = "Export du vault…"
+            vaultExportRepository.exportVaultZip(outputUri) { done, total ->
+                _userMessage.value = "Export du vault… ($done/$total)"
+            }.fold(
+                onSuccess = { count -> _userMessage.value = "$count fichiers exportés ✅" },
+                onFailure = { e ->
+                    val reason = e.localizedMessage ?: e.message ?: "erreur inconnue"
+                    _userMessage.value = "Échec de l'export : $reason"
+                }
+            )
+        }
+    }
 
     fun appendContent(text: String) {
         val currentContent = _unsavedContent.value ?: uiState.value.selectedFileContent ?: ""

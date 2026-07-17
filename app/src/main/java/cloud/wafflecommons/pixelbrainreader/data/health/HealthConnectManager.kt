@@ -210,6 +210,19 @@ class HealthConnectManager @Inject constructor(
             }
         }
 
+        // 5. Latest body weight (kg) logged in range — 0.0 on days with no weigh-in.
+        // Previously never read, so the "weight" habit auto-source was permanently stuck at 0.
+        var weightKg = 0.0
+        if (granted.contains(HealthPermission.getReadPermission(androidx.health.connect.client.records.WeightRecord::class))) {
+            try {
+                val weightRequest = ReadRecordsRequest(androidx.health.connect.client.records.WeightRecord::class, timeRangeFilter)
+                val weightResponse = healthConnectClient.readRecords(weightRequest)
+                weightKg = weightResponse.records.maxByOrNull { it.time }?.weight?.inKilograms ?: 0.0
+            } catch (e: Exception) {
+                Log.e("HealthConnectManager", "Failed to read weight", e)
+            }
+        }
+
         DailyHealthMetrics(
             date = date.toString(),
             steps = totalSteps,
@@ -220,7 +233,8 @@ class HealthConnectManager @Inject constructor(
             waterConsumedMl = waterConsumedMl,
             caloriesConsumed = caloriesConsumed,
             caloriesBurned = caloriesBurned,
-            mindfulnessMinutes = mindfulnessMinutes
+            mindfulnessMinutes = mindfulnessMinutes,
+            weight = weightKg
         )
     }
 
@@ -235,7 +249,8 @@ class HealthConnectManager @Inject constructor(
         HealthPermission.getReadPermission(DistanceRecord::class),
         HealthPermission.getReadPermission(ExerciseSessionRecord::class),
         HealthPermission.getReadPermission(androidx.health.connect.client.records.ActiveCaloriesBurnedRecord::class),
-        HealthPermission.getReadPermission(MindfulnessSessionRecord::class)
+        HealthPermission.getReadPermission(MindfulnessSessionRecord::class),
+        HealthPermission.getReadPermission(androidx.health.connect.client.records.WeightRecord::class)
     )
 
     fun getSdkStatus(): Int {

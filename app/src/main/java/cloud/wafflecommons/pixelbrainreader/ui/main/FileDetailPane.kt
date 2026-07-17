@@ -83,7 +83,6 @@ import cloud.wafflecommons.pixelbrainreader.ui.mood.MoodViewModel
 import cloud.wafflecommons.pixelbrainreader.data.repository.DailyMoodData
 import cloud.wafflecommons.pixelbrainreader.data.repository.MoodEntry
 import cloud.wafflecommons.pixelbrainreader.ui.utils.ObsidianHelper
-import cloud.wafflecommons.pixelbrainreader.ui.utils.ObsidianLinkPlugin
 import cloud.wafflecommons.pixelbrainreader.ui.utils.ObsidianImagePlugin
 import cloud.wafflecommons.pixelbrainreader.ui.utils.ObsidianCalloutPlugin
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -111,6 +110,7 @@ fun FileDetailPane(
     fileName: String? = null,
     isLoading: Boolean,
     isRefreshing: Boolean,
+    statusText: String? = null,
     onRefresh: () -> Unit,
     isExpandedScreen: Boolean,
     isEditing: Boolean,
@@ -187,6 +187,7 @@ fun FileDetailPane(
             cloud.wafflecommons.pixelbrainreader.ui.components.PullToRefreshBox(
                 isRefreshing = isRefreshing,
                 onRefresh = onRefresh,
+                statusText = statusText,
                 modifier = Modifier.weight(1f)
             ) {
                 Box(Modifier.fillMaxSize()) { // Wrap for FAB
@@ -442,10 +443,30 @@ fun MetadataHeader(metadata: Map<String, String>, tags: List<String>) {
 }
 
 
+/** URI scheme used internally to carry an Obsidian wikilink target through Markwon's
+ *  markdown-link machinery so clicks route to [MarkwonContent]'s LinkResolver. */
+private const val WIKI_LINK_SCHEME = "pixelbrain-wiki"
+
+// [[target]] / [[target|label]] → a standard markdown link carrying WIKI_LINK_SCHEME.
+// This makes Markwon render just the label (no raw brackets) AND makes the region a real
+// clickable link. The negative lookbehind keeps image embeds (![[image.png]]) untouched.
+private val WIKI_LINK_REGEX = Regex("(?<!!)\\[\\[([^\\]|]+?)(?:\\|([^\\]]+))?\\]\\]")
+
+private fun convertWikiLinks(markdown: String): String =
+    WIKI_LINK_REGEX.replace(markdown) { m ->
+        val target = m.groupValues[1].trim()
+        val label = m.groupValues[2].trim().ifEmpty { target }
+        val encoded = java.net.URLEncoder.encode(target, "UTF-8")
+        "[$label]($WIKI_LINK_SCHEME://$encoded)"
+    }
+
+private fun decodeSafely(value: String): String =
+    try { java.net.URLDecoder.decode(value, "UTF-8") } catch (e: Exception) { value }
+
 @Composable
 fun MarkwonContent(content: String, onWikiLinkClick: (String) -> Unit) {
     val textColor = MaterialTheme.colorScheme.onSurface.toArgb()
-    
+
     AndroidView(
         factory = { context ->
             TextView(context).apply {
@@ -457,15 +478,33 @@ fun MarkwonContent(content: String, onWikiLinkClick: (String) -> Unit) {
             }
         },
         update = { tv ->
+            val defaultLinkResolver = io.noties.markwon.LinkResolverDef()
             val markwon = Markwon.builder(tv.context)
                 .usePlugin(StrikethroughPlugin.create())
                 .usePlugin(TablePlugin.create(tv.context))
                 .usePlugin(LinkifyPlugin.create())
                 .usePlugin(TaskListPlugin.create(textColor, textColor, textColor))
-                .usePlugin(ObsidianLinkPlugin { target -> onWikiLinkClick(target) })
                 .usePlugin(ObsidianImagePlugin())
                 .usePlugin(ObsidianCalloutPlugin())
                 .usePlugin(ImagesPlugin.create())
+                // Route every link click: internal wikilinks / relative note paths open
+                // in-app; http(s)/mailto/tel fall through to the default resolver, which
+                // fires ACTION_VIEW and opens the URL in the browser (Chrome).
+                .usePlugin(object : AbstractMarkwonPlugin() {
+                    override fun configureConfiguration(builder: io.noties.markwon.MarkwonConfiguration.Builder) {
+                        builder.linkResolver { view, link ->
+                            when {
+                                link.startsWith("$WIKI_LINK_SCHEME://") ->
+                                    onWikiLinkClick(decodeSafely(link.removePrefix("$WIKI_LINK_SCHEME://")))
+                                link.startsWith("#") -> Unit // in-note anchor: no navigation
+                                link.contains("://") || link.startsWith("mailto:") || link.startsWith("tel:") ->
+                                    defaultLinkResolver.resolve(view, link) // external → browser
+                                else ->
+                                    onWikiLinkClick(decodeSafely(link).removePrefix("./")) // relative → vault
+                            }
+                        }
+                    }
+                })
                 // --- HTML PLUGIN FOR FALLBACKS ---
                 .usePlugin(io.noties.markwon.html.HtmlPlugin.create { plugin ->
                     plugin.addHandler(object : io.noties.markwon.html.tag.SimpleTagHandler() {
@@ -481,8 +520,8 @@ fun MarkwonContent(content: String, onWikiLinkClick: (String) -> Unit) {
                     })
                 })
                 .build()
-            
-            markwon.setMarkdown(tv, content)
+
+            markwon.setMarkdown(tv, convertWikiLinks(content))
         }
     )
 }

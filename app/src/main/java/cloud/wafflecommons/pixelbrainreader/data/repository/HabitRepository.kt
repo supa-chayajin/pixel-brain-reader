@@ -99,9 +99,13 @@ class HabitRepository @Inject constructor(
         val autoSource: String? = null,
         val createdDate: String = "",
         val archived: Boolean = false,
-        val sortOrder: Int = 0
+        val sortOrder: Int = 0,
+        // New scheduling fields; defaults keep old vault config.json round-tripping across devices.
+        val scheduleMode: String = "WEEKLY",
+        val intervalCount: Int = 0,
+        val intervalUnit: String = "DAY"
     )
-    
+
     @Serializable
     data class HabitLogDto(
         val habitId: String,
@@ -186,7 +190,10 @@ class HabitRepository @Inject constructor(
                             autoSource = config.autoSource,
                             createdDate = config.createdDate,
                             archived = config.archived,
-                            sortOrder = config.sortOrder
+                            sortOrder = config.sortOrder,
+                            scheduleMode = config.scheduleMode,
+                            intervalCount = config.intervalCount,
+                            intervalUnit = config.intervalUnit
                         )
                     )
                 }
@@ -220,7 +227,10 @@ class HabitRepository @Inject constructor(
                     autoSource = entity.autoSource,
                     createdDate = entity.createdDate,
                     archived = entity.archived,
-                    sortOrder = entity.sortOrder
+                    sortOrder = entity.sortOrder,
+                    scheduleMode = entity.scheduleMode,
+                    intervalCount = entity.intervalCount,
+                    intervalUnit = entity.intervalUnit
                 )
             }
 
@@ -328,6 +338,16 @@ class HabitRepository @Inject constructor(
         }
     }
 
+    /** Most recent COMPLETED date for a habit (this + last year), for INTERVAL scheduling. */
+    suspend fun getLastCompletedDate(habitId: String): java.time.LocalDate? = withContext(Dispatchers.IO) {
+        val year = java.time.LocalDate.now().year
+        val logs = habitDao.getLogsForYear(year.toString()) + habitDao.getLogsForYear((year - 1).toString())
+        logs.asSequence()
+            .filter { it.habitId == habitId && it.status == HabitStatus.COMPLETED }
+            .maxByOrNull { it.date }
+            ?.date?.let { runCatching { java.time.LocalDate.parse(it) }.getOrNull() }
+    }
+
     suspend fun addHabitConfig(config: HabitConfig) = habitMutex.withLock {
         withContext(Dispatchers.IO) {
             val entity = mapConfigToEntity(config)
@@ -352,7 +372,10 @@ class HabitRepository @Inject constructor(
             autoSource = domain.autoSource,
             createdDate = domain.createdDate,
             archived = domain.archived,
-            sortOrder = domain.sortOrder
+            sortOrder = domain.sortOrder,
+            scheduleMode = domain.scheduleMode,
+            intervalCount = domain.intervalCount,
+            intervalUnit = domain.intervalUnit
         )
     }
 
@@ -370,7 +393,10 @@ class HabitRepository @Inject constructor(
             autoSource = entity.autoSource,
             createdDate = entity.createdDate,
             archived = entity.archived,
-            sortOrder = entity.sortOrder
+            sortOrder = entity.sortOrder,
+            scheduleMode = entity.scheduleMode,
+            intervalCount = entity.intervalCount,
+            intervalUnit = entity.intervalUnit
         )
     }
 

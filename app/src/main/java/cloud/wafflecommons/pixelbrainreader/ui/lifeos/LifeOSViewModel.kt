@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import cloud.wafflecommons.pixelbrainreader.data.model.HabitConfig
 import cloud.wafflecommons.pixelbrainreader.data.model.HabitLogEntry
 import cloud.wafflecommons.pixelbrainreader.data.model.HabitStatus
+import cloud.wafflecommons.pixelbrainreader.domain.lifeos.HabitScheduler
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyTaskEntity
 import cloud.wafflecommons.pixelbrainreader.data.repository.HabitRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.TaskRepository
@@ -54,7 +55,8 @@ class LifeOSViewModel @Inject constructor(
     private val grantXpUseCase: cloud.wafflecommons.pixelbrainreader.domain.gamification.GrantXpUseCase,
     private val automateHabitsUseCase: cloud.wafflecommons.pixelbrainreader.domain.gamification.AutomateHabitsUseCase,
     private val jGitProvider: JGitProvider,
-    private val syncOrchestrator: cloud.wafflecommons.pixelbrainreader.data.sync.SyncOrchestrator
+    private val syncOrchestrator: cloud.wafflecommons.pixelbrainreader.data.sync.SyncOrchestrator,
+    private val soundEffectManager: cloud.wafflecommons.pixelbrainreader.data.utils.SoundEffectManager
 ) : ViewModel() {
 
     private val selectedDateFlow = MutableStateFlow(LocalDate.now())
@@ -67,54 +69,50 @@ class LifeOSViewModel @Inject constructor(
             gamificationRepository.gamificationState,
             taskRepository.getTasksFlow(date)
         ) { configs, logsMap, gamificationState, scopedTasks ->
-            val dayMap = mapOf(
-                java.time.DayOfWeek.MONDAY to "MON",
-                java.time.DayOfWeek.TUESDAY to "TUE",
-                java.time.DayOfWeek.WEDNESDAY to "WED",
-                java.time.DayOfWeek.THURSDAY to "THU",
-                java.time.DayOfWeek.FRIDAY to "FRI",
-                java.time.DayOfWeek.SATURDAY to "SAT",
-                java.time.DayOfWeek.SUNDAY to "SUN"
-            )
-            val todayKey = dayMap[date.dayOfWeek] ?: "MON"
-            
             val habitsWithStats = configs.map { habit ->
                  val habitLogs = logsMap[habit.id] ?: emptyList()
-                 
-                 val cleanFreq = habit.frequency.map { it.trim().uppercase() }
-                 val isScheduledToday = cleanFreq.isEmpty() || cleanFreq.contains(todayKey)
                  
                  val todayLog = habitLogs.find { it.date == date.toString() }
                  val isCompletedToday = isHabitComplete(habit, todayLog)
                  val currentValue = todayLog?.value ?: 0.0
-                 
+
+                 // Most recent completion date — only INTERVAL scheduling consults it.
+                 val lastCompletedDate = habitLogs
+                     .filter { isHabitComplete(habit, it) }
+                     .maxByOrNull { it.date }
+                     ?.date?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+
+                 val isScheduledToday = HabitScheduler.isScheduledOn(habit, date, lastCompletedDate)
+
                  val history = (0..6).map { i ->
                     val checkDate = date.minusDays(i.toLong()).toString()
                     val log = habitLogs.find { it.date == checkDate }
                     isHabitComplete(habit, log)
                  }.reversed()
-                 
-                 // Streak
-                 var streak = 0
-                 var checkDate = if (isCompletedToday) date else date.minusDays(1)
-                 for (i in 0..365) {
-                      val checkDateKey = dayMap[checkDate.dayOfWeek] ?: "MON"
-                      val isCheckDateScheduled = cleanFreq.isEmpty() || cleanFreq.contains(checkDateKey)
-                      
-                      val d = checkDate.toString()
-                      val log = habitLogs.find { it.date == d }
-                      
-                      if (isHabitComplete(habit, log)) {
-                          streak++
-                          checkDate = checkDate.minusDays(1)
-                      } else if (!isCheckDateScheduled) {
-                          // Skip days where the habit wasn't scheduled
-                          checkDate = checkDate.minusDays(1)
-                      } else {
-                          break
-                      }
+
+                 // Streak. Interval habits complete on irregular days, so their streak is the
+                 // total number of completions; weekly / bi-weekly walk back day-by-day,
+                 // skipping unscheduled days via the shared scheduler.
+                 val streak = if (habit.scheduleMode.equals("INTERVAL", ignoreCase = true)) {
+                     habitLogs.count { isHabitComplete(habit, it) }
+                 } else {
+                     var s = 0
+                     var checkDate = if (isCompletedToday) date else date.minusDays(1)
+                     for (i in 0..365) {
+                         val scheduled = HabitScheduler.isScheduledOn(habit, checkDate, null)
+                         val log = habitLogs.find { it.date == checkDate.toString() }
+                         if (isHabitComplete(habit, log)) {
+                             s++
+                             checkDate = checkDate.minusDays(1)
+                         } else if (!scheduled) {
+                             checkDate = checkDate.minusDays(1)
+                         } else {
+                             break
+                         }
+                     }
+                     s
                  }
-                 
+
                  HabitWithStats(habit, isCompletedToday, currentValue, streak, history, isScheduledToday)
             }
             
@@ -199,6 +197,7 @@ class LifeOSViewModel @Inject constructor(
             // And only if it's TODAY (gamification should probably be real-time/strict?)
             // We allow backfilling but maybe reduce XP? For now, standard XP for any date logic.
             if (isCompleting) {
+                soundEffectManager.success()
                 grantXpUseCase.execute(
                     sourceId = habitId,
                     actionType = cloud.wafflecommons.pixelbrainreader.domain.gamification.XpActionType.HABIT_DONE
@@ -233,6 +232,7 @@ class LifeOSViewModel @Inject constructor(
             // Let's stick to "If status becomes COMPLETED"
             val isNowComplete = status == HabitStatus.COMPLETED
             if (isNowComplete && !wasComplete) {
+                 soundEffectManager.success()
                  grantXpUseCase.execute(
                     sourceId = habitId,
                     actionType = cloud.wafflecommons.pixelbrainreader.domain.gamification.XpActionType.HABIT_DONE,
@@ -248,6 +248,7 @@ class LifeOSViewModel @Inject constructor(
             taskRepository.toggleTask(task.id, isDone)
             
             if (isDone) {
+                 soundEffectManager.success()
                  grantXpUseCase.execute(
                     sourceId = task.id,
                     actionType = cloud.wafflecommons.pixelbrainreader.domain.gamification.XpActionType.TASK_DONE

@@ -11,10 +11,10 @@ import cloud.wafflecommons.pixelbrainreader.data.notifications.NotificationHelpe
 import cloud.wafflecommons.pixelbrainreader.data.repository.ChoreRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
 import cloud.wafflecommons.pixelbrainreader.domain.homeos.CalculateChoreEntropyUseCase
+import cloud.wafflecommons.pixelbrainreader.domain.lifeos.HabitScheduler
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.flow.first
-import java.time.DayOfWeek
 import java.time.LocalDate
 
 /**
@@ -42,14 +42,23 @@ class ChoresHabitsReminderWorker @AssistedInject constructor(
                 .filter { it.dirtinessPercentage >= 100f }
                 .map { it.entity.name }
 
-            // Habits scheduled today (frequency empty = daily) minus those already
-            // COMPLETED today.
+            // Habits scheduled today (via the shared HabitScheduler — supports weekly,
+            // bi-weekly and interval modes) minus those already COMPLETED today.
             val today = LocalDate.now()
             val todayStr = today.toString() // ISO yyyy-MM-dd
-            val todayKey = dayKeyOf(today.dayOfWeek)
-            val activeToday = habitDao.getAllConfigs()
-                .filter { !it.archived && (it.frequency.isEmpty() || it.frequency.contains(todayKey)) }
-            val completedIds = habitDao.getLogsForYear(todayStr.substring(0, 4))
+            val yearLogs = habitDao.getLogsForYear(todayStr.substring(0, 4))
+            val lastCompletedByHabit = yearLogs
+                .filter { it.status == HabitStatus.COMPLETED }
+                .groupBy { it.habitId }
+                .mapValues { (_, logs) -> logs.maxOf { it.date } }
+            val activeToday = habitDao.getAllConfigs().filter { cfg ->
+                !cfg.archived && HabitScheduler.isScheduledOn(
+                    cfg.scheduleMode, cfg.frequency, cfg.intervalCount, cfg.intervalUnit,
+                    today,
+                    lastCompletedByHabit[cfg.id]?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+                )
+            }
+            val completedIds = yearLogs
                 .filter { it.date == todayStr && it.status == HabitStatus.COMPLETED }
                 .map { it.habitId }
                 .toSet()
@@ -76,15 +85,5 @@ class ChoresHabitsReminderWorker @AssistedInject constructor(
             Log.w("ChoresHabitsReminder", "Chores/habits reminder failed (non-fatal)", e)
             Result.success()
         }
-    }
-
-    private fun dayKeyOf(day: DayOfWeek): String = when (day) {
-        DayOfWeek.MONDAY -> "MON"
-        DayOfWeek.TUESDAY -> "TUE"
-        DayOfWeek.WEDNESDAY -> "WED"
-        DayOfWeek.THURSDAY -> "THU"
-        DayOfWeek.FRIDAY -> "FRI"
-        DayOfWeek.SATURDAY -> "SAT"
-        DayOfWeek.SUNDAY -> "SUN"
     }
 }

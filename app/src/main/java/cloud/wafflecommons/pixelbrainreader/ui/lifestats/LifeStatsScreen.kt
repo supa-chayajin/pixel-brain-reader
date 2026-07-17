@@ -58,6 +58,7 @@ fun LifeStatsScreen(
         cloud.wafflecommons.pixelbrainreader.ui.components.PullToRefreshBox(
             isRefreshing = isRefreshing,
             onRefresh = { viewModel.triggerSync() },
+            statusText = (syncState as? SyncState.Syncing)?.step?.label,
             modifier = Modifier.fillMaxSize().padding(innerPadding)
         ) {
             if (uiState.isLoading) {

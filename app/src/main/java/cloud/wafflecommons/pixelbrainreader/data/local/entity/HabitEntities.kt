@@ -26,7 +26,13 @@ data class HabitConfigEntity(
     val autoSource: String? = null,
     val createdDate: String = "",
     val archived: Boolean = false,
-    val sortOrder: Int = 0
+    val sortOrder: Int = 0,
+    // Scheduling mode. WEEKLY: `frequency` holds weekday keys (MON..SUN), empty = daily.
+    // BIWEEKLY: `frequency` holds 2-week slots ("W1-MON", "W2-FRI"). INTERVAL: due every
+    // [intervalCount] [intervalUnit] since last completion, regardless of weekday.
+    val scheduleMode: String = "WEEKLY",   // WEEKLY | BIWEEKLY | INTERVAL
+    val intervalCount: Int = 0,            // INTERVAL: N (e.g. every 2 …)
+    val intervalUnit: String = "DAY"       // INTERVAL: DAY | WEEK | MONTH
 )
 
 @Immutable

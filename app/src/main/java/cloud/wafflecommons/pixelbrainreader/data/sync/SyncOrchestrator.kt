@@ -17,11 +17,26 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
+ * The granular sub-steps of a sync cycle, each with a user-facing (French) label so the
+ * pull-to-refresh indicator can show WHAT is being refreshed instead of a generic string.
+ */
+enum class SyncStep(val label: String) {
+    PULLING("Récupération des notes…"),
+    INDEXING("Indexation du vault…"),
+    HEALTH("Synchronisation santé…"),
+    HABITS("Mise à jour des habitudes…"),
+    GOOGLE("Synchronisation Google…"),
+    PUSHING("Envoi des modifications…"),
+    RECONCILING("Réconciliation…")
+}
+
+/**
  * Represents the current state of the global sync cycle.
  */
 sealed class SyncState {
     object Idle : SyncState()
-    object Syncing : SyncState()
+    /** In progress. [step] names the current phase for the UI. */
+    data class Syncing(val step: SyncStep = SyncStep.PULLING) : SyncState()
     object Success : SyncState()
     data class Error(val message: String) : SyncState()
 }
@@ -69,7 +84,7 @@ class SyncOrchestrator @Inject constructor(
      *
      * @return true if the sync was executed, false if it was skipped.
      */
-    suspend fun executeFullSyncCycle(): Boolean = withContext(Dispatchers.IO) {
+    suspend fun executeFullSyncCycle(force: Boolean = false): Boolean = withContext(Dispatchers.IO) {
         // Skip if Mutex is already held (sync in progress)
         if (!syncMutex.tryLock()) {
             Log.d(TAG, "Sync skipped: already in progress")
@@ -77,9 +92,10 @@ class SyncOrchestrator @Inject constructor(
         }
 
         try {
-            // Cooldown check
+            // Cooldown check — bypassed for user-initiated (force) refreshes so a manual
+            // pull-to-refresh always does something instead of silently no-op'ing.
             val now = System.currentTimeMillis()
-            if (now - lastSyncTimestamp < COOLDOWN_MS) {
+            if (!force && now - lastSyncTimestamp < COOLDOWN_MS) {
                 Log.d(TAG, "Sync skipped: cooldown active (${(COOLDOWN_MS - (now - lastSyncTimestamp)) / 1000}s remaining)")
                 return@withContext false
             }
@@ -90,7 +106,7 @@ class SyncOrchestrator @Inject constructor(
                 return@withContext false
             }
 
-            _syncState.value = SyncState.Syncing
+            _syncState.value = SyncState.Syncing(SyncStep.PULLING)
             Log.i(TAG, "=== Starting Full Sync Cycle ===")
 
             // Phase 0: Commit any pending local edits BEFORE the pull. JGit's
@@ -118,11 +134,13 @@ class SyncOrchestrator @Inject constructor(
 
             // Phase 1.5: Reindex Room from vault FS — keeps the index honest after a pull
             // that may have added/removed/modified files outside the app's write path.
+            _syncState.value = SyncState.Syncing(SyncStep.INDEXING)
             Log.i(TAG, "Phase 1.5: Reindexing Room (post-pull)...")
             runCatching { vaultDiscoveryRepository.reindexAll(0L) }
                 .onFailure { Log.w(TAG, "Post-pull reindex failed (non-fatal)", it) }
 
             // Phase 2: Health Data Sync (non-fatal)
+            _syncState.value = SyncState.Syncing(SyncStep.HEALTH)
             Log.i(TAG, "Phase 2: Health data sync...")
             try {
                 val healthResult = syncHealthDataUseCase.invoke()
@@ -139,11 +157,13 @@ class SyncOrchestrator @Inject constructor(
             // from the vault and propagate into habit_logs (+ JSON log files)
             // BEFORE the push, so the same commit ships both metrics and the
             // derived habit progress. Non-fatal.
+            _syncState.value = SyncState.Syncing(SyncStep.HABITS)
             Log.i(TAG, "Phase 2.6: Habit automation (health → habits)...")
             runCatching { automateHabitsUseCase(java.time.LocalDate.now()) }
                 .onFailure { Log.w(TAG, "Phase 2.6: Habit automation failed (non-fatal)", it) }
 
             // Phase 2.5: Google Ecosystem Sync (non-fatal)
+            _syncState.value = SyncState.Syncing(SyncStep.GOOGLE)
             Log.i(TAG, "Phase 2.5: Google Ecosystem sync...")
             try {
                 val calRes = googleCalendarRepository.syncTodayEvents()
@@ -161,6 +181,7 @@ class SyncOrchestrator @Inject constructor(
             }
 
             // Phase 3: Git Add + Commit + Push
+            _syncState.value = SyncState.Syncing(SyncStep.PUSHING)
             Log.i(TAG, "Phase 3: Add/Commit/Push...")
             try {
                 jGitProvider.addAll()
@@ -189,6 +210,7 @@ class SyncOrchestrator @Inject constructor(
             // synced state before this method returns. Embedding indexing is
             // intentionally NOT triggered here: it's now exclusively under
             // user control via Settings → "Index Knowledge Vault".
+            _syncState.value = SyncState.Syncing(SyncStep.RECONCILING)
             Log.i(TAG, "Phase 4: Inline Mood/Habit/Chore JSON → Room reconcile...")
             runCatching { moodRepository.syncWithFileSystem() }
                 .onFailure { Log.w(TAG, "Phase 4: Mood reconcile failed (non-fatal)", it) }

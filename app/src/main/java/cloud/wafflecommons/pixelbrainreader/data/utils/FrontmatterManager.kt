@@ -128,7 +128,15 @@ object FrontmatterManager {
         val firstYaml = lines.subList(i, firstClose).joinToString("\n")
 
         if (firstYaml.isNotBlank()) {
-            return Location(firstYaml, bodyFrom(lines, firstClose + 1))
+            // Only treat the leading block as frontmatter if it actually looks like YAML.
+            // A file that opens with `---` used as a thematic break (horizontal rule) and
+            // contains a later `---` must NOT have the text between them swallowed as
+            // frontmatter — that `---` is body content, not a delimiter.
+            return if (looksLikeYaml(firstYaml)) {
+                Location(firstYaml, bodyFrom(lines, firstClose + 1))
+            } else {
+                null
+            }
         }
 
         // Empty leading block — recovery path for the legacy daily-note template

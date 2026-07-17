@@ -219,6 +219,7 @@ fun DailyNoteScreen(
         cloud.wafflecommons.pixelbrainreader.ui.components.PullToRefreshBox(
             isRefreshing = isRefreshing,
             onRefresh = { viewModel.triggerSync() },
+            statusText = (syncState as? SyncState.Syncing)?.step?.label,
             modifier = Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)
         ) {
         Box(modifier = Modifier.fillMaxSize()) {
@@ -763,6 +764,9 @@ private fun AddTimelineDialog(onDismiss: () -> Unit, onConfirm: (String, LocalTi
                     value = content,
                     onValueChange = { content = it },
                     label = { Text("What happened?") },
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Sentences
+                    ),
                     modifier = Modifier.fillMaxWidth().focusRequester(contentFocus)
                 )
                 TimeInput(state = timePickerState) // Or TimePicker for full dial
@@ -792,6 +796,7 @@ private fun AddTaskDialog(onDismiss: () -> Unit, onConfirm: (String, java.time.L
     var label by remember { mutableStateOf("") }
     var useTime by remember { mutableStateOf(false) }
     var selectedDate by remember { mutableStateOf(java.time.LocalDate.now()) }
+    val labelFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     
     val context = androidx.compose.ui.platform.LocalContext.current
     val dateFormatter = java.time.format.DateTimeFormatter.ofPattern("EEE, MMM dd")
@@ -812,9 +817,13 @@ private fun AddTaskDialog(onDismiss: () -> Unit, onConfirm: (String, java.time.L
                     onValueChange = { label = it },
                     label = { Text("Goal / Task") },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Sentences
+                    ),
+                    modifier = Modifier.fillMaxWidth().focusRequester(labelFocus)
                 )
-                
+                LaunchedEffect(Unit) { labelFocus.requestFocus() }
+
                 // Date Picker
                 Row(
                     verticalAlignment = Alignment.CenterVertically, 
@@ -925,6 +934,9 @@ private fun QuickCaptureSheet(
                     .focusRequester(focusRequester),
                 placeholder = { Text("What's on your mind?", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)) },
                 textStyle = MaterialTheme.typography.bodyLarge,
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                    capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Sentences
+                ),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
                     unfocusedBorderColor = Color.Transparent,

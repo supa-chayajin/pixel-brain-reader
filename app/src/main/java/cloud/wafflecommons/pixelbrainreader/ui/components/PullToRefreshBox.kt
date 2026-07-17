@@ -27,6 +27,9 @@ fun PullToRefreshBox(
     isRefreshing: Boolean,
     onRefresh: () -> Unit,
     modifier: Modifier = Modifier,
+    // What is being refreshed right now — shown in the indicator while refreshing, so the
+    // label reflects the live sync step instead of a generic "repository" string.
+    statusText: String? = null,
     content: @Composable BoxScope.() -> Unit
 ) {
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
@@ -90,9 +93,9 @@ fun PullToRefreshBox(
                     androidx.compose.foundation.layout.Spacer(modifier = Modifier.padding(4.dp))
                     androidx.compose.material3.Text(
                         text = when {
-                            isRefreshing -> "Syncing Repository..."
-                            state.distanceFraction >= 1f -> "Release to Sync"
-                            else -> "Pull to Sync"
+                            isRefreshing -> statusText ?: "Synchronisation…"
+                            state.distanceFraction >= 1f -> "Relâchez pour synchroniser"
+                            else -> "Tirez pour synchroniser"
                         },
                         style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
                         color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
