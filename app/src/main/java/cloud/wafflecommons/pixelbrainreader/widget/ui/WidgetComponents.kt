@@ -2,6 +2,7 @@ package cloud.wafflecommons.pixelbrainreader.widget.ui
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceModifier
@@ -51,13 +52,15 @@ object WidgetTokens {
 fun WidgetSurface(
     modifier: GlanceModifier = GlanceModifier,
     onClick: Action? = null,
+    // Tighter placements (e.g. the 2-row Health widget) can trade inner padding for content room.
+    contentPadding: Dp = WidgetTokens.Pad,
     content: @Composable () -> Unit
 ) {
     var m = GlanceModifier
         .fillMaxSize()
         .background(GlanceTheme.colors.surface)
         .cornerRadius(WidgetTokens.CardRadius)
-        .padding(WidgetTokens.Pad)
+        .padding(contentPadding)
     if (onClick != null) m = m.clickable(onClick)
     Box(modifier = modifier.then(m)) { content() }
 }
@@ -136,9 +139,13 @@ fun StatTile(
     var m = modifier
         .background(GlanceTheme.colors.secondaryContainer)
         .cornerRadius(WidgetTokens.TileRadius)
-        .padding(vertical = 7.dp, horizontal = 10.dp)
+        .padding(vertical = 4.dp, horizontal = 10.dp)
     if (onClick != null) m = m.clickable(onClick)
-    Column(modifier = m, horizontalAlignment = Alignment.Start) {
+    Column(
+        modifier = m,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalAlignment = Alignment.Start
+    ) {
         Text(emoji, style = TextStyle(fontSize = 12.sp))
         Text(
             value,
