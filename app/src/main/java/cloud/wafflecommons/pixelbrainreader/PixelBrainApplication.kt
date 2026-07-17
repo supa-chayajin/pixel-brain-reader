@@ -22,6 +22,7 @@ class PixelBrainApplication : Application(), Configuration.Provider {
     @Inject lateinit var choreRepository: cloud.wafflecommons.pixelbrainreader.data.repository.ChoreRepository
     @Inject lateinit var dailyDashboardRepository: cloud.wafflecommons.pixelbrainreader.data.repository.DailyDashboardRepository
     @Inject lateinit var reminderScheduler: cloud.wafflecommons.pixelbrainreader.data.notifications.ReminderScheduler
+    @Inject lateinit var gamificationRepository: cloud.wafflecommons.pixelbrainreader.data.gamification.GamificationRepository
 
     /** Application-scoped coroutine scope — survives Activity recreation. */
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -51,6 +52,10 @@ class PixelBrainApplication : Application(), Configuration.Provider {
         // (Re)schedule reminder notifications from the saved preferences. Also
         // creates the notification channels. Cheap; runs off the main thread.
         appScope.launch { runCatching { reminderScheduler.reschedule() } }
+        // Hydrate the gamification profile from disk on startup so the level/XP shown across the app
+        // (and the mutation baseline) is the real saved state from the first frame — not the default
+        // that a screen or widget action might otherwise read/mutate before Habits is ever opened.
+        appScope.launch { runCatching { gamificationRepository.loadState() } }
     }
 
     /**

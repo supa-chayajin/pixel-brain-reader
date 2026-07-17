@@ -40,7 +40,10 @@ object DailyMarkdownParser {
             val trimmed = line.trim()
             if (trimmed.startsWith("## 🗓️ Timeline") || trimmed.startsWith("## Timeline")) { section = "TIMELINE"; return@forEach }
             if (trimmed.startsWith("## 📝 Journal") || trimmed.startsWith("## Journal")) { section = "JOURNAL"; return@forEach }
-            if (trimmed.startsWith("## 🧠 Idées") || trimmed.startsWith("## Idées")) { section = "IDEAS"; return@forEach }
+            // Accept the English header (current burner output) AND the legacy French header
+            // ("Idées / Second Cerveau") so daily notes written before the localization still parse.
+            if (trimmed.startsWith("## 🧠 Ideas") || trimmed.startsWith("## Ideas") ||
+                trimmed.startsWith("## 🧠 Idées") || trimmed.startsWith("## Idées")) { section = "IDEAS"; return@forEach }
             if (trimmed.startsWith("## 📑 Notes") || trimmed.startsWith("## Notes")) { section = "NOTES"; return@forEach }
             if (trimmed.startsWith("## 💡 Scraps") || trimmed.startsWith("## Scraps")) { section = "SCRAPS"; return@forEach }
             if (trimmed.startsWith("## 🌟 Gratitude") || trimmed.startsWith("## Gratitude")) { section = "GRATITUDE"; return@forEach }

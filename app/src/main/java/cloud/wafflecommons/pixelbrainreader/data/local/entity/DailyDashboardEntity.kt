@@ -22,6 +22,6 @@ data class DailyDashboardEntity(
     val dailyMantra: String = "",
     
     // Second Brain / Persistent Sections
-    val ideasContent: String = "", // "🧠 Idées / Second Cerveau"
+    val ideasContent: String = "", // "🧠 Ideas / Second Brain"
     val notesContent: String = ""  // "📑 Notes / Self-care"
 )

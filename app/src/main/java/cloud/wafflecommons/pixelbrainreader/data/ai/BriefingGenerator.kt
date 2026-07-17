@@ -16,7 +16,7 @@ class BriefingGenerator @Inject constructor(
 
     suspend fun getDailyQuote(moodTrend: String): String {
         return try {
-            val prompt = "Generate an inspiring or stoic daily quote in French based on a mood trend of $moodTrend. Output Format: 'Quote' - Author."
+            val prompt = "Generate an inspiring or stoic daily quote in English based on a mood trend of $moodTrend. Output Format: 'Quote' - Author."
             val flow = geminiRagManager.generateResponse(prompt, useRAG = false)
             
              var result = ""
@@ -32,7 +32,7 @@ class BriefingGenerator @Inject constructor(
         val tag = "Cortex"
         return try {
             val condition = "${weather.emoji} ${weather.description}"
-            val prompt = "Voici la météo actuelle : $condition, ${weather.temperature}. Donne un conseil court et pratique (une seule phrase) en français pour la journée (ex: 'Prends un parapluie')."
+            val prompt = "The current weather is: $condition, ${weather.temperature}. Give one short, practical piece of advice (a single sentence) in English for the day (e.g. 'Take an umbrella')."
             
             Log.d(tag, "Generating weather insight for: ${weather.description}")
 
@@ -46,13 +46,13 @@ class BriefingGenerator @Inject constructor(
              }
             
             if (result.isBlank()) {
-                "Préparez-vous pour la journée."
+                "Get ready for the day."
             } else {
                 result.replace("\"", "").trim()
             }
         } catch (e: Exception) {
              Log.e(tag, "Weather AI Failed", e)
-             "Préparez-vous pour la journée. (IA Indisponible)"
+             "Get ready for the day. (AI Unavailable)"
         }
     }
 
@@ -67,7 +67,7 @@ class BriefingGenerator @Inject constructor(
 
             val prompt = """
                 $weatherContext
-                Incorporate this into a concise daily briefing in French.
+                Incorporate this into a concise daily briefing in English.
                 Keep it under 50 words.
                 Do not explicitly state 'The weather is...', weave it naturally into advice or a greeting.
             """.trimIndent()
@@ -84,13 +84,13 @@ class BriefingGenerator @Inject constructor(
             }
             
             if (result.isBlank()) {
-                "Préparez-vous pour une excellente journée."
+                "Get ready for a great day."
             } else {
                 result.replace("\"", "").trim()
             }
         } catch (e: Exception) {
              Log.e(tag, "Briefing Gen Failed", e)
-             "Préparez-vous pour une excellente journée."
+             "Get ready for a great day."
         }
     }
 }

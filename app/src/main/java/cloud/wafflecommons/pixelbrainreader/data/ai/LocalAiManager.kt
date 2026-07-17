@@ -299,32 +299,31 @@ class LocalAiManager @Inject constructor(
         chatHistory: List<ChatMessageEntity>,
         currentQuery: String
     ): String = buildString {
-        // Scaffolding labels are intentionally in French — the surrounding
-        // structural language is a strong steer for Gemini Nano to keep the
-        // generated response in French too, complementing the explicit
-        // instruction inside [systemPrompt].
-        append("[SYSTÈME]\n")
+        // Scaffolding labels reinforce the English-response instruction inside
+        // [systemPrompt] — the surrounding structural language steers Gemini Nano
+        // to keep the generated response in English too.
+        append("[SYSTEM]\n")
         append(systemPrompt.trim())
         append("\n\n")
 
         // Phase 3: omit the references block entirely when context is empty.
         // Showing an empty block confuses the model into refusing to chat.
         if (!ragContext.isNullOrBlank()) {
-            append("[INFORMATIONS DE RÉFÉRENCE]\n")
-            append("Utilise les extraits ci-dessous, issus des notes de l'utilisateur, ")
-            append("pour répondre avec précision. Si la réponse n'y figure pas, dis-le clairement.\n\n")
+            append("[REFERENCE INFORMATION]\n")
+            append("Use the excerpts below, taken from the user's notes, ")
+            append("to answer accurately. If the answer isn't there, say so clearly.\n\n")
             append(ragContext.trim())
             append("\n\n")
         }
 
-        append("[HISTORIQUE DE CONVERSATION]\n")
+        append("[CONVERSATION HISTORY]\n")
         chatHistory.forEach { msg ->
-            val label = if (msg.role == "USER") "Utilisateur" else "Assistant"
+            val label = if (msg.role == "USER") "User" else "Assistant"
             append(label).append(": ").append(msg.content.trim()).append('\n')
         }
         append('\n')
-        append("[QUESTION DE L'UTILISATEUR]\n")
-        append("Utilisateur: ").append(currentQuery.trim()).append('\n')
+        append("[USER QUESTION]\n")
+        append("User: ").append(currentQuery.trim()).append('\n')
         // Trailing cue — Nano completes after this label, which keeps the response
         // role-anchored even when chat history is empty.
         append("Assistant:")

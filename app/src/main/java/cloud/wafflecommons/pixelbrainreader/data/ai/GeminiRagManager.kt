@@ -86,7 +86,7 @@ class GeminiRagManager @Inject constructor(
      * Now each file is summarized on its own (small, safe input), then the per-file summaries
      * (small combined input) are reduced into a folder synthesis. Returns [Result] so real
      * failures (model not ready / context / timeout) surface to the UI instead of masquerading
-     * as note content. Prompts are in French to match the app's on-device assistant persona.
+     * as note content.
      */
     suspend fun analyzeFolder(
         files: List<Pair<String, String>>,
@@ -94,43 +94,71 @@ class GeminiRagManager @Inject constructor(
     ): Result<String> {
         val usable = files.filter { it.second.isNotBlank() }.take(MAX_ANALYZE_FILES)
         if (usable.isEmpty()) {
-            return Result.failure(IllegalStateException("Aucun fichier exploitable à analyser."))
+            return Result.failure(IllegalStateException("No usable files to analyze."))
         }
 
+        // Re-probe on-device model readiness before firing one inference per file — a stale
+        // cold-start availability probe would otherwise doom every call silently.
+        localAiManager.refreshAvailability()
+
         // MAP: one concise summary per file. Each prompt stays well under Nano's context.
+        // A single file failing (Nano legitimately returns empty responses fairly often) must
+        // NOT abort the whole folder — only a genuinely unavailable model aborts early.
         val perFile = mutableListOf<String>()
-        usable.forEachIndexed { index, (name, content) ->
+        val skipped = mutableListOf<String>()
+        var modelUnavailable: Throwable? = null
+        for ((index, pair) in usable.withIndex()) {
+            val (name, content) = pair
             onProgress(index, usable.size)
             val prompt = buildString {
-                appendLine("Résume ce document en 1 à 2 phrases concises, en français.")
-                appendLine("Titre : $name")
-                appendLine("Contenu :")
+                appendLine("Summarize this document in 1 to 2 concise sentences, in English.")
+                appendLine("Title: $name")
+                appendLine("Content:")
                 append(content.take(PER_FILE_CHARS))
             }
-            val summary = localAiManager.generateResponse(prompt).getOrElse { e ->
-                Log.e("Cortex", "Folder analysis: per-file summary failed for $name", e)
-                return Result.failure(e)
-            }
-            perFile.add("- **$name** : ${summary.trim()}")
+            localAiManager.generateResponse(prompt).fold(
+                onSuccess = { summary ->
+                    val s = summary.trim()
+                    if (s.isNotBlank()) perFile.add("- **$name**: $s") else skipped.add(name)
+                },
+                onFailure = { e ->
+                    if (e is NanoException.Unavailable) {
+                        modelUnavailable = e
+                    } else {
+                        Log.e("Cortex", "Folder analysis: per-file summary failed for $name", e)
+                        skipped.add(name)
+                    }
+                }
+            )
+            if (modelUnavailable != null) break
         }
         onProgress(usable.size, usable.size)
 
+        // Model not ready, or every file failed → surface an actionable failure (no note written).
+        if (perFile.isEmpty()) {
+            return Result.failure(
+                modelUnavailable
+                    ?: IllegalStateException("The on-device model returned no summaries. Please try again.")
+            )
+        }
+
         val joined = perFile.joinToString("\n")
+        val skippedNote = if (skipped.isNotEmpty()) "\n\n> ⚠️ ${skipped.size} file(s) could not be summarized." else ""
 
         // REDUCE: synthesize the folder from the (small) per-file summaries. If this step
         // fails, the per-file summaries are still a useful, complete result on their own.
         val overviewPrompt = buildString {
-            appendLine("Voici les résumés des notes d'un même dossier :")
+            appendLine("Here are the summaries of the notes in a folder:")
             appendLine(joined)
             appendLine()
-            appendLine("Rédige une courte synthèse markdown du dossier : thèmes communs, points clés et liens intéressants entre les notes.")
+            appendLine("Write a short markdown synthesis of the folder: common themes, key points and interesting links between the notes.")
         }
         val overview = localAiManager.generateResponse(overviewPrompt).getOrNull()
 
         val body = if (overview.isNullOrBlank()) {
-            "## Synthèse du dossier\n\n$joined"
+            "## Folder synthesis\n\n$joined$skippedNote"
         } else {
-            "$overview\n\n---\n\n### Résumés par fichier\n$joined"
+            "${overview.trim()}\n\n---\n\n### Per-file summaries\n$joined$skippedNote"
         }
         return Result.success(body)
     }

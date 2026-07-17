@@ -41,7 +41,7 @@ class VaultExportRepository @Inject constructor(
     ): Result<Int> = withContext(Dispatchers.IO) {
         try {
             if (!rootDir.exists()) {
-                return@withContext Result.failure(IllegalStateException("Vault introuvable."))
+                return@withContext Result.failure(IllegalStateException("Vault not found."))
             }
 
             val files = rootDir.walkTopDown()
@@ -50,11 +50,11 @@ class VaultExportRepository @Inject constructor(
                 .toList()
 
             if (files.isEmpty()) {
-                return@withContext Result.failure(IllegalStateException("Aucun fichier à exporter."))
+                return@withContext Result.failure(IllegalStateException("No files to export."))
             }
 
             val stream = context.contentResolver.openOutputStream(outputUri)
-                ?: return@withContext Result.failure(IllegalStateException("Impossible d'ouvrir la destination."))
+                ?: return@withContext Result.failure(IllegalStateException("Unable to open destination."))
 
             stream.use { os ->
                 ZipOutputStream(BufferedOutputStream(os)).use { zip ->

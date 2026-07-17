@@ -90,7 +90,7 @@ class CrashActivity : ComponentActivity() {
                 )
 
                 Text(
-                    text = "Oups, le cerveau de Pixel a trébuché",
+                    text = "Oops, Pixel's brain stumbled",
                     style = MaterialTheme.typography.headlineMedium,
                     textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.onSurface
@@ -99,7 +99,7 @@ class CrashActivity : ComponentActivity() {
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Text(
-                    text = "Une erreur inattendue est survenue. Nous nous excusons pour la gêne occasionnée.",
+                    text = "An unexpected error occurred. We apologize for the inconvenience.",
                     style = MaterialTheme.typography.bodyLarge,
                     textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -115,7 +115,7 @@ class CrashActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
-                    Text("Redémarrer l'application")
+                    Text("Restart the app")
                 }
 
                 // Technical details are ONLY visible in debug builds. In
@@ -130,7 +130,7 @@ class CrashActivity : ComponentActivity() {
                         onClick = { showDetails = !showDetails },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text(if (showDetails) "Masquer les détails techniques" else "Afficher les détails techniques")
+                        Text(if (showDetails) "Hide technical details" else "Show technical details")
                     }
 
                     AnimatedVisibility(visible = showDetails) {

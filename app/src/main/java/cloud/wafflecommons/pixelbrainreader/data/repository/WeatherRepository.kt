@@ -199,11 +199,11 @@ class WeatherRepository @Inject constructor(
 
     fun getParentingAdvice(weather: WeatherData): String {
         return when {
-            weather.emoji.contains("🌧️") || weather.emoji.contains("⛈️") -> "Musée / Bibliothèque"
-            weather.emoji.contains("🌫️") -> "Gilet jaune !"
-            weather.temperature.replace("°C", "").toIntOrNull()?.let { it < 10 } == true -> "Bonnet obligatoire"
-            weather.temperature.replace("°C", "").toIntOrNull()?.let { it > 25 } == true -> "Crème solaire & Eau"
-            else -> "Parc / Balade"
+            weather.emoji.contains("🌧️") || weather.emoji.contains("⛈️") -> "Museum / Library"
+            weather.emoji.contains("🌫️") -> "Hi-vis vest!"
+            weather.temperature.replace("°C", "").toIntOrNull()?.let { it < 10 } == true -> "Hat required"
+            weather.temperature.replace("°C", "").toIntOrNull()?.let { it > 25 } == true -> "Sunscreen & Water"
+            else -> "Park / Walk"
         }
     }
 }

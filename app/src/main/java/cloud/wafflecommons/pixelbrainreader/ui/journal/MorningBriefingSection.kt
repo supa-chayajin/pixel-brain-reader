@@ -171,7 +171,7 @@ fun MorningBriefingSection(
                             }
                         } else {
                              Text(
-                                text = "Aucune actualité pour le moment.",
+                                text = "No news right now.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                 fontStyle = FontStyle.Italic
@@ -460,7 +460,7 @@ private fun BriefingSkeleton() {
         
         Spacer(modifier = Modifier.height(24.dp))
         Text(
-            text = "✨ Génération de l'Oracle en cours...",
+            text = "✨ Generating the Oracle…",
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.padding(bottom = 8.dp)

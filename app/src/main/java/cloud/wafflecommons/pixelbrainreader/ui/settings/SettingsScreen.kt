@@ -247,7 +247,7 @@ fun SettingsScreen(
             // 0b. Google Ecosystem
             StaggeredEntry(index = 1) {
             SettingsSection(
-                title = "Écosystème Google",
+                title = "Google Ecosystem",
                 icon = Icons.Rounded.AccountCircle
             ) {
                 val isEnabled = uiState.isGoogleSyncEnabled
@@ -526,7 +526,7 @@ fun SettingsScreen(
                     },
                     leadingContent = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) }
                 ) {
-                    Text("Ordre de la barre de navigation")
+                    Text("Navigation bar order")
                 }
 
                 ListItem(
@@ -541,7 +541,7 @@ fun SettingsScreen(
                         )
                     }
                 ) {
-                    Text("Effets sonores")
+                    Text("Sound effects")
                 }
             }
             }

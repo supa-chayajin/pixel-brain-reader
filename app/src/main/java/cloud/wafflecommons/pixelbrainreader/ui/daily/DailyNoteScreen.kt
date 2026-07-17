@@ -129,7 +129,13 @@ fun DailyNoteScreen(
     }
 
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        snackbarHost = {
+            // Lift above the floating ExpressiveNavBar, which would otherwise cover it.
+            SnackbarHost(
+                snackbarHostState,
+                modifier = Modifier.padding(bottom = NavBarClearance)
+            )
+        },
         topBar = {
             CortexTopAppBar(
                 title = "Cortex",
@@ -266,7 +272,7 @@ fun DailyNoteScreen(
                     item {
                         cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 4) {
                             Text(
-                                text = "Stay safe friend, and don't your dare go hollow!",
+                                text = "Stay safe my friend, and don't you dare go hollow!",
                                 style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.Medium,
                                 fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
@@ -493,7 +499,7 @@ private fun SecondBrainSection(
         // Ideas
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
-                text = "🧠 Idées / Second Cerveau",
+                text = "🧠 Ideas / Second Brain",
                 style = MaterialTheme.typography.titleMedium,
                 color = secondaryColor,
                 fontWeight = FontWeight.Bold

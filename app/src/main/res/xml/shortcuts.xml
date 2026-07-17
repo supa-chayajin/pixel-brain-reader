@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Launcher long-press shortcuts. Each fires an EXPLICIT (component-targeted) intent carrying a
+  pixelbrain:// URI that MainActivity.handleIntent validates + routes. Explicit targeting keeps
+  them off the browsable surface. applicationId has no build-type suffix, so the package literal is
+  safe across debug/release.
+-->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="capture"
+        android:enabled="true"
+        android:icon="@drawable/sc_capture"
+        android:shortcutShortLabel="@string/shortcut_capture_short"
+        android:shortcutLongLabel="@string/shortcut_capture_long"
+        android:shortcutDisabledMessage="@string/shortcut_disabled">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="cloud.wafflecommons.pixelbrainreader"
+            android:targetClass="cloud.wafflecommons.pixelbrainreader.MainActivity"
+            android:data="pixelbrain://capture" />
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="daily"
+        android:enabled="true"
+        android:icon="@drawable/sc_daily"
+        android:shortcutShortLabel="@string/shortcut_daily_short"
+        android:shortcutLongLabel="@string/shortcut_daily_long"
+        android:shortcutDisabledMessage="@string/shortcut_disabled">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="cloud.wafflecommons.pixelbrainreader"
+            android:targetClass="cloud.wafflecommons.pixelbrainreader.MainActivity"
+            android:data="pixelbrain://open?screen=daily" />
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="mood"
+        android:enabled="true"
+        android:icon="@drawable/sc_mood"
+        android:shortcutShortLabel="@string/shortcut_mood_short"
+        android:shortcutLongLabel="@string/shortcut_mood_long"
+        android:shortcutDisabledMessage="@string/shortcut_disabled">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="cloud.wafflecommons.pixelbrainreader"
+            android:targetClass="cloud.wafflecommons.pixelbrainreader.MainActivity"
+            android:data="pixelbrain://open?screen=mood" />
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="habits"
+        android:enabled="true"
+        android:icon="@drawable/sc_habits"
+        android:shortcutShortLabel="@string/shortcut_habits_short"
+        android:shortcutLongLabel="@string/shortcut_habits_long"
+        android:shortcutDisabledMessage="@string/shortcut_disabled">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="cloud.wafflecommons.pixelbrainreader"
+            android:targetClass="cloud.wafflecommons.pixelbrainreader.MainActivity"
+            android:data="pixelbrain://open?screen=habits" />
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="chores"
+        android:enabled="true"
+        android:icon="@drawable/sc_chores"
+        android:shortcutShortLabel="@string/shortcut_chores_short"
+        android:shortcutLongLabel="@string/shortcut_chores_long"
+        android:shortcutDisabledMessage="@string/shortcut_disabled">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="cloud.wafflecommons.pixelbrainreader"
+            android:targetClass="cloud.wafflecommons.pixelbrainreader.MainActivity"
+            android:data="pixelbrain://open?screen=chores" />
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="search"
+        android:enabled="true"
+        android:icon="@drawable/sc_search"
+        android:shortcutShortLabel="@string/shortcut_search_short"
+        android:shortcutLongLabel="@string/shortcut_search_long"
+        android:shortcutDisabledMessage="@string/shortcut_disabled">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="cloud.wafflecommons.pixelbrainreader"
+            android:targetClass="cloud.wafflecommons.pixelbrainreader.MainActivity"
+            android:data="pixelbrain://open?screen=chat" />
+    </shortcut>
+</shortcuts>

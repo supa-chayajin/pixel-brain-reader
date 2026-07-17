@@ -141,7 +141,7 @@ fun MoodCheckInSheet(
                 ) {
                     Icon(Icons.Outlined.Schedule, contentDescription = null, modifier = Modifier.size(16.dp))
                     Text(
-                        text = if (java.time.Duration.between(selectedDateTime, java.time.LocalDateTime.now()).toMinutes() < 1) "Maintenant" else selectedDateTime.format(timeFormatter),
+                        text = if (java.time.Duration.between(selectedDateTime, java.time.LocalDateTime.now()).toMinutes() < 1) "Now" else selectedDateTime.format(timeFormatter),
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Medium
                     )

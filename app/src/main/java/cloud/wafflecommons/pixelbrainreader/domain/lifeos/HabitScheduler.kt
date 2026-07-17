@@ -75,13 +75,13 @@ object HabitScheduler {
     fun describe(habit: HabitConfig): String = when (habit.scheduleMode.uppercase()) {
         "INTERVAL" -> {
             val unit = when (habit.intervalUnit.uppercase()) {
-                "WEEK" -> if (habit.intervalCount > 1) "semaines" else "semaine"
-                "MONTH" -> if (habit.intervalCount > 1) "mois" else "mois"
-                else -> if (habit.intervalCount > 1) "jours" else "jour"
+                "WEEK" -> if (habit.intervalCount > 1) "weeks" else "week"
+                "MONTH" -> if (habit.intervalCount > 1) "months" else "month"
+                else -> if (habit.intervalCount > 1) "days" else "day"
             }
-            "Tous les ${habit.intervalCount} $unit"
+            "Every ${habit.intervalCount} $unit"
         }
-        "BIWEEKLY" -> "Sur 2 semaines (${habit.frequency.size} jours)"
-        else -> if (habit.frequency.isEmpty()) "Tous les jours" else habit.frequency.joinToString(", ")
+        "BIWEEKLY" -> "Over 2 weeks (${habit.frequency.size} days)"
+        else -> if (habit.frequency.isEmpty()) "Every day" else habit.frequency.joinToString(", ")
     }
 }

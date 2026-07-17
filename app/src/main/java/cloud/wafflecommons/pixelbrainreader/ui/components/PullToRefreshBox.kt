@@ -93,9 +93,9 @@ fun PullToRefreshBox(
                     androidx.compose.foundation.layout.Spacer(modifier = Modifier.padding(4.dp))
                     androidx.compose.material3.Text(
                         text = when {
-                            isRefreshing -> statusText ?: "Synchronisation…"
-                            state.distanceFraction >= 1f -> "Relâchez pour synchroniser"
-                            else -> "Tirez pour synchroniser"
+                            isRefreshing -> statusText ?: "Syncing…"
+                            state.distanceFraction >= 1f -> "Release to sync"
+                            else -> "Pull to sync"
                         },
                         style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
                         color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant

@@ -51,44 +51,44 @@ class GamificationRepository @Inject constructor(
     }
 
     suspend fun loadState() = withContext(Dispatchers.IO) {
-        val file = fileRepository.getLocalFile(profileFile)
-        if (file.exists()) {
-            try {
-                val content = file.readText()
-                if (content.isNotBlank()) {
-                    val state = jsonParser.decodeFromString<GamificationState>(content)
-                    _gamificationState.value = state
-                }
-            } catch (e: Exception) {
-                if (cloud.wafflecommons.pixelbrainreader.BuildConfig.DEBUG) {
-                    Log.e("Gamification", "Error loading profile", e)
-                }
-                // Keep default
-            }
+        val disk = readStateFromDisk()
+        if (disk != null) {
+            _gamificationState.value = disk
         } else {
-            // Create default
+            // No valid file yet — persist the current (default) so the file exists.
             saveState(_gamificationState.value)
         }
     }
 
     suspend fun getStateSnapshot(): GamificationState = withContext(Dispatchers.IO) {
-        val file = fileRepository.getLocalFile(profileFile)
-        if (file.exists()) {
-            try {
-                val content = file.readText()
-                if (content.isNotBlank()) {
-                    return@withContext jsonParser.decodeFromString<GamificationState>(content)
-                }
-            } catch (e: Exception) {
-                 Log.e("Gamification", "Error reading snapshot", e)
+        readStateFromDisk() ?: GamificationState() // Fallback
+    }
+
+    /** Reads the persisted profile fresh from disk, or null if it is absent / blank / corrupt. */
+    private fun readStateFromDisk(): GamificationState? {
+        return try {
+            val file = fileRepository.getLocalFile(profileFile)
+            if (!file.exists()) return null
+            val content = file.readText()
+            if (content.isBlank()) null else jsonParser.decodeFromString<GamificationState>(content)
+        } catch (e: Exception) {
+            if (cloud.wafflecommons.pixelbrainreader.BuildConfig.DEBUG) {
+                Log.e("Gamification", "Error reading profile from disk", e)
             }
+            null
         }
-        return@withContext GamificationState() // Fallback
     }
 
     suspend fun updateState(transform: (GamificationState) -> GamificationState) = mutex.withLock {
         withContext(Dispatchers.IO) {
-            val current = _gamificationState.value
+            // CRITICAL: base the mutation on the freshest ON-DISK state, not a possibly-unhydrated
+            // in-memory default. A widget ActionCallback (or any caller) can run before loadState()
+            // has hydrated _gamificationState, so it would still hold the default; mutating THAT and
+            // saving it silently WIPES the real saved profile (this actually happened — a single
+            // widget chore reset a level-9 profile to level 1). Reading disk first makes every
+            // mutation additive to persisted progress. `mutex` serialises writes within the process,
+            // and Glance callbacks share this same process, so disk is always current here.
+            val current = readStateFromDisk() ?: _gamificationState.value
             val newState = transform(current)
             _gamificationState.value = newState
             saveState(newState)
