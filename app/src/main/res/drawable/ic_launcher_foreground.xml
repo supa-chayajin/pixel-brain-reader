@@ -1,41 +1,63 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
+    android:viewportWidth="108"
+    android:viewportHeight="108">
 
     <!--
-       CORRECTION "SAFE ZONE" :
-       J'ai encapsulé tout le dessin dans un groupe avec scaleX/scaleY="0.75".
-       L'icône est réduite à 75% de sa taille et centrée (pivot 12,12).
-       Elle ne sera plus tronquée par le cercle.
+      PIXEL BRAIN — "Chip" foreground.
+      A processor (rounded-square die + pins, cyan→magenta gradient) with a duotone
+      brain centred on the die at (54,54). Everything is symmetric about the centre.
     -->
-    <group
-        android:scaleX="0.75"
-        android:scaleY="0.75"
-        android:pivotX="12"
-        android:pivotY="12">
 
-        <!-- HÉMISPHÈRE GAUCHE (Cyan) -->
-        <path
-            android:fillColor="#FF00838F"
-            android:pathData="M11.5,4 C9,3.8 6.5,4.5 5,7 C3.5,9.5 3.5,14 4.5,17 C5.5,20 8.5,21.5 11.5,20 L11.5,17 C11.5,17 10.5,17 10.5,17 C9,17 8,15 8,12 C8,9 9.5,7 11.5,7 Z" />
-        <path
-            android:fillColor="#FF00E5FF"
-            android:pathData="M11,4.2 C9.5,4.2 7,5 6,7.5 C5,10 5.5,13 6,15 C6.5,17 8,19 11,19.5 L11,4.2 Z" />
-        <path
-            android:fillColor="#FF00B8D4"
-            android:pathData="M8.5,8 C7.5,9 7.5,11 8,13 C8.5,15 10,16 11,16 L11,14 C10.5,14 9.5,13 9.5,12 C9.5,10.5 10,9.5 11,9 L11,7.5 C10,7.5 9,7.5 8.5,8 Z" />
+    <!-- Chip pins (one path, gradient stroke) -->
+    <path android:strokeWidth="3.6" android:strokeLineCap="round"
+        android:pathData="M42,31 L42,25 M54,31 L54,24 M66,31 L66,25
+                          M42,77 L42,83 M54,77 L54,84 M66,77 L66,83
+                          M31,42 L25,42 M31,54 L24,54 M31,66 L25,66
+                          M77,42 L83,42 M77,54 L84,54 M77,66 L83,66">
+        <aapt:attr name="android:strokeColor">
+            <gradient android:type="linear" android:startX="28" android:startY="28" android:endX="80" android:endY="80">
+                <item android:offset="0" android:color="#FF2AEEFF" />
+                <item android:offset="1" android:color="#FFFF4FA3" />
+            </gradient>
+        </aapt:attr>
+    </path>
 
-        <!-- HÉMISPHÈRE DROIT (Magenta) -->
-        <path
-            android:fillColor="#FFAD1457"
-            android:pathData="M12.5,4 C15,3.8 17.5,4.5 19,7 C20.5,9.5 20.5,14 19.5,17 C18.5,20 15.5,21.5 12.5,20 L12.5,17 C12.5,17 13.5,17 13.5,17 C15,17 16,15 16,12 C16,9 14.5,7 12.5,7 Z" />
-        <path
-            android:fillColor="#FFFF4081"
-            android:pathData="M13,4.2 C14.5,4.2 17,5 18,7.5 C19,10 18.5,13 18,15 C17.5,17 16,19 13,19.5 L13,4.2 Z" />
-        <path
-            android:fillColor="#FFF50057"
-            android:pathData="M15.5,8 C16.5,9 16.5,11 16,13 C15.5,15 14,16 13,16 L13,14 C13.5,14 14.5,13 14.5,12 C14.5,10.5 14,9.5 13,9 L13,7.5 C14,7.5 15,7.5 15.5,8 Z" />
-    </group>
+    <!-- Chip die outline -->
+    <path android:strokeWidth="4.4" android:strokeLineJoin="round"
+        android:pathData="M43,31 H65 A12,12 0 0 1 77,43 V65 A12,12 0 0 1 65,77 H43 A12,12 0 0 1 31,65 V43 A12,12 0 0 1 43,31 Z">
+        <aapt:attr name="android:strokeColor">
+            <gradient android:type="linear" android:startX="31" android:startY="31" android:endX="77" android:endY="77">
+                <item android:offset="0" android:color="#FF2AEEFF" />
+                <item android:offset="1" android:color="#FFFF4FA3" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Brain — LEFT lobe (cyan), centred at (54,54) -->
+    <path android:pathData="M54,41 C49,39 43,40 40,44 C35,49 36,56 41,59 C38,63 41,68 47,67 C50,69 54,68 54,65 L54,41 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="38" android:startY="41" android:endX="50" android:endY="68">
+                <item android:offset="0" android:color="#FF2AF0FF" />
+                <item android:offset="1" android:color="#FF0093BA" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Brain — RIGHT lobe (magenta) -->
+    <path android:pathData="M54,41 C59,39 65,40 68,44 C73,49 72,56 67,59 C70,63 67,68 61,67 C58,69 54,68 54,65 L54,41 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="70" android:startY="41" android:endX="58" android:endY="68">
+                <item android:offset="0" android:color="#FFFF5CB0" />
+                <item android:offset="1" android:color="#FFDE006A" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- fissure + centre node -->
+    <path android:strokeColor="#40041018" android:strokeWidth="1.4" android:strokeLineCap="round"
+        android:pathData="M54,43 L54,66" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M54,54 m-3,0 a3,3 0 1,0 6,0 a3,3 0 1,0 -6,0" />
 </vector>
