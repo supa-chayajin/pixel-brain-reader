@@ -37,7 +37,7 @@ import cloud.wafflecommons.pixelbrainreader.data.local.entity.ChoreEntity
         ChoreEntity::class, // V4.6 Home OS
         cloud.wafflecommons.pixelbrainreader.data.local.entity.ChatMessageEntity::class // Nano chat memory (RAG + CREATIVE)
     ],
-    version = 28, // Habit scheduleMode/intervalCount/intervalUnit (bi-weekly + interval scheduling)
+    version = 29, // ChoreEntity.sortOrder + archived (manual order + hide-on-dashboard)
     exportSchema = false
 )
 @androidx.room.TypeConverters(RoomTypeConverters::class)
