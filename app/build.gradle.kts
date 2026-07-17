@@ -34,8 +34,8 @@ android {
         // Compose 1.12 / compileSdk 37), Life Stats revamp, reminder-notification overhaul.
         // versionName is the single source of truth — surfaced in Settings via
         // BuildConfig.VERSION_NAME (no more hardcoded string to drift).
-        versionCode = 800
-        versionName = "8.0.0"
+        versionCode = 810
+        versionName = "8.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
