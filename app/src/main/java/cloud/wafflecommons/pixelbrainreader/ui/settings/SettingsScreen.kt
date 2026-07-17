@@ -20,6 +20,7 @@ import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material3.*
 import kotlinx.coroutines.launch
@@ -60,6 +61,7 @@ fun SettingsScreen(
     onNavigateToHabitConfig: () -> Unit = {},
     onNavigateToHomeConfig: () -> Unit = {},
     onNavigateToReminders: () -> Unit = {},
+    onNavigateToNavBarReorder: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -348,6 +350,31 @@ fun SettingsScreen(
                     leadingContent = { Icon(Icons.Filled.Notifications, contentDescription = null) }
                 ) {
                     Text("Reminders & Notifications")
+                }
+
+                ListItem(
+                    modifier = Modifier.clickable {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onNavigateToNavBarReorder()
+                    },
+                    leadingContent = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) }
+                ) {
+                    Text("Ordre de la barre de navigation")
+                }
+
+                ListItem(
+                    leadingContent = { Icon(Icons.Filled.VolumeUp, contentDescription = null) },
+                    trailingContent = {
+                        Switch(
+                            checked = uiState.soundEffectsEnabled,
+                            onCheckedChange = {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                viewModel.setSoundEffects(it)
+                            }
+                        )
+                    }
+                ) {
+                    Text("Effets sonores")
                 }
 
                 Spacer(Modifier.height(8.dp))

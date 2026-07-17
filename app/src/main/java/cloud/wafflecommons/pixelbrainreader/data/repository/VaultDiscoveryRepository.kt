@@ -38,6 +38,39 @@ class VaultDiscoveryRepository @Inject constructor(
         return fileDao.searchFiles(query)
     }
 
+    /** Every directory path in the vault, for wikilink folder resolution. */
+    suspend fun getAllFolderPaths(): List<String> = withContext(Dispatchers.IO) {
+        fileDao.getAllFolderPaths()
+    }
+
+    /**
+     * Resolve an Obsidian link target (`[[Note]]`, `[[folder/Note]]`, `[[Folder]]`, or a
+     * relative markdown path) to a real vault entity. Mirrors Obsidian's resolution order:
+     * exact path first, then `.md` extension, then a case-insensitive match on the basename
+     * or path suffix anywhere in the vault. Returns null if nothing matches.
+     */
+    suspend fun resolveLink(target: String): FileEntity? = withContext(Dispatchers.IO) {
+        val clean = target.trim().removePrefix("/").removeSuffix("/")
+        if (clean.isEmpty()) return@withContext null
+
+        // 1. Direct path hit (with and without an implicit .md extension).
+        fileDao.getFile(clean)?.let { return@withContext it }
+        if (!clean.contains('.')) {
+            fileDao.getFile("$clean.md")?.let { return@withContext it }
+        }
+
+        // 2. Basename / path-suffix match across the whole vault.
+        val candidates = if (clean.endsWith(".md")) listOf(clean) else listOf(clean, "$clean.md")
+        val matchPath = fileDao.getAllPaths().firstOrNull { path ->
+            candidates.any { c ->
+                path.equals(c, ignoreCase = true) ||
+                    path.endsWith("/$c", ignoreCase = true) ||
+                    path.substringAfterLast('/').equals(c, ignoreCase = true)
+            }
+        }
+        matchPath?.let { fileDao.getFile(it) }
+    }
+
     suspend fun reindexAll(sinceTimestamp: Long = 0L): List<FileEntity> = withContext(Dispatchers.IO) {
         val start = System.currentTimeMillis()
         if (!rootDir.exists()) rootDir.mkdirs()

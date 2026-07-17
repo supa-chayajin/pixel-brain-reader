@@ -7,8 +7,13 @@ data class ParsedMarkdown(
 )
 
 object ObsidianHelper {
-    // Regex for Frontmatter: Matches start of file, --- OR +++, content, then --- OR +++
-    private val FRONTMATTER_REGEX = Regex("^(?:---|\\+\\+\\+)\\n([\\s\\S]*?)\\n(?:---|\\+\\+\\+)", RegexOption.MULTILINE)
+    // Frontmatter is ONLY a fenced YAML block at the very TOP of the file (offset 0).
+    // A `---`/`+++` line anywhere else is a Markdown thematic break (horizontal rule),
+    // never frontmatter. We anchor to \A (start of input) and drop RegexOption.MULTILINE so
+    // that mid-file `---` separators (common in diaries) can no longer be mis-parsed as
+    // metadata. The closing fence must be its own line.
+    private val FRONTMATTER_REGEX =
+        Regex("\\A(?:---|\\+\\+\\+)[ \\t]*\\r?\\n([\\s\\S]*?)\\r?\\n(?:---|\\+\\+\\+)[ \\t]*(?:\\r?\\n|\\z)")
     
     val WIKI_LINK_REGEX = Regex("\\[\\[([^|\\]]+)(?:\\|([^\\]]+))?\\]\\]")
     fun parse(content: String): ParsedMarkdown {

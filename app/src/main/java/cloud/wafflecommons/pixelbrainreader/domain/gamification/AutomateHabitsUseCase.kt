@@ -4,6 +4,7 @@ import android.util.Log
 import cloud.wafflecommons.pixelbrainreader.data.health.DailyHealthMetrics
 import cloud.wafflecommons.pixelbrainreader.data.repository.FileRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.HabitRepository
+import cloud.wafflecommons.pixelbrainreader.domain.lifeos.HabitScheduler
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -31,12 +32,18 @@ class AutomateHabitsUseCase @Inject constructor(
         } ?: return@withContext
 
         val allHabits = habitRepository.getHabitConfigs()
-        val dayKey = date.dayOfWeek.name.take(3) 
 
-        val activeHabitsForDay = allHabits.filter { habit -> 
-            !habit.archived && 
-            habit.frequency.contains(dayKey) && 
-            !habit.autoSource.isNullOrBlank()
+        // Only auto-fill habits actually scheduled for `date` (weekly/bi-weekly/interval),
+        // via the shared HabitScheduler. Last-completed is only needed for INTERVAL mode.
+        val candidates = allHabits.filter { !it.archived && !it.autoSource.isNullOrBlank() }
+        val activeHabitsForDay = mutableListOf<cloud.wafflecommons.pixelbrainreader.data.model.HabitConfig>()
+        for (habit in candidates) {
+            val lastCompleted = if (habit.scheduleMode.equals("INTERVAL", ignoreCase = true)) {
+                habitRepository.getLastCompletedDate(habit.id)
+            } else null
+            if (HabitScheduler.isScheduledOn(habit, date, lastCompleted)) {
+                activeHabitsForDay.add(habit)
+            }
         }
 
         activeHabitsForDay.forEach { habit ->
@@ -48,6 +55,9 @@ class AutomateHabitsUseCase @Inject constructor(
                 "health_connect_hydration" -> metrics.waterConsumedMl
                 "health_connect_mindfulness" -> metrics.mindfulnessMinutes.toDouble()
                 "health_connect_meditation" -> metrics.mindfulnessMinutes.toDouble()
+                "health_connect_active_minutes" -> metrics.activeMinutes.toDouble()
+                "health_connect_exercise" -> metrics.activeMinutes.toDouble()
+                "health_connect_distance" -> metrics.distanceKm
                 "health_connect_weight" -> metrics.weight
                 
                 // [FIX Phase 5] "Prise de Masse" Nutrition Mapping

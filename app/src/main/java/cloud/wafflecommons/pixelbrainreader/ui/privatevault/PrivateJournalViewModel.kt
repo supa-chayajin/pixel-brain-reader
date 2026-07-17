@@ -20,7 +20,8 @@ import javax.inject.Inject
 @HiltViewModel
 class PrivateJournalViewModel @Inject constructor(
     private val repository: PrivateNoteRepository,
-    private val secretManager: cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
+    private val secretManager: cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager,
+    private val localAiManager: cloud.wafflecommons.pixelbrainreader.data.ai.LocalAiManager
 ) : ViewModel() {
 
     data class VaultState(
@@ -265,5 +266,77 @@ class PrivateJournalViewModel @Inject constructor(
             editorContent = "",
             isCreatingNew = false
         )
+    }
+
+    // --- AI writing assistant (100% on-device via LocalAiManager; safe for the encrypted vault) ---
+
+    enum class AssistAction { IMPROVE, CONTINUE, INSPIRE }
+
+    data class AssistState(
+        val visible: Boolean = false,
+        val isLoading: Boolean = false,
+        val action: AssistAction? = null,
+        val result: String? = null,
+        val error: String? = null
+    )
+
+    private val _assistState = MutableStateFlow(AssistState())
+    val assistState = _assistState.asStateFlow()
+
+    fun openAssist() { _assistState.value = AssistState(visible = true) }
+    fun dismissAssist() { _assistState.value = AssistState() }
+
+    /** Runs a French journaling-assist action over the current entry. Never mutates the note
+     *  directly — the result is shown for the user to explicitly apply. */
+    fun runWritingAssist(action: AssistAction) {
+        val content = _uiState.value.editorContent
+        _assistState.value = AssistState(visible = true, isLoading = true, action = action)
+        viewModelScope.launch {
+            val prompt = when (action) {
+                AssistAction.IMPROVE -> """
+                    Tu es un assistant d'écriture bienveillant. Réécris ce texte de journal intime en
+                    français en améliorant le style, la clarté et la fluidité, SANS inventer de faits
+                    ni changer le sens, en gardant un ton personnel et naturel. Réponds uniquement
+                    avec le texte réécrit.
+
+                    Texte :
+                    $content
+                """.trimIndent()
+                AssistAction.CONTINUE -> """
+                    Tu es un assistant d'écriture. Continue ce texte de journal intime en français,
+                    sur 2 à 4 phrases, dans le même ton et le même style. Réponds uniquement avec la suite.
+
+                    Texte :
+                    $content
+                """.trimIndent()
+                AssistAction.INSPIRE -> buildString {
+                    appendLine("Propose 3 questions courtes et bienveillantes, en français, pour m'aider à")
+                    appendLine("écrire mon journal intime aujourd'hui. Une par ligne, format liste avec un tiret.")
+                    if (content.isNotBlank()) {
+                        appendLine()
+                        appendLine("Contexte de ce que j'ai déjà écrit :")
+                        append(content.take(1500))
+                    }
+                }
+            }
+            val result = localAiManager.generateResponse(prompt)
+            _assistState.value = result.fold(
+                onSuccess = { AssistState(visible = true, action = action, result = it.trim()) },
+                onFailure = { AssistState(visible = true, action = action, error = it.localizedMessage ?: "Modèle IA indisponible") }
+            )
+        }
+    }
+
+    fun applyAssistReplace() {
+        val r = _assistState.value.result ?: return
+        onEditorContentChange(r)
+        dismissAssist()
+    }
+
+    fun applyAssistAppend() {
+        val r = _assistState.value.result ?: return
+        val cur = _uiState.value.editorContent
+        onEditorContentChange(if (cur.isBlank()) r else "$cur\n\n$r")
+        dismissAssist()
     }
 }

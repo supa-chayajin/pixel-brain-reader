@@ -37,6 +37,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.composable
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.CloseFullscreen
 import androidx.compose.material.icons.rounded.Dashboard
@@ -136,6 +137,7 @@ private fun ExpressiveNavBar(
     currentRoute: String?,
     isViewingDailyNote: Boolean,
     isLargeScreen: Boolean,
+    order: List<String>,
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -151,7 +153,11 @@ private fun ExpressiveNavBar(
         NavDest(Screen.MoodTracker, Icons.Default.Mood, "Mood", currentRoute == Screen.MoodTracker),
         NavDest(Screen.Stats, Icons.Default.Star, "Stats", currentRoute == Screen.Stats)
     )
-    val regular = if (isLargeScreen) allRegular else allRegular.take(3)
+    // Apply the user's custom order; any destination not present in `order` (e.g. added in a
+    // later app version) is appended so nothing ever disappears from the bar.
+    val ordered = order.mapNotNull { route -> allRegular.find { it.route == route } }
+        .plus(allRegular.filter { dest -> order.none { it == dest.route } })
+    val regular = if (isLargeScreen) ordered else ordered.take(3)
     val dailySelected = currentRoute == Screen.DailyNote
 
     Row(
@@ -519,12 +525,26 @@ fun MainScreen(
     // uses the full IME inset, the input floats a nav-bar-height above the keyboard
     // on EVERY text surface. layoutType = None reclaims that space (and gives more
     // room to type); the nav returns when the keyboard closes.
-    val navLayoutType = if (WindowInsets.isImeVisible) {
+    // Also hide it while editing a file in the detail pane: editor mode wants the full
+    // height for writing, and the floating bar would otherwise overlay the editor.
+    val isEditingFile = uiState.isEditing && uiState.selectedFileName != null
+    val navLayoutType = if (WindowInsets.isImeVisible || isEditingFile) {
         androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType.None
     } else {
         // Custom ExpressiveNavBar is a bottom bar in all sizes (Finance-style).
         androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType.NavigationBar
     }
+
+    // SAF launcher: export the whole vault as a ZIP to a user-picked location (outside the app).
+    val vaultExportLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri: android.net.Uri? -> uri?.let { viewModel.exportVault(it) } }
+
+    // Live repo-sync step label for the Repo / File-detail pull-to-refresh indicators.
+    val repoSyncStatus by viewModel.repoSyncStatus.collectAsStateWithLifecycle()
+
+    // Custom nav-bar order (persisted); drives the order of the regular tabs.
+    val navBarOrder by viewModel.navBarOrder.collectAsStateWithLifecycle()
 
     // Smart Active State Logic
     val todayName = remember {
@@ -838,6 +858,19 @@ fun MainScreen(
                                         ) {
                                             Icon(Icons.Rounded.Add, "New File")
                                         }
+
+                                        // Export the whole vault as a ZIP to phone storage (outside the app).
+                                        FilledTonalIconButton(
+                                            onClick = {
+                                                vaultExportLauncher.launch("PixelBrainVault_${java.time.LocalDate.now()}.zip")
+                                            },
+                                            colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        ) {
+                                            Icon(Icons.Rounded.Download, "Export vault")
+                                        }
                                     }
                                 }
                             }
@@ -869,6 +902,7 @@ fun MainScreen(
                                                     files = uiState.files,
                                                     isLoading = uiState.isLoading,
                                                     isRefreshing = uiState.isRefreshing,
+                                                    statusText = repoSyncStatus,
                                                     error = uiState.error,
                                                     currentPath = uiState.currentPath,
                                                     searchQuery = uiState.searchQuery, // PASS QUERY
@@ -883,9 +917,9 @@ fun MainScreen(
                                                     onRefresh = { viewModel.refreshCurrentFolder() },
                                                     onCreateFile = { viewModel.openCreateFileDialog() },
                                                     onRenameFile = { newName, file -> viewModel.renameFile(newName, file) },
-                                                    onDeleteFile = { file -> 
-                                                        viewModel.loadFile(file)
-                                                        viewModel.requestDeleteFile()
+                                                    onDeleteFile = { file ->
+                                                        // Delete the swiped file directly — do NOT open it first.
+                                                        viewModel.requestDeleteFile(file)
                                                     },
                                                     onAnalyzeFolder = { viewModel.analyzeCurrentFolder() }
                                                 )
@@ -913,6 +947,7 @@ fun MainScreen(
                                             fileName = uiState.selectedFileName,
                                             isLoading = uiState.isLoading,
                                             isRefreshing = uiState.isRefreshing,
+                                            statusText = repoSyncStatus,
                                             onRefresh = { viewModel.refreshCurrentFile() },
                                             isExpandedScreen = isLargeScreen,
                                             isEditing = uiState.isEditing,
@@ -980,7 +1015,8 @@ fun MainScreen(
                     onBack = { navController.popBackStack() },
                     onNavigateToHabitConfig = { navController.navigate("habit_config") },
                     onNavigateToHomeConfig = { navController.navigate(Screen.ROUTE_HOME_CONFIG) },
-                    onNavigateToReminders = { navController.navigate("reminders") }
+                    onNavigateToReminders = { navController.navigate("reminders") },
+                    onNavigateToNavBarReorder = { navController.navigate("navbar_reorder") }
                 )
             }
 
@@ -992,6 +1028,14 @@ fun MainScreen(
 
             composable("habit_config") {
                 cloud.wafflecommons.pixelbrainreader.ui.settings.HabitConfigScreen(
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
+
+            composable("navbar_reorder") {
+                cloud.wafflecommons.pixelbrainreader.ui.settings.NavBarReorderScreen(
+                    order = navBarOrder,
+                    onOrderChange = { viewModel.setNavBarOrder(it) },
                     onNavigateBack = { navController.popBackStack() }
                 )
             }
@@ -1091,6 +1135,7 @@ fun MainScreen(
                 currentRoute = currentRoute,
                 isViewingDailyNote = isViewingDailyNote,
                 isLargeScreen = isLargeScreen,
+                order = navBarOrder,
                 onSelect = { route ->
                     navController.navigate(route) {
                         popUpTo(navController.graph.findStartDestination().id) { saveState = true }

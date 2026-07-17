@@ -2,6 +2,7 @@ package cloud.wafflecommons.pixelbrainreader.ui.homeconfig
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import cloud.wafflecommons.pixelbrainreader.ui.theme.NavBarClearance
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -64,7 +65,11 @@ fun HomeConfigScreen(
             )
         },
         floatingActionButton = {
-            Column(horizontalAlignment = Alignment.End) {
+            // Lift the stacked FABs above the floating ExpressiveNavBar (which overlays content).
+            Column(
+                horizontalAlignment = Alignment.End,
+                modifier = Modifier.padding(bottom = 66.dp)
+            ) {
                 SmallFloatingActionButton(
                     onClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -89,7 +94,7 @@ fun HomeConfigScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = PaddingValues(bottom = 100.dp)
+            contentPadding = PaddingValues(bottom = NavBarClearance)
         ) {
             item {
                 Text(

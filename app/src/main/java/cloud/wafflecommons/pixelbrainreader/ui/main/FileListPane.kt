@@ -44,6 +44,7 @@ fun FileListPane(
     files: List<GithubFileDto>,
     isLoading: Boolean,
     isRefreshing: Boolean,
+    statusText: String? = null,
     searchQuery: String = "", // Added for Search Feedback
     error: String?,
     currentPath: String,
@@ -209,6 +210,7 @@ fun FileListPane(
                     haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
                     onRefresh()
                 },
+                statusText = statusText,
                 modifier = Modifier.fillMaxSize()
             ) {
                 val filteredFiles = remember(files, currentPath) { 
@@ -263,18 +265,25 @@ fun FileListPane(
                             state = dismissState,
                             modifier = Modifier.animateItem(),
                             backgroundContent = {
+                                // Key the affordance off the LIVE swipe direction, not targetValue.
+                                // targetValue stays Settled until the (deliberately deep) trigger
+                                // threshold is crossed, so it used to show the wrong (Edit) icon,
+                                // left-aligned, during a delete swipe until you passed the trigger.
+                                // dismissDirection reflects the drag sign immediately, so the right
+                                // icon/colour/side appear from the first pixel — before the trigger.
                                 val direction = dismissState.dismissDirection
                                 val color by animateColorAsState(
-                                    when (dismissState.targetValue) {
-                                        SwipeToDismissBoxValue.StartToEnd -> MaterialTheme.colorScheme.primaryContainer 
-                                        SwipeToDismissBoxValue.EndToStart -> MaterialTheme.colorScheme.errorContainer 
+                                    when (direction) {
+                                        SwipeToDismissBoxValue.StartToEnd -> MaterialTheme.colorScheme.primaryContainer
+                                        SwipeToDismissBoxValue.EndToStart -> MaterialTheme.colorScheme.errorContainer
                                         else -> MaterialTheme.colorScheme.surfaceContainerLow
-                                    }
+                                    },
+                                    label = "swipeBackground"
                                 )
-                                val icon = when (dismissState.targetValue) {
+                                val icon = when (direction) {
                                     SwipeToDismissBoxValue.StartToEnd -> Icons.Default.Edit
                                     SwipeToDismissBoxValue.EndToStart -> Icons.Default.Delete
-                                    else -> Icons.Default.Edit
+                                    else -> null
                                 }
                                 val alignment = when (direction) {
                                     SwipeToDismissBoxValue.StartToEnd -> Alignment.CenterStart
@@ -289,11 +298,13 @@ fun FileListPane(
                                         .padding(horizontal = 24.dp),
                                     contentAlignment = alignment
                                 ) {
-                                    Icon(
-                                        icon,
-                                        contentDescription = null,
-                                        tint = if (dismissState.targetValue == SwipeToDismissBoxValue.EndToStart) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer
-                                    )
+                                    if (icon != null) {
+                                        Icon(
+                                            icon,
+                                            contentDescription = if (direction == SwipeToDismissBoxValue.EndToStart) "Delete" else "Rename",
+                                            tint = if (direction == SwipeToDismissBoxValue.EndToStart) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer
+                                        )
+                                    }
                                 }
                             }
                         ) {

@@ -52,6 +52,12 @@ fun ChoreDashboardScreen(
             )
         }
     ) { padding ->
+        cloud.wafflecommons.pixelbrainreader.ui.components.PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = { viewModel.triggerSync() },
+            statusText = (syncState as? SyncState.Syncing)?.step?.label,
+            modifier = Modifier.fillMaxSize().padding(padding)
+        ) {
         if (groupedChores.isEmpty()) {
             EmptyChoreState(
                 modifier = Modifier.fillMaxSize()
@@ -65,7 +71,6 @@ fun ChoreDashboardScreen(
                 verticalItemSpacing = 16.dp,
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding)
             ) {
                 groupedChores.forEach { (roomName, chores) ->
                     item(span = StaggeredGridItemSpan.FullLine) {
@@ -115,6 +120,7 @@ fun ChoreDashboardScreen(
                     }
                 }
             }
+        }
         }
     }
 }

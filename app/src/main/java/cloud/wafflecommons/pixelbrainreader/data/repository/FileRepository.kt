@@ -5,9 +5,13 @@ import android.util.Log
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.FileEntity
 import cloud.wafflecommons.pixelbrainreader.data.remote.JGitProvider
 import dagger.hilt.android.qualifiers.ApplicationContext
+import cloud.wafflecommons.pixelbrainreader.data.sync.SyncStep
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow // Kept for compatibility but unused
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flow
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -29,12 +33,17 @@ class FileRepository @Inject constructor(
     private val _fileUpdates = MutableSharedFlow<String>(replay = 0)
     val fileUpdates = _fileUpdates.asSharedFlow()
 
+    // Live label of the current repo-sync sub-step (null when idle) so the Repo/File-detail
+    // pull-to-refresh indicator can show WHAT is being refreshed, not a generic string.
+    private val _syncStatus = MutableStateFlow<String?>(null)
+    val syncStatus: StateFlow<String?> = _syncStatus.asStateFlow()
+
     fun getFilesFlow(path: String): Flow<List<FileEntity>> = vaultDiscoveryRepository.getAllFilesFlow(path)
     
     // Compatibility alias
     fun getFiles(path: String) = getFilesFlow(path)
     
-    suspend fun getAllFolders() = emptyList<String>() // TODO: Add to VaultDiscovery if needed
+    suspend fun getAllFolders(): List<String> = vaultDiscoveryRepository.getAllFolderPaths()
 
     fun searchFiles(query: String) = vaultDiscoveryRepository.searchFiles(query)
 
@@ -57,18 +66,22 @@ class FileRepository @Inject constructor(
     }
 
     suspend fun syncRepository(owner: String? = null, repo: String? = null, branch: String = "main"): Result<Unit> {
+      try {
         // 1. Setup/Clone
+         _syncStatus.value = "Connexion au dépôt…"
          val remoteUrl = if (owner != null && repo != null) "https://github.com/$owner/$repo.git" else null
          jGitProvider.setupRepository(remoteUrl).onFailure { error ->
              Log.e("FileRepository", "Setup repository failed during sync", error)
              return Result.failure(error)
          }
-         
+
          // 2. Commit
+         _syncStatus.value = "Validation locale…"
          jGitProvider.addAll()
          jGitProvider.commit("Auto-sync")
-         
+
          // 3. Pull
+         _syncStatus.value = SyncStep.PULLING.label
          val pullResult = jGitProvider.pull()
          if (pullResult is cloud.wafflecommons.pixelbrainreader.data.remote.SyncResult.ResolvedWithConflicts) {
              Log.w("FileRepository", "Sync completed, but ${pullResult.backedUpFilesCount} conflicts were defensively backed up.")
@@ -77,17 +90,22 @@ class FileRepository @Inject constructor(
              Log.e("FileRepository", "Pull failed during sync", pullResult.exception)
              return Result.failure(pullResult.exception)
          }
-         
+
          // 4. Push
+         _syncStatus.value = SyncStep.PUSHING.label
          val pushResult = jGitProvider.push()
-         
+
          // 5. Reindex file table (so the UI sees post-pull state).
          // Embedding indexing is now exclusively triggered by the user from
          // Settings → "Index Knowledge Vault" (manual). We do NOT enqueue
          // IndexingWorker here.
+         _syncStatus.value = SyncStep.INDEXING.label
          vaultDiscoveryRepository.reindexAll()
 
          return pushResult
+      } finally {
+         _syncStatus.value = null
+      }
     }
     
     // --- Shim Methods ---
@@ -123,14 +141,8 @@ class FileRepository @Inject constructor(
          return Result.success(Unit)
     }
     
-     suspend fun resolveLink(targetPath: String): FileEntity? {
-        // This logic belongs in VaultDiscovery
-        // But for now, direct File check or DB check
-        // We lack direct DB access here if we don't inject DAO, but VaultDiscovery has it.
-        // Let's assume VaultDiscovery should have `findFile`.
-        // Ideally we expose `findFile` in VaultDiscovery.
-        return null // Placeholder - better to fail than crash if we removed DAO
-    }
+     suspend fun resolveLink(targetPath: String): FileEntity? =
+        vaultDiscoveryRepository.resolveLink(targetPath)
     
     suspend fun pushDirtyFiles(owner: String, repo: String, message: String? = null): Result<Unit> {
         jGitProvider.commit(message ?: "Auto-sync")

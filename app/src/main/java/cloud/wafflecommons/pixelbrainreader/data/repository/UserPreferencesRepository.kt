@@ -196,4 +196,40 @@ class UserPreferencesRepository @Inject constructor(
         val cleaned = windows.map { it.trim() }.filter { it.isNotBlank() }.distinct().sorted()
         context.dataStore.edit { it[KEY_CHORES_REMINDER_WINDOWS] = cleaned.joinToString(",") }
     }
+
+    // --- Navigation bar order (the regular tabs; the "Daily" button is fixed/separate) ---
+    private val KEY_NAVBAR_ORDER = stringPreferencesKey("navbar_order")
+
+    val navBarOrder: Flow<List<String>> = context.dataStore.data
+        .map { prefs ->
+            val saved = prefs[KEY_NAVBAR_ORDER]
+                ?.split(",")?.map { it.trim() }?.filter { it.isNotBlank() }
+                ?: emptyList()
+            // Merge the saved order with the canonical set so newly-added destinations always
+            // appear (appended) and removed/renamed ones are dropped — the list stays valid
+            // across app updates without a migration.
+            val valid = saved.filter { it in DEFAULT_NAVBAR_ORDER }
+            valid + DEFAULT_NAVBAR_ORDER.filter { it !in valid }
+        }
+
+    suspend fun setNavBarOrder(order: List<String>) {
+        val cleaned = order.filter { it in DEFAULT_NAVBAR_ORDER }.distinct()
+        val full = cleaned + DEFAULT_NAVBAR_ORDER.filter { it !in cleaned }
+        context.dataStore.edit { it[KEY_NAVBAR_ORDER] = full.joinToString(",") }
+    }
+
+    // --- Sound effects (opt-in; paired with existing haptics) ---
+    private val KEY_SOUND_EFFECTS = androidx.datastore.preferences.core.booleanPreferencesKey("sound_effects_enabled")
+
+    val soundEffectsEnabled: Flow<Boolean> = context.dataStore.data
+        .map { it[KEY_SOUND_EFFECTS] ?: false }
+
+    suspend fun setSoundEffectsEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_SOUND_EFFECTS] = enabled }
+    }
+
+    companion object {
+        /** Canonical order + membership of the reorderable regular nav destinations. */
+        val DEFAULT_NAVBAR_ORDER = listOf("home", "habits", "home_os", "chat", "mood", "stats")
+    }
 }

@@ -20,7 +20,11 @@ data class HabitConfig(
     val autoSource: String? = null,
     val createdDate: String = "",
     val archived: Boolean = false,
-    val sortOrder: Int = 0
+    val sortOrder: Int = 0,
+    // See HabitConfigEntity for the scheduling model.
+    val scheduleMode: String = "WEEKLY",   // WEEKLY | BIWEEKLY | INTERVAL
+    val intervalCount: Int = 0,            // INTERVAL: N
+    val intervalUnit: String = "DAY"       // INTERVAL: DAY | WEEK | MONTH
 )
 
 @Immutable

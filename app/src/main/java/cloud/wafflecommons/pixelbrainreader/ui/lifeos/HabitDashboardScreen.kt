@@ -78,6 +78,7 @@ fun HabitDashboardScreen(
             onRefresh = {
                 viewModel.forceSyncEverything()
             },
+            statusText = (syncState as? SyncState.Syncing)?.step?.label,
             modifier = Modifier.fillMaxSize().padding(padding)
         ) {
             if (state.isLoading) {

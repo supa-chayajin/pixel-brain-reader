@@ -18,6 +18,7 @@ import androidx.compose.runtime.Immutable
 import cloud.wafflecommons.pixelbrainreader.data.repository.TaskRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.ChoreRepository
 import cloud.wafflecommons.pixelbrainreader.domain.homeos.CalculateChoreEntropyUseCase
+import cloud.wafflecommons.pixelbrainreader.domain.lifeos.HabitScheduler
 import cloud.wafflecommons.pixelbrainreader.ui.homeos.StatusColor
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flow
@@ -168,13 +169,7 @@ class LifeStatsViewModel @Inject constructor(
         val avgHeartRate = if (hrDaysCount > 0) totalHrSum / hrDaysCount else 0
 
         // --- Productivity (Habits): today's completion + best current streak ---
-        val dayMap = mapOf(
-            java.time.DayOfWeek.MONDAY to "MON", java.time.DayOfWeek.TUESDAY to "TUE",
-            java.time.DayOfWeek.WEDNESDAY to "WED", java.time.DayOfWeek.THURSDAY to "THU",
-            java.time.DayOfWeek.FRIDAY to "FRI", java.time.DayOfWeek.SATURDAY to "SAT",
-            java.time.DayOfWeek.SUNDAY to "SUN"
-        )
-        val todayKey = dayMap[today.dayOfWeek] ?: "MON"
+        // Scheduling goes through the shared HabitScheduler (weekly / bi-weekly / interval).
         val todayString = today.toString()
 
         val activeConfigs = configs.filter { !it.archived }
@@ -183,26 +178,31 @@ class LifeStatsViewModel @Inject constructor(
         var bestHabitStreak = 0
 
         activeConfigs.forEach { habit ->
-            val cleanFreq = habit.frequency.map { it.trim().uppercase() }
             val logs = habitLogsMap[habit.id] ?: emptyList()
+            val lastCompleted = logs.filter { isHabitLogComplete(habit, it) }
+                .maxByOrNull { it.date }
+                ?.date?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
 
-            val isScheduled = cleanFreq.isEmpty() || cleanFreq.contains(todayKey)
+            val isScheduled = HabitScheduler.isScheduledOn(habit, today, lastCompleted)
             val completedToday = isHabitLogComplete(habit, logs.find { it.date == todayString })
             if (isScheduled) {
                 totalHabitsScheduledToday++
                 if (completedToday) completedHabitsToday++
             }
 
-            // Current streak: skip unscheduled days, break on the first missed scheduled day.
-            var streak = 0
-            var cd = if (completedToday) today else today.minusDays(1)
-            for (i in 0..365) {
-                val key = dayMap[cd.dayOfWeek] ?: "MON"
-                val sched = cleanFreq.isEmpty() || cleanFreq.contains(key)
-                val lg = logs.find { it.date == cd.toString() }
-                if (isHabitLogComplete(habit, lg)) { streak++; cd = cd.minusDays(1) }
-                else if (!sched) { cd = cd.minusDays(1) }
-                else break
+            val streak = if (habit.scheduleMode.equals("INTERVAL", ignoreCase = true)) {
+                logs.count { isHabitLogComplete(habit, it) }
+            } else {
+                var s = 0
+                var cd = if (completedToday) today else today.minusDays(1)
+                for (i in 0..365) {
+                    val sched = HabitScheduler.isScheduledOn(habit, cd, null)
+                    val lg = logs.find { it.date == cd.toString() }
+                    if (isHabitLogComplete(habit, lg)) { s++; cd = cd.minusDays(1) }
+                    else if (!sched) { cd = cd.minusDays(1) }
+                    else break
+                }
+                s
             }
             bestHabitStreak = maxOf(bestHabitStreak, streak)
         }

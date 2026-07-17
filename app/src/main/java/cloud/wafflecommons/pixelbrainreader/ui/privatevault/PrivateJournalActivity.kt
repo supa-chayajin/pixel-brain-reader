@@ -14,12 +14,15 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Lock
@@ -295,8 +298,20 @@ fun PrivateVaultScreen(
                  saveState = viewModel.saveState.collectAsStateWithLifecycle().value,
                  onContentChange = { viewModel.onEditorContentChange(it) },
                  onClose = { viewModel.closeNote() },
-                 onForceSave = { viewModel.forceSaveImmediate() }
+                 onForceSave = { viewModel.forceSaveImmediate() },
+                 onOpenAssist = { viewModel.openAssist() }
              )
+
+             val assist by viewModel.assistState.collectAsStateWithLifecycle()
+             if (assist.visible) {
+                 WritingAssistSheet(
+                     state = assist,
+                     onAction = { viewModel.runWritingAssist(it) },
+                     onReplace = { viewModel.applyAssistReplace() },
+                     onAppend = { viewModel.applyAssistAppend() },
+                     onDismiss = { viewModel.dismissAssist() }
+                 )
+             }
         } else {
              // List Mode
              Scaffold(
@@ -444,7 +459,8 @@ fun PrivateEditor(
     saveState: cloud.wafflecommons.pixelbrainreader.ui.components.SaveState,
     onContentChange: (String) -> Unit,
     onClose: () -> Unit,
-    onForceSave: () -> Unit
+    onForceSave: () -> Unit,
+    onOpenAssist: () -> Unit = {}
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -475,6 +491,9 @@ fun PrivateEditor(
                     }
                 },
                 actions = {
+                    CortexIconButton(onClick = onOpenAssist) {
+                        Icon(Icons.Default.AutoAwesome, contentDescription = "Aide à l'écriture")
+                    }
                     cloud.wafflecommons.pixelbrainreader.ui.components.SaveStatusIndicator(
                         state = saveState,
                         modifier = Modifier.padding(end = 16.dp)
@@ -494,6 +513,80 @@ fun PrivateEditor(
                 modifier = Modifier.fillMaxSize(),
                 useMonospace = true
             )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun WritingAssistSheet(
+    state: PrivateJournalViewModel.AssistState,
+    onAction: (PrivateJournalViewModel.AssistAction) -> Unit,
+    onReplace: () -> Unit,
+    onAppend: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 24.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text("Aide à l'écriture", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(
+                "Suggestions générées sur l'appareil, en français — rien ne quitte le téléphone.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                androidx.compose.material3.FilledTonalButton(
+                    onClick = { onAction(PrivateJournalViewModel.AssistAction.IMPROVE) },
+                    modifier = Modifier.weight(1f)
+                ) { Text("✨ Améliorer") }
+                androidx.compose.material3.FilledTonalButton(
+                    onClick = { onAction(PrivateJournalViewModel.AssistAction.CONTINUE) },
+                    modifier = Modifier.weight(1f)
+                ) { Text("➡️ Continuer") }
+            }
+            androidx.compose.material3.FilledTonalButton(
+                onClick = { onAction(PrivateJournalViewModel.AssistAction.INSPIRE) },
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("💡 Inspire-moi") }
+
+            when {
+                state.isLoading -> {
+                    Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.Center) {
+                        androidx.compose.material3.CircularProgressIndicator()
+                    }
+                }
+                state.error != null -> {
+                    Text(
+                        "⚠️ ${state.error}",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+                state.result != null -> {
+                    androidx.compose.material3.HorizontalDivider()
+                    Text(
+                        state.result,
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        androidx.compose.material3.OutlinedButton(onClick = onAppend, modifier = Modifier.weight(1f)) {
+                            Text("Ajouter à la fin")
+                        }
+                        androidx.compose.material3.Button(onClick = onReplace, modifier = Modifier.weight(1f)) {
+                            Text("Remplacer")
+                        }
+                    }
+                }
+            }
         }
     }
 }
