@@ -100,10 +100,12 @@ class HabitRepository @Inject constructor(
         val createdDate: String = "",
         val archived: Boolean = false,
         val sortOrder: Int = 0,
-        // New scheduling fields; defaults keep old vault config.json round-tripping across devices.
-        val scheduleMode: String = "WEEKLY",
+        // New scheduling fields. NULLABLE on purpose: Gson (used by importConfigFromJson) does
+        // NOT apply Kotlin default values, so an OLD config.json without these keys deserializes
+        // them as null. Coalesced to defaults at the entity boundary below.
+        val scheduleMode: String? = null,
         val intervalCount: Int = 0,
-        val intervalUnit: String = "DAY"
+        val intervalUnit: String? = null
     )
 
     @Serializable
@@ -191,9 +193,9 @@ class HabitRepository @Inject constructor(
                             createdDate = config.createdDate,
                             archived = config.archived,
                             sortOrder = config.sortOrder,
-                            scheduleMode = config.scheduleMode,
+                            scheduleMode = config.scheduleMode ?: "WEEKLY",
                             intervalCount = config.intervalCount,
-                            intervalUnit = config.intervalUnit
+                            intervalUnit = config.intervalUnit ?: "DAY"
                         )
                     )
                 }
