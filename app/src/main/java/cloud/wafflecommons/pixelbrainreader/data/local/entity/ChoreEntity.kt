@@ -18,5 +18,7 @@ data class ChoreEntity(
     val frequencyDays: Int, // E.g., every 7 days
     val lastDoneDate: String, // ISO-8601 e.g., "2026-03-09"
     val icon: String = "cleaning_services", // Material icon alias
-    val createdAt: Long = System.currentTimeMillis() // Epoch for stable sorting
+    val createdAt: Long = System.currentTimeMillis(), // Epoch for stable sorting
+    val sortOrder: Int = 0, // Manual ordering within a room (from the vault's chores.json)
+    val archived: Boolean = false // Hidden from the dashboard when true; still preserved on export
 )

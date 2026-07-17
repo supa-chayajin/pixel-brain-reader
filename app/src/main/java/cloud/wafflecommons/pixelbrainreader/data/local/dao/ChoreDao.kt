@@ -11,7 +11,9 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface ChoreDao {
 
-    @Query("SELECT * FROM chores ORDER BY createdAt DESC")
+    // NOTE: returns ALL chores (incl. archived) — export (exportHomeConfigToJson) relies on
+    // this to round-trip archived chores. Archived are filtered out in the display layer.
+    @Query("SELECT * FROM chores ORDER BY sortOrder ASC, createdAt DESC")
     fun getAllChoresAsFlow(): Flow<List<ChoreEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)

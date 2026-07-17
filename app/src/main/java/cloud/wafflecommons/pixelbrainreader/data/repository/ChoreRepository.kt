@@ -46,11 +46,12 @@ class ChoreRepository @Inject constructor(
 
     // NOTE: these files are parsed with Gson (below), and Gson does NOT apply Kotlin
     // default values — an absent JSON key leaves a reference type null and a primitive 0,
-    // NOT the default written here. The vault's chores.json may come from an older or
-    // hand-seeded schema (e.g. sortOrder/archived, and no baseEffort/lastDoneDate/createdAt),
-    // so every absent-prone field is nullable and coalesced in [toEntity]. Without this a
-    // null lastDoneDate hits ChoreEntity's NOT NULL column and rolls back the WHOLE
-    // rooms+chores import transaction (symptom: chores AND rooms both import as 0).
+    // NOT the default written here. Vault chores.json may come from an older or hand-seeded
+    // schema (e.g. no baseEffort/lastDoneDate/createdAt), so every absent-prone field is
+    // nullable and coalesced in [toEntity]. Without this a null lastDoneDate hits
+    // ChoreEntity's NOT NULL column and rolls back the WHOLE rooms+chores import transaction
+    // (symptom: chores AND rooms both import as 0). sortOrder/archived are first-class and
+    // round-trip through import/export.
     @Serializable
     data class ChoreDto(
         val id: String,
@@ -60,7 +61,9 @@ class ChoreRepository @Inject constructor(
         val frequencyDays: Int? = null,
         val lastDoneDate: String? = null,
         val icon: String? = null,
-        val createdAt: Long = 0L
+        val createdAt: Long = 0L,
+        val sortOrder: Int? = null,
+        val archived: Boolean? = null
     )
 
     // --- Rooms (live data) ----------------------------------------------------
@@ -223,7 +226,9 @@ class ChoreRepository @Inject constructor(
         frequencyDays = frequencyDays,
         lastDoneDate = lastDoneDate,
         icon = icon,
-        createdAt = createdAt
+        createdAt = createdAt,
+        sortOrder = sortOrder,
+        archived = archived
     )
 
     private fun ChoreDto.toEntity() = ChoreEntity(
@@ -234,6 +239,8 @@ class ChoreRepository @Inject constructor(
         frequencyDays = frequencyDays ?: 7,
         lastDoneDate = lastDoneDate ?: "",
         icon = icon ?: "cleaning_services",
-        createdAt = if (createdAt > 0L) createdAt else System.currentTimeMillis()
+        createdAt = if (createdAt > 0L) createdAt else System.currentTimeMillis(),
+        sortOrder = sortOrder ?: 0,
+        archived = archived ?: false
     )
 }

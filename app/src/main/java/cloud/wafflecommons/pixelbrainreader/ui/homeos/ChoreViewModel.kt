@@ -31,7 +31,9 @@ class ChoreViewModel @Inject constructor(
         .map { roomsWithChores ->
             val result = mutableMapOf<String, List<ChoreUiModel>>()
             for (roomData in roomsWithChores) {
-                val uiModels = calculateChoreEntropyUseCase(roomData.chores)
+                // Archived chores are hidden from the dashboard (still preserved on export).
+                val visibleChores = roomData.chores.filter { !it.archived }
+                val uiModels = calculateChoreEntropyUseCase(visibleChores)
                 // We show empty rooms if we want, or filter them. Here we show all known rooms.
                 result[roomData.room.name] = uiModels.sortedByDescending { it.dirtinessPercentage }
             }
