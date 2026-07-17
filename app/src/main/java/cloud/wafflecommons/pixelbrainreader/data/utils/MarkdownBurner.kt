@@ -48,7 +48,10 @@ object MarkdownBurner {
         } else {
             timeline.sortedBy { it.time }.forEach { entry ->
                 val timeStr = entry.time.format(DateTimeFormatter.ofPattern("HH:mm"))
-                sb.append("- $timeStr ${entry.content}\n")
+                // Preserve googleEventId across the round-trip so re-parsed Calendar rows
+                // stay reclaimable by purgeGoogleTimelineForDate (fixes the triple-dup bug).
+                val content = DailyMarkers.appendCalendarMarker(entry.content, entry.googleEventId)
+                sb.append("- $timeStr $content\n")
             }
         }
         sb.append("\n")
@@ -66,8 +69,11 @@ object MarkdownBurner {
                 val checkbox = if (task.isDone) "[x]" else "[ ]"
                 val timePrefix = if (task.scheduledTime != null) "at ${task.scheduledTime} " else ""
                 val priorityMark = if (task.priority > 1) "‼️ " else ""
-                
-                sb.append("- $checkbox $priorityMark$timePrefix${task.label}\n")
+                // Preserve googleTaskId across the round-trip so re-parsed Google tasks stay
+                // reclaimable by purgeGoogleTasksForDate (fixes the triple-dup bug).
+                val label = DailyMarkers.appendTaskMarker(task.label, task.googleTaskId)
+
+                sb.append("- $checkbox $priorityMark$timePrefix$label\n")
             }
         }
         sb.append("\n")

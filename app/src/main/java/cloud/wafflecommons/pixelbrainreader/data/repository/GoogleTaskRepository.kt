@@ -138,6 +138,9 @@ class GoogleTaskRepository @Inject constructor(
                         total++
                     }
                 }
+                // Heal any pre-marker orphan duplicates (rows whose googleTaskId/source were
+                // stripped by the old burn↔parse round-trip) now that the keyed rows are back.
+                taskDao.collapseOrphanTasksForDate(today.toString())
                 Log.i(TAG, "syncPendingTasks complete: imported $total task(s)")
                 Result.success(total)
             } catch (e: Exception) {
