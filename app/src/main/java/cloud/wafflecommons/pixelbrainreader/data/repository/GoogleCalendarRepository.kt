@@ -19,6 +19,7 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.time.OffsetDateTime
 import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -132,6 +133,9 @@ class GoogleCalendarRepository @Inject constructor(
                         total++
                     }
                 }
+                // Heal any pre-marker orphan duplicates (rows whose googleEventId was stripped
+                // by the old burn↔parse round-trip) now that the keyed rows are back in place.
+                dailyDashboardDao.collapseOrphanTimelineForDate(today)
                 Log.i(TAG, "syncTodayEvents complete: imported $total event(s)")
                 Result.success(total)
             } catch (e: Exception) {
@@ -143,7 +147,10 @@ class GoogleCalendarRepository @Inject constructor(
     private fun extractStartTime(evt: Event): LocalTime {
         val raw = evt.start?.dateTime?.toString() ?: return LocalTime.MIDNIGHT
         return try {
-            OffsetDateTime.parse(raw).toLocalTime()
+            // Truncate to minutes: the timeline only ever renders/burns HH:mm, so storing
+            // sub-minute precision serves no purpose and would break the orphan-heal twin-match
+            // in collapseOrphanTimelineForDate (a re-parsed orphan is always minute-precise).
+            OffsetDateTime.parse(raw).toLocalTime().truncatedTo(ChronoUnit.MINUTES)
         } catch (e: Exception) {
             LocalTime.MIDNIGHT
         }

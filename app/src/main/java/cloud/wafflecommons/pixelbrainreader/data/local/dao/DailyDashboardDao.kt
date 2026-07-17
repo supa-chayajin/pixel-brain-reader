@@ -69,6 +69,28 @@ interface DailyDashboardDao {
     """)
     suspend fun purgeGoogleTimelineForDate(date: LocalDate)
 
+    /**
+     * Heals journals already tripled by the pre-marker burn↔parse round-trip: deletes orphan
+     * (googleEventId IS NULL) timeline rows that duplicate a Calendar-keyed row for the same
+     * date/time/content. Those orphans were invisible to [purgeGoogleTimelineForDate] and to
+     * the nullable UNIQUE index. Only ever deletes an UNKEYED row that has a KEYED twin, so a
+     * user-authored entry (no keyed twin) is never removed. Call after the Calendar import so
+     * the freshly-inserted keyed rows are present to match against.
+     */
+    @Query("""
+        DELETE FROM timeline_entries
+        WHERE date = :date
+          AND googleEventId IS NULL
+          AND EXISTS (
+              SELECT 1 FROM timeline_entries k
+              WHERE k.date = timeline_entries.date
+                AND k.time = timeline_entries.time
+                AND k.content = timeline_entries.content
+                AND k.googleEventId IS NOT NULL
+          )
+    """)
+    suspend fun collapseOrphanTimelineForDate(date: LocalDate)
+
     @Query("SELECT * FROM timeline_entries WHERE id = :id LIMIT 1")
     suspend fun getTimelineEntryById(id: String): TimelineEntryEntity?
 

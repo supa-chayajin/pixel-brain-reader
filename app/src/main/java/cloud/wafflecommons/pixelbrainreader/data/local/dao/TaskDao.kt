@@ -42,4 +42,26 @@ interface TaskDao {
      */
     @Query("DELETE FROM daily_tasks WHERE source = 'GoogleTasks' AND scheduledDate = :date")
     suspend fun purgeGoogleTasksForDate(date: String)
+
+    /**
+     * Heals journals already tripled by the pre-marker burn↔parse round-trip: deletes orphan
+     * (source != 'GoogleTasks') task rows that duplicate a Google-keyed row for the same
+     * date/label/time. Those orphans came back from parse as source="Local" and were invisible
+     * to [purgeGoogleTasksForDate] and the nullable UNIQUE index. Only ever deletes a non-Google
+     * row that has a GoogleTasks twin, so a locally-authored task (no Google twin) is preserved.
+     * Call after the Tasks import so the freshly-inserted keyed rows are present to match against.
+     */
+    @Query("""
+        DELETE FROM daily_tasks
+        WHERE scheduledDate = :date
+          AND source != 'GoogleTasks'
+          AND EXISTS (
+              SELECT 1 FROM daily_tasks g
+              WHERE g.scheduledDate = daily_tasks.scheduledDate
+                AND g.label = daily_tasks.label
+                AND IFNULL(g.scheduledTime, '') = IFNULL(daily_tasks.scheduledTime, '')
+                AND g.source = 'GoogleTasks'
+          )
+    """)
+    suspend fun collapseOrphanTasksForDate(date: String)
 }
