@@ -44,15 +44,22 @@ class ChoreRepository @Inject constructor(
         val createdAt: Long = 0L
     )
 
+    // NOTE: these files are parsed with Gson (below), and Gson does NOT apply Kotlin
+    // default values — an absent JSON key leaves a reference type null and a primitive 0,
+    // NOT the default written here. The vault's chores.json may come from an older or
+    // hand-seeded schema (e.g. sortOrder/archived, and no baseEffort/lastDoneDate/createdAt),
+    // so every absent-prone field is nullable and coalesced in [toEntity]. Without this a
+    // null lastDoneDate hits ChoreEntity's NOT NULL column and rolls back the WHOLE
+    // rooms+chores import transaction (symptom: chores AND rooms both import as 0).
     @Serializable
     data class ChoreDto(
         val id: String,
         val name: String,
         val roomId: String,
-        val baseEffort: Int = 1,
-        val frequencyDays: Int = 7,
-        val lastDoneDate: String = "",
-        val icon: String = "cleaning_services",
+        val baseEffort: Int? = null,
+        val frequencyDays: Int? = null,
+        val lastDoneDate: String? = null,
+        val icon: String? = null,
         val createdAt: Long = 0L
     )
 
@@ -223,10 +230,10 @@ class ChoreRepository @Inject constructor(
         id = id,
         name = name,
         roomId = roomId,
-        baseEffort = baseEffort,
-        frequencyDays = frequencyDays,
-        lastDoneDate = lastDoneDate,
-        icon = icon,
+        baseEffort = baseEffort ?: 1,
+        frequencyDays = frequencyDays ?: 7,
+        lastDoneDate = lastDoneDate ?: "",
+        icon = icon ?: "cleaning_services",
         createdAt = if (createdAt > 0L) createdAt else System.currentTimeMillis()
     )
 }
