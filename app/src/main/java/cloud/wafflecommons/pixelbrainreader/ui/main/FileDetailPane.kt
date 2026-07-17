@@ -61,6 +61,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
@@ -125,11 +126,18 @@ fun FileDetailPane(
     // ... (Shape and Surface logic remains) ...
 
     val lifecycleOwner = LocalLifecycleOwner.current
+    // The DisposableEffect below runs ONCE (its key, lifecycleOwner, is stable), so the
+    // observer closes over whatever `hasUnsavedChanges`/`onSave` were at first composition —
+    // which is always "no unsaved changes" right after a file opens. rememberUpdatedState
+    // keeps the observer reading the LIVE values, so the ON_PAUSE/ON_STOP flush actually
+    // fires after the user edits (the whole point of this safety net).
+    val currentHasUnsavedChanges by rememberUpdatedState(hasUnsavedChanges)
+    val currentOnSave by rememberUpdatedState(onSave)
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_PAUSE || event == Lifecycle.Event.ON_STOP) {
-                if (hasUnsavedChanges) {
-                    onSave() // Flushes auto-save immediately before death/background
+                if (currentHasUnsavedChanges) {
+                    currentOnSave() // Flushes auto-save immediately before death/background
                 }
             }
         }

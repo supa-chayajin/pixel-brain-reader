@@ -40,43 +40,35 @@ class SafeFileProvider @Inject constructor(
 
     /**
      * Performs an Atomic Write using "Write-to-Temp -> Rename" strategy.
+     *
+     * Uses java.nio ATOMIC_MOVE (minSdk 36, always available) which is a POSIX rename() —
+     * it replaces the target in a single atomic step. The old delete()-then-rename() path
+     * had a crash window where the target was already gone but the rename hadn't landed,
+     * which could lose the file entirely.
      */
     fun atomicWrite(path: String, content: String) {
         val targetFile = getSafeFile(path)
         val tempFile = File(targetFile.parentFile, "${targetFile.name}.tmp")
-        
+
         // Ensure parent exists
         targetFile.parentFile?.mkdirs()
-        
+
         try {
-            // Write to temp
             tempFile.writeText(content)
-            
-            // Sync/Flush (Auto-handled by writeText but being explicit is good practice for streams, 
-            // writeText uses OutputStreamWriter which flushes. 
-            // For true posix fsync we'd need FileOutputStream.fd.sync() but writeText is sufficient for app level)
-            
-            // Atomic Rename
-            // renameTo returns false if dest exists on some OS/FS, but simple overwrite usually works on Android internal storage
-            // If it fails, we might need delete first.
-            if (targetFile.exists()) {
-                 // Android's renameTo is usually atomic but might fail if target exists on some old versions.
-                 // Java API non-atomic on Windows, but POSIX usually atomic.
-                 // Let's use robust rename.
-            }
-            
-            // Kotlin/Java File.renameTo is weak. 
-            // Better: use java.nio.file.Files.move(temp, target, StandardCopyOption.ATOMIC_MOVE)
-            // But we need API 26+ (Oreo). Assuming minSdk is reasonably high (24-26+ for PixelBrainReader?)
-            
-            // Fallback for robust save:
-            if (!tempFile.renameTo(targetFile)) {
-                // Try deleting target first (Not atomic window, but practically safe for our single-user app)
-                if (targetFile.delete() && tempFile.renameTo(targetFile)) {
-                    // Success
-                } else {
-                    throw java.io.IOException("Failed to atomicaly rename ${tempFile.name} to ${targetFile.name}")
-                }
+            try {
+                java.nio.file.Files.move(
+                    tempFile.toPath(),
+                    targetFile.toPath(),
+                    java.nio.file.StandardCopyOption.ATOMIC_MOVE
+                )
+            } catch (atomicUnsupported: java.nio.file.AtomicMoveNotSupportedException) {
+                // Practically never happens on app-internal storage; degrade to a
+                // (non-atomic) replace rather than failing the save outright.
+                java.nio.file.Files.move(
+                    tempFile.toPath(),
+                    targetFile.toPath(),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING
+                )
             }
         } catch (e: Exception) {
             tempFile.delete() // Cleanup

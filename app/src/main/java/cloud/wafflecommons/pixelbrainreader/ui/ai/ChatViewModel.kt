@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
@@ -102,19 +103,16 @@ class ChatViewModel @Inject constructor(
      */
     val chatHistory: StateFlow<List<ChatMessage>> = _currentMode
         .flatMapLatest { mode -> chatRepository.streamMessages(mode.storage()) }
+        // Map at the boundary so the bubble composable stays Room-agnostic. Mapping in the
+        // pipeline (instead of an extra MutableStateFlow fed by a permanent collector) keeps
+        // WhileSubscribed meaningful — the Room query actually stops ~5s after the Chat
+        // screen is backgrounded instead of running for the ViewModel's whole life.
+        .map { entities -> entities.map { it.toUi() } }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),
             initialValue = emptyList()
         )
-        .let { entityFlow ->
-            // Map at the boundary so the bubble composable stays Room-agnostic.
-            MutableStateFlow<List<ChatMessage>>(emptyList()).also { ui ->
-                viewModelScope.launch {
-                    entityFlow.collect { entities -> ui.value = entities.map { it.toUi() } }
-                }
-            }
-        }
 
     // --- Ambient state -------------------------------------------------------
 

@@ -189,6 +189,11 @@ class LocalAiManager @Inject constructor(
             } catch (e: GenAiException) {
                 logGenAiException("generateContent", e)
                 Result.failure(mapGenAiException(e))
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // Never swallow cancellation — let it propagate so a cancelled caller
+                // (navigation-away, timeout) actually unwinds instead of being reported
+                // as a generic generation failure.
+                throw e
             } catch (e: Throwable) {
                 Log.w(tag, "Unexpected inference error", e)
                 Result.failure(NanoException.Generation(e))

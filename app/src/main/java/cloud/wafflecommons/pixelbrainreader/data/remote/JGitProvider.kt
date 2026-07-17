@@ -306,25 +306,31 @@ class JGitProvider @Inject constructor(
                         org.eclipse.jgit.api.RebaseResult.Status.STOPPED,
                         org.eclipse.jgit.api.RebaseResult.Status.CONFLICTS,
                         org.eclipse.jgit.api.RebaseResult.Status.FAILED -> {
-                            Log.w("JGitProvider", "Rebase conflict/failure: ${rebaseResult.status}. Backing up and aborting.")
+                            Log.w("JGitProvider", "Rebase conflict/failure: ${rebaseResult.status}. Aborting, then backing up clean local copies.")
 
-                            // Back up any conflicting files before aborting
-                            var backedUpCount = 0
                             val conflicts = rebaseResult.conflicts ?: emptyList()
-                            for (relativePath in conflicts) {
-                                val backup = conflictResolver.secureLocalBackup(relativePath)
-                                if (backup != null) backedUpCount++
-                            }
 
-                            // Abort the rebase to restore working tree to pre-pull state
+                            // Abort FIRST so the working tree is restored to the clean
+                            // pre-pull local state. Backing up BEFORE the abort captures
+                            // JGit's <<<<<<< / >>>>>>> conflict markers instead of the
+                            // user's actual local content — useless for recovery.
                             try {
                                 git.rebase()
                                     .setOperation(org.eclipse.jgit.api.RebaseCommand.Operation.ABORT)
                                     .call()
-                                Log.i("JGitProvider", "Rebase aborted successfully. $backedUpCount files backed up.")
+                                Log.i("JGitProvider", "Rebase aborted successfully.")
                             } catch (abortEx: Exception) {
                                 Log.e("JGitProvider", "Failed to abort rebase", abortEx)
                             }
+
+                            // Now snapshot the (restored, clean) local versions so the
+                            // user has a recoverable copy of their diverged work.
+                            var backedUpCount = 0
+                            for (relativePath in conflicts) {
+                                val backup = conflictResolver.secureLocalBackup(relativePath)
+                                if (backup != null) backedUpCount++
+                            }
+                            Log.i("JGitProvider", "$backedUpCount clean local file(s) backed up.")
 
                             return@withContext SyncResult.ResolvedWithConflicts(backedUpCount)
                         }
@@ -355,15 +361,21 @@ class JGitProvider @Inject constructor(
      */
     suspend fun setRemote(url: String, remoteName: String = "origin"): Result<Unit> = withContext(Dispatchers.IO) {
         if (!isReady()) return@withContext Result.failure(Exception("Repo not ready"))
-        try {
-            Git.open(rootDir).use { git ->
-                val config = git.repository.config
-                config.setString("remote", remoteName, "url", url)
-                config.save()
+        // Mutate .git/config under the same gitMutex every other write uses — otherwise a
+        // concurrent pull()/push() reading remote.<name>.url can race a half-written config
+        // or collide on .git/config.lock.
+        gitMutex.withLock {
+            cleanStaleLocks()
+            try {
+                Git.open(rootDir).use { git ->
+                    val config = git.repository.config
+                    config.setString("remote", remoteName, "url", url)
+                    config.save()
+                }
+                Result.success(Unit)
+            } catch (e: Exception) {
+                Result.failure(e)
             }
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
         }
     }
     

@@ -35,6 +35,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
 
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -134,13 +135,35 @@ class MainViewModel @Inject constructor(
         else repository.getFileContentFlow(path)
     }
 
+    /** Precomputed, sorted view of the file list. */
+    private data class FileView(val dtos: List<GithubFileDto>, val folders: List<String>)
+
+    // Map + sort the file list OFF the main thread and only when the files themselves
+    // change. Previously this ran inside the 27-way uiState combine (Main dispatcher), so
+    // it re-sorted the whole vault on every keystroke / sync-flag toggle → jank on large
+    // vaults. flowOn(Default) + a dedicated source flow fixes that.
+    private val _fileView = _filesFlow
+        .map { files ->
+            val dtos = files
+                .map { it.toDto() }
+                .filter { !it.name.startsWith(".") }
+                .sortedWith(compareBy({ it.type != "dir" }, { it.name }))
+            val folders = files
+                .filter { it.type == "dir" }
+                .map { it.path }
+                .distinct()
+                .sorted()
+            FileView(dtos, folders)
+        }
+        .flowOn(kotlinx.coroutines.Dispatchers.Default)
+
     // --- The Unified Reactive State ---
     val uiState: StateFlow<UiState> = combine(
         _currentPath, _searchQuery, _selectedFilePath, _selectedFileName,
         _isEditing, _unsavedContent, _isLoading, _isRefreshing, _isSyncing,
         _saveState, _userMessage, _error, _importState, _isFocusMode,
         _isExitPending, _showDeleteConfirmation, userPrefs.listPaneWidth,
-        _filesFlow, _selectedFileContent, _isIndexing, _analysisResult,
+        _fileView, _selectedFileContent, _isIndexing, _analysisResult,
         _availableMoveDestinations, _moveDialogCurrentPath, _availableTemplates,
         _showCreateFileDialog, _navigationTrigger
     ) { args ->
@@ -162,7 +185,7 @@ class MainViewModel @Inject constructor(
         val isExitPending = args[14] as Boolean
         val showDelete = args[15] as Boolean
         val width = args[16] as Float
-        val files = args[17] as List<FileEntity>
+        val fileView = args[17] as FileView
         val dbContent = args[18] as? String
         val isIndexing = args[19] as Boolean
         val analysis = args[20] as? String
@@ -172,16 +195,8 @@ class MainViewModel @Inject constructor(
         val showCreate = args[24] as Boolean
         val navTrigger = args[25] as? String
 
-        val dtos = files
-            .map { it.toDto() }
-            .filter { !it.name.startsWith(".") }
-            .sortedWith(compareBy({ it.type != "dir" }, { it.name }))
-
-        val foldersList = files
-            .filter { it.type == "dir" }
-            .map { it.path }
-            .distinct()
-            .sorted()
+        val dtos = fileView.dtos
+        val foldersList = fileView.folders
 
         UiState(
             searchQuery = query,
@@ -813,9 +828,16 @@ class MainViewModel @Inject constructor(
                         .replace(Regex("\\s*```$"), "").trim()
                     _isLoading.value = false
                     _userMessage.value = "Synthèse du dossier prête ✨"
+                    // Folder insight is a READ-ONLY, ephemeral pseudo-document. Detach it
+                    // from any real file path FIRST — otherwise saveFile()/autosave would
+                    // write this summary into whatever note was previously open in the
+                    // detail pane, silently corrupting it. With path == null, saveFile()
+                    // early-returns on its `_selectedFilePath.value ?: return` guard.
+                    _selectedFilePath.value = null
                     _selectedFileName.value = "Folder_Insight.md"
                     _unsavedContent.value = summary
                     _isEditing.value = false
+                    _saveState.value = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.IDLE
                 },
                 onFailure = { e ->
                     // Surface the real failure — NEVER write the error text into a note body.

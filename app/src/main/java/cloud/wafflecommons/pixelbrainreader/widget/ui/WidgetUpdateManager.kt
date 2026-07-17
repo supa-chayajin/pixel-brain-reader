@@ -7,6 +7,7 @@ import androidx.work.WorkManager
 import cloud.wafflecommons.pixelbrainreader.widget.data.WidgetUpdateWorker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -15,11 +16,15 @@ import javax.inject.Singleton
 class WidgetUpdateManager @Inject constructor(
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: Context
 ) {
+    // One structured, process-lived scope instead of a fresh unmanaged CoroutineScope per
+    // call — a SupervisorJob isolates failures and there is a single owner for the work.
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     /**
      * Refreshes the widget UI only. Valid if snapshot is already updated.
      */
     fun triggerUpdate() {
-        CoroutineScope(Dispatchers.IO).launch {
+        scope.launch {
             CompanionWidget().updateAll(context)
         }
     }

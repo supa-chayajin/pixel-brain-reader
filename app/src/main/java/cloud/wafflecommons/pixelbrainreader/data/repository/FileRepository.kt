@@ -5,8 +5,10 @@ import android.util.Log
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.FileEntity
 import cloud.wafflecommons.pixelbrainreader.data.remote.JGitProvider
 import dagger.hilt.android.qualifiers.ApplicationContext
+import cloud.wafflecommons.pixelbrainreader.data.sync.GitSyncCoordinator
 import cloud.wafflecommons.pixelbrainreader.data.sync.SyncStep
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.MutableSharedFlow // Kept for compatibility but unused
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -26,6 +28,7 @@ class FileRepository @Inject constructor(
     private val noteRepository: NoteRepository,
     private val vaultDiscoveryRepository: VaultDiscoveryRepository,
     private val jGitProvider: JGitProvider, // Still needed for Direct Sync ops
+    private val gitSyncCoordinator: GitSyncCoordinator,
     @ApplicationContext private val context: Context
 ) {
 
@@ -66,45 +69,52 @@ class FileRepository @Inject constructor(
     }
 
     suspend fun syncRepository(owner: String? = null, repo: String? = null, branch: String = "main"): Result<Unit> {
-      try {
-        // 1. Setup/Clone
-         _syncStatus.value = "Connexion au dépôt…"
-         val remoteUrl = if (owner != null && repo != null) "https://github.com/$owner/$repo.git" else null
-         jGitProvider.setupRepository(remoteUrl).onFailure { error ->
-             Log.e("FileRepository", "Setup repository failed during sync", error)
-             return Result.failure(error)
-         }
+      // Serialize this whole commit→pull→push sequence against the SyncOrchestrator's
+      // foreground cycle (shared GitSyncCoordinator lock). Without it the two can
+      // interleave in the gap between individual git ops and one side pushes a stale
+      // ref → dropped sync. withLock (not tryLock) so an explicit user save waits for
+      // an in-flight cycle rather than being silently skipped.
+      return gitSyncCoordinator.mutex.withLock {
+        try {
+          // 1. Setup/Clone
+           _syncStatus.value = "Connexion au dépôt…"
+           val remoteUrl = if (owner != null && repo != null) "https://github.com/$owner/$repo.git" else null
+           jGitProvider.setupRepository(remoteUrl).onFailure { error ->
+               Log.e("FileRepository", "Setup repository failed during sync", error)
+               return@withLock Result.failure(error)
+           }
 
-         // 2. Commit
-         _syncStatus.value = "Validation locale…"
-         jGitProvider.addAll()
-         jGitProvider.commit("Auto-sync")
+           // 2. Commit
+           _syncStatus.value = "Validation locale…"
+           jGitProvider.addAll()
+           jGitProvider.commit("Auto-sync")
 
-         // 3. Pull
-         _syncStatus.value = SyncStep.PULLING.label
-         val pullResult = jGitProvider.pull()
-         if (pullResult is cloud.wafflecommons.pixelbrainreader.data.remote.SyncResult.ResolvedWithConflicts) {
-             Log.w("FileRepository", "Sync completed, but ${pullResult.backedUpFilesCount} conflicts were defensively backed up.")
-             // Eventual UI notification hook could go here
-         } else if (pullResult is cloud.wafflecommons.pixelbrainreader.data.remote.SyncResult.Error) {
-             Log.e("FileRepository", "Pull failed during sync", pullResult.exception)
-             return Result.failure(pullResult.exception)
-         }
+           // 3. Pull
+           _syncStatus.value = SyncStep.PULLING.label
+           val pullResult = jGitProvider.pull()
+           if (pullResult is cloud.wafflecommons.pixelbrainreader.data.remote.SyncResult.ResolvedWithConflicts) {
+               Log.w("FileRepository", "Sync completed, but ${pullResult.backedUpFilesCount} conflicts were defensively backed up.")
+               // Eventual UI notification hook could go here
+           } else if (pullResult is cloud.wafflecommons.pixelbrainreader.data.remote.SyncResult.Error) {
+               Log.e("FileRepository", "Pull failed during sync", pullResult.exception)
+               return@withLock Result.failure(pullResult.exception)
+           }
 
-         // 4. Push
-         _syncStatus.value = SyncStep.PUSHING.label
-         val pushResult = jGitProvider.push()
+           // 4. Push
+           _syncStatus.value = SyncStep.PUSHING.label
+           val pushResult = jGitProvider.push()
 
-         // 5. Reindex file table (so the UI sees post-pull state).
-         // Embedding indexing is now exclusively triggered by the user from
-         // Settings → "Index Knowledge Vault" (manual). We do NOT enqueue
-         // IndexingWorker here.
-         _syncStatus.value = SyncStep.INDEXING.label
-         vaultDiscoveryRepository.reindexAll()
+           // 5. Reindex file table (so the UI sees post-pull state).
+           // Embedding indexing is now exclusively triggered by the user from
+           // Settings → "Index Knowledge Vault" (manual). We do NOT enqueue
+           // IndexingWorker here.
+           _syncStatus.value = SyncStep.INDEXING.label
+           vaultDiscoveryRepository.reindexAll()
 
-         return pushResult
-      } finally {
-         _syncStatus.value = null
+           pushResult
+        } finally {
+           _syncStatus.value = null
+        }
       }
     }
     
