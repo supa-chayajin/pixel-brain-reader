@@ -20,6 +20,7 @@ import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.TextStyle
+import androidx.compose.ui.platform.LocalConfiguration
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
@@ -65,8 +66,12 @@ fun MoodCalendar(
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Previous Month")
                 }
 
+                // Read locale observably (via LocalConfiguration) so the month name
+                // recomposes on a locale change — and without Locale.getDefault(), which
+                // the NonObservableLocale lint rightly flags in composables.
+                val monthLocale = LocalConfiguration.current.locales[0]!!
                 Text(
-                    text = "${currentMonth.month.getDisplayName(TextStyle.FULL, Locale.getDefault())} ${currentMonth.year}",
+                    text = "${currentMonth.month.getDisplayName(TextStyle.FULL, monthLocale)} ${currentMonth.year}",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )

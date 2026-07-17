@@ -44,6 +44,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.material.icons.filled.HealthAndSafety
 import androidx.hilt.navigation.compose.hiltViewModel
 import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.widget.Toast
 import androidx.compose.material.icons.rounded.CleaningServices
 import androidx.compose.material.icons.rounded.DateRange
@@ -53,6 +55,16 @@ import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
+
+/** Walk the ContextWrapper chain to the hosting Activity (avoids casting LocalContext directly). */
+private fun Context.findActivity(): Activity? {
+    var ctx: Context? = this
+    while (ctx is ContextWrapper) {
+        if (ctx is Activity) return ctx
+        ctx = ctx.baseContext
+    }
+    return null
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -111,7 +123,7 @@ fun SettingsScreen(
     // V6: Credential Manager flow.
     // signIn() is suspending and triggered from the VM; AuthorizationClient may
     // surface a consent IntentSender, which we resolve through StartIntentSenderForResult.
-    val activity = LocalContext.current as Activity
+    val activity = remember(context) { context.findActivity() }
     val consentLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartIntentSenderForResult()
     ) { result ->
@@ -238,7 +250,7 @@ fun SettingsScreen(
                     onClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         if (!isEnabled) {
-                            viewModel.connectGoogle(activity)
+                            activity?.let { viewModel.connectGoogle(it) }
                         } else {
                             viewModel.setGoogleSyncEnabled(false)
                         }
@@ -265,7 +277,7 @@ fun SettingsScreen(
                             onCheckedChange = { checked ->
                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 if (checked) {
-                                    viewModel.connectGoogle(activity)
+                                    activity?.let { viewModel.connectGoogle(it) }
                                 } else {
                                     viewModel.setGoogleSyncEnabled(false)
                                 }

@@ -1,0 +1,22 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <!-- snowflakes -->
+    <path android:strokeColor="#FFE1F5FE" android:strokeWidth="1.6" android:strokeLineCap="round"
+        android:pathData="M16,37 L16,43 M13.4,38.5 L18.6,41.5 M13.4,41.5 L18.6,38.5
+                          M32,37 L32,43 M29.4,38.5 L34.6,41.5 M29.4,41.5 L34.6,38.5" />
+    <path android:fillColor="#FFE1F5FE" android:pathData="M24,41 m-2,0 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0" />
+    <!-- cloud -->
+    <path android:pathData="M13,34 C8,34 4,30 4,25 C4,20 8,16 13,16 C13.5,16 14,16 14.5,16.1 C15.8,11 20,8 24.8,8 C30.2,8 34.6,12 35.2,17.3 C39.4,17.9 42.5,21.5 42.5,25.8 C42.5,30.6 38.6,34.4 33.8,34.4 L13,34.5 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="8" android:startY="8" android:endX="30" android:endY="34">
+                <item android:offset="0" android:color="#FFECEFF1" />
+                <item android:offset="1" android:color="#FFAEBFC9" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path android:fillColor="#66FFFFFF" android:pathData="M15,20 C20,15.5 28,15.5 33,20 C27,17.5 21,17.5 15,20 Z" />
+</vector>
