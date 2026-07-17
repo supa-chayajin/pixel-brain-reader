@@ -16,6 +16,7 @@ import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material.icons.rounded.HomeWork
 import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.filled.CheckCircle
@@ -38,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import cloud.wafflecommons.pixelbrainreader.data.ai.NanoState
 import cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
 import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
+import cloud.wafflecommons.pixelbrainreader.ui.theme.NavBarClearance
 import cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
@@ -145,7 +147,14 @@ fun SettingsScreen(
     }
     
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        snackbarHost = {
+            // Lift the snackbar above the floating ExpressiveNavBar (overlaid by
+            // MainScreen), which would otherwise cover the toasts entirely.
+            SnackbarHost(
+                snackbarHostState,
+                modifier = Modifier.padding(bottom = NavBarClearance)
+            )
+        },
         topBar = {
             cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
                 title = "Settings",
@@ -445,16 +454,28 @@ fun SettingsScreen(
 
                 val isSyncingConfigs by viewModel.isSyncingConfigs.collectAsStateWithLifecycle()
 
+                // Full config bridge between the vault and the app. Import pulls
+                // Habits + Rooms + Chores from the vault into Room (fixes a fresh
+                // sign-in where chores/rooms aren't yet imported); Export writes
+                // the same set back to the vault and pushes. Both wipe-and-replace,
+                // so Import first after a sign-in, Export after local edits.
+                Text(
+                    text = "Import brings Habits, Rooms & Chores from the vault into the app. Export sends them back and pushes. Both replace the whole set — import first after signing in, export after making changes here.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(Modifier.height(8.dp))
+
                 Button(
                     onClick = {
-                        viewModel.syncAllConfigsToVault { success ->
-                             coroutineScope.launch {
-                                 if(success) {
-                                     snackbarHostState.showSnackbar("All configuration (Habits, Home OS) synced and pushed!")
-                                 } else {
-                                     snackbarHostState.showSnackbar("Failed to sync configurations. Check Git logs.")
-                                 }
-                             }
+                        viewModel.importAllFromVault { success ->
+                            coroutineScope.launch {
+                                snackbarHostState.showSnackbar(
+                                    if (success) "Imported all (Habits, Rooms, Chores) from the vault."
+                                    else "Import failed. Check Git logs."
+                                )
+                            }
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
@@ -463,9 +484,9 @@ fun SettingsScreen(
                     if (isSyncingConfigs) {
                         CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary)
                     } else {
-                        Icon(Icons.Default.Sync, contentDescription = null)
+                        Icon(Icons.Default.Download, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
-                        Text("Export & Sync All Configurations (Vault)")
+                        Text("Import All (Vault → App)")
                     }
                 }
 
@@ -473,18 +494,21 @@ fun SettingsScreen(
 
                 OutlinedButton(
                     onClick = {
-                        viewModel.forceSyncHabits {
+                        viewModel.exportAllToVault { success ->
                             coroutineScope.launch {
-                                snackbarHostState.showSnackbar("Habit configuration pulled and imported from Vault.")
+                                snackbarHostState.showSnackbar(
+                                    if (success) "Exported all (Habits, Rooms, Chores) to the vault & pushed."
+                                    else "Export failed. Check Git logs."
+                                )
                             }
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !isSyncingConfigs
                 ) {
-                    Icon(Icons.Default.Sync, contentDescription = null)
+                    Icon(Icons.Default.Upload, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Force Import Habits (Vault -> App)")
+                    Text("Export All (App → Vault)")
                 }
             }
             }

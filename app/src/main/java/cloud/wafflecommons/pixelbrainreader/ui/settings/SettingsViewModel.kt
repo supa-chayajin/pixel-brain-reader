@@ -32,6 +32,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import cloud.wafflecommons.pixelbrainreader.data.local.preferences.GamificationPreferences
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -44,6 +45,7 @@ class SettingsViewModel @Inject constructor(
     private val healthConnectManager: cloud.wafflecommons.pixelbrainreader.data.health.HealthConnectManager,
     private val syncHealthDataUseCase: cloud.wafflecommons.pixelbrainreader.data.usecase.SyncHealthDataUseCase,
     private val habitRepository: cloud.wafflecommons.pixelbrainreader.data.repository.HabitRepository,
+    private val choreRepository: cloud.wafflecommons.pixelbrainreader.data.repository.ChoreRepository,
     private val gamificationPrefs: GamificationPreferences,
     val googleAuthManager: GoogleAuthRepository,
     private val localAiManager: LocalAiManager
@@ -340,13 +342,6 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun forceSyncHabits(onComplete: () -> Unit) {
-        viewModelScope.launch {
-            habitRepository.importConfigFromJson()
-            onComplete()
-        }
-    }
-
     fun setGoogleSyncEnabled(enabled: Boolean) {
         viewModelScope.launch {
             userPrefs.setGoogleSyncEnabled(enabled)
@@ -414,14 +409,47 @@ class SettingsViewModel @Inject constructor(
     private val _isSyncingConfigs = MutableStateFlow(false)
     val isSyncingConfigs: StateFlow<Boolean> = _isSyncingConfigs.asStateFlow()
 
-    fun syncAllConfigsToVault(onComplete: (Boolean) -> Unit) {
+    /**
+     * Export ALL Life-OS config to the vault — Habits + Rooms + Chores — then
+     * commit & push. Delegates to [HabitRepository.performBulkConfigSync], which
+     * writes config.json (habits) + rooms.json + chores.json and pushes them.
+     */
+    fun exportAllToVault(onComplete: (Boolean) -> Unit) {
         viewModelScope.launch {
             _isSyncingConfigs.value = true
             try {
                 habitRepository.performBulkConfigSync()
                 onComplete(true)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                Log.e("SettingsViewModel", "Failed to sync configs", e)
+                Log.e("SettingsViewModel", "Export all to vault failed", e)
+                onComplete(false)
+            } finally {
+                _isSyncingConfigs.value = false
+            }
+        }
+    }
+
+    /**
+     * Import ALL Life-OS config from the vault into Room — Habits (configs + logs)
+     * + Rooms + Chores. Reads the on-disk vault JSON (already pulled during
+     * sign-in / sync) and wipe-and-replaces the Room tables via the same
+     * `syncWithFileSystem` bridges the sync cycle runs — exposed here as a manual
+     * button so a fresh sign-in can force the full import (the sign-in mirror
+     * sync does not run these bridges, which is why chores/rooms went missing).
+     */
+    fun importAllFromVault(onComplete: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            _isSyncingConfigs.value = true
+            try {
+                habitRepository.syncWithFileSystem()   // habit configs + logs
+                choreRepository.syncWithFileSystem()   // rooms + chores
+                onComplete(true)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e("SettingsViewModel", "Import all from vault failed", e)
                 onComplete(false)
             } finally {
                 _isSyncingConfigs.value = false
