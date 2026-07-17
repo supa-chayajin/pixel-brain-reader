@@ -4,7 +4,7 @@ A **native Android, local-first Markdown vault reader and life-OS** that turns a
 
 - Single Gradle module (`:app`) · Kotlin · Jetpack Compose · Material 3 (adaptive)
 - Min/compile SDK **36**, JVM target **17**, package `cloud.wafflecommons.pixelbrainreader`
-- Current version: **6.1.0** (`versionCode = 610`)
+- Current version: **9.0.0** (`versionCode = 900`)
 
 ---
 
@@ -19,7 +19,7 @@ On top of that vault, the app layers:
 - **Life OS** — habits, chores, gamification, dashboards, mood, life stats.
 - **Health** — Health Connect → Room → markdown export in the vault.
 - **Google ecosystem (read-only sync)** — Calendar + Tasks via Google Auth + AuthorizationClient.
-- **Cortex AI** — chat over your vault. Cloud (Gemini Flash / Pro) **and** fully on-device Gemini Nano via ML Kit GenAI. Privacy-first: no silent cloud fallback.
+- **Cortex AI** — chat over your vault, **100% on-device** (Gemini Nano via ML Kit GenAI + a local TFLite MiniLM RAG index). No cloud, no API key. Chat, briefing, oracle, folder-insight and the web-import summary all run locally.
 - **Private Vault** — a separate journal surface (`PrivateJournalActivity`).
 - **Home-screen widget** — Jetpack Glance, reads pre-rendered snapshots.
 
@@ -60,8 +60,8 @@ The entire app runs in a **single Compose Activity** (`MainActivity`) using a Ma
               │                            │  Google Calendar+Tasks   │
               │                            └──────────────────────────┘
               │
-        WorkManager (Hilt) — DailyExportWorker, DailyBriefingWorker,
-                             HealthSyncWorker, IndexingWorker, …
+        WorkManager (Hilt) — DailyExportWorker, ImportWorker,
+                             IndexingWorker, VaultReminderWorker, …
 ```
 
 ### Two persistence layers, distinct roles
@@ -97,10 +97,10 @@ Pull failure aborts; health/google failures don't. Preserve this Pull-then-Push 
 
 ## AI stack
 
-### Cloud (Gemini Flash / Pro)
-- `data/ai/GeminiRagManager.kt` (RAG) and `GeminiScribeManager.kt` (persona-based writing).
-- API key wired from `local.properties` at build time (`BuildConfig.geminiApiKey`), overridable at runtime via `SecretManager.getGeminiApiKey()`.
-- Local embeddings (RAG retrieval) computed on-device via **MediaPipe Tasks Text** + the bundled `universal_sentence_encoder.tflite`, stored in Room as `EmbeddingEntity`. Indexing is owned by `IndexingWorker`.
+**100% on-device — no cloud, no API key.** Cloud Gemini (and `GeminiScribeManager`) were removed; `data/ai/GeminiRagManager.kt` is now a local RAG facade over `VectorSearchEngine` + `LocalAiManager`.
+
+### Local RAG retrieval
+- On-device embeddings via a raw **TFLite** model (`assets/sentences_encoder.tflite`, `paraphrase-multilingual-MiniLM-L12-v2`, 384-dim) tokenized by DJL's `HuggingFaceTokenizer` (`assets/tokenizer.json`), stored in Room as `EmbeddingEntity`. Indexing is owned by `IndexingWorker`.
 
 ### On-device Gemini Nano (ML Kit GenAI)
 - `data/ai/LocalAiManager.kt` wraps the `com.google.mlkit:genai-prompt` API (Gemini Nano via Android AICore).
@@ -167,11 +167,9 @@ domain/                    Pure-Kotlin domain types
 Workers in `data/workers/`:
 
 - `IndexingWorker` — builds/refreshes the local embedding index.
-- `DailyExportWorker` — unique periodic, scheduled for **23:00 daily**.
-- `DailyBriefingWorker` — generates the morning briefing.
-- `HealthSyncWorker` — pulls Health Connect data outside of `ON_RESUME`.
-- `ImportWorker` — fetches and converts shared web content.
-- `CalendarSyncWorker` / `TaskSyncWorker` — Google Calendar/Tasks reconciliation.
+- `DailyExportWorker` — unique periodic, **23:50 daily, unconditional** (burns the complete day to markdown). Health sync and morning briefing are **not** separate workers — health runs via `SyncHealthDataUseCase` inside the `SyncOrchestrator` cycle, and the briefing is generated inline in repositories.
+- `ImportWorker` — reader-mode fetch + clean-markdown conversion of shared/deep-linked web content.
+- `VaultReminderWorker` / `ChoresHabitsReminderWorker` — reminder notifications.
 
 ---
 
@@ -208,15 +206,8 @@ Workers in `data/workers/`:
 
 ### Required local config (gitignored)
 
-Two files must exist before building:
-
-1. **`local.properties`** — must define
-   ```properties
-   geminiApiKey=your_google_ai_studio_key_here
-   ```
-   This is wired into `BuildConfig.geminiApiKey` from `app/build.gradle.kts:34`.
-
-2. **`app/google-services.json`** — Firebase / Google Services config, required by the `googleServices` plugin.
+- **`app/google-services.json`** — Firebase / Google Services config, required by the `googleServices` plugin. **Required.**
+- **`local.properties`** — no AI key is needed (the app is 100% on-device). Optional keys: `githubOauthClientId` (enables "Login with GitHub" via OAuth Device Flow — a public client id, no secret), and the release-signing keys (`storeFile`/`storePassword`/`keyAlias`/`keyPassword`).
 
 ### Common Gradle commands
 

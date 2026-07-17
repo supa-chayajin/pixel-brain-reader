@@ -111,52 +111,55 @@ class MoodRepository @Inject constructor(
         }
         
         Log.d("PBR_SYNC", "Scanning mood folder: ${root.absolutePath}")
-        
-        // Atomic Transaction (Blocking - Safe in Dispatchers.IO)
-        database.runInTransaction {
-            var parsedCount = 0
-            var filesCount = 0
-            root.walk().filter { it.isFile && it.name.endsWith(".json") }.forEach { file ->
-                try {
-                    val content = file.readText()
-                    if (content.isNotBlank()) {
-                         val data = jsonParser.decodeFromString<DailyMoodDataDto>(content)
-                         
-                         // 1. Validate Date
-                         var dateKey = data.date
-                         if (dateKey.isBlank()) {
-                             dateKey = file.nameWithoutExtension.take(10) // Fallback to filename (YYYY-MM-DD)
-                         }
-                         
-                         // 2. Map Entries
-                         if (data.entries.isNotEmpty()) {
-                            data.entries.forEach { entry ->
-                                 // Calc Timestamp
-                                 val timeStr = if (entry.time.length == 5) entry.time else "12:00" // Simple Validation
-                                 val localDateTime = java.time.LocalDateTime.parse("${dateKey}T${timeStr}")
-                                 val timestamp = localDateTime.atZone(java.time.ZoneId.systemDefault()).toEpochSecond() * 1000
 
-                                 val entity = cloud.wafflecommons.pixelbrainreader.data.local.entity.MoodEntity(
-                                     timestamp = timestamp,
-                                     date = dateKey,
-                                     time = timeStr,
-                                     score = entry.score,
-                                     label = entry.label,
-                                     activities = entry.activities.joinToString(","),
-                                     note = entry.note
-                                 )
-                                 moodDao.insertMoodBlocking(entity)
-                                 parsedCount++
-                            }
-                            filesCount++
-                         }
-                    }
-                } catch (e: Exception) {
-                    Log.e("PBR_SYNC", "Failed to parse ${file.name}: ${e.message}")
+        // Phase 1: read + parse every JSON file OUTSIDE any DB transaction. Doing the
+        // filesystem walk inside runInTransaction held Room's single writer lock for the
+        // whole scan, stalling every other DAO write app-wide. Build the entity list first.
+        val entities = mutableListOf<cloud.wafflecommons.pixelbrainreader.data.local.entity.MoodEntity>()
+        var filesCount = 0
+        root.walk().filter { it.isFile && it.name.endsWith(".json") }.forEach { file ->
+            try {
+                val content = file.readText()
+                if (content.isNotBlank()) {
+                     val data = jsonParser.decodeFromString<DailyMoodDataDto>(content)
+
+                     // 1. Validate Date
+                     var dateKey = data.date
+                     if (dateKey.isBlank()) {
+                         dateKey = file.nameWithoutExtension.take(10) // Fallback to filename (YYYY-MM-DD)
+                     }
+
+                     // 2. Map Entries
+                     if (data.entries.isNotEmpty()) {
+                        data.entries.forEach { entry ->
+                             // Calc Timestamp
+                             val timeStr = if (entry.time.length == 5) entry.time else "12:00" // Simple Validation
+                             val localDateTime = java.time.LocalDateTime.parse("${dateKey}T${timeStr}")
+                             val timestamp = localDateTime.atZone(java.time.ZoneId.systemDefault()).toEpochSecond() * 1000
+
+                             entities.add(cloud.wafflecommons.pixelbrainreader.data.local.entity.MoodEntity(
+                                 timestamp = timestamp,
+                                 date = dateKey,
+                                 time = timeStr,
+                                 score = entry.score,
+                                 label = entry.label,
+                                 activities = entry.activities.joinToString(","),
+                                 note = entry.note
+                             ))
+                        }
+                        filesCount++
+                     }
                 }
+            } catch (e: Exception) {
+                Log.e("PBR_SYNC", "Failed to parse ${file.name}: ${e.message}")
             }
-            Log.d("PBR_SYNC", "Imported $parsedCount mood entries (from $filesCount files)")
         }
+
+        // Phase 2: commit the parsed entities in one short transaction (just DB writes).
+        database.runInTransaction {
+            entities.forEach { moodDao.insertMoodBlocking(it) }
+        }
+        Log.d("PBR_SYNC", "Imported ${entities.size} mood entries (from $filesCount files)")
     }
 
     /**

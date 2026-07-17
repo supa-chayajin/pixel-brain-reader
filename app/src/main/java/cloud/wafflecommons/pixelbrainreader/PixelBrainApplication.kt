@@ -20,6 +20,7 @@ class PixelBrainApplication : Application(), Configuration.Provider {
     @Inject lateinit var moodRepository: cloud.wafflecommons.pixelbrainreader.data.repository.MoodRepository
     @Inject lateinit var habitRepository: cloud.wafflecommons.pixelbrainreader.data.repository.HabitRepository
     @Inject lateinit var choreRepository: cloud.wafflecommons.pixelbrainreader.data.repository.ChoreRepository
+    @Inject lateinit var dailyDashboardRepository: cloud.wafflecommons.pixelbrainreader.data.repository.DailyDashboardRepository
     @Inject lateinit var reminderScheduler: cloud.wafflecommons.pixelbrainreader.data.notifications.ReminderScheduler
 
     /** Application-scoped coroutine scope — survives Activity recreation. */
@@ -46,6 +47,7 @@ class PixelBrainApplication : Application(), Configuration.Provider {
         cancelLegacyGoogleOutboxWorkers()
         runStartupReconcile()
         scheduleVaultIndexing()
+        registerBackgroundBurnObserver()
         // (Re)schedule reminder notifications from the saved preferences. Also
         // creates the notification channels. Cheap; runs off the main thread.
         appScope.launch { runCatching { reminderScheduler.reschedule() } }
@@ -73,6 +75,27 @@ class PixelBrainApplication : Application(), Configuration.Provider {
             cloud.wafflecommons.pixelbrainreader.data.workers.IndexingWorker.UNIQUE_WORK_NAME,
             androidx.work.ExistingWorkPolicy.KEEP,
             request
+        )
+    }
+
+    /**
+     * Burn today's board to its markdown file whenever the app goes to the background
+     * (ProcessLifecycle ON_STOP). Together with the eager burn at the start of every sync
+     * cycle and the guaranteed 23:50 nightly burn, this keeps the on-disk copy of today's
+     * Room-only data (dashboard/timeline/tasks/scraps/gratitude) continuously fresh — so a
+     * destructive Room migration can never lose more than the current moment's edits, and
+     * [DailyDashboardRepository.rehydrateTodayFromDiskIfEmpty] can rebuild Room from disk.
+     */
+    private fun registerBackgroundBurnObserver() {
+        androidx.lifecycle.ProcessLifecycleOwner.get().lifecycle.addObserver(
+            object : androidx.lifecycle.DefaultLifecycleObserver {
+                override fun onStop(owner: androidx.lifecycle.LifecycleOwner) {
+                    appScope.launch {
+                        runCatching { dailyDashboardRepository.burnToDisk(java.time.LocalDate.now()) }
+                            .onFailure { Log.w("PixelBrainApp", "Background burn (ON_STOP) failed", it) }
+                    }
+                }
+            }
         )
     }
 
@@ -107,6 +130,12 @@ class PixelBrainApplication : Application(), Configuration.Provider {
             } catch (e: Exception) {
                 Log.w("PixelBrainApp", "Startup file reindex failed", e)
             }
+            // Cold-start recovery: if a destructive Room migration wiped today's board but
+            // the last burn is still on disk, rebuild today's dashboard/scraps/gratitude
+            // from that markdown. No-op on a normal launch (guarded on an empty Room).
+            try { dailyDashboardRepository.rehydrateTodayFromDiskIfEmpty() } catch (e: Exception) {
+                Log.w("PixelBrainApp", "Startup today-rehydrate failed", e)
+            }
             // Mood/Habit/Chore JSON → Room. Each is independent; failures are logged
             // and don't block the others.
             try { moodRepository.syncWithFileSystem() } catch (e: Exception) {
@@ -123,26 +152,25 @@ class PixelBrainApplication : Application(), Configuration.Provider {
 
     private fun scheduleDailyBurnWork() {
         val currentTime = java.time.LocalDateTime.now()
-        // Target 23:00 (11:00 PM) today
-        var targetTime = java.time.LocalDateTime.of(currentTime.toLocalDate(), java.time.LocalTime.of(23, 0))
+        // Target 23:50 — the last practical moment of the day — so the complete day is
+        // burned to markdown every single day.
+        var targetTime = java.time.LocalDateTime.of(currentTime.toLocalDate(), java.time.LocalTime.of(23, 50))
 
-        // If it's already past 23:00 today, schedule for tomorrow
+        // If it's already past 23:50 today, schedule for tomorrow
         if (currentTime.isAfter(targetTime)) {
             targetTime = targetTime.plusDays(1)
         }
 
         val initialDelay = java.time.Duration.between(currentTime, targetTime).toMillis()
 
+        // NO constraints: the burn is a cheap, purely-local markdown write and MUST fire
+        // every day. The previous requiresDeviceIdle + batteryNotLow constraints could
+        // defer it for days (device never idle at 23:50), which — before the eager-burn
+        // safety net — risked losing a day's board on a destructive Room migration.
         val exportWorkRequest = androidx.work.PeriodicWorkRequestBuilder<cloud.wafflecommons.pixelbrainreader.data.workers.DailyExportWorker>(
             24, java.util.concurrent.TimeUnit.HOURS
         )
             .setInitialDelay(initialDelay, java.util.concurrent.TimeUnit.MILLISECONDS)
-            .setConstraints(
-                androidx.work.Constraints.Builder()
-                    .setRequiresBatteryNotLow(true)
-                    .setRequiresDeviceIdle(true)
-                    .build()
-            )
             .build()
 
         androidx.work.WorkManager.getInstance(this).enqueueUniquePeriodicWork(

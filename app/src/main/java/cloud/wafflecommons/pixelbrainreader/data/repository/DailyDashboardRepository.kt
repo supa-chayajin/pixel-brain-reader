@@ -152,85 +152,72 @@ class DailyDashboardRepository @Inject constructor(
     // --- Ingest & Burn (The Bridge) ---
 
     suspend fun ingest(date: LocalDate, content: String) = withContext(Dispatchers.IO) {
-        // TOTAL ISOLATION SHIELD: 
+        // TOTAL ISOLATION SHIELD:
         // The dashboard is an "Iron Vault" for Today.
         // We NEVER import today's file back into Room to avoid "Data Poisoning" (Git Pull overwriting local typing).
         if (date == LocalDate.now()) {
             android.util.Log.d("DailyRepo", "SHIELD ACTIVE: Blocking file ingest for TODAY. Room is the exclusive source of truth.")
             return@withContext
         }
-        
-        val lines = content.lines()
-        val timelineEvents = mutableListOf<TimelineEntryEntity>()
-        val tasks = mutableListOf<DailyTaskEntity>()
-        var ideas = StringBuilder()
-        var notes = StringBuilder()
-        
-        var section = "HEADER" 
-        
-        val timelineRegex = Regex("^\\s*-\\s+(\\d{1,2}:\\d{2})\\s+(.*)")
-        
-        lines.forEach { line ->
-            val trimmed = line.trim()
-            if (trimmed.startsWith("## 🗓️ Timeline") || trimmed.startsWith("## Timeline")) { section = "TIMELINE"; return@forEach }
-            if (trimmed.startsWith("## 📝 Journal") || trimmed.startsWith("## Journal")) { section = "JOURNAL"; return@forEach }
-            if (trimmed.startsWith("## 🧠 Idées") || trimmed.startsWith("## Idées")) { section = "IDEAS"; return@forEach }
-            if (trimmed.startsWith("## 📑 Notes") || trimmed.startsWith("## Notes")) { section = "NOTES"; return@forEach }
-            if (trimmed.startsWith("##")) return@forEach // Skip other headers
-            
-            when(section) {
-                "TIMELINE" -> {
-                     val match = timelineRegex.find(line)
-                     if (match != null) {
-                         val (timeStr, text) = match.destructured
-                         try {
-                              timelineEvents.add(TimelineEntryEntity(
-                                  date = date,
-                                  time = LocalTime.parse(timeStr, DateTimeFormatter.ofPattern("H:mm")),
-                                  content = text.trim()
-                              ))
-                         } catch(e: Exception){}
-                     }
-                }
-                "JOURNAL" -> {
-                    if (trimmed.startsWith("- [")) {
-                        val isDone = trimmed.startsWith("- [x]")
-                        val rawLabel = trimmed.substringAfter("] ").trim()
-                        val priority = if (rawLabel.contains("‼️")) 2 else 1
-                        val cleanLabel = rawLabel.replace("‼️", "").trim()
-                        var scheduledTime: LocalTime? = null
-                        var finalLabel = cleanLabel
-                        
-                        val timeMatch = Regex("at (\\d{1,2}:\\d{2})").find(cleanLabel)
-                        if (timeMatch != null) {
-                            try {
-                                scheduledTime = LocalTime.parse(timeMatch.groupValues[1], DateTimeFormatter.ofPattern("H:mm"))
-                                finalLabel = cleanLabel.replace(timeMatch.value, "").trim()
-                            } catch(e: Exception){}
-                        }
-                        
-                        tasks.add(DailyTaskEntity(
-                            scheduledDate = date.format(DateTimeFormatter.ISO_LOCAL_DATE), 
-                            label = finalLabel, 
-                            isDone = isDone, 
-                            priority = priority, 
-                            scheduledTime = scheduledTime?.format(DateTimeFormatter.ofPattern("HH:mm"))
-                        ))
-                    }
-                }
-                "IDEAS" -> { if (line.isNotBlank() || ideas.isNotEmpty()) ideas.append(line).append("\n") }
-                "NOTES" -> { if (line.isNotBlank() || notes.isNotEmpty()) notes.append(line).append("\n") }
-            }
-        }
-        
+
+        val parsed = cloud.wafflecommons.pixelbrainreader.data.utils.DailyMarkdownParser.parse(date, content)
         val dashboard = DailyDashboardEntity(
             date = date,
             dailyMantra = "", // Extraction logic omitted for brevity
-            ideasContent = ideas.toString().trim(),
-            notesContent = notes.toString().trim()
+            ideasContent = parsed.ideas,
+            notesContent = parsed.notes
         )
-        
-        dashboardDao.ingestDailyData(dashboard, timelineEvents, tasks)
+        // NB: past-day ingest intentionally restores only the dashboard/timeline/tasks
+        // (all keyed by date, REPLACE-safe). Scraps carry random UUIDs, so re-inserting
+        // them here on every reconcile would DUPLICATE — scrap/gratitude restore lives
+        // exclusively in rehydrateTodayFromDiskIfEmpty(), which runs once when Room is empty.
+        dashboardDao.ingestDailyData(dashboard, parsed.timeline, parsed.tasks)
+    }
+
+    /**
+     * COLD-START RECOVERY (data-loss safety net for the destructive Room migration).
+     *
+     * After a schema bump, `fallbackToDestructiveMigration` drops every table. Today's
+     * dashboard, its scraps, and its gratitude are Room-exclusive until the nightly burn,
+     * and [ingest] refuses to re-import today (the anti-poisoning SHIELD) — so without
+     * this, the board comes back EMPTY even though the last burn is intact on disk.
+     *
+     * Here we bypass the SHIELD and rebuild today's Room state from the on-disk markdown,
+     * but ONLY when Room genuinely has no dashboard row for today. That guard makes it a
+     * no-op on every normal launch (never overwrites live state, never duplicates scraps).
+     */
+    suspend fun rehydrateTodayFromDiskIfEmpty() = withContext(Dispatchers.IO) {
+        val today = LocalDate.now()
+        if (dashboardDao.getDashboard(today) != null) return@withContext // Room already holds today.
+
+        val path = "10_Journal/${today.format(DateTimeFormatter.ISO_DATE)}.md"
+        val content = fileRepository.readFile(path) ?: return@withContext // No disk copy → nothing to recover.
+
+        val parsed = cloud.wafflecommons.pixelbrainreader.data.utils.DailyMarkdownParser.parse(today, content)
+        val dashboard = DailyDashboardEntity(
+            date = today,
+            dailyMantra = "",
+            ideasContent = parsed.ideas,
+            notesContent = parsed.notes
+        )
+        dashboardDao.ingestDailyData(dashboard, parsed.timeline, parsed.tasks)
+
+        // Restore scraps (global, active) and today's gratitude. Safe from duplication
+        // because this whole method only runs when Room had no dashboard for today.
+        val todayStr = today.format(DateTimeFormatter.ISO_LOCAL_DATE)
+        parsed.scraps.forEach {
+            scratchDao.insertScrap(cloud.wafflecommons.pixelbrainreader.data.local.entity.ScratchNoteEntity(content = it))
+        }
+        parsed.gratitude.forEach {
+            gratitudeDao.insertGratitude(
+                cloud.wafflecommons.pixelbrainreader.data.local.entity.GratitudeEntity(date = todayStr, content = it)
+            )
+        }
+        android.util.Log.i(
+            "DailyRepo",
+            "Cold-start recovery: restored today from disk (${parsed.timeline.size} timeline, " +
+                "${parsed.tasks.size} tasks, ${parsed.scraps.size} scraps, ${parsed.gratitude.size} gratitude)"
+        )
     }
 
     suspend fun burnToDisk(date: LocalDate) = withContext(Dispatchers.IO) {

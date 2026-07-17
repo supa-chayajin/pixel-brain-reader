@@ -17,22 +17,26 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.outlined.VpnKey
 import androidx.compose.material.icons.outlined.Link
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -58,11 +62,58 @@ fun LoginScreen(
     val isTokenValid by viewModel.isTokenValid.collectAsStateWithLifecycle()
     val loginSuccess by viewModel.loginSuccess.collectAsStateWithLifecycle()
     val errorMessage by viewModel.errorMessage.collectAsStateWithLifecycle()
+    val deviceState by viewModel.deviceState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
 
     LaunchedEffect(loginSuccess) {
         if (loginSuccess) {
             onLoginSuccess()
         }
+    }
+
+    // GitHub Device Flow: show the user code + open the browser to approve it.
+    deviceState?.let { device ->
+        AlertDialog(
+            onDismissRequest = { viewModel.cancelGitHubDeviceFlow() },
+            title = { Text("Se connecter avec GitHub") },
+            text = {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        "Entrez ce code sur GitHub :",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        device.userCode,
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        "En attente d'autorisation…",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    runCatching {
+                        context.startActivity(
+                            android.content.Intent(
+                                android.content.Intent.ACTION_VIEW,
+                                android.net.Uri.parse(device.verificationUri)
+                            ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                        )
+                    }
+                }) { Text("Ouvrir GitHub") }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.cancelGitHubDeviceFlow() }) { Text("Annuler") }
+            }
+        )
     }
 
     Scaffold(
@@ -166,6 +217,26 @@ fun LoginScreen(
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(horizontal = 16.dp)
             )
+
+            // Optional one-tap GitHub sign-in (Device Flow). Only shown when a client id is
+            // configured; otherwise the PAT field above is the sole path. Fills the token
+            // field on success — the user still provides the repo URL and taps Connect.
+            if (viewModel.isGitHubAuthAvailable) {
+                Spacer(modifier = Modifier.height(16.dp))
+                OutlinedButton(
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        viewModel.startGitHubDeviceFlow()
+                    },
+                    enabled = !isLoading,
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    shape = MaterialTheme.shapes.medium
+                ) {
+                    Icon(Icons.Outlined.VpnKey, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.size(8.dp))
+                    Text("Se connecter avec GitHub")
+                }
+            }
 
             errorMessage?.let { error ->
                 Spacer(modifier = Modifier.height(16.dp))

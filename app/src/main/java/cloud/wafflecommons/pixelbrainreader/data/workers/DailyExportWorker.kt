@@ -25,9 +25,13 @@ class DailyExportWorker @AssistedInject constructor(
             dashboardRepository.performRetroactiveExport()
             Log.i("DailyExportWorker", "Daily Burn and Retroactive Recovery completed successfully.")
             Result.success()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
-            Log.e("DailyExportWorker", "Failed to burn daily metrics", e)
-            Result.retry()
+            // Cap retries so a DETERMINISTIC failure (malformed row, bug) can't retry with
+            // backoff forever — mirrors IndexingWorker's runAttemptCount < 3 policy.
+            Log.e("DailyExportWorker", "Failed to burn daily metrics (attempt ${runAttemptCount + 1})", e)
+            if (runAttemptCount < 3) Result.retry() else Result.failure()
         }
     }
 }

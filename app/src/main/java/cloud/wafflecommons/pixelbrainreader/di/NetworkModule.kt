@@ -1,5 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.di
 
+import cloud.wafflecommons.pixelbrainreader.BuildConfig
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -19,7 +20,11 @@ object NetworkModule {
     @Singleton
     fun provideOkHttpClient(): OkHttpClient {
         val logging = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BODY
+            // BODY logs full request/response — including the OpenMeteo lat/long query
+            // params (the user's GPS location). Never ship that in a release build; the
+            // interceptor logs at INFO, which R8 does NOT strip.
+            level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY
+                    else HttpLoggingInterceptor.Level.NONE
         }
         return OkHttpClient.Builder()
             .addInterceptor(logging)
@@ -48,5 +53,22 @@ object NetworkModule {
     @Singleton
     fun provideOpenMeteoService(@javax.inject.Named("OpenMeteoRetrofit") retrofit: Retrofit): cloud.wafflecommons.pixelbrainreader.data.remote.OpenMeteoService {
         return retrofit.create(cloud.wafflecommons.pixelbrainreader.data.remote.OpenMeteoService::class.java)
+    }
+
+    @Provides
+    @Singleton
+    @javax.inject.Named("GitHubAuthRetrofit")
+    fun provideGitHubAuthRetrofit(okHttpClient: OkHttpClient): Retrofit {
+        return Retrofit.Builder()
+            .baseUrl("https://github.com/")
+            .client(okHttpClient)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+    }
+
+    @Provides
+    @Singleton
+    fun provideGitHubDeviceAuthService(@javax.inject.Named("GitHubAuthRetrofit") retrofit: Retrofit): cloud.wafflecommons.pixelbrainreader.data.auth.GitHubDeviceAuthService {
+        return retrofit.create(cloud.wafflecommons.pixelbrainreader.data.auth.GitHubDeviceAuthService::class.java)
     }
 }

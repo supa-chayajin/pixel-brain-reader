@@ -226,11 +226,14 @@ class SettingsViewModel @Inject constructor(
     }
 
     private fun scanAssetsForModels() {
-        try {
-            val files = context.assets.list("")?.filter { it.endsWith(".tflite") } ?: emptyList()
-            _uiState.value = _uiState.value.copy(availableEmbeddingModels = files)
-        } catch (e: Exception) {
-             _uiState.value = _uiState.value.copy(availableEmbeddingModels = listOf("text_embedder.tflite"))
+        // Asset enumeration is disk I/O — keep it off the main thread (this runs from init).
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val files = context.assets.list("")?.filter { it.endsWith(".tflite") } ?: emptyList()
+                _uiState.value = _uiState.value.copy(availableEmbeddingModels = files)
+            } catch (e: Exception) {
+                 _uiState.value = _uiState.value.copy(availableEmbeddingModels = listOf("text_embedder.tflite"))
+            }
         }
     }
     

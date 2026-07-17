@@ -15,11 +15,21 @@ import javax.inject.Inject
 @HiltViewModel
 class LoginViewModel @Inject constructor(
     private val secretManager: SecretManager,
-    private val repository: FileRepository
+    private val repository: FileRepository,
+    private val gitHubDeviceAuth: cloud.wafflecommons.pixelbrainreader.data.auth.GitHubDeviceAuthRepository
 ) : ViewModel() {
 
     private val _token = MutableStateFlow("")
     val token: StateFlow<String> = _token.asStateFlow()
+
+    /** Whether the "Login with GitHub" entry point is available (client id configured). */
+    val isGitHubAuthAvailable: Boolean = gitHubDeviceAuth.isConfigured
+
+    /** Non-null while the user must approve a device code on github.com/login/device. */
+    private val _deviceState = MutableStateFlow<GitHubDeviceState?>(null)
+    val deviceState: StateFlow<GitHubDeviceState?> = _deviceState.asStateFlow()
+
+    data class GitHubDeviceState(val userCode: String, val verificationUri: String)
 
     private val _repoUrl = MutableStateFlow("")
     val repoUrl: StateFlow<String> = _repoUrl.asStateFlow()
@@ -77,6 +87,46 @@ class LoginViewModel @Inject constructor(
         }
 
         return null
+    }
+
+    /**
+     * "Login with GitHub" — OAuth Device Flow. Fetches a user code, surfaces it (the UI opens
+     * the browser), polls until approved, then drops the resulting access token into the same
+     * token field the PAT flow uses. The user still supplies the repo URL and taps Connect.
+     */
+    fun startGitHubDeviceFlow() {
+        if (!gitHubDeviceAuth.isConfigured) {
+            _errorMessage.value = "GitHub login isn't configured on this build. Use a Personal Access Token."
+            return
+        }
+        viewModelScope.launch {
+            _isLoading.value = true
+            _errorMessage.value = null
+            val code = gitHubDeviceAuth.requestDeviceCode().getOrElse { e ->
+                _errorMessage.value = "GitHub sign-in failed: ${e.message}"
+                _isLoading.value = false
+                return@launch
+            }
+            _deviceState.value = GitHubDeviceState(code.userCode, code.verificationUri)
+
+            val tokenResult = gitHubDeviceAuth.pollForToken(code.deviceCode, code.interval, code.expiresIn)
+            _deviceState.value = null
+            _isLoading.value = false
+            tokenResult.fold(
+                onSuccess = { token ->
+                    _token.value = token
+                    checkValidity()
+                    _errorMessage.value = null
+                },
+                onFailure = { e -> _errorMessage.value = "GitHub sign-in failed: ${e.message}" }
+            )
+        }
+    }
+
+    /** User dismissed the device-code dialog. (Polling stops when the VM scope is cleared.) */
+    fun cancelGitHubDeviceFlow() {
+        _deviceState.value = null
+        _isLoading.value = false
     }
 
     fun onConnectClick() {

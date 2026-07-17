@@ -9,6 +9,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _No unreleased changes._
 
+## [9.0.0] — 2026-07-17
+
+Stability, data-safety and security hardening pass (full code review), plus a
+reader-mode web importer and GitHub OAuth Device Flow login.
+
+### Added
+
+- **"Login with GitHub" (OAuth Device Flow).** New `GitHubDeviceAuthService` /
+  `GitHubDeviceAuthRepository`; the login screen shows a user code, opens the
+  browser to approve, and drops the resulting token into the same secure store
+  the PAT flow uses. Requires an OAuth App client id in `local.properties`
+  (`githubOauthClientId`); hidden otherwise. PAT login is preserved.
+- **Reader-mode web importer.** `ImportWorker` now strips chrome/ads/nav,
+  scores the DOM for the densest article body, rewrites image/link URLs to
+  absolute, extracts Open-Graph metadata (title/author/date/site/hero image),
+  and emits clean Obsidian-flavoured markdown with source + AI-summary callouts.
+- **Cold-start data recovery.** `DailyDashboardRepository.rehydrateTodayFromDiskIfEmpty()`
+  rebuilds today's board (dashboard/timeline/tasks/scraps/gratitude) from the
+  last burned markdown after a destructive Room migration; extracted
+  `DailyMarkdownParser` (the inverse of `MarkdownBurner`) with round-trip tests.
+- **Import URL SSRF guard.** `ImportUrlValidator` (unit-tested) + a user
+  confirmation dialog gate the public `pixelbrain://import` deep link.
+- **Tests.** New JVM suites: `SyncOrchestratorTest`, `DailyMarkdownParserTest`,
+  `ImportUrlValidatorTest`, `SafeFileProviderTest`.
+
+### Fixed
+
+- **Data loss on schema bump (CRITICAL).** Today's board / scraps / gratitude
+  are now continuously burned to disk (start of every sync cycle + on app
+  background) and the nightly burn runs **23:50 daily, unconditional** (was
+  23:00 gated on device-idle/battery, which could defer for days).
+- **Silent sync stall.** A rebase conflict now stops the cycle with a visible
+  `SyncState.Error` instead of aborting, failing the push, and reporting Success.
+  A failed push likewise surfaces an error. Conflict backups now capture the
+  clean local file (post-abort) instead of merge-marker garbage.
+- **Structured concurrency.** `CancellationException` is rethrown across the
+  sync cycle and `LocalAiManager` instead of being swallowed into an error toast.
+- **Sync serialization.** `SyncOrchestrator` and `FileRepository.syncRepository`
+  now share a `GitSyncCoordinator` lock so explicit saves and the foreground
+  cycle can't interleave; `JGitProvider.setRemote` runs under the git mutex.
+- **Folder-insight overwrite.** Viewing an AI folder summary can no longer save
+  itself over the previously-open note.
+- **Unsaved-edit flush.** The background auto-save flush now reads live state
+  (`rememberUpdatedState`) instead of a stale value captured at file-open.
+- **Release logging leak.** OkHttp `BODY` logging (which included GPS query
+  params) is gated behind `BuildConfig.DEBUG`.
+- **Crash loop.** `GlobalExceptionHandler` bails to the platform handler after
+  repeated rapid crashes instead of relaunching the crash UI's restart loop.
+- **Worker retries.** `ImportWorker` retries transient failures (capped);
+  `DailyExportWorker` no longer retries permanent failures forever.
+- **Atomic writes.** `SafeFileProvider.atomicWrite` uses `Files.move(ATOMIC_MOVE)`
+  (no delete-then-rename crash window).
+
+### Changed
+
+- Version bumped to **9.0.0** (`versionCode` 900).
+- Heavy file-list sorting moved off the main thread (`MainViewModel`); the chat
+  history query respects `WhileSubscribed`; Mood-repo import no longer holds a
+  Room transaction across the filesystem walk.
+
 ## [7.0.0] — 2026-05-20
 
 Security-hardened release with R8 minification, an upgraded native vector

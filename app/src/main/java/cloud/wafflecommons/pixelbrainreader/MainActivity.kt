@@ -55,6 +55,9 @@ class MainActivity : FragmentActivity() {
      */
     private var loginState by mutableStateOf<Boolean?>(null)
 
+    /** A deep-linked import URL awaiting explicit user confirmation (null = none pending). */
+    private var pendingImportUrl by mutableStateOf<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -120,6 +123,31 @@ class MainActivity : FragmentActivity() {
                     )
                     false -> LoginScreen(onLoginSuccess = { loginState = true })
                 }
+
+                // Untrusted deep-link import: confirm with the user (showing the source
+                // host) before fetching + writing + pushing a note. Surfaced only once
+                // logged in so it always overlays the main UI.
+                if (loginState == true) {
+                    pendingImportUrl?.let { url ->
+                        val host = remember(url) { android.net.Uri.parse(url).host ?: url }
+                        androidx.compose.material3.AlertDialog(
+                            onDismissRequest = { pendingImportUrl = null },
+                            title = { androidx.compose.material3.Text("Importer un article ?") },
+                            text = { androidx.compose.material3.Text("Depuis : $host") },
+                            confirmButton = {
+                                androidx.compose.material3.TextButton(onClick = {
+                                    enqueueImport(url)
+                                    pendingImportUrl = null
+                                }) { androidx.compose.material3.Text("Importer") }
+                            },
+                            dismissButton = {
+                                androidx.compose.material3.TextButton(onClick = { pendingImportUrl = null }) {
+                                    androidx.compose.material3.Text("Annuler")
+                                }
+                            }
+                        )
+                    }
+                }
             }
         }
 
@@ -149,25 +177,35 @@ class MainActivity : FragmentActivity() {
             viewModel.handleShareIntent(intent)
         }
         
-        // Deep Link (pixelbrain://import?url=...)
+        // Deep Link (pixelbrain://import?url=...). This is a PUBLIC, BROWSABLE entry point
+        // (any web page can fire it), so it must be treated as untrusted:
+        //  - validate the URL (http/https, public host, bounded length) to stop it being an
+        //    SSRF / arbitrary-fetch primitive into the LAN or cloud metadata endpoints, and
+        //  - require explicit user confirmation before importing + pushing a note, so a
+        //    tapped link can't silently write to the vault.
         if (intent.action == Intent.ACTION_VIEW && intent.scheme == "pixelbrain" && intent.data?.host == "import") {
-             val url = intent.data?.getQueryParameter("url")
-             // ImportWorker fetches this URL server-side (Jsoup), so only accept
-             // http(s) targets — reject file://, content://, javascript:, etc. so
-             // the public deep link can't become an arbitrary-URL fetch primitive.
-             if (url != null && (url.startsWith("http://") || url.startsWith("https://"))) {
-                 // Wait for connectivity rather than failing the import when offline.
-                 val constraints = androidx.work.Constraints.Builder()
-                     .setRequiredNetworkType(androidx.work.NetworkType.CONNECTED)
-                     .build()
-                 val workRequest = androidx.work.OneTimeWorkRequestBuilder<cloud.wafflecommons.pixelbrainreader.data.workers.ImportWorker>()
-                     .setInputData(androidx.work.workDataOf("url" to url))
-                     .setConstraints(constraints)
-                     .build()
-                 androidx.work.WorkManager.getInstance(this).enqueue(workRequest)
-
-                 android.widget.Toast.makeText(this, "Importing Article...", android.widget.Toast.LENGTH_SHORT).show()
+             val url = try { intent.data?.getQueryParameter("url") } catch (e: Exception) { null }
+             if (url != null && isSafeImportUrl(url)) {
+                 pendingImportUrl = url
              }
         }
+    }
+
+    /** Delegates to the pure, unit-tested [ImportUrlValidator]. */
+    private fun isSafeImportUrl(raw: String): Boolean =
+        cloud.wafflecommons.pixelbrainreader.data.utils.ImportUrlValidator.isSafe(raw)
+
+    /** Enqueue the confirmed import. Kept separate from validation so the dialog gates it. */
+    private fun enqueueImport(url: String) {
+        // Wait for connectivity rather than failing the import when offline.
+        val constraints = androidx.work.Constraints.Builder()
+            .setRequiredNetworkType(androidx.work.NetworkType.CONNECTED)
+            .build()
+        val workRequest = androidx.work.OneTimeWorkRequestBuilder<cloud.wafflecommons.pixelbrainreader.data.workers.ImportWorker>()
+            .setInputData(androidx.work.workDataOf("url" to url))
+            .setConstraints(constraints)
+            .build()
+        androidx.work.WorkManager.getInstance(this).enqueue(workRequest)
+        android.widget.Toast.makeText(this, "Importing Article...", android.widget.Toast.LENGTH_SHORT).show()
     }
 }

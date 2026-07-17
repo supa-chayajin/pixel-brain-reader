@@ -33,6 +33,7 @@ import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Psychology
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cloud.wafflecommons.pixelbrainreader.data.ai.NanoState
 import cloud.wafflecommons.pixelbrainreader.ui.main.MarkwonContent
@@ -64,7 +65,9 @@ fun ChatPanel(
     viewModel: ChatViewModel = hiltViewModel(),
     onInsertContent: (String) -> Unit = {}
 ) {
-    var textState by remember { mutableStateOf(TextFieldValue("")) }
+    // rememberSaveable so an unsent draft survives process death (config changes are
+    // already handled without recreation via the Activity's configChanges).
+    var textState by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue("")) }
     val listState = rememberLazyListState()
     val haptic = LocalHapticFeedback.current
 
