@@ -18,6 +18,7 @@ import androidx.glance.layout.Alignment
 import androidx.glance.layout.Column
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
+import androidx.glance.layout.fillMaxHeight
 import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
@@ -35,8 +36,11 @@ import cloud.wafflecommons.pixelbrainreader.widget.data.WidgetDataSnapshot
 class HealthWidget : GlanceAppWidget() {
 
     companion object {
-        private val SHORT = DpSize(200.dp, 190.dp)  // steps bar + one tile row
-        private val TALL = DpSize(300.dp, 280.dp)   // + second tile row
+        // A 2-row placement on the dogfood Fold is ~213dp tall — TALL is sized under that so both tile
+        // rows are selected there (was 280dp → forced a 3rd, empty grid row). The layout below is tuned
+        // (tight surface padding + 4dp gaps) to fit both rows inside that ~213dp without clipping.
+        private val SHORT = DpSize(200.dp, 150.dp)  // steps bar + one tile row (compact placement)
+        private val TALL = DpSize(300.dp, 205.dp)   // + second tile row (fits a 2-row placement)
     }
 
     override val sizeMode = SizeMode.Responsive(setOf(SHORT, TALL))
@@ -50,9 +54,9 @@ class HealthWidget : GlanceAppWidget() {
 
     @Composable
     private fun Content(context: Context, s: WidgetDataSnapshot?) {
-        val showSecondRow = LocalSize.current.height >= 210.dp
+        val showSecondRow = LocalSize.current.height >= 200.dp
         val openStats = actionStartActivity(WidgetNav.openIntent(context, WidgetNav.SCREEN_STATS))
-        WidgetSurface {
+        WidgetSurface(contentPadding = 10.dp) {
             Column(modifier = GlanceModifier.fillMaxSize()) {
                 WidgetHeader(
                     emoji = "❤️",
@@ -61,7 +65,7 @@ class HealthWidget : GlanceAppWidget() {
                     trailingEmoji = "↻",
                     onTrailingClick = actionRunCallback<RefreshWidgetCallback>()
                 )
-                Spacer(GlanceModifier.height(10.dp))
+                Spacer(GlanceModifier.height(4.dp))
                 if (s == null) {
                     WidgetEmpty("⌛", "Open the app to sync health")
                 } else {
@@ -72,22 +76,25 @@ class HealthWidget : GlanceAppWidget() {
                         trailing = "${s.steps} / ${fmtK(goal)}",
                         color = WidgetTokens.Success
                     )
-                    Spacer(GlanceModifier.height(10.dp))
-                    Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        StatTile("💤", s.sleep, "sleep", GlanceModifier.defaultWeight())
+                    Spacer(GlanceModifier.height(4.dp))
+                    // Both tile rows share the leftover height equally (defaultWeight) and every tile
+                    // fills its row (fillMaxHeight) so all six cards are identical regardless of how
+                    // their emoji/value line-heights would otherwise wrap.
+                    Row(modifier = GlanceModifier.fillMaxWidth().defaultWeight(), verticalAlignment = Alignment.CenterVertically) {
+                        StatTile("💤", s.sleep, "sleep", GlanceModifier.defaultWeight().fillMaxHeight())
                         Spacer(GlanceModifier.width(8.dp))
-                        StatTile("❤️", if (s.avgHeartRate > 0) "${s.avgHeartRate}" else "--", "bpm", GlanceModifier.defaultWeight())
+                        StatTile("❤️", if (s.avgHeartRate > 0) "${s.avgHeartRate}" else "--", "bpm", GlanceModifier.defaultWeight().fillMaxHeight())
                         Spacer(GlanceModifier.width(8.dp))
-                        StatTile("🔥", "${s.activeMinutes}m", "active", GlanceModifier.defaultWeight())
+                        StatTile("🔥", "${s.activeMinutes}m", "active", GlanceModifier.defaultWeight().fillMaxHeight())
                     }
                     if (showSecondRow) {
-                        Spacer(GlanceModifier.height(8.dp))
-                        Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            StatTile("🍽️", "${s.caloriesBurned}", "kcal", GlanceModifier.defaultWeight())
+                        Spacer(GlanceModifier.height(4.dp))
+                        Row(modifier = GlanceModifier.fillMaxWidth().defaultWeight(), verticalAlignment = Alignment.CenterVertically) {
+                            StatTile("🍽️", "${s.caloriesBurned}", "kcal", GlanceModifier.defaultWeight().fillMaxHeight())
                             Spacer(GlanceModifier.width(8.dp))
-                            StatTile("📏", String.format("%.1f", s.distanceKm), "km", GlanceModifier.defaultWeight())
+                            StatTile("📏", String.format("%.1f", s.distanceKm), "km", GlanceModifier.defaultWeight().fillMaxHeight())
                             Spacer(GlanceModifier.width(8.dp))
-                            StatTile("💧", fmtWater(s.hydrationMl), "water", GlanceModifier.defaultWeight())
+                            StatTile("💧", fmtWater(s.hydrationMl), "water", GlanceModifier.defaultWeight().fillMaxHeight())
                         }
                     }
                 }

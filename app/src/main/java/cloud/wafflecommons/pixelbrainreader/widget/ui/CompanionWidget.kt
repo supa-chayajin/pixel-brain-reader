@@ -48,11 +48,13 @@ import cloud.wafflecommons.pixelbrainreader.widget.data.WidgetDataFetcher
 class CompanionWidget : GlanceAppWidget() {
 
     companion object {
-        // Declared sizes → Glance picks the closest that fits and reports it via LocalSize.
+        // Declared sizes → Glance picks the largest that fits and reports it via LocalSize.
+        // On the dogfood Fold a 3-row placement reports 340dp tall and a 4-row one ~453dp, so LARGE
+        // (340) is the "current" size and XLARGE (400) only wins once the widget grows a whole row.
         private val SMALL = DpSize(160.dp, 120.dp)    // hero + XP only
         private val MEDIUM = DpSize(270.dp, 180.dp)   // + life progress pills
-        private val LARGE = DpSize(300.dp, 340.dp)    // + health pills + graph + quick actions
-        private val XLARGE = DpSize(360.dp, 460.dp)   // roomy: graph gets the bulk of the space
+        private val LARGE = DpSize(300.dp, 340.dp)    // + health pills + graph (no quick actions)
+        private val XLARGE = DpSize(360.dp, 400.dp)   // one row taller: reveals the quick-action row
     }
 
     override val sizeMode = SizeMode.Responsive(setOf(SMALL, MEDIUM, LARGE, XLARGE))
@@ -71,7 +73,8 @@ class CompanionWidget : GlanceAppWidget() {
         val h = size.height
         val showLifeRow = h >= 160.dp     // MEDIUM+
         val showHealthRow = h >= 240.dp   // LARGE+
-        val showExtras = h >= 240.dp      // LARGE+ : vitality graph + quick actions
+        val showExtras = h >= 240.dp      // LARGE+ : vitality graph
+        val showQuickRow = h >= 400.dp    // XLARGE (one row taller) : quick-action row under the graph
 
         WidgetSurface {
             Column(modifier = GlanceModifier.fillMaxSize()) {
@@ -91,11 +94,15 @@ class CompanionWidget : GlanceAppWidget() {
                 if (showExtras) {
                     // Sub-Column keeps the top-level Column within Glance's 10-direct-child limit and
                     // lets the graph flex to fill whatever vertical space is left after the pills.
+                    // The quick-action row is only revealed one row taller (XLARGE); at the current
+                    // size the graph takes the whole remaining space so nothing sits under it.
                     Column(modifier = GlanceModifier.fillMaxWidth().defaultWeight()) {
                         Spacer(GlanceModifier.height(8.dp))
                         Graph(state, GlanceModifier.fillMaxWidth().defaultWeight())
-                        Spacer(GlanceModifier.height(8.dp))
-                        QuickRow(context)
+                        if (showQuickRow) {
+                            Spacer(GlanceModifier.height(8.dp))
+                            QuickRow(context)
+                        }
                     }
                 }
             }
