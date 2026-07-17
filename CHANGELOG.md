@@ -9,6 +9,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _No unreleased changes._
 
+## [9.1.0] — 2026-07-17
+
+Navigation, settings, and launcher-icon polish for the pre-dogfooding build,
+plus the "living" weather icons and the redesigned launcher chip that landed
+after 9.0.0.
+
+### Added
+
+- **Stats as a Life-OS hub.** The Life Stats screen now has top-bar shortcuts to
+  Habits and Chores, and Habits & Chores each show a Stats shortcut. Navigation
+  is back-stack aware: opening Habits/Chores from Stats (or Stats from either)
+  returns to the exact screen you came from instead of stacking new copies —
+  handy on the folded display where those tabs aren't in the navbar.
+- **"Living" weather icons.** Colourful custom vector illustrations (sun,
+  partly-cloudy, rain, snow, storm, fog, unknown, offline) replace the flat
+  Material glyphs, rendered untinted with a subtle bob + breathe animation.
+
+### Changed
+
+- **Launcher icon redesigned & re-padded.** New duotone "pixel-brain chip"
+  (cyan→magenta processor die + pins with a centred brain) on a solid white
+  background, with a matching Android-13 themed monochrome layer and status-bar
+  notification icon. Inner padding increased (foreground **and** monochrome now
+  scale to 0.75) so the pins clear Android 16/17's tighter adaptive masks,
+  including the 7-sided "cookie" mask.
+- **Settings reorganized.** "Ordre de la barre de navigation" and "Effets
+  sonores" moved out of *Life OS Automations* into a dedicated **Interface &
+  Sound** section; *Knowledge Vault (RAG)* now sits beside *Intelligence* (both
+  are the on-device brain). Section order tidied.
+- Version bumped to **9.1.0** (`versionCode` 910).
+
+### Fixed
+
+- File-list **"No results"** empty state now uses a crossed-out magnifier
+  (`SearchOff`) instead of a plain search glyph.
+- Cleared two Android Lint errors: `SettingsScreen` resolves its host Activity
+  via a `ContextWrapper` walk, and `MoodCalendar` reads the locale from
+  `LocalConfiguration`. `lintDebug` is green.
+
 ## [9.0.0] — 2026-07-17
 
 Stability, data-safety and security hardening pass (full code review), plus a

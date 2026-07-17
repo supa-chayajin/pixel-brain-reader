@@ -28,6 +28,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @Composable
 fun ChoreDashboardScreen(
+    onNavigateToStats: () -> Unit = {},
     viewModel: ChoreViewModel = hiltViewModel()
 ) {
     val groupedChores by viewModel.groupedChores.collectAsStateWithLifecycle()
@@ -48,7 +49,18 @@ fun ChoreDashboardScreen(
             @OptIn(ExperimentalMaterial3Api::class)
             cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
                 title = "Chores",
-                subtitle = "Get something done today"
+                subtitle = "Get something done today",
+                actions = {
+                    FilledTonalIconButton(
+                        onClick = onNavigateToStats,
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.ShowChart, "View Statistics")
+                    }
+                }
             )
         }
     ) { padding ->

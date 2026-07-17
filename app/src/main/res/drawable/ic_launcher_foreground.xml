@@ -12,7 +12,7 @@
       the edge). A processor (rounded-square die + pins, cyan→magenta gradient) with
       a duotone brain centred on the die at (54,54). Background is transparent.
     -->
-    <group android:scaleX="0.86" android:scaleY="0.86" android:pivotX="54" android:pivotY="54">
+    <group android:scaleX="0.75" android:scaleY="0.75" android:pivotX="54" android:pivotY="54">
 
         <!-- Chip pins (one path, gradient stroke) -->
         <path android:strokeWidth="3.6" android:strokeLineCap="round"
