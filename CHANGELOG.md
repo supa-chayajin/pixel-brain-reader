@@ -9,6 +9,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _No unreleased changes._
 
+## [9.2.0] — 2026-07-17
+
+Life-OS sync repair and configurability, surfaced during pre-dogfooding.
+
+### Added
+
+- **Import All / Export All config buttons** in Settings, replacing the old
+  "Export & Sync All Configurations" + "Force Import Habits" pair. Each covers
+  Habits + Rooms + Chores. Import runs the same `syncWithFileSystem` bridges the
+  sync cycle uses (the first-sign-in mirror sync does not), so a fresh login can
+  force the full import on demand; Export writes all three back and pushes.
+- **"Show all habits" toggle** on the Habits screen — a Today / All segmented
+  control. "Today" keeps the scheduled-for-today view; "All" lists every
+  configured habit (grouped identically), so habits scheduled for other days are
+  reachable without waiting for their day.
+- **First-class chore `sortOrder` + `archived`.** Both round-trip through
+  import/export (no longer stripped), chores order by `sortOrder`, and archived
+  chores are hidden from the dashboard.
+
+### Fixed
+
+- **Chores/rooms importing as 0 (silent).** A hand-seeded `chores.json` without
+  `lastDoneDate` deserialized it to `null` (Gson ignores Kotlin defaults), hit
+  `ChoreEntity`'s NOT NULL column, and rolled back the whole rooms+chores
+  transaction — so both imported as zero and only reappeared after an in-app
+  edit. The importer's absent-prone fields are now nullable + coalesced.
+- **Settings toasts hidden behind the floating nav bar.** The Settings snackbar
+  is lifted above it (`NavBarClearance`) so import/export results are visible.
+
+### Changed
+
+- Version bumped to **9.2.0** (`versionCode` 920). Room DB **v29** (chore
+  `sortOrder`/`archived` columns; destructive migration re-imports from vault).
+
 ## [9.1.0] — 2026-07-17
 
 Navigation, settings, and launcher-icon polish for the pre-dogfooding build,

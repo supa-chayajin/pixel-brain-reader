@@ -21,6 +21,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import cloud.wafflecommons.pixelbrainreader.data.sync.SyncState
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -47,6 +48,9 @@ fun HabitDashboardScreen(
     val todayHabits by viewModel.todayHabits.collectAsStateWithLifecycle()
     val syncState by viewModel.isSyncing.collectAsStateWithLifecycle()
     val isRefreshing = syncState is SyncState.Syncing
+
+    // View toggle: false = today's scheduled habits (default), true = every habit.
+    var showAll by rememberSaveable { mutableStateOf(false) }
 
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
 
@@ -115,15 +119,41 @@ fun HabitDashboardScreen(
                      }
                 }
 
-                if (todayHabits.isEmpty()) {
+                // View toggle: today's scheduled habits vs. every habit.
+                item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                    SingleChoiceSegmentedButtonRow(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 4.dp)
+                    ) {
+                        SegmentedButton(
+                            selected = !showAll,
+                            onClick = { showAll = false },
+                            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2)
+                        ) { Text("Today") }
+                        SegmentedButton(
+                            selected = showAll,
+                            onClick = { showAll = true },
+                            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2)
+                        ) { Text("All (${state.habits.size})") }
+                    }
+                }
+
+                val habitsToShow = if (showAll) state.allGroupedHabits else state.groupedHabits
+
+                if (habitsToShow.isEmpty()) {
                     item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
                         Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                            Text("No habits scheduled for today. Enjoy your rest!", textAlign = TextAlign.Center)
+                            Text(
+                                if (showAll) "No habits configured."
+                                else "No habits scheduled for today. Enjoy your rest!",
+                                textAlign = TextAlign.Center
+                            )
                         }
                     }
                 } else {
                     // Iterate over Grouped Habits
-                    state.groupedHabits.forEach { (category, habits) ->
+                    habitsToShow.forEach { (category, habits) ->
                         // Section Header (Full Width)
                         item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
                             cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 0) {

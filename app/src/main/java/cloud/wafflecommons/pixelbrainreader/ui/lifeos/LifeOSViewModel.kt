@@ -39,7 +39,8 @@ data class HabitWithStats(
 data class LifeOSUiState(
     val habits: List<HabitConfig> = emptyList(),
     val habitsWithStats: List<HabitWithStats> = emptyList(),
-    val groupedHabits: Map<String, List<HabitWithStats>> = emptyMap(),
+    val groupedHabits: Map<String, List<HabitWithStats>> = emptyMap(),      // today's scheduled habits
+    val allGroupedHabits: Map<String, List<HabitWithStats>> = emptyMap(),   // every habit (for the "All" view)
     val logs: Map<String, List<HabitLogEntry>> = emptyMap(),
     val scopedTasks: List<DailyTaskEntity> = emptyList(),
     val selectedDate: LocalDate = LocalDate.now(),
@@ -116,21 +117,21 @@ class LifeOSViewModel @Inject constructor(
                  HabitWithStats(habit, isCompletedToday, currentValue, streak, history, isScheduledToday)
             }
             
-            val todayHabitsList = habitsWithStats.filter { it.isScheduledToday }
-            val groupedHabits = todayHabitsList.groupBy { habitStat ->
-                val parser = cloud.wafflecommons.pixelbrainreader.data.gamification.AttributeParser
-                val attr = parser.parse(habitStat.config.description)
-                if (attr != null) {
-                     "${attr.name} Training"
-                } else {
-                     "General"
-                }
+            // Same category key for both views so "Today" and "All" group identically.
+            val categoryOf = { habitStat: HabitWithStats ->
+                val attr = cloud.wafflecommons.pixelbrainreader.data.gamification.AttributeParser
+                    .parse(habitStat.config.description)
+                if (attr != null) "${attr.name} Training" else "General"
             }
-            
+            val todayHabitsList = habitsWithStats.filter { it.isScheduledToday }
+            val groupedHabits = todayHabitsList.groupBy(categoryOf)
+            val allGroupedHabits = habitsWithStats.groupBy(categoryOf)
+
             LifeOSUiState(
                  habits = configs,
                  habitsWithStats = habitsWithStats,
                  groupedHabits = groupedHabits,
+                 allGroupedHabits = allGroupedHabits,
                  scopedTasks = scopedTasks,
                  isLoading = false,
                  selectedDate = date,
