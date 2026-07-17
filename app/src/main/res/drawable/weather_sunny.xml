@@ -1,0 +1,41 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+
+    <!-- soft halo -->
+    <path android:pathData="M24,24 m-20,0 a20,20 0 1,0 40,0 a20,20 0 1,0 -40,0">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="radial" android:centerX="24" android:centerY="24" android:gradientRadius="20">
+                <item android:offset="0.45" android:color="#33FFD24A" />
+                <item android:offset="1" android:color="#00FFD24A" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- rays -->
+    <path android:strokeWidth="3" android:strokeLineCap="round"
+        android:pathData="M24,12 L24,6.5 M24,36 L24,41.5 M36,24 L41.5,24 M12,24 L6.5,24 M32.5,15.5 L36.5,11.5 M15.5,15.5 L11.5,11.5 M32.5,32.5 L36.5,36.5 M15.5,32.5 L11.5,36.5">
+        <aapt:attr name="android:strokeColor">
+            <gradient android:type="linear" android:startX="8" android:startY="8" android:endX="40" android:endY="40">
+                <item android:offset="0" android:color="#FFFFCA28" />
+                <item android:offset="1" android:color="#FFFF8F00" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- sun body -->
+    <path android:pathData="M24,24 m-9.5,0 a9.5,9.5 0 1,0 19,0 a9.5,9.5 0 1,0 -19,0">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="radial" android:centerX="20" android:centerY="20" android:gradientRadius="15">
+                <item android:offset="0" android:color="#FFFFE082" />
+                <item android:offset="0.6" android:color="#FFFFC01F" />
+                <item android:offset="1" android:color="#FFFF9800" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- highlight -->
+    <path android:fillColor="#66FFFFFF" android:pathData="M20,19 m-3.2,0 a3.2,3.2 0 1,0 6.4,0 a3.2,3.2 0 1,0 -6.4,0" />
+</vector>

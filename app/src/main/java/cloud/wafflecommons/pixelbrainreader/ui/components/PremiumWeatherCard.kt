@@ -1,18 +1,26 @@
 package cloud.wafflecommons.pixelbrainreader.ui.components
 
+import androidx.annotation.DrawableRes
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import cloud.wafflecommons.pixelbrainreader.R
 import cloud.wafflecommons.pixelbrainreader.data.repository.WeatherData
-
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.*
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -63,12 +71,7 @@ fun PremiumWeatherCard(
                 // Unavailable State (code -2, set by DailyNoteViewModel.weatherUnavailable):
                 // distinct from loading so the card never spins forever when location is
                 // denied or the network/parse fails.
-                Icon(
-                    imageVector = Icons.Rounded.CloudOff,
-                    contentDescription = "Weather unavailable",
-                    modifier = Modifier.size(64.dp),
-                    tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
-                )
+                AliveWeatherIcon(R.drawable.weather_offline, "Weather unavailable")
                 Column {
                     Text(
                         text = "Weather unavailable",
@@ -83,15 +86,10 @@ fun PremiumWeatherCard(
                     )
                 }
             } else {
-                val (icon, condition) = mapWeatherCode(weather.code)
-                
-                // Large Weather Icon
-                Icon(
-                    imageVector = icon,
-                    contentDescription = condition,
-                    modifier = Modifier.size(64.dp),
-                    tint = MaterialTheme.colorScheme.primary
-                )
+                val (iconRes, condition) = mapWeatherCode(weather.code)
+
+                // Large, colourful, gently-animated weather illustration
+                AliveWeatherIcon(iconRes, condition)
 
                 Column {
                     Text(
@@ -111,14 +109,50 @@ fun PremiumWeatherCard(
     }
 }
 
-private fun mapWeatherCode(code: Int): Pair<androidx.compose.ui.graphics.vector.ImageVector, String> {
+/**
+ * A weather illustration that "breathes" — a gentle vertical bob + subtle scale pulse on an
+ * infinite loop so the card feels alive without being distracting.
+ */
+@Composable
+private fun AliveWeatherIcon(
+    @DrawableRes resId: Int,
+    contentDescription: String,
+    modifier: Modifier = Modifier
+) {
+    val transition = rememberInfiniteTransition(label = "weather")
+    val bob by transition.animateFloat(
+        initialValue = -2.2f,
+        targetValue = 2.2f,
+        animationSpec = infiniteRepeatable(tween(2600, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "bob"
+    )
+    val breathe by transition.animateFloat(
+        initialValue = 0.97f,
+        targetValue = 1.04f,
+        animationSpec = infiniteRepeatable(tween(3200, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "breathe"
+    )
+    Image(
+        painter = painterResource(resId),
+        contentDescription = contentDescription,
+        modifier = modifier
+            .size(64.dp)
+            .graphicsLayer {
+                translationY = bob.dp.toPx()
+                scaleX = breathe
+                scaleY = breathe
+            }
+    )
+}
+
+private fun mapWeatherCode(code: Int): Pair<Int, String> {
     return when (code) {
-        0 -> Icons.Rounded.WbSunny to "Clear Skies"
-        1, 2, 3 -> Icons.Rounded.Cloud to "Partly Cloudy"
-        45, 48 -> Icons.Rounded.Cloud to "Foggy"
-        51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82 -> Icons.Rounded.WaterDrop to "Rainy"
-        71, 73, 75, 77, 85, 86 -> Icons.Rounded.AcUnit to "Snowy"
-        95, 96, 99 -> Icons.Rounded.Thunderstorm to "Stormy"
-        else -> Icons.Rounded.DeviceThermostat to "Unknown"
+        0 -> R.drawable.weather_sunny to "Clear Skies"
+        1, 2, 3 -> R.drawable.weather_partly_cloudy to "Partly Cloudy"
+        45, 48 -> R.drawable.weather_fog to "Foggy"
+        51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82 -> R.drawable.weather_rain to "Rainy"
+        71, 73, 75, 77, 85, 86 -> R.drawable.weather_snow to "Snowy"
+        95, 96, 99 -> R.drawable.weather_storm to "Stormy"
+        else -> R.drawable.weather_unknown to "Unknown"
     }
 }
