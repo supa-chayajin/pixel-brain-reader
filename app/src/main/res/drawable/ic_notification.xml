@@ -5,22 +5,19 @@
     android:viewportHeight="24"
     android:tint="#FFFFFF">
     <!--
-      Pixel Brain logo (the two-hemisphere brain) as a SOLID white silhouette sized
-      to fill the 24dp status-bar small icon. Notification small icons are alpha-only,
-      so every path is solid white; the full-colour logo is set as the large icon.
+      Pixel Brain — "Chip" status-bar small icon. Alpha-only (tinted white): a chip
+      die + pins with a small solid brain centred inside. Kept simple for 24dp.
     -->
-    <group android:scaleX="0.92" android:scaleY="0.92" android:pivotX="12" android:pivotY="12">
-        <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M11.5,4 C9,3.8 6.5,4.5 5,7 C3.5,9.5 3.5,14 4.5,17 C5.5,20 8.5,21.5 11.5,20 L11.5,17 C11.5,17 10.5,17 10.5,17 C9,17 8,15 8,12 C8,9 9.5,7 11.5,7 Z" />
-        <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M12.5,4 C15,3.8 17.5,4.5 19,7 C20.5,9.5 20.5,14 19.5,17 C18.5,20 15.5,21.5 12.5,20 L12.5,17 C12.5,17 13.5,17 13.5,17 C15,17 16,15 16,12 C16,9 14.5,7 12.5,7 Z" />
-        <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M8.5,8 C7.5,9 7.5,11 8,13 C8.5,15 10,16 11,16 L11,14 C10.5,14 9.5,13 9.5,12 C9.5,10.5 10,9.5 11,9 L11,7.5 C10,7.5 9,7.5 8.5,8 Z" />
-        <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M15.5,8 C16.5,9 16.5,11 16,13 C15.5,15 14,16 13,16 L13,14 C13.5,14 14.5,13 14.5,12 C14.5,10.5 14,9.5 13,9 L13,7.5 C14,7.5 15,7.5 15.5,8 Z" />
-    </group>
+    <!-- pins -->
+    <path android:strokeColor="#FFFFFF" android:strokeWidth="1.5" android:strokeLineCap="round"
+        android:pathData="M9.5,6 L9.5,3.6 M14.5,6 L14.5,3.6
+                          M9.5,18 L9.5,20.4 M14.5,18 L14.5,20.4
+                          M6,9.5 L3.6,9.5 M6,14.5 L3.6,14.5
+                          M18,9.5 L20.4,9.5 M18,14.5 L20.4,14.5" />
+    <!-- chip die -->
+    <path android:strokeColor="#FFFFFF" android:strokeWidth="1.8" android:strokeLineJoin="round"
+        android:pathData="M9,6 H15 A3,3 0 0 1 18,9 V15 A3,3 0 0 1 15,18 H9 A3,3 0 0 1 6,15 V9 A3,3 0 0 1 9,6 Z" />
+    <!-- brain (small solid blob, two lobes) -->
+    <path android:fillColor="#FFFFFF" android:pathData="M12,9.6 C10.7,9.6 9.7,10.5 9.7,12 C9.7,13.5 10.7,14.4 12,14.4 Z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M12,9.6 C13.3,9.6 14.3,10.5 14.3,12 C14.3,13.5 13.3,14.4 12,14.4 Z" />
 </vector>
