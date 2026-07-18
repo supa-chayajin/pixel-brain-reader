@@ -1,9 +1,15 @@
 package cloud.wafflecommons.pixelbrainreader.ui.privatevault
 
+import android.app.Activity
+import android.content.Intent
 import android.os.Bundle
+import android.speech.RecognizerIntent
 import android.view.WindowManager
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.biometric.BiometricPrompt
 import androidx.compose.animation.AnimatedVisibility
@@ -23,9 +29,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.*
@@ -41,8 +49,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
@@ -50,6 +60,7 @@ import cloud.wafflecommons.pixelbrainreader.ui.components.ComposeCortexEditor
 import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
 import cloud.wafflecommons.pixelbrainreader.ui.theme.PixelBrainReaderTheme
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
 import java.io.File
 import java.time.Instant
 import java.time.LocalDateTime
@@ -294,12 +305,14 @@ fun PrivateVaultScreen(
              PrivateEditor(
                  file = state.selectedFile,
                  content = state.editorContent,
+                 editorRevision = state.editorRevision,
                  title = state.selectedFile?.name?.removeSuffix(".md.enc") ?: "New Note",
                  saveState = viewModel.saveState.collectAsStateWithLifecycle().value,
                  onContentChange = { viewModel.onEditorContentChange(it) },
                  onClose = { viewModel.closeNote() },
                  onForceSave = { viewModel.forceSaveImmediate() },
-                 onOpenAssist = { viewModel.openAssist() }
+                 onOpenAssist = { viewModel.openAssist() },
+                 onBeautify = { viewModel.beautifyMarkdown(it) }
              )
 
              val assist by viewModel.assistState.collectAsStateWithLifecycle()
@@ -455,12 +468,14 @@ fun VaultFileItem(file: File, onClick: () -> Unit) {
 fun PrivateEditor(
     file: File?,
     content: String,
+    editorRevision: Int,
     title: String,
     saveState: cloud.wafflecommons.pixelbrainreader.ui.components.SaveState,
     onContentChange: (String) -> Unit,
     onClose: () -> Unit,
     onForceSave: () -> Unit,
-    onOpenAssist: () -> Unit = {}
+    onOpenAssist: () -> Unit = {},
+    onBeautify: suspend (String) -> String? = { null }
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -472,6 +487,85 @@ fun PrivateEditor(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    // Selection-aware editor state. The ViewModel owns the plain-string content (which drives the
+    // encrypted autosave); this local TextFieldValue adds the cursor/selection the toolbar needs
+    // for the "beautify selection" action. Offsets stay 1:1 (MarkdownVisualTransformation is Identity).
+    var editorValue by remember { mutableStateOf(TextFieldValue(content, TextRange(content.length))) }
+    // Reconcile ONLY on external replacements (note open, AI apply), keyed on editorRevision — NOT on
+    // `content`, which is a laggy StateFlow echo of the user's own keystrokes and would jump the caret.
+    LaunchedEffect(editorRevision) {
+        if (content != editorValue.text) {
+            editorValue = TextFieldValue(content, TextRange(content.length))
+        }
+    }
+    var isBeautifying by remember { mutableStateOf(false) }
+    val hasSelection = !editorValue.selection.collapsed
+
+    fun applyChange(newValue: TextFieldValue) {
+        editorValue = newValue
+        onContentChange(newValue.text)
+    }
+
+    // Speech-to-text: the system dialog captures audio; we splice the transcript at the caret.
+    val speechLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val spoken = result.data
+                ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+                ?.firstOrNull()
+            if (!spoken.isNullOrBlank()) {
+                val cur = editorValue
+                val start = cur.selection.min
+                val end = cur.selection.max
+                val before = cur.text.substring(0, start)
+                val after = cur.text.substring(end)
+                val needsSpace = before.isNotEmpty() && !before.last().isWhitespace()
+                val insert = (if (needsSpace) " " else "") + spoken
+                val newText = before + insert + after
+                applyChange(TextFieldValue(newText, TextRange(start + insert.length)))
+            }
+        }
+    }
+
+    fun startDictation() {
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_PROMPT, "Dictate your note…")
+        }
+        try {
+            speechLauncher.launch(intent)
+        } catch (e: android.content.ActivityNotFoundException) {
+            Toast.makeText(context, "Speech recognition unavailable on this device", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun beautifySelection() {
+        if (!hasSelection || isBeautifying) return
+        val sel = editorValue.selection
+        val start = sel.min
+        val end = sel.max
+        val baseText = editorValue.text
+        val selected = baseText.substring(start, end)
+        scope.launch {
+            isBeautifying = true
+            val formatted = try { onBeautify(selected) } finally { isBeautifying = false }
+            if (!formatted.isNullOrBlank()) {
+                // The editor is still editable during the (multi-second) AI call. If the note changed
+                // meanwhile, the captured offsets are stale — splicing would crash or corrupt, so skip.
+                if (editorValue.text == baseText) {
+                    val newText = baseText.substring(0, start) + formatted + baseText.substring(end)
+                    applyChange(TextFieldValue(newText, TextRange(start, start + formatted.length)))
+                } else {
+                    Toast.makeText(context, "Note changed — beautify skipped", Toast.LENGTH_SHORT).show()
+                }
+            }
         }
     }
 
@@ -491,6 +585,24 @@ fun PrivateEditor(
                     }
                 },
                 actions = {
+                    // Dictate straight into the encrypted note.
+                    CortexIconButton(onClick = { startDictation() }) {
+                        Icon(Icons.Default.Mic, contentDescription = "Dictate")
+                    }
+                    // Beautify the SELECTED text as Markdown. Disabled when nothing is selected.
+                    CortexIconButton(
+                        onClick = { beautifySelection() },
+                        enabled = hasSelection && !isBeautifying
+                    ) {
+                        if (isBeautifying) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(Icons.Default.AutoFixHigh, contentDescription = "Beautify selection as Markdown")
+                        }
+                    }
                     CortexIconButton(onClick = onOpenAssist) {
                         Icon(Icons.Default.AutoAwesome, contentDescription = "Writing assistant")
                     }
@@ -508,8 +620,8 @@ fun PrivateEditor(
     ) { padding ->
         Box(modifier = Modifier.padding(padding).fillMaxSize().padding(horizontal = 16.dp)) {
             ComposeCortexEditor(
-                content = content,
-                onContentChange = onContentChange,
+                value = editorValue,
+                onValueChange = { applyChange(it) },
                 modifier = Modifier.fillMaxSize(),
                 useMonospace = true
             )

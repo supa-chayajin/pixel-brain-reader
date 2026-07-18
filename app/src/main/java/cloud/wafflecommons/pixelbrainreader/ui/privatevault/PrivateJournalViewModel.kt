@@ -29,6 +29,10 @@ class PrivateJournalViewModel @Inject constructor(
         val files: List<File> = emptyList(),
         val selectedFile: File? = null,
         val editorContent: String = "",
+        // Bumped ONLY when editorContent is replaced externally (note open, AI apply) — never on the
+        // user's own keystrokes. The editor keys its TextFieldValue reconcile on this so a laggy
+        // echo of the user's own typing can't jump the caret to the end mid-edit.
+        val editorRevision: Int = 0,
         val isCreatingNew: Boolean = false,
         val errorMessage: String? = null,
         val passwordInput: String = ""
@@ -92,6 +96,7 @@ class PrivateJournalViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(
             selectedFile = null,
             editorContent = "",
+            editorRevision = _uiState.value.editorRevision + 1,
             isCreatingNew = true
         )
     }
@@ -159,6 +164,7 @@ class PrivateJournalViewModel @Inject constructor(
                 _uiState.value = _uiState.value.copy(
                     selectedFile = file,
                     editorContent = content,
+                    editorRevision = _uiState.value.editorRevision + 1,
                     isCreatingNew = false
                 )
             } catch (e: Exception) {
@@ -193,6 +199,7 @@ class PrivateJournalViewModel @Inject constructor(
                     files = updatedFiles,
                     selectedFile = newFile,
                     editorContent = initialContent,
+                    editorRevision = _uiState.value.editorRevision + 1,
                     isCreatingNew = false
                 )
                 
@@ -208,6 +215,17 @@ class PrivateJournalViewModel @Inject constructor(
     
     fun onEditorContentChange(text: String) {
         _uiState.value = _uiState.value.copy(editorContent = text)
+        _saveState.value = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.UNSAVED
+        _autoSaveTriggerFlow.value = text
+    }
+
+    /** Replace the editor content from a NON-keystroke source (AI apply). Bumps [VaultState.editorRevision]
+     *  so the editor reconciles its TextFieldValue; still marks unsaved + schedules the autosave. */
+    private fun replaceEditorContent(text: String) {
+        _uiState.value = _uiState.value.copy(
+            editorContent = text,
+            editorRevision = _uiState.value.editorRevision + 1
+        )
         _saveState.value = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.UNSAVED
         _autoSaveTriggerFlow.value = text
     }
@@ -329,14 +347,40 @@ class PrivateJournalViewModel @Inject constructor(
 
     fun applyAssistReplace() {
         val r = _assistState.value.result ?: return
-        onEditorContentChange(r)
+        replaceEditorContent(r)
         dismissAssist()
     }
 
     fun applyAssistAppend() {
         val r = _assistState.value.result ?: return
         val cur = _uiState.value.editorContent
-        onEditorContentChange(if (cur.isBlank()) r else "$cur\n\n$r")
+        replaceEditorContent(if (cur.isBlank()) r else "$cur\n\n$r")
         dismissAssist()
+    }
+
+    /**
+     * Reformats a snippet of the note into clean Markdown using the on-device model (100% local,
+     * safe for the encrypted vault). Returns the reformatted text, or null on failure (a toast
+     * explains why). Never mutates the note itself — the editor splices the result into the
+     * current selection.
+     */
+    suspend fun beautifyMarkdown(selectedText: String): String? {
+        if (selectedText.isBlank()) return null
+        val prompt = """
+            Reformat the following text into clean, well-structured Markdown. Apply headings,
+            bullet or numbered lists, bold and italic emphasis, and code fences where they fit
+            the content. Do NOT add, remove, translate or invent any information — only reformat
+            what is given. Reply ONLY with the resulting Markdown, with no surrounding explanation.
+
+            Text:
+            $selectedText
+        """.trimIndent()
+        return localAiManager.generateResponse(prompt).fold(
+            onSuccess = { it.trim() },
+            onFailure = {
+                _uiEvent.send(UiEvent.ShowToast("Beautify failed: ${it.localizedMessage ?: "AI model unavailable"}"))
+                null
+            }
+        )
     }
 }

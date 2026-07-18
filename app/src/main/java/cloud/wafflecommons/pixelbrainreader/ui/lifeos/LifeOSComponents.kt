@@ -146,6 +146,9 @@ fun HabitCard(
     }
 
     val isDone = habit.isCompletedToday
+    // Automatic habits are driven by Health Connect (config.autoSource) — their completion is
+    // reconciled from health data on every sync, so the user must NOT be able to check/edit them.
+    val isAutomatic = !config.autoSource.isNullOrBlank()
     // Animate Background
     val containerColor by animateColorAsState(
         if (isDone) themeColor.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceContainer,
@@ -157,10 +160,11 @@ fun HabitCard(
 
     Card(
         onClick = {
-            if (config.type == HabitType.MEASURABLE) {
-                showDialog = true
-            } else {
-                onToggle()
+            // Automatic (Health-Connect) habits are read-only — no manual toggle/edit.
+            when {
+                isAutomatic -> Unit
+                config.type == HabitType.MEASURABLE -> showDialog = true
+                else -> onToggle()
             }
         },
         colors = CardDefaults.cardColors(containerColor = containerColor),
@@ -171,28 +175,46 @@ fun HabitCard(
         ) {
             // Top Section: Info (Icon + Text)
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // Checkbox (Visual & Interactive)
+                // Checkbox (Visual & Interactive). Disabled for automatic habits so the user
+                // can't override the Health-Connect-derived state.
                 cloud.wafflecommons.pixelbrainreader.ui.components.CortexBouncyCheckbox(
                     checked = isDone,
-                    onCheckedChange = { 
-                        // Only toggle if not measurable (measurable needs dialog)
-                        if (config.type != HabitType.MEASURABLE) {
-                            onToggle() 
-                        } else {
-                            showDialog = true
+                    enabled = !isAutomatic,
+                    onCheckedChange = {
+                        // Only toggle if not measurable (measurable needs dialog); automatic = read-only.
+                        when {
+                            isAutomatic -> Unit
+                            config.type != HabitType.MEASURABLE -> onToggle()
+                            else -> showDialog = true
                         }
                     },
                     modifier = Modifier.size(24.dp)
                 )
                 Spacer(Modifier.width(8.dp))
-                
+
                 Text(
                     text = config.title,
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
                 )
+                if (isAutomatic) {
+                    Spacer(Modifier.width(8.dp))
+                    Surface(
+                        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f),
+                        shape = MaterialTheme.shapes.extraSmall
+                    ) {
+                        Text(
+                            text = "AUTO",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Black,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
+                        )
+                    }
+                }
             }
             
             Spacer(Modifier.height(4.dp))
@@ -278,7 +300,13 @@ fun HabitCard(
                 
                 // Status / Action Hint
                 if (config.type != HabitType.MEASURABLE) {
-                     if (isDone) {
+                     if (isAutomatic) {
+                        Text(
+                            "Auto · Health",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
+                    } else if (isDone) {
                         Text(
                             "Done!",
                             style = MaterialTheme.typography.labelLarge,

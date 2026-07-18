@@ -25,7 +25,8 @@ class ChoreRepository @Inject constructor(
     private val choreDao: ChoreDao,
     private val homeRoomDao: HomeRoomDao,
     private val fileRepository: FileRepository,
-    private val database: AppDatabase
+    private val database: AppDatabase,
+    private val widgetUpdateManager: cloud.wafflecommons.pixelbrainreader.widget.ui.WidgetUpdateManager
 ) {
     private val gson: Gson = GsonBuilder().setPrettyPrinting().create()
     private val homeDir = "10_Journal/data/home"
@@ -93,16 +94,20 @@ class ChoreRepository @Inject constructor(
     suspend fun insertChore(chore: ChoreEntity) {
         choreDao.insertChore(chore)
         exportHomeConfigToJson()
+        runCatching { widgetUpdateManager.scheduleSnapshotUpdate() }
     }
 
     suspend fun updateLastDoneDate(choreId: String, date: String) {
         choreDao.updateLastDoneDate(choreId, date)
         exportHomeConfigToJson()
+        // Reflect the completed chore in the Chores/Companion widgets.
+        runCatching { widgetUpdateManager.scheduleSnapshotUpdate() }
     }
 
     suspend fun deleteChore(chore: ChoreEntity) {
         choreDao.deleteChore(chore)
         exportHomeConfigToJson()
+        runCatching { widgetUpdateManager.scheduleSnapshotUpdate() }
     }
 
     // --- Export (Room -> JSON) -----------------------------------------------

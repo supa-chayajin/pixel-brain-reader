@@ -17,6 +17,7 @@ import javax.inject.Inject
 class SyncHealthDataUseCase @Inject constructor(
     private val healthConnectManager: HealthConnectManager,
     private val fileRepository: FileRepository,
+    private val widgetUpdateManager: cloud.wafflecommons.pixelbrainreader.widget.ui.WidgetUpdateManager,
     @ApplicationContext private val context: Context
 ) {
 
@@ -41,6 +42,9 @@ class SyncHealthDataUseCase @Inject constructor(
             val encoded = json.encodeToString(metrics)
             val vaultRelPath = "10_Journal/data/health/metrics/$date.json"
             fileRepository.saveFileLocally(vaultRelPath, encoded)
+
+            // Health drives the snapshot-backed Health/Companion widgets — rebuild after new metrics.
+            runCatching { widgetUpdateManager.scheduleSnapshotUpdate() }
 
             Result.success(Unit)
         } catch (e: Exception) {

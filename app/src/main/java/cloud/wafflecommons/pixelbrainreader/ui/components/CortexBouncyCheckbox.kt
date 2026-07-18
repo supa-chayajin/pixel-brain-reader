@@ -18,16 +18,17 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 fun CortexBouncyCheckbox(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true
 ) {
     val haptic = LocalHapticFeedback.current
-    
+
     // Scale animation: 1.0 -> 1.2 -> 1.0 when checked changes
-    // We can simulate a "bounce" by checking if state changed? 
+    // We can simulate a "bounce" by checking if state changed?
     // Actually simpler: just animate based on checked state? No, that's toggle.
-    // A click interaction usually scales DOWN then UP. 
+    // A click interaction usually scales DOWN then UP.
     // For now, let's just make it scale a bit when checked.
-    
+
     val scale by animateFloatAsState(
         targetValue = if (checked) 1.1f else 1.0f,
         animationSpec = MaterialTheme.motionScheme.fastSpatialSpec(),
@@ -37,10 +38,13 @@ fun CortexBouncyCheckbox(
     Box(modifier = modifier.scale(scale)) {
         Checkbox(
             checked = checked,
+            // A disabled checkbox (e.g. an automatic Health-Connect habit) never invokes
+            // this lambda, so the haptic + callback only fire on genuine user toggles.
             onCheckedChange = {
                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 onCheckedChange(it)
             },
+            enabled = enabled,
             colors = CheckboxDefaults.colors(
                 checkedColor = MaterialTheme.colorScheme.primary,
                 checkmarkColor = MaterialTheme.colorScheme.onPrimary,

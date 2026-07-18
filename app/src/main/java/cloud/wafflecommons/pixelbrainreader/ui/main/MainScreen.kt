@@ -603,6 +603,14 @@ fun MainScreen(
             navigator.navigateTo(ListDetailPaneScaffoldRole.Detail)
         }
     }
+
+    // Folder-insight ready → open the Detail pane. A one-shot event (not a selectedFileName diff)
+    // so re-analyzing while an insight is already open still navigates to the fresh result.
+    LaunchedEffect(Unit) {
+        viewModel.openDetailEvent.collect {
+            navigator.navigateTo(ListDetailPaneScaffoldRole.Detail)
+        }
+    }
     
     // Auto-navigate to Import if state present
     LaunchedEffect(uiState.importState) {

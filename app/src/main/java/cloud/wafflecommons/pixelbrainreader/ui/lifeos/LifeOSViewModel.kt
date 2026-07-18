@@ -185,7 +185,10 @@ class LifeOSViewModel @Inject constructor(
         viewModelScope.launch {
             val date = uiState.value.selectedDate
             val stats = uiState.value.habitsWithStats.find { it.config.id == habitId } ?: return@launch
-            
+            // Automatic (Health-Connect) habits are read-only — their state is reconciled from
+            // health data, never a manual tap. Ignore any toggle that slips past the UI guard.
+            if (!stats.config.autoSource.isNullOrBlank()) return@launch
+
             val isCompleting = !stats.isCompletedToday
             val newEntry = if (!isCompleting) {
                  HabitLogEntry(habitId, date.toString(), 0.0, HabitStatus.SKIPPED)
@@ -214,7 +217,9 @@ class LifeOSViewModel @Inject constructor(
         viewModelScope.launch {
             val date = uiState.value.selectedDate
             val habitConfig = uiState.value.habits.find { it.id == habitId } ?: return@launch
-            
+            // Automatic (Health-Connect) habits are read-only — reject manual value edits.
+            if (!habitConfig.autoSource.isNullOrBlank()) return@launch
+
             // Check if becoming complete
             val wasComplete = isHabitComplete(habitConfig, uiState.value.logs[habitId]?.find { it.date == date.toString() })
             

@@ -1,7 +1,9 @@
 package cloud.wafflecommons.pixelbrainreader.ui.homeos
 
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
@@ -17,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
+import cloud.wafflecommons.pixelbrainreader.ui.theme.RoomPalette
 import cloud.wafflecommons.pixelbrainreader.ui.theme.SemanticPalette
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
@@ -84,9 +87,16 @@ fun ChoreDashboardScreen(
                 modifier = Modifier
                     .fillMaxSize()
             ) {
-                groupedChores.forEach { (roomName, chores) ->
+                groupedChores.forEach { group ->
+                    val roomName = group.roomName
+                    val chores = group.chores
+                    val roomColor = RoomPalette.resolveColor(group.roomColorHex, roomName)
                     item(span = StaggeredGridItemSpan.FullLine) {
-                        RoomHeader(roomName = roomName, urgentCount = chores.count { it.statusColor == StatusColor.RED })
+                        RoomHeader(
+                            roomName = roomName,
+                            roomColor = roomColor,
+                            urgentCount = chores.count { it.statusColor == StatusColor.RED }
+                        )
                     }
 
                     if (chores.isEmpty()) {
@@ -123,6 +133,7 @@ fun ChoreDashboardScreen(
                             Box(Modifier.animateItem()) {
                                 ChoreCard(
                                     chore = choreModel,
+                                    roomColor = roomColor,
                                     onDoItClick = {
                                         viewModel.doChore(choreModel.entity.id)
                                     }
@@ -138,13 +149,21 @@ fun ChoreDashboardScreen(
 }
 
 @Composable
-fun RoomHeader(roomName: String, urgentCount: Int) {
+fun RoomHeader(roomName: String, roomColor: Color, urgentCount: Int) {
     Row(
-        verticalAlignment = Alignment.Bottom,
+        verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 24.dp, bottom = 4.dp)
     ) {
+        // Room identity colour dot.
+        Box(
+            modifier = Modifier
+                .size(12.dp)
+                .clip(CircleShape)
+                .background(roomColor)
+        )
+        Spacer(modifier = Modifier.width(8.dp))
         Text(
             text = roomName,
             style = MaterialTheme.typography.headlineSmall,
@@ -171,7 +190,7 @@ fun RoomHeader(roomName: String, urgentCount: Int) {
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun ChoreCard(chore: ChoreUiModel, onDoItClick: () -> Unit) {
+fun ChoreCard(chore: ChoreUiModel, roomColor: Color, onDoItClick: () -> Unit) {
     val barColor = when (chore.statusColor) {
         StatusColor.GREEN -> SemanticPalette.Success
         StatusColor.YELLOW -> SemanticPalette.Warning
@@ -193,6 +212,14 @@ fun ChoreCard(chore: ChoreUiModel, onDoItClick: () -> Unit) {
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
+      Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+        // Room identity colour accent down the left edge.
+        Box(
+            modifier = Modifier
+                .width(4.dp)
+                .fillMaxHeight()
+                .background(roomColor)
+        )
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -262,6 +289,7 @@ fun ChoreCard(chore: ChoreUiModel, onDoItClick: () -> Unit) {
                 )
             }
         }
+      }
     }
 }
 

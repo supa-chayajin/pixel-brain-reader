@@ -20,6 +20,10 @@ class WidgetUpdateWorker @AssistedInject constructor(
         return try {
             widgetSnapshotManager.updateSnapshot()
             Result.success()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // Normal when a newer snapshot rebuild REPLACES this one (unique work) — not a failure.
+            // Rethrow so WorkManager records a clean cancellation instead of an error + retry.
+            throw e
         } catch (e: Exception) {
             Log.e("WidgetUpdateWorker", "Snapshot update failed", e)
             Result.retry()

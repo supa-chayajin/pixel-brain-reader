@@ -26,7 +26,8 @@ import kotlinx.coroutines.flow.first
 class GamificationRepository @Inject constructor(
     private val fileRepository: FileRepository,
     private val gamificationPreferences: GamificationPreferences,
-    private val lazyGrantXpUseCase: Lazy<GrantXpUseCase>
+    private val lazyGrantXpUseCase: Lazy<GrantXpUseCase>,
+    private val widgetUpdateManager: cloud.wafflecommons.pixelbrainreader.widget.ui.WidgetUpdateManager
 ) {
     private val _gamificationState = MutableStateFlow(GamificationState())
     val gamificationState: Flow<GamificationState> = _gamificationState.asStateFlow()
@@ -92,6 +93,9 @@ class GamificationRepository @Inject constructor(
             val newState = transform(current)
             _gamificationState.value = newState
             saveState(newState)
+            // Every XP/level/attribute change flows through here — refresh the widgets so the
+            // Companion rings, level bar, etc. reflect the new state (coalesced snapshot rebuild).
+            runCatching { widgetUpdateManager.scheduleSnapshotUpdate() }
         }
     }
 

@@ -397,6 +397,18 @@ class MainViewModel @Inject constructor(
     )
     val uiEvent = _uiEvent.asSharedFlow()
 
+    /**
+     * One-shot signal to force-open the Detail pane. Needed for folder-insight: its pseudo-filename
+     * ("Folder_Insight.md") doesn't change between runs, so the selectedFileName-diff navigation
+     * effect wouldn't re-open the pane when re-analyzing while an insight is already showing.
+     */
+    private val _openDetailEvent = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(
+        replay = 0,
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
+    val openDetailEvent = _openDetailEvent.asSharedFlow()
+
 
     fun saveFile() {
         val path = _selectedFilePath.value ?: return
@@ -847,6 +859,9 @@ class MainViewModel @Inject constructor(
                     _unsavedContent.value = summary
                     _isEditing.value = false
                     _saveState.value = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.IDLE
+                    // Force-open the Detail pane even if the pseudo-filename didn't change, so a
+                    // re-run while an insight is already open still surfaces the fresh result.
+                    _openDetailEvent.tryEmit(Unit)
                 },
                 onFailure = { e ->
                     // Surface the real failure — NEVER write the error text into a note body.

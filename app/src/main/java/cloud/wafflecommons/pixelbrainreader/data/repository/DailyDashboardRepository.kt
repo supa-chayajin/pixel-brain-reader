@@ -23,7 +23,8 @@ class DailyDashboardRepository @Inject constructor(
     private val fileRepository: FileRepository,
     private val briefingGenerator: BriefingGenerator,
     private val weatherRepository: WeatherRepository,
-    private val gratitudeDao: cloud.wafflecommons.pixelbrainreader.data.local.dao.GratitudeDao
+    private val gratitudeDao: cloud.wafflecommons.pixelbrainreader.data.local.dao.GratitudeDao,
+    private val widgetUpdateManager: cloud.wafflecommons.pixelbrainreader.widget.ui.WidgetUpdateManager
 ) {
 
     // --- Live Data Access (Separated Sections) ---
@@ -133,14 +134,18 @@ class DailyDashboardRepository @Inject constructor(
             priority = priority
         )
         dashboardDao.insertTask(task)
+        runCatching { widgetUpdateManager.scheduleSnapshotUpdate() }
     }
 
     suspend fun updateTask(task: DailyTaskEntity) = withContext(Dispatchers.IO) {
         dashboardDao.insertTask(task)
+        runCatching { widgetUpdateManager.scheduleSnapshotUpdate() }
     }
 
     suspend fun toggleTask(taskId: String, isDone: Boolean) = withContext(Dispatchers.IO) {
         dashboardDao.updateTaskStatus(taskId, isDone)
+        // Keep the Today/Companion widgets in sync with the task's new done state.
+        runCatching { widgetUpdateManager.scheduleSnapshotUpdate() }
     }
 
     private suspend fun ensureDashboard(date: LocalDate) {

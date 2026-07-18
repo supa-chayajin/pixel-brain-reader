@@ -83,6 +83,12 @@ class HabitToggleCallback : ActionCallback {
         val targetDone = parameters[WidgetKeys.HABIT_TARGET_DONE] ?: true
         val ep = WidgetLiveData.entryPoint(context)
         val today = LocalDate.now()
+        // Defensive: automatic (Health-Connect) habits are read-only. The widget row no longer
+        // sends a toggle for them, but a stale/replayed intent must not slip past this guard.
+        val isAutomatic = runCatching {
+            ep.habitRepository().getHabitConfigs().find { it.id == habitId }?.autoSource?.isNotBlank() == true
+        }.getOrDefault(false)
+        if (isAutomatic) return
         runWidgetAction(context, refreshLive = { HabitsWidget().updateAll(context) }) {
             // Read the live state so a stale baked parameter (or a double tap) can't double-grant XP.
             val alreadyCompleted = ep.habitRepository().getLogsForYear(today.year)[habitId].orEmpty()

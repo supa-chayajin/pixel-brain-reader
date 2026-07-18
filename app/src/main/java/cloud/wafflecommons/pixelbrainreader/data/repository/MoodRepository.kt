@@ -235,8 +235,11 @@ class MoodRepository @Inject constructor(
             }
         } catch (e: Exception) {}
         
-        // Trigger Widget Update
+        // Trigger Widget Update. triggerUpdate() re-renders the live MoodWidget instantly;
+        // scheduleSnapshotUpdate() rebuilds the snapshot so the Companion widget's mood emoji
+        // (which reads the snapshot, not live data) also reflects the new entry.
         widgetUpdateManager.triggerUpdate()
+        runCatching { widgetUpdateManager.scheduleSnapshotUpdate() }
     }
 
     // --- Mappers ---
