@@ -38,7 +38,8 @@ class HabitRepository @Inject constructor(
     private val choreRepository: ChoreRepository,
     private val jGitProvider: cloud.wafflecommons.pixelbrainreader.data.remote.JGitProvider,
     private val database: cloud.wafflecommons.pixelbrainreader.data.local.AppDatabase,
-    private val secretManager: cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
+    private val secretManager: cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager,
+    private val widgetUpdateManager: cloud.wafflecommons.pixelbrainreader.widget.ui.WidgetUpdateManager
 ) {
     private val jsonParser = Json { 
         ignoreUnknownKeys = true 
@@ -322,6 +323,9 @@ class HabitRepository @Inject constructor(
             }
         }
 
+        // Refresh widgets so the Habits/Companion widgets reflect the new completion state.
+        runCatching { widgetUpdateManager.scheduleSnapshotUpdate() }
+
         // Phase 3 — Git push. Fire-and-forget on the repository's own scope so a
         // fast follow-up toggle never waits for the network. Errors are logged;
         // SyncOrchestrator picks up un-pushed work on the next foreground sync.
@@ -355,6 +359,7 @@ class HabitRepository @Inject constructor(
             val entity = mapConfigToEntity(config)
             habitDao.insertConfig(entity)
             exportConfigToJson() // Instantly sync changes to JSON vault
+            runCatching { widgetUpdateManager.scheduleSnapshotUpdate() }
         }
     }
 

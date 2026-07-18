@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.ChoreEntity
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.HomeRoomEntity
 import cloud.wafflecommons.pixelbrainreader.data.repository.ChoreRepository
+import cloud.wafflecommons.pixelbrainreader.ui.theme.RoomPalette
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -38,7 +39,7 @@ class HomeConfigViewModel @Inject constructor(
             initialValue = emptyMap()
         )
 
-    fun createEmptyRoom(name: String, icon: String = "home", color: String = "#808080") {
+    fun createEmptyRoom(name: String, icon: String = "home", color: String = RoomPalette.randomHex()) {
         viewModelScope.launch(Dispatchers.IO) {
             val roomEntity = HomeRoomEntity(
                 id = UUID.randomUUID().toString(),

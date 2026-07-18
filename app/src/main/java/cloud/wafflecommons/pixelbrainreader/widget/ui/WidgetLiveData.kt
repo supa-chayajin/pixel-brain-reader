@@ -22,7 +22,7 @@ object WidgetLiveData {
     fun entryPoint(context: Context): WidgetEntryPoint =
         EntryPointAccessors.fromApplication(context.applicationContext, WidgetEntryPoint::class.java)
 
-    data class WidgetHabit(val id: String, val title: String, val done: Boolean)
+    data class WidgetHabit(val id: String, val title: String, val done: Boolean, val isAutomatic: Boolean = false)
     data class WidgetTask(val id: String, val label: String, val time: String?, val done: Boolean)
     data class WidgetChore(val id: String, val name: String, val effort: Int)
     data class WidgetMood(val emoji: String, val entryCount: Int)
@@ -48,7 +48,8 @@ object WidgetLiveData {
                 if (!HabitScheduler.isScheduledOn(c, today, lastCompleted)) return@mapNotNull null
                 val todayLog = logs.find { it.date == todayIso }
                 val done = todayLog != null && repo.calculateCompletion(todayLog.value, c.targetValue, c.type)
-                WidgetHabit(c.id, c.title, done)
+                // Automatic (Health-Connect) habits are read-only in the widget too.
+                WidgetHabit(c.id, c.title, done, isAutomatic = !c.autoSource.isNullOrBlank())
             }
         } catch (e: CancellationException) { throw e } catch (e: Exception) { emptyList() }
     }

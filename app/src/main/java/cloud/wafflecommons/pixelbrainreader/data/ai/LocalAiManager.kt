@@ -63,31 +63,51 @@ class LocalAiManager @Inject constructor(
     @Volatile
     private var downloadJob: Job? = null
 
+    // Auto-download: kick the download at most once automatically per process when the model is
+    // downloadable (still retryable via Settings → downloadModel). Prevents any re-probe loop.
+    @Volatile
+    private var autoDownloadAttempted = false
+
+    // Pre-load: pay the one-time model-load cost off the user's first real query, once per Ready.
+    @Volatile
+    private var prewarmed = false
+
     init {
-        // Passive probe ONLY. Never starts a download from here — that requires
-        // explicit user intent through [downloadModel].
+        // Probe availability on startup. When the model is downloadable this now auto-starts the
+        // download (user opted in), so the AI surfaces work without a manual Settings visit.
         ioScope.launch { refreshAvailability() }
     }
 
     /**
      * Probe ML Kit GenAI status and reflect it in [nanoState]. Idempotent and safe to
-     * call from lifecycle observers (e.g. ON_RESUME). Will NOT initiate a download.
+     * call from lifecycle observers (e.g. ON_RESUME).
      *
-     * If the system reports a download is already in progress (resumed from a prior
-     * session), we attach to its progress flow so the UI can show it — but we never
-     * start a new download here.
+     * When the model is DOWNLOADABLE this auto-starts the download once (the user opted in),
+     * and when it's AVAILABLE it kicks a background pre-load. If a download is already in
+     * progress (resumed from a prior session) we attach to its progress flow for the UI.
      */
     suspend fun refreshAvailability() = withContext(Dispatchers.IO) {
         if (_nanoState.value is NanoState.Downloading) return@withContext
         _nanoState.value = NanoState.Checking
         Log.i(tag, "Probing ML Kit GenAI status (package=${appContext.packageName})…")
         try {
-            val status = ensureModel().checkStatus()
+            // Bound the probe (see STATUS_TIMEOUT_MS) so a stuck AICore can't leave us in Checking
+            // forever, which manifested as "Nano not responding anywhere".
+            val status = withTimeoutOrNull(STATUS_TIMEOUT_MS) { ensureModel().checkStatus() }
+            if (status == null) {
+                Log.w(tag, "ML Kit GenAI checkStatus timed out after ${STATUS_TIMEOUT_MS}ms")
+                _nanoState.value = NanoState.Error(
+                    RuntimeException("On-device AI availability check timed out")
+                )
+                return@withContext
+            }
             Log.i(tag, "ML Kit GenAI checkStatus → ${describeStatus(status)}")
             applyStatus(status)
         } catch (e: GenAiException) {
             logGenAiException("checkStatus", e)
             _nanoState.value = classifyAvailability(e)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Throwable) {
             Log.e(tag, "Unexpected non-GenAiException probing ML Kit GenAI", e)
             _nanoState.value = NanoState.Error(e)
@@ -333,6 +353,15 @@ class LocalAiManager @Inject constructor(
         // Generous — the first inference after a fresh (re)download reloads the model into
         // memory and can take a while. Chat streaming uses its own tighter budget.
         const val INFERENCE_TIMEOUT_MS = 120_000L
+        // Bound the AICore availability probe. checkStatus() has been observed to wedge
+        // indefinitely on some devices; without this, nanoState stays Checking forever and
+        // every AI surface fast-fails with "still checking…" (i.e. "Nano not responding anywhere").
+        const val STATUS_TIMEOUT_MS = 15_000L
+        // Background pre-load budget. Kept SHORT (not the full inference timeout): prewarm holds
+        // sessionMutex, so a slow/wedging AICore first-inference must not pin it for minutes and
+        // stall a real user query that arrives during launch. On a healthy device the cold model
+        // load is a few seconds; if it can't finish in this window, prewarm gives up and releases.
+        const val PREWARM_TIMEOUT_MS = 30_000L
         const val AICORE_PACKAGE = "com.google.android.aicore"
     }
 
@@ -343,6 +372,34 @@ class LocalAiManager @Inject constructor(
             val newModel = Generation.getClient()
             model = newModel
             return newModel
+        }
+    }
+
+    /**
+     * Fire-and-forget pre-load: run one tiny throwaway inference so the model is resident in memory
+     * before the user's first real query (this is the bulk of RAG/Spark first-response latency).
+     * Uses [GenerativeModel.generateContent] — deliberately NOT `warmup()`, which has been observed
+     * to wedge on Pixel/AICore. Runs at most once per Ready transition; result and errors are
+     * discarded (non-fatal), and a failure resets the flag so a later Ready can retry.
+     */
+    private fun prewarmAsync() {
+        if (prewarmed) return
+        prewarmed = true
+        ioScope.launch {
+            try {
+                sessionMutex.withLock {
+                    val done = withTimeoutOrNull(PREWARM_TIMEOUT_MS) {
+                        ensureModel().generateContent("Hi")
+                        true
+                    }
+                    Log.i(tag, if (done == true) "Nano prewarm complete" else "Nano prewarm timed out (model slow to load; real queries will retry)")
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                Log.w(tag, "Nano prewarm failed (non-fatal)", e)
+                prewarmed = false
+            }
         }
     }
 
@@ -364,12 +421,23 @@ class LocalAiManager @Inject constructor(
     private fun applyStatus(status: Int) {
         when (status) {
             FeatureStatus.AVAILABLE -> {
-                Log.i(tag, "ML Kit GenAI status=AVAILABLE — marking Ready (no warmup; first inference loads on demand)")
+                Log.i(tag, "ML Kit GenAI status=AVAILABLE — marking Ready (pre-loading in background)")
                 _nanoState.value = NanoState.Ready
+                prewarmAsync()
             }
             FeatureStatus.DOWNLOADING -> startDownload()
-            FeatureStatus.DOWNLOADABLE ->
-                _nanoState.value = NanoState.NotDownloaded
+            FeatureStatus.DOWNLOADABLE -> {
+                // User opted into auto-download: start it the first time we see the model is
+                // downloadable so the AI surfaces work without a manual Settings visit. Guarded so
+                // repeated probes can't loop; the Settings button (downloadModel) still retries.
+                if (!autoDownloadAttempted) {
+                    autoDownloadAttempted = true
+                    Log.i(tag, "ML Kit GenAI status=DOWNLOADABLE — auto-starting download")
+                    startDownload()
+                } else {
+                    _nanoState.value = NanoState.NotDownloaded
+                }
+            }
             FeatureStatus.UNAVAILABLE ->
                 _nanoState.value = NanoState.Unavailable(
                     reason = "ML Kit GenAI reports UNAVAILABLE on this device"
@@ -388,6 +456,7 @@ class LocalAiManager @Inject constructor(
      */
     private fun startDownload() {
         if (downloadJob?.isActive == true) return
+        prewarmed = false // a fresh model should be pre-loaded once it completes
         _nanoState.value = NanoState.Downloading(progress = -1f)
         downloadJob = ioScope.launch {
             try {
@@ -412,8 +481,9 @@ class LocalAiManager @Inject constructor(
                             )
                         }
                         is DownloadStatus.DownloadCompleted -> {
-                            Log.i(tag, "ML Kit GenAI download completed — marking Ready (no warmup)")
+                            Log.i(tag, "ML Kit GenAI download completed — marking Ready (pre-loading in background)")
                             _nanoState.value = NanoState.Ready
+                            prewarmAsync()
                         }
                         is DownloadStatus.DownloadFailed -> {
                             logGenAiException("download", event.e)

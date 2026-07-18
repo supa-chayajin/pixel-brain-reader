@@ -71,3 +71,52 @@ object NotePastels {
     /** The picker's fixed swatches (a theme surface default is prepended at the call site). */
     val swatches = listOf(Red, Blue, Green, Purple)
 }
+
+/**
+ * Identity accents used to color-code chore ROOMS (mirrors how habits carry a per-item colour).
+ * A room's colour is assigned randomly from these on creation and persisted as a hex string in
+ * [cloud.wafflecommons.pixelbrainreader.data.local.entity.HomeRoomEntity.color] (so it round-trips
+ * through the vault). Non-theme-adaptive on purpose so a room keeps its identity across light/dark.
+ *
+ * These are stored as hex strings (not Compose [Color]) to match the entity's `color: String` field.
+ */
+object RoomPalette {
+    /** The neutral placeholder a room gets before a colour is assigned. */
+    const val DEFAULT_HEX = "#808080"
+
+    val hexSwatches: List<String> = listOf(
+        "#EF5350", // red
+        "#EC407A", // pink
+        "#AB47BC", // purple
+        "#5C6BC0", // indigo
+        "#42A5F5", // blue
+        "#26A69A", // teal
+        "#66BB6A", // green
+        "#9CCC65", // lime
+        "#FFA726", // orange
+        "#8D6E63"  // brown
+    )
+
+    /** A random swatch — assigned when a room is first created. */
+    fun randomHex(): String = hexSwatches.random()
+
+    /**
+     * Resolve a room's display [Color]: use its stored hex when it's a real (non-default, parseable)
+     * value, otherwise fall back to a stable colour derived from the room name so legacy rooms that
+     * predate colour assignment still read as distinct.
+     */
+    fun resolveColor(hex: String?, roomName: String): Color {
+        if (!hex.isNullOrBlank() && hex != DEFAULT_HEX) {
+            runCatching { return Color(android.graphics.Color.parseColor(hex)) }
+        }
+        return colorForName(roomName)
+    }
+
+    /** Stable colour derived from a seed (room name) — deterministic across runs. */
+    fun colorForName(seed: String): Color {
+        if (hexSwatches.isEmpty()) return Color(0xFF808080)
+        val idx = ((seed.hashCode() % hexSwatches.size) + hexSwatches.size) % hexSwatches.size
+        return runCatching { Color(android.graphics.Color.parseColor(hexSwatches[idx])) }
+            .getOrDefault(Color(0xFF808080))
+    }
+}

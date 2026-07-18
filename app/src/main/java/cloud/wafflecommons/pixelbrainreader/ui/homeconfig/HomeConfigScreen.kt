@@ -30,6 +30,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.ChoreEntity
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.HomeRoomEntity
 import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
+import cloud.wafflecommons.pixelbrainreader.ui.theme.RoomPalette
 import java.time.LocalDate
 import java.util.UUID
 import kotlin.math.roundToInt
@@ -240,7 +241,8 @@ fun HomeConfigScreen(
                                 id = targetRoom?.id,
                                 name = nameInput,
                                 icon = targetRoom?.icon ?: "home",
-                                color = targetRoom?.color ?: "#808080",
+                                // Keep an existing room's colour on edit; give a new room a random one.
+                                color = targetRoom?.color ?: RoomPalette.randomHex(),
                                 sortOrder = targetRoom?.sortOrder ?: 0
                             )
                         }

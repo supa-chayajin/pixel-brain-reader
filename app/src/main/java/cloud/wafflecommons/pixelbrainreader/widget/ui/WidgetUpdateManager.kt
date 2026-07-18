@@ -3,6 +3,7 @@ package cloud.wafflecommons.pixelbrainreader.widget.ui
 import android.content.Context
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.updateAll
+import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import cloud.wafflecommons.pixelbrainreader.widget.data.WidgetUpdateWorker
@@ -49,9 +50,21 @@ class WidgetUpdateManager @Inject constructor(
     /**
      * Schedules a background worker to rebuild the data snapshot AND then re-render the widgets.
      * Use this after a data mutation or when the app is backgrounded.
+     *
+     * Enqueued as UNIQUE work with [ExistingWorkPolicy.REPLACE] so a burst of mutations (e.g. a
+     * sync reconciling many habits/chores, or several quick taps) coalesces into a single rebuild
+     * against the latest state instead of spawning one worker per mutation.
      */
     fun scheduleSnapshotUpdate() {
         val request = OneTimeWorkRequestBuilder<WidgetUpdateWorker>().build()
-        WorkManager.getInstance(context).enqueue(request)
+        WorkManager.getInstance(context).enqueueUniqueWork(
+            UNIQUE_SNAPSHOT_WORK,
+            ExistingWorkPolicy.REPLACE,
+            request
+        )
+    }
+
+    private companion object {
+        const val UNIQUE_SNAPSHOT_WORK = "widget_snapshot_update"
     }
 }

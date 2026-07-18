@@ -16,6 +16,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.OffsetMapping
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
@@ -47,6 +48,46 @@ fun ComposeCortexEditor(
     BasicTextField(
         value = content,
         onValueChange = onContentChange,
+        modifier = modifier,
+        readOnly = readOnly,
+        enabled = enabled,
+        textStyle = TextStyle(
+            color = textColor,
+            fontSize = 16.sp,
+            fontFamily = if (useMonospace) FontFamily.Monospace else FontFamily.Default,
+            lineHeight = 24.sp
+        ),
+        cursorBrush = SolidColor(primaryColor),
+        visualTransformation = visualTransformation
+    )
+}
+
+/**
+ * Selection-aware overload. Same styling as the [String] variant but backed by a [TextFieldValue],
+ * so callers can read/drive the cursor and selection (e.g. to reformat only the selected text).
+ * Offsets stay 1:1 because [MarkdownVisualTransformation] uses [OffsetMapping.Identity].
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun ComposeCortexEditor(
+    value: TextFieldValue,
+    onValueChange: (TextFieldValue) -> Unit,
+    modifier: Modifier = Modifier,
+    useMonospace: Boolean = true,
+    readOnly: Boolean = false,
+    enabled: Boolean = true
+) {
+    val textColor = MaterialTheme.colorScheme.onSurface
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val codeBackgroundColor = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f)
+
+    val visualTransformation = remember(textColor, primaryColor) {
+        MarkdownVisualTransformation(textColor, primaryColor, codeBackgroundColor)
+    }
+
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
         modifier = modifier,
         readOnly = readOnly,
         enabled = enabled,

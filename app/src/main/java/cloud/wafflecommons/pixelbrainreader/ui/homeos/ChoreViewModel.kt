@@ -26,23 +26,26 @@ class ChoreViewModel @Inject constructor(
     private val syncOrchestrator: cloud.wafflecommons.pixelbrainreader.data.sync.SyncOrchestrator
 ) : ViewModel() {
 
-    // Sorted and grouped by Room natively for the UI
-    val groupedChores: StateFlow<Map<String, List<ChoreUiModel>>> = choreRepository.getRoomsWithChoresStream()
+    // Sorted and grouped by Room natively for the UI, carrying each room's identity colour.
+    val groupedChores: StateFlow<List<RoomChoreGroup>> = choreRepository.getRoomsWithChoresStream()
         .map { roomsWithChores ->
-            val result = mutableMapOf<String, List<ChoreUiModel>>()
-            for (roomData in roomsWithChores) {
+            roomsWithChores.map { roomData ->
                 // Archived chores are hidden from the dashboard (still preserved on export).
                 val visibleChores = roomData.chores.filter { !it.archived }
                 val uiModels = calculateChoreEntropyUseCase(visibleChores)
-                // We show empty rooms if we want, or filter them. Here we show all known rooms.
-                result[roomData.room.name] = uiModels.sortedByDescending { it.dirtinessPercentage }
+                RoomChoreGroup(
+                    roomId = roomData.room.id,
+                    roomName = roomData.room.name,
+                    roomColorHex = roomData.room.color,
+                    // We show all known rooms (even empty ones).
+                    chores = uiModels.sortedByDescending { it.dirtinessPercentage }
+                )
             }
-            result
         }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
-            initialValue = emptyMap()
+            initialValue = emptyList()
         )
 
     val allRooms: StateFlow<List<HomeRoomEntity>> = choreRepository.getAllRoomsStream()
@@ -63,8 +66,8 @@ class ChoreViewModel @Inject constructor(
     fun doChore(choreId: String) {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             // Find the chore in the current state to check for anti-cheat and calculate dynamic XP
-            val choreMap = groupedChores.value
-            val targetUiModel = choreMap.values.flatten().find { it.entity.id == choreId } ?: return@launch
+            val targetUiModel = groupedChores.value.flatMap { it.chores }
+                .find { it.entity.id == choreId } ?: return@launch
             
             // ANTI-CHEAT: If it was cleaned today or yesterday (dirtiness very low), grant no XP
             if (targetUiModel.dirtinessPercentage < 5f) {
@@ -125,6 +128,8 @@ class ChoreViewModel @Inject constructor(
                 matchingRoom = cloud.wafflecommons.pixelbrainreader.data.local.entity.HomeRoomEntity(
                     id = java.util.UUID.randomUUID().toString(),
                     name = safeRoomName,
+                    // New rooms get a random identity colour (like habits carry a colour).
+                    color = cloud.wafflecommons.pixelbrainreader.ui.theme.RoomPalette.randomHex()
                 )
                 choreRepository.upsertRoom(matchingRoom)
             }

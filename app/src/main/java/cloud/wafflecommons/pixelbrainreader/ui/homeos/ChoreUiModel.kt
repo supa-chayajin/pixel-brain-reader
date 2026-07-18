@@ -16,3 +16,12 @@ data class ChoreUiModel(
     val dirtinessPercentage: Float,
     val statusColor: StatusColor
 )
+
+/** A room and its chores, carrying the room's identity colour for the dashboard's colour-coding. */
+@Immutable
+data class RoomChoreGroup(
+    val roomId: String,
+    val roomName: String,
+    val roomColorHex: String,
+    val chores: List<ChoreUiModel>
+)

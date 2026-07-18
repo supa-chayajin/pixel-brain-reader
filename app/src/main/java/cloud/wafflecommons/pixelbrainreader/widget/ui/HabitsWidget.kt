@@ -84,14 +84,22 @@ class HabitsWidget : GlanceAppWidget() {
 
     @Composable
     private fun HabitRow(habit: WidgetLiveData.WidgetHabit) {
-        val toggle = actionRunCallback<HabitToggleCallback>(
-            actionParametersOf(
-                WidgetKeys.HABIT_ID to habit.id,
-                WidgetKeys.HABIT_TARGET_DONE to !habit.done
+        // Automatic (Health-Connect) habits are read-only — no tap toggle, just a live status.
+        val baseModifier = GlanceModifier.fillMaxWidth().padding(vertical = 6.dp)
+        val rowModifier = if (habit.isAutomatic) {
+            baseModifier
+        } else {
+            baseModifier.clickable(
+                actionRunCallback<HabitToggleCallback>(
+                    actionParametersOf(
+                        WidgetKeys.HABIT_ID to habit.id,
+                        WidgetKeys.HABIT_TARGET_DONE to !habit.done
+                    )
+                )
             )
-        )
+        }
         Row(
-            modifier = GlanceModifier.fillMaxWidth().padding(vertical = 6.dp).clickable(toggle),
+            modifier = rowModifier,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
@@ -107,12 +115,24 @@ class HabitsWidget : GlanceAppWidget() {
             Text(
                 habit.title,
                 maxLines = 1,
+                modifier = GlanceModifier.defaultWeight(),
                 style = TextStyle(
                     fontSize = 14.sp,
                     color = if (habit.done) GlanceTheme.colors.onSurfaceVariant else GlanceTheme.colors.onSurface,
                     textDecoration = if (habit.done) TextDecoration.LineThrough else TextDecoration.None
                 )
             )
+            if (habit.isAutomatic) {
+                Spacer(GlanceModifier.width(8.dp))
+                Text(
+                    "AUTO",
+                    style = TextStyle(
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = GlanceTheme.colors.onSurfaceVariant
+                    )
+                )
+            }
         }
     }
 }
