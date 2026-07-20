@@ -1,9 +1,11 @@
 package cloud.wafflecommons.pixelbrainreader.data.repository
 
+import android.util.Log
 import cloud.wafflecommons.pixelbrainreader.data.ai.BriefingGenerator
 import cloud.wafflecommons.pixelbrainreader.data.ai.OracleGenerator
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.DailyBriefingDao
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyBriefingEntity
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
@@ -31,28 +33,29 @@ class DailyBriefingRepository @Inject constructor(
         val dateStr = date.toString()
 
         // 1. Fast Path: Check Cached Data (No Lock)
-        var cached = dao.getBriefing(dateStr)
-        if (isValid(cached)) {
-            return@withContext DailyBriefingModel(
-                briefing = cached!!.briefingContent,
-                oracleInsight = cached.oracleContent
-            )
+        dao.getBriefing(dateStr)?.let { hit ->
+            if (isValid(hit)) {
+                return@withContext DailyBriefingModel(
+                    briefing = hit.briefingContent,
+                    oracleInsight = hit.oracleContent
+                )
+            }
         }
 
         // 2. Slow Path: Acquire Lock (Double-Checked Locking)
         mutex.withLock {
             // Re-fetch to see if another thread finished while we were waiting
-            cached = dao.getBriefing(dateStr)
-            if (isValid(cached)) {
+            val cached = dao.getBriefing(dateStr)
+            if (cached != null && isValid(cached)) {
                 return@withLock DailyBriefingModel(
-                    briefing = cached!!.briefingContent,
+                    briefing = cached.briefingContent,
                     oracleInsight = cached.oracleContent
                 )
             }
 
             // Still Invalid/Missing -> Proceed to Generate
             if (cached != null) {
-                println("Briefing Cache Invalidated (Under Lock) for $dateStr. Content invalid.")
+                Log.d("DailyBriefing", "Briefing cache invalidated for $dateStr — content invalid.")
             }
 
             // Fetch Context (Weather)
@@ -63,7 +66,8 @@ class DailyBriefingRepository @Inject constructor(
                     null
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
+                if (e is CancellationException) throw e
+                Log.d("DailyBriefing", "Briefing context/generation failed", e)
                 null
             }
 
@@ -71,7 +75,8 @@ class DailyBriefingRepository @Inject constructor(
             val newBriefing = try {
                 briefingGenerator.generateBriefing(weather)
             } catch (e: Exception) {
-                e.printStackTrace()
+                if (e is CancellationException) throw e
+                Log.d("DailyBriefing", "Briefing context/generation failed", e)
                 null
             }
 
@@ -82,7 +87,8 @@ class DailyBriefingRepository @Inject constructor(
                     null
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
+                if (e is CancellationException) throw e
+                Log.d("DailyBriefing", "Briefing context/generation failed", e)
                 null
             }
 
@@ -98,23 +104,23 @@ class DailyBriefingRepository @Inject constructor(
                                 newOracle.length >= 10 && 
                                 !newOracle.contains("Carpe Diem", ignoreCase = true))
 
-            if (isBriefingValid && isOracleValid) {
+            if (newBriefing != null && isBriefingValid && isOracleValid) {
                 val entity = DailyBriefingEntity(
                     date = dateStr,
-                    briefingContent = newBriefing!!, // validated
+                    briefingContent = newBriefing,
                     oracleContent = newOracle
                 )
                 dao.insertBriefing(entity)
-                println("Saved valid briefing to DB for $dateStr")
+                Log.d("DailyBriefing", "Saved valid briefing to DB for $dateStr")
                 return@withLock DailyBriefingModel(newBriefing, newOracle)
             } else {
-                println("Generated content invalid. ABORTING SAVE to protect DB. Briefing: ${newBriefing?.take(15)}...")
+                Log.d("DailyBriefing", "Generated content invalid — aborting save to protect DB.")
             }
 
             // 4. Fallback (Generation Failed or Returned Garbage)
             // Return existing (even if invalid) content to prevent blank screen, but DO NOT overwrite DB.
             if (cached != null) {
-                return@withLock DailyBriefingModel(cached!!.briefingContent, cached!!.oracleContent)
+                return@withLock DailyBriefingModel(cached.briefingContent, cached.oracleContent)
             }
 
             // Ultimate Fallback
