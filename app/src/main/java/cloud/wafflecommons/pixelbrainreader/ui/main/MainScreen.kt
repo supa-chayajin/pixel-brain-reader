@@ -1051,7 +1051,8 @@ fun MainScreen(
                     onNavigateToHabitConfig = { navController.navigate("habit_config") },
                     onNavigateToHomeConfig = { navController.navigate(Screen.ROUTE_HOME_CONFIG) },
                     onNavigateToReminders = { navController.navigate("reminders") },
-                    onNavigateToNavBarReorder = { navController.navigate("navbar_reorder") }
+                    onNavigateToNavBarReorder = { navController.navigate("navbar_reorder") },
+                    onNavigateToMoodTags = { navController.navigate("mood_tags") }
                 )
             }
 
@@ -1071,6 +1072,12 @@ fun MainScreen(
                 cloud.wafflecommons.pixelbrainreader.ui.settings.NavBarReorderScreen(
                     order = navBarOrder,
                     onOrderChange = { viewModel.setNavBarOrder(it) },
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
+
+            composable("mood_tags") {
+                cloud.wafflecommons.pixelbrainreader.ui.settings.MoodTagSettingsScreen(
                     onNavigateBack = { navController.popBackStack() }
                 )
             }

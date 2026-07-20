@@ -158,8 +158,7 @@ class ImportWorker @AssistedInject constructor(
     private suspend fun summarize(markdownBody: String): String? {
         if (markdownBody.length <= 500) return null
         return try {
-            val prompt = "Summarize this article in 3 concise bullet points (match the article's language, " +
-                "French or English):\n\n${markdownBody.take(4000)}"
+            val prompt = "Résume cet article en 3 puces concises, en français :\n\n${markdownBody.take(4000)}"
             val sb = StringBuilder()
             geminiRagManager.generateResponse(prompt, useRAG = false).collect { chunk ->
                 if (!chunk.startsWith("Thinking")) sb.append(chunk)

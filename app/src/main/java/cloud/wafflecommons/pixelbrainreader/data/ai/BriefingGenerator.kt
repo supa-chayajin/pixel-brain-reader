@@ -12,11 +12,11 @@ class BriefingGenerator @Inject constructor(
     private val geminiRagManager: GeminiRagManager
 ) {
     
-    private val FALLBACK_QUOTE = "The only way to do great work is to love what you do."
+    private val FALLBACK_QUOTE = "La seule façon de faire du bon travail, c'est d'aimer ce que l'on fait."
 
     suspend fun getDailyQuote(moodTrend: String): String {
         return try {
-            val prompt = "Generate an inspiring or stoic daily quote in English based on a mood trend of $moodTrend. Output Format: 'Quote' - Author."
+            val prompt = "Génère une citation quotidienne inspirante ou stoïcienne à partir d'une tendance d'humeur : $moodTrend. Format de sortie : « Citation » - Auteur. ${AiLanguage.DIRECTIVE}"
             val flow = geminiRagManager.generateResponse(prompt, useRAG = false)
             
              var result = ""
@@ -32,7 +32,7 @@ class BriefingGenerator @Inject constructor(
         val tag = "Cortex"
         return try {
             val condition = "${weather.emoji} ${weather.description}"
-            val prompt = "The current weather is: $condition, ${weather.temperature}. Give one short, practical piece of advice (a single sentence) in English for the day (e.g. 'Take an umbrella')."
+            val prompt = "La météo actuelle est : $condition, ${weather.temperature}. Donne un seul conseil court et pratique (une seule phrase) pour la journée (par ex. « Prends un parapluie »). ${AiLanguage.DIRECTIVE}"
             
             Log.d(tag, "Generating weather insight for: ${weather.description}")
 
@@ -46,13 +46,13 @@ class BriefingGenerator @Inject constructor(
              }
             
             if (result.isBlank()) {
-                "Get ready for the day."
+                "Prépare-toi pour la journée."
             } else {
                 result.replace("\"", "").trim()
             }
         } catch (e: Exception) {
              Log.e(tag, "Weather AI Failed", e)
-             "Get ready for the day. (AI Unavailable)"
+             "Prépare-toi pour la journée. (IA indisponible)"
         }
     }
 
@@ -60,16 +60,17 @@ class BriefingGenerator @Inject constructor(
         val tag = "WeatherAI"
         return try {
             val weatherContext = if (weather != null) {
-                "Today's weather is ${weather.temperature}, ${weather.description}."
+                "La météo d'aujourd'hui est ${weather.temperature}, ${weather.description}."
             } else {
-                "Weather data is currently unavailable."
+                "Les données météo sont actuellement indisponibles."
             }
 
             val prompt = """
                 $weatherContext
-                Incorporate this into a concise daily briefing in English.
-                Keep it under 50 words.
-                Do not explicitly state 'The weather is...', weave it naturally into advice or a greeting.
+                Intègre cela dans un briefing quotidien concis.
+                Reste sous les 50 mots.
+                N'énonce pas explicitement « La météo est... », intègre-la naturellement dans un conseil ou une salutation.
+                ${AiLanguage.DIRECTIVE}
             """.trimIndent()
 
             Log.d(tag, "Briefing generation triggered with weather context.")
@@ -84,7 +85,7 @@ class BriefingGenerator @Inject constructor(
             }
             
             if (result.isBlank()) {
-                "Get ready for a great day."
+                "Prépare-toi pour une belle journée."
             } else {
                 result.replace("\"", "").trim()
             }

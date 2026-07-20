@@ -32,15 +32,21 @@ data class MoodState(
 @HiltViewModel
 class MoodViewModel @Inject constructor(
     private val moodRepository: MoodRepository,
+    private val moodTagRepository: cloud.wafflecommons.pixelbrainreader.data.repository.MoodTagRepository,
     private val noteRepository: cloud.wafflecommons.pixelbrainreader.data.repository.NoteRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(MoodState())
     val uiState: StateFlow<MoodState> = _uiState.asStateFlow()
 
+    /** Canonical, vault-synced activity tags offered in the check-in sheet. */
+    val availableTags: StateFlow<List<String>> = moodTagRepository.tags
+
     init {
         // Initial load for today
         loadMood(LocalDate.now())
+        // Hydrate the offered-tags list from the vault (seeds defaults on first run).
+        viewModelScope.launch { moodTagRepository.ensureLoaded() }
     }
 
     /**

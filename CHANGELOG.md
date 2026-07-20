@@ -9,6 +9,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _No unreleased changes._
 
+## [9.4.0] — 2026-07-20
+
+Two dogfooding follow-ups: on-device AI now answers in **French**, and Mood **activity
+tags are user-managed** in a dedicated, vault-synced settings page.
+
+### Added
+
+- **Mood Tags settings page** (`Settings ▸ Life OS Automations ▸ Manage Mood Tags`). Add,
+  remove and reorder the activity tags offered when logging a mood. This list is now the
+  canonical source for the mood check-in sheet (previously a hardcoded, categorized list).
+  It is stored as `10_Journal/data/config/mood_tags.json` in the vault, so it **syncs across
+  devices via git** — seeded from the former defaults on first run, written + pushed on the
+  first edit. Historical mood entries keep the tags they were saved with; curating the list
+  only changes what is *offered* going forward. Backed by the new `MoodTagRepository`.
+
+### Changed
+
+- **All on-device AI output is now in French.** Chat, daily briefing/quote/weather advice, the
+  RPG Oracle quest, folder insight (map-reduce), private-journal writing assist
+  (improve / continue / inspire), Markdown beautify and the web-import summary all reply in
+  French. Prompts were rewritten in French prose (the strongest steer for Gemini Nano) and the
+  explicit "answer in French" directive is centralised in the new `data/ai/AiLanguage.kt`. The
+  chat scaffold labels in `LocalAiManager` were translated too so the surrounding structural
+  language reinforces the response language.
+- **The mood check-in sheet reads the curated tag list** instead of the hardcoded categorized
+  activities. Known/seed tags keep their original icons; user-added tags get a generic tag glyph.
+- **Speech-to-text is pinned to French.** The private-vault dictation and the Cortex chat voice
+  input now request `fr-FR` (`RecognizerIntent.EXTRA_LANGUAGE` / `EXTRA_LANGUAGE_PREFERENCE`)
+  instead of the device default, so dictated notes and prompts transcribe in French.
+
 ## [9.3.0] — 2026-07-17
 
 Home-screen widget suite + app actions, a full English localization pass, and three

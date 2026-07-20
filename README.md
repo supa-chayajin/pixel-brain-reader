@@ -4,7 +4,7 @@ A **native Android, local-first Markdown vault reader and life-OS** that turns a
 
 - Single Gradle module (`:app`) · Kotlin · Jetpack Compose · Material 3 (adaptive)
 - Min/compile SDK **36**, JVM target **17**, package `cloud.wafflecommons.pixelbrainreader`
-- Current version: **9.2.0** (`versionCode = 920`)
+- Current version: **9.4.0** (`versionCode = 940`)
 
 ---
 
@@ -19,7 +19,7 @@ On top of that vault, the app layers:
 - **Life OS** — habits, chores, gamification, dashboards, mood, life stats.
 - **Health** — Health Connect → Room → markdown export in the vault.
 - **Google ecosystem (read-only sync)** — Calendar + Tasks via Google Auth + AuthorizationClient.
-- **Cortex AI** — chat over your vault, **100% on-device** (Gemini Nano via ML Kit GenAI + a local TFLite MiniLM RAG index). No cloud, no API key. Chat, briefing, oracle, folder-insight and the web-import summary all run locally.
+- **Cortex AI** — chat over your vault, **100% on-device** (Gemini Nano via ML Kit GenAI + a local TFLite MiniLM RAG index). No cloud, no API key. Chat, briefing, oracle, folder-insight and the web-import summary all run locally, and **all AI output is in French** (see `data/ai/AiLanguage.kt`).
 - **Private Vault** — a separate journal surface (`PrivateJournalActivity`).
 - **Home-screen widget** — Jetpack Glance, reads pre-rendered snapshots.
 
@@ -99,6 +99,8 @@ Pull failure aborts; health/google failures don't. Preserve this Pull-then-Push 
 
 **100% on-device — no cloud, no API key.** Cloud Gemini (and `GeminiScribeManager`) were removed; `data/ai/GeminiRagManager.kt` is now a local RAG facade over `VectorSearchEngine` + `LocalAiManager`.
 
+**Response language is French.** Every generation surface (chat, briefing, oracle, folder insight, journal assist, web-import summary) replies in French. Prompts are written in French prose (the strongest steer for Nano) and carry an explicit directive centralised in `data/ai/AiLanguage.kt` — the single greppable source of truth for the "answer in French" contract.
+
 ### Local RAG retrieval
 - On-device embeddings via a raw **TFLite** model (`assets/sentences_encoder.tflite`, `paraphrase-multilingual-MiniLM-L12-v2`, 384-dim) tokenized by DJL's `HuggingFaceTokenizer` (`assets/tokenizer.json`), stored in Room as `EmbeddingEntity`. Indexing is owned by `IndexingWorker`.
 
@@ -148,9 +150,9 @@ domain/                    Pure-Kotlin domain types
 | `journal`, `daily` | Daily note, journal entries |
 | `lifeos`, `homeos`, `homeconfig` | Habits, chores, dashboards, gamification |
 | `health`, `lifestats` | Health Connect + analytics |
-| `mood` | Mood logger + emoji mapping |
-| `cortex`, `ai` | Cortex chat (`ChatPanel`, `ChatViewModel`) — Oracle (RAG) + Scribe (persona) |
-| `settings` | Theme, AI model, Health Connect, Google sync, on-device model lifecycle |
+| `mood` | Mood logger + emoji mapping; activity tags curated in Settings (vault-synced) |
+| `cortex`, `ai` | Cortex chat (`ChatPanel`, `ChatViewModel`) — Oracle (RAG) + Scribe (persona), French output |
+| `settings` | Theme, AI model, Health Connect, Google sync, on-device model lifecycle, Mood Tags |
 | `gamification`, `privatevault`, `login`, `crash` | The remaining special-purpose screens |
 
 `PrivateJournalActivity` and `CrashActivity` (in the `:crash` process via `ui/crash/GlobalExceptionHandler.kt`) are the only Activities besides `MainActivity`.

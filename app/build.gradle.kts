@@ -34,8 +34,8 @@ android {
         // Compose 1.12 / compileSdk 37), Life Stats revamp, reminder-notification overhaul.
         // versionName is the single source of truth — surfaced in Settings via
         // BuildConfig.VERSION_NAME (no more hardcoded string to drift).
-        versionCode = 930
-        versionName = "9.3.0"
+        versionCode = 940
+        versionName = "9.4.0"
 
         // GitHub OAuth "Device Flow" client id (public — no secret needed for device flow).
         // Register an OAuth App at github.com/settings/developers, enable Device Flow, and

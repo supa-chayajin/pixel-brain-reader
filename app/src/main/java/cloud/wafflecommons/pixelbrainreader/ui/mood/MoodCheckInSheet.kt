@@ -35,6 +35,8 @@ fun MoodCheckInSheet(
     viewModel: MoodViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    // Canonical activity tags, curated in Settings ▸ Mood Tags and synced via the vault.
+    val availableTags by viewModel.availableTags.collectAsStateWithLifecycle()
     val haptic = LocalHapticFeedback.current
     var selectedMood by remember { mutableIntStateOf(3) }
     val selectedActivities = remember { mutableStateListOf<String>() }
@@ -47,31 +49,6 @@ fun MoodCheckInSheet(
         Pair(4, "🙂"),
         Pair(5, "🤩")
     )
-
-    data class ActivityItem(val label: String, val icon: ImageVector)
-    data class ActivityCategory(val title: String, val items: List<ActivityItem>)
-
-    val categorizedActivities = remember {
-        listOf(
-            ActivityCategory("Hobbies", listOf(
-                ActivityItem("Coding", Icons.Outlined.Code),
-                ActivityItem("Working", Icons.Outlined.WorkHistory),
-                ActivityItem("Gaming", Icons.Outlined.SportsEsports),
-                ActivityItem("Chilling", Icons.Outlined.BeachAccess)
-            )),
-            ActivityCategory("Social & Vibe", listOf(
-                ActivityItem("Solo", Icons.Outlined.Person),
-                ActivityItem("Family", Icons.Outlined.FamilyRestroom),
-                ActivityItem("Friends", Icons.Outlined.Groups)
-            )),
-            ActivityCategory("Location", listOf(
-                ActivityItem("Home", Icons.Outlined.Home),
-                ActivityItem("Work", Icons.Outlined.HomeWork),
-                ActivityItem("CDS", Icons.Outlined.Work),
-                ActivityItem("Out", Icons.Outlined.NaturePeople)
-            ))
-        )
-    }
 
 
     ModalBottomSheet(
@@ -167,34 +144,32 @@ fun MoodCheckInSheet(
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 
-                categorizedActivities.forEach { category ->
+                if (availableTags.isEmpty()) {
                     Text(
-                        text = category.title,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(bottom = 12.dp, top = 8.dp)
+                        text = "No tags yet. Add some in Settings ▸ Mood Tags.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    
+                } else {
                     FlowRow(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        category.items.forEach { item ->
-                            val isSelected = selectedActivities.contains(item.label)
-                            
+                        availableTags.forEach { tag ->
+                            val isSelected = selectedActivities.contains(tag)
+
                             FilterChip(
                                 selected = isSelected,
                                 onClick = {
                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    if (isSelected) selectedActivities.remove(item.label)
-                                    else selectedActivities.add(item.label)
+                                    if (isSelected) selectedActivities.remove(tag)
+                                    else selectedActivities.add(tag)
                                 },
-                                label = { Text(item.label) },
+                                label = { Text(tag) },
                                 leadingIcon = {
                                     Icon(
-                                        imageVector = item.icon,
+                                        imageVector = tagIcon(tag),
                                         contentDescription = null,
                                         modifier = Modifier.size(18.dp)
                                     )
@@ -234,6 +209,26 @@ fun MoodCheckInSheet(
             }
         }
     }
+}
+
+/**
+ * Resolves a leading icon for a mood tag. Known/seed tags keep their original glyph;
+ * user-added tags fall back to a generic tag icon (icons can't be persisted, so they're
+ * derived from the label here rather than stored alongside the tag).
+ */
+private fun tagIcon(label: String): ImageVector = when (label) {
+    "Coding" -> Icons.Outlined.Code
+    "Working" -> Icons.Outlined.WorkHistory
+    "Gaming" -> Icons.Outlined.SportsEsports
+    "Chilling" -> Icons.Outlined.BeachAccess
+    "Solo" -> Icons.Outlined.Person
+    "Family" -> Icons.Outlined.FamilyRestroom
+    "Friends" -> Icons.Outlined.Groups
+    "Home" -> Icons.Outlined.Home
+    "Work" -> Icons.Outlined.HomeWork
+    "CDS" -> Icons.Outlined.Work
+    "Out" -> Icons.Outlined.NaturePeople
+    else -> Icons.Outlined.Tag
 }
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)

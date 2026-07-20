@@ -535,9 +535,14 @@ fun PrivateEditor(
     }
 
     fun startDictation() {
+        // Pin dictation to French — the private journal is a French-first surface.
+        val french = java.util.Locale.FRANCE.toLanguageTag() // "fr-FR"
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_PROMPT, "Dictate your note…")
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, french)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, french)
+            putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, french)
+            putExtra(RecognizerIntent.EXTRA_PROMPT, "Dictez votre note…")
         }
         try {
             speechLauncher.launch(intent)
@@ -649,7 +654,7 @@ private fun WritingAssistSheet(
         ) {
             Text("Writing assistant", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Text(
-                "Suggestions generated on-device, in English — nothing leaves the phone.",
+                "Suggestions generated on-device, in French — nothing leaves the phone.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
