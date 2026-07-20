@@ -41,6 +41,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   they are now debug-only (stripped by R8) or scrubbed, and the last `println` calls
   are gone.
 
+- **Fenced code blocks are finally syntax-highlighted.** Ten languages (kotlin, java,
+  javascript, json, yaml, bash, python, markup/HTML, markdown, clike) with the usual
+  aliases (`kt`, `js`, `sh`, `yml`, `md`, `py`…), light/dark theme following the app
+  surface. Grammars are vendored from Prism4j (Apache-2.0) plus a hand-written bash
+  grammar; a manual locator avoids the kapt-only bundler, so the KSP-only toolchain
+  is untouched. Unknown languages still render as plain text.
+
 ### Removed
 
 - Dead code: `GenerativeModelStub` (unreferenced mock AI) and the unused

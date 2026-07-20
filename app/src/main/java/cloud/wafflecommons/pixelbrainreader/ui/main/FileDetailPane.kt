@@ -473,7 +473,8 @@ private fun decodeSafely(value: String): String =
 
 @Composable
 fun MarkwonContent(content: String, onWikiLinkClick: (String) -> Unit) {
-    val textColor = MaterialTheme.colorScheme.onSurface.toArgb()
+    val colorScheme = MaterialTheme.colorScheme
+    val textColor = colorScheme.onSurface.toArgb()
 
     AndroidView(
         factory = { context ->
@@ -492,6 +493,14 @@ fun MarkwonContent(content: String, onWikiLinkClick: (String) -> Unit) {
                 .usePlugin(TablePlugin.create(tv.context))
                 .usePlugin(LinkifyPlugin.create())
                 .usePlugin(TaskListPlugin.create(textColor, textColor, textColor))
+                // Fenced-code syntax highlighting: vendored Prism4j grammars via the
+                // manual locator (see PrismHelper); theme follows the surface luminance.
+                .usePlugin(
+                    io.noties.markwon.syntax.SyntaxHighlightPlugin.create(
+                        cloud.wafflecommons.pixelbrainreader.ui.utils.PrismHelper.prism,
+                        cloud.wafflecommons.pixelbrainreader.ui.utils.CodeTheme.create(colorScheme)
+                    )
+                )
                 .usePlugin(ObsidianImagePlugin())
                 .usePlugin(ObsidianCalloutPlugin())
                 .usePlugin(ImagesPlugin.create())
