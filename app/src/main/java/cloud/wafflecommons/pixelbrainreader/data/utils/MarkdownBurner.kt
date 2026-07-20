@@ -21,10 +21,18 @@ object MarkdownBurner {
     ): String {
         val sb = StringBuilder()
 
-        // 1. Frontmatter
+        // 1. Frontmatter. FrontmatterManager.extractFrontmatterRaw returns the YAML
+        // WITHOUT its --- fences, so the burner must always re-fence — appending it
+        // verbatim made the 2nd burn of a day emit unfenced YAML and the 3rd burn
+        // (finding no fenced block) reset it, silently dropping user-added keys.
         if (existingFrontmatter.isNotBlank()) {
-            sb.append(existingFrontmatter)
-            if (!existingFrontmatter.endsWith("\n")) sb.append("\n")
+            val fm = existingFrontmatter.trimEnd('\n')
+            if (fm.startsWith("---")) {
+                // Already a fenced block — pass through untouched.
+                sb.append(fm).append("\n")
+            } else {
+                sb.append("---\n").append(fm).append("\n---\n")
+            }
         } else {
             sb.append("---\n")
             sb.append("date: ${dashboard.date}\n")

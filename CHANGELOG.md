@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Daily-note frontmatter no longer degrades over repeated burns.** The burner
+  received the YAML *without* its `---` fences and appended it verbatim, so the second
+  burn of a day emitted an unfenced block (breaking Obsidian properties) and the third
+  reset it, silently dropping user-added keys. The burner now always re-fences.
+  Reported by the new round-trip test harness.
+- **AI source citations are now tappable.** The source chips under a RAG answer open
+  the cited vault note (chat → file browser detail pane) instead of doing nothing —
+  the last dead button in the app.
+
 - **Cancelled syncs no longer masquerade as sync failures.** Every git/repository/AI
   `catch (e: Exception)` that converted failures into results (JGitProvider's 10 op
   wrappers, Mood/Habit/VaultDiscovery repository parse-and-push paths, the Gemini Nano
