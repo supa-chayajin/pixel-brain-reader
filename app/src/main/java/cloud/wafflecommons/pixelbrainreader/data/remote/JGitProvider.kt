@@ -14,6 +14,7 @@ import java.io.File
 import java.io.Writer
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -68,10 +69,11 @@ class JGitProvider @Inject constructor(
                 .forEach { lockFile ->
                     val deleted = lockFile.delete()
                     if (deleted) {
-                        Log.w("JGitProvider", "Cleaned stale lock file: ${lockFile.absolutePath}")
+                        Log.d("JGitProvider", "Cleaned stale lock file: ${lockFile.absolutePath}")
                     }
                 }
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Log.e("JGitProvider", "Failed to clean stale locks", e)
         }
     }
@@ -137,6 +139,7 @@ class JGitProvider @Inject constructor(
                     Result.success(Unit)
                 }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 Result.failure(e)
             }
         }
@@ -159,6 +162,7 @@ class JGitProvider @Inject constructor(
                 }
                 Result.success(Unit)
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 Result.failure(e)
             }
         }
@@ -176,6 +180,7 @@ class JGitProvider @Inject constructor(
                 }
                 Result.success(Unit)
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 Result.failure(e)
             }
         }
@@ -193,6 +198,7 @@ class JGitProvider @Inject constructor(
                 }
                 Result.success(Unit)
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 Result.failure(e)
             }
         }
@@ -240,6 +246,7 @@ class JGitProvider @Inject constructor(
                 }
                 Result.success(Unit)
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 Log.e("JGitProvider", "Commit Failed", e)
                 Result.failure(e)
             }
@@ -267,6 +274,7 @@ class JGitProvider @Inject constructor(
                 Log.i("JGitProvider", "Push Successful")
                 Result.success(Unit)
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 Log.e("JGitProvider", "Push Failed", e)
                 Result.failure(e)
             }
@@ -343,6 +351,7 @@ class JGitProvider @Inject constructor(
             Log.i("JGitProvider", "Pull Successful")
             return@withContext SyncResult.Success
             } catch (e: Exception) {
+                 if (e is CancellationException) throw e
                  if (e is RefNotAdvertisedException) {
                      Log.w("JGitProvider", "Pull skipped: Ref not advertised (Empty repo?)")
                      return@withContext SyncResult.Success
@@ -374,6 +383,7 @@ class JGitProvider @Inject constructor(
                 }
                 Result.success(Unit)
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 Result.failure(e)
             }
         }
@@ -424,6 +434,7 @@ class JGitProvider @Inject constructor(
                 Log.w("GitSync", "EMERGENCY FORCE PUSH COMPLETED")
                 Result.success(Unit)
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 Log.e("GitSync", "Force Push Failed", e)
                 Result.failure(e)
             }
