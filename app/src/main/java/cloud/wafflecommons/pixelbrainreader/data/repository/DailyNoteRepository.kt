@@ -106,10 +106,10 @@ links: []
             val file = safeFileProvider.getSafeFile(path)
             if (file.exists()) file.readText() else null
         } catch (e: SecurityException) {
-            Log.e("DailyNoteRepository", "Path traversal blocked for $path", e)
+            Log.d("DailyNoteRepository", "Path traversal blocked for $path", e)
             null
         } catch (e: Exception) {
-            Log.e("DailyNoteRepository", "Failed to read $path", e)
+            Log.d("DailyNoteRepository", "Failed to read $path", e)
             null
         }
     }
