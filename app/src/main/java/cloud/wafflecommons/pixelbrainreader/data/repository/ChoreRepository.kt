@@ -145,7 +145,7 @@ class ChoreRepository @Inject constructor(
     suspend fun syncWithFileSystem() = withContext(Dispatchers.IO) {
         val homeRoot = fileRepository.getLocalFile(homeDir)
         if (!homeRoot.exists()) {
-            Log.w("DataSync", "Home directory not found: ${homeRoot.absolutePath}")
+            Log.d("DataSync", "Home directory not found: ${homeRoot.absolutePath}")
             return@withContext
         }
 

@@ -213,7 +213,7 @@ class GoogleAuthRepository @Inject constructor(
         if (!email.isNullOrBlank() && secretManager.getGoogleEmail() != email) {
             secretManager.saveGoogleEmail(email)
             _isAccountLinked.value = true
-            Log.i(TAG, "Captured email from AuthorizationResult: $email")
+            Log.i(TAG, "Captured Google account email from AuthorizationResult")
         }
     }
 
