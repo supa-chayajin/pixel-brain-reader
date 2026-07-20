@@ -1,18 +1,22 @@
 package cloud.wafflecommons.pixelbrainreader.ui.utils
 
-import android.text.SpannableStringBuilder
-import android.text.style.BackgroundColorSpan
-import android.text.style.ForegroundColorSpan
 import androidx.compose.material3.ColorScheme
-import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.luminance
 import io.noties.markwon.syntax.Prism4jTheme
+import io.noties.markwon.syntax.Prism4jThemeDarkula
+import io.noties.markwon.syntax.Prism4jThemeDefault
 
 object CodeTheme {
-    fun create(colorScheme: ColorScheme): Prism4jTheme {
-        // Fallback to Default Theme due to API signature mismatch in Prism4jTheme interface
-        // This ensures the app compiles and has syntax highlighting.
-        return io.noties.markwon.syntax.Prism4jThemeDefault.create()
-    }
-
-    // private class CustomPrismTheme(...) : Prism4jTheme { ... } implementation commented out/removed
+    /**
+     * Prism theme matched to the current Material scheme: Darkula on dark
+     * surfaces, the light default otherwise. A fully Material-dynamic theme
+     * already lost one fight with the Prism4jTheme API signature — keeping the
+     * stock themes is deliberate for v10.
+     */
+    fun create(colorScheme: ColorScheme): Prism4jTheme =
+        if (colorScheme.surface.luminance() < 0.5f) {
+            Prism4jThemeDarkula.create()
+        } else {
+            Prism4jThemeDefault.create()
+        }
 }
