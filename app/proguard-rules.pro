@@ -156,6 +156,15 @@
 -keep class cloud.wafflecommons.pixelbrainreader.data.remote.OpenMeteoResponse { *; }
 -keep class cloud.wafflecommons.pixelbrainreader.data.remote.DailyUnits { *; }
 
+# Two more Gson-reflected types OUTSIDE the kept packages (same failure class as
+# OpenMeteo): DailyHealthMetrics is Gson().fromJson'd in AutomateHabitsUseCase /
+# ApplyHealthSynergyUseCase, and the Attribute enum round-trips through a Gson
+# TypeToken map in GamificationPreferences. R8 renaming fields/enum constants
+# breaks both silently — and since that JSON is persisted, a rename also corrupts
+# stored data across builds.
+-keep class cloud.wafflecommons.pixelbrainreader.data.health.DailyHealthMetrics { *; }
+-keep class cloud.wafflecommons.pixelbrainreader.data.gamification.Attribute { *; }
+
 # -----------------------------------------------------------------------------
 # Security (EncryptedSharedPreferences / CryptoManager)
 # -----------------------------------------------------------------------------
@@ -184,6 +193,15 @@
 -dontwarn org.eclipse.jgit.**
 -dontwarn org.slf4j.**
 -dontwarn org.ietf.jgss.**
+
+# -----------------------------------------------------------------------------
+# flexmark-java html→markdown converter (web import / universal collector)
+# -----------------------------------------------------------------------------
+# Flexmark resolves its extensions and DataKey option holders reflectively; R8
+# stripping/renaming them breaks the ACTION_SEND / pixelbrain://import reader
+# pipeline ONLY in release builds (debug has R8 off).
+-keep class com.vladsch.flexmark.** { *; }
+-dontwarn com.vladsch.flexmark.**
 
 # -----------------------------------------------------------------------------
 # MediaPipe Tasks (TFLite text embedder)
