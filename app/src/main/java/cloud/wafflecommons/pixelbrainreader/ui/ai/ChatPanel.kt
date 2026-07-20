@@ -63,7 +63,8 @@ import java.time.format.DateTimeFormatter
 fun ChatPanel(
     modifier: Modifier = Modifier,
     viewModel: ChatViewModel = hiltViewModel(),
-    onInsertContent: (String) -> Unit = {}
+    onInsertContent: (String) -> Unit = {},
+    onSourceClick: (String) -> Unit = {}
 ) {
     // rememberSaveable so an unsent draft survives process death (config changes are
     // already handled without recreation via the Activity's configChanges).
@@ -176,6 +177,7 @@ fun ChatPanel(
                                 ChatBubble(
                                     message = msg,
                                     onInsert = if (!msg.isUser) onInsertContent else null,
+                                    onSourceClick = if (!msg.isUser) onSourceClick else null,
                                     accentColor = modeColor
                                 )
                             }
@@ -269,6 +271,7 @@ fun BrainModeSwitch(
 fun ChatBubble(
     message: ChatMessage,
     onInsert: ((String) -> Unit)?,
+    onSourceClick: ((String) -> Unit)? = null,
     accentColor: Color
 ) {
     val isUser = message.isUser
@@ -354,7 +357,7 @@ fun ChatBubble(
                     ) {
                         message.sources.forEach { source ->
                             AssistChip(
-                                onClick = { /* TODO: Navigate to File */ },
+                                onClick = { onSourceClick?.invoke(source) },
                                 label = {
                                     Text(
                                         source.substringAfterLast("/"),

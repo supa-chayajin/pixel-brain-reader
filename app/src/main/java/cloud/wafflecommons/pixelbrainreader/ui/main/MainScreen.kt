@@ -1039,7 +1039,8 @@ fun MainScreen(
                             onInsertContent = { text ->
                                 android.util.Log.d("PixelBrain", "ChatPanel onInsertContent triggered. Saving to Inbox.")
                                 viewModel.saveChatToInbox(text)
-                            }
+                            },
+                            onSourceClick = { path -> viewModel.openVaultFile(path) }
                         )
                     }
                 }

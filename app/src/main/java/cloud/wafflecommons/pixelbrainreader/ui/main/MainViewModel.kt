@@ -305,6 +305,25 @@ class MainViewModel @Inject constructor(
         }
     }
     
+    /**
+     * Open a vault file by relative path from a non-browser surface (e.g. an AI
+     * source-citation chip). Content flows reactively from the selected path;
+     * the "home" navigation trigger routes back to the file browser, whose
+     * selectedFileName effect opens the detail pane.
+     */
+    fun openVaultFile(path: String) {
+        val dto = GithubFileDto(
+            name = path.substringAfterLast('/'),
+            path = path,
+            type = "file",
+            downloadUrl = null,
+            sha = null,
+            lastModified = System.currentTimeMillis()
+        )
+        loadFile(dto)
+        _navigationTrigger.value = "home"
+    }
+
     fun refreshFile(file: GithubFileDto) {
         if (file.downloadUrl == null) return
         syncFile(file.path, file.downloadUrl, isUserAction = true)
