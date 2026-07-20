@@ -2,6 +2,7 @@ package cloud.wafflecommons.pixelbrainreader.data.repository
 
 import android.util.Log
 import com.google.gson.Gson
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
@@ -106,7 +107,7 @@ class MoodRepository @Inject constructor(
     suspend fun syncWithFileSystem() = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
         val root = fileRepository.getLocalFile(moodDir)
         if (!root.exists()) {
-             Log.w("DataSync", "Mood directory not found: ${root.absolutePath}")
+             Log.d("DataSync", "Mood directory not found: ${root.absolutePath}")
              return@withContext
         }
         
@@ -151,6 +152,7 @@ class MoodRepository @Inject constructor(
                      }
                 }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 Log.e("PBR_SYNC", "Failed to parse ${file.name}: ${e.message}")
             }
         }
@@ -186,7 +188,12 @@ class MoodRepository @Inject constructor(
         val path = "$moodDir/$date.json"
         
         // 1. Read existing JSON from Disk
-        val currentContent = try { fileRepository.readFile(path) } catch(e:Exception) { null }
+        val currentContent = try {
+            fileRepository.readFile(path)
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            null
+        }
         val currentData = try {
              if (!currentContent.isNullOrBlank()) {
                  jsonParser.decodeFromString<DailyMoodDataDto>(currentContent)
@@ -194,6 +201,7 @@ class MoodRepository @Inject constructor(
                  DailyMoodDataDto(date = date.toString())
              }
         } catch (e: Exception) {
+             if (e is CancellationException) throw e
              DailyMoodDataDto(date = date.toString())
         }
 
@@ -233,7 +241,9 @@ class MoodRepository @Inject constructor(
             if (!owner.isNullOrBlank() && !repo.isNullOrBlank()) {
                 fileRepository.pushDirtyFiles(owner, repo, "feat(health): update mood $date")
             }
-        } catch (e: Exception) {}
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+        }
         
         // Trigger Widget Update. triggerUpdate() re-renders the live MoodWidget instantly;
         // scheduleSnapshotUpdate() rebuilds the snapshot so the Companion widget's mood emoji

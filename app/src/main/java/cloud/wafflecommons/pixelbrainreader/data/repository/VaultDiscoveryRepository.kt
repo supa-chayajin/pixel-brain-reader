@@ -7,6 +7,7 @@ import cloud.wafflecommons.pixelbrainreader.data.local.entity.FileEntity
 import cloud.wafflecommons.pixelbrainreader.data.utils.FrontmatterManager
 import com.google.gson.Gson
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
@@ -198,6 +199,7 @@ class VaultDiscoveryRepository @Inject constructor(
 
                  contentSha = sha1Of(content.toByteArray(Charsets.UTF_8))
              } catch (e: Exception) {
+                 if (e is CancellationException) throw e
                  // Log.w("VaultDiscovery", "Failed to extract metadata for $path")
              }
          } else if (file.isFile) {
@@ -206,6 +208,7 @@ class VaultDiscoveryRepository @Inject constructor(
              try {
                  contentSha = sha1Of(file.readBytes())
              } catch (e: Exception) {
+                 if (e is CancellationException) throw e
                  // Leave SHA null; the reindex falls back to mtime comparison.
              }
          }

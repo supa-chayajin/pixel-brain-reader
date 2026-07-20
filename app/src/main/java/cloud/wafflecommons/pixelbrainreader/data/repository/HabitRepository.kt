@@ -13,6 +13,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.decodeFromString
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -122,7 +123,7 @@ class HabitRepository @Inject constructor(
     suspend fun syncWithFileSystem() = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
         val root = fileRepository.getLocalFile(habitsDir)
         if (!root.exists()) {
-             Log.w("DataSync", "Habits directory not found: ${root.absolutePath}")
+             Log.d("DataSync", "Habits directory not found: ${root.absolutePath}")
              return@withContext
         }
         
@@ -156,6 +157,7 @@ class HabitRepository @Inject constructor(
                             }
                         }
                     } catch (e: Exception) {
+                        if (e is CancellationException) throw e
                         Log.e("PBR_SYNC", "Failed to parse ${file.name}: ${e.message}")
                     }
                 }
@@ -205,6 +207,7 @@ class HabitRepository @Inject constructor(
         } catch (e: JsonSyntaxException) {
             Log.e("HabitRepository", "JSON Syntax Error in habit config", e)
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Log.e("HabitRepository", "Error importing config", e)
         }
     }
@@ -242,6 +245,7 @@ class HabitRepository @Inject constructor(
             Log.d("HabitRepository", "Exported configs to JSON successfully")
 
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Log.e("HabitRepository", "Error exporting config to JSON", e)
         }
     }
@@ -339,6 +343,7 @@ class HabitRepository @Inject constructor(
                     )
                 }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 Log.e("HabitRepository", "Background push failed for ${entry.habitId}@$date", e)
             }
         }

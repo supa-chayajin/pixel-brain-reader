@@ -13,6 +13,7 @@ import com.google.mlkit.genai.prompt.GenerativeModel
 import com.google.mlkit.genai.prompt.Generation
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.ChatMessageEntity
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -496,6 +497,7 @@ class LocalAiManager @Inject constructor(
                 logGenAiException("downloadStream", e)
                 _nanoState.value = classifyAvailability(e)
             } catch (e: Throwable) {
+                if (e is CancellationException) throw e
                 Log.e(tag, "Unexpected download stream error", e)
                 _nanoState.value = NanoState.Error(e)
             }
