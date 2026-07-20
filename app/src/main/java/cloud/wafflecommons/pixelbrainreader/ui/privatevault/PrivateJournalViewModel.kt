@@ -312,27 +312,27 @@ class PrivateJournalViewModel @Inject constructor(
         viewModelScope.launch {
             val prompt = when (action) {
                 AssistAction.IMPROVE -> """
-                    You are a supportive writing assistant. Rewrite this private-journal text in
-                    English, improving the style, clarity and flow, WITHOUT inventing facts
-                    or changing the meaning, keeping a personal and natural tone. Reply only
-                    with the rewritten text.
+                    Tu es un assistant d'écriture bienveillant. Réécris ce texte de journal intime
+                    en français, en améliorant le style, la clarté et la fluidité, SANS inventer de
+                    faits ni changer le sens, en gardant un ton personnel et naturel. Réponds
+                    uniquement avec le texte réécrit.
 
-                    Text:
+                    Texte :
                     $content
                 """.trimIndent()
                 AssistAction.CONTINUE -> """
-                    You are a writing assistant. Continue this private-journal text in English,
-                    over 2 to 4 sentences, in the same tone and style. Reply only with the continuation.
+                    Tu es un assistant d'écriture. Poursuis ce texte de journal intime en français,
+                    sur 2 à 4 phrases, dans le même ton et le même style. Réponds uniquement avec la suite.
 
-                    Text:
+                    Texte :
                     $content
                 """.trimIndent()
                 AssistAction.INSPIRE -> buildString {
-                    appendLine("Suggest 3 short, kind questions, in English, to help me")
-                    appendLine("write my private journal today. One per line, list format with a dash.")
+                    appendLine("Propose 3 questions courtes et bienveillantes, en français, pour m'aider à")
+                    appendLine("écrire mon journal intime aujourd'hui. Une par ligne, format liste avec un tiret.")
                     if (content.isNotBlank()) {
                         appendLine()
-                        appendLine("Context of what I've already written:")
+                        appendLine("Contexte de ce que j'ai déjà écrit :")
                         append(content.take(1500))
                     }
                 }
@@ -340,7 +340,7 @@ class PrivateJournalViewModel @Inject constructor(
             val result = localAiManager.generateResponse(prompt)
             _assistState.value = result.fold(
                 onSuccess = { AssistState(visible = true, action = action, result = it.trim()) },
-                onFailure = { AssistState(visible = true, action = action, error = it.localizedMessage ?: "AI model unavailable") }
+                onFailure = { AssistState(visible = true, action = action, error = it.localizedMessage ?: "Modèle IA indisponible") }
             )
         }
     }
@@ -367,18 +367,19 @@ class PrivateJournalViewModel @Inject constructor(
     suspend fun beautifyMarkdown(selectedText: String): String? {
         if (selectedText.isBlank()) return null
         val prompt = """
-            Reformat the following text into clean, well-structured Markdown. Apply headings,
-            bullet or numbered lists, bold and italic emphasis, and code fences where they fit
-            the content. Do NOT add, remove, translate or invent any information — only reformat
-            what is given. Reply ONLY with the resulting Markdown, with no surrounding explanation.
+            Reformate le texte suivant en Markdown propre et bien structuré. Applique des titres,
+            des listes à puces ou numérotées, du gras et de l'italique, et des blocs de code là où
+            cela convient. N'ajoute, ne supprime, ne traduis et n'invente aucune information —
+            reformate uniquement ce qui est fourni. Réponds UNIQUEMENT avec le Markdown résultant,
+            sans explication autour.
 
-            Text:
+            Texte :
             $selectedText
         """.trimIndent()
         return localAiManager.generateResponse(prompt).fold(
             onSuccess = { it.trim() },
             onFailure = {
-                _uiEvent.send(UiEvent.ShowToast("Beautify failed: ${it.localizedMessage ?: "AI model unavailable"}"))
+                _uiEvent.send(UiEvent.ShowToast("Échec de la mise en forme : ${it.localizedMessage ?: "Modèle IA indisponible"}"))
                 null
             }
         )

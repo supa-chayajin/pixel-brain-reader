@@ -21,7 +21,7 @@ class OracleGenerator @Inject constructor(
     private val geminiRagManager: GeminiRagManager
 ) {
     
-    private val FALLBACK_INSIGHT = "The mists are thick today. Rest well, Hero, and let your spirit guide you."
+    private val FALLBACK_INSIGHT = "Les brumes sont épaisses aujourd'hui. Repose-toi bien, Héros, et laisse ton esprit te guider."
 
     suspend fun generateDailyInsight(): String {
         return try {
@@ -48,13 +48,13 @@ class OracleGenerator @Inject constructor(
             
             // 2. prompt
             val prompt = """
-                Act as a wise, ancient Mentor for a $characterClass. 
-                The user has had ${sleepHours}h sleep (Status: $sleepStatus), walked $steps steps yesterday, and felt $mood. 
-                Their weakest attribute is currently $weakAttr. 
-                Analyze the link between their physical state and mood. 
-                Give ONE concrete, epic, short quest to improve their day (max 30 words).
-                Tone: Epic, Encouraging, RPG-style.
-                 ALWAYS answer in English.
+                Agis comme un Mentor sage et ancien pour un aventurier de classe $characterClass.
+                L'utilisateur a dormi ${sleepHours}h (Statut : $sleepStatus), a marché $steps pas hier, et se sentait $mood.
+                Son attribut le plus faible est actuellement $weakAttr.
+                Analyse le lien entre son état physique et son humeur.
+                Donne UNE quête concrète, épique et courte pour améliorer sa journée (max 30 mots).
+                Ton : épique, encourageant, style RPG.
+                ${AiLanguage.DIRECTIVE}
             """.trimIndent()
             
             Log.d("OracleGenerator", "Generating insight: $prompt")

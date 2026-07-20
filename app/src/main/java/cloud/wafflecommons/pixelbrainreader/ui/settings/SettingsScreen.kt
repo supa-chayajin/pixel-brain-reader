@@ -52,6 +52,7 @@ import android.content.ContextWrapper
 import android.widget.Toast
 import androidx.compose.material.icons.rounded.CleaningServices
 import androidx.compose.material.icons.rounded.DateRange
+import androidx.compose.material.icons.rounded.Mood
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.HeartRateRecord
@@ -77,6 +78,7 @@ fun SettingsScreen(
     onNavigateToHomeConfig: () -> Unit = {},
     onNavigateToReminders: () -> Unit = {},
     onNavigateToNavBarReorder: () -> Unit = {},
+    onNavigateToMoodTags: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -448,6 +450,16 @@ fun SettingsScreen(
                     leadingContent = { Icon(Icons.Filled.Notifications, contentDescription = null) }
                 ) {
                     Text("Reminders & Notifications")
+                }
+
+                ListItem(
+                    modifier = Modifier.clickable {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onNavigateToMoodTags()
+                    },
+                    leadingContent = { Icon(Icons.Rounded.Mood, contentDescription = null) }
+                ) {
+                    Text("Manage Mood Tags")
                 }
 
                 Spacer(Modifier.height(8.dp))

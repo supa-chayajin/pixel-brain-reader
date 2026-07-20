@@ -30,10 +30,10 @@ class GeminiRagManager @Inject constructor(
             userMessage
         } else {
             """
-            Context from my notes:
+            Contexte tiré de mes notes :
             ${contextChunks.joinToString("\n---\n")}
 
-            Based on the context above, answer the user's question:
+            À partir du contexte ci-dessus, réponds à la question de l'utilisateur. ${AiLanguage.DIRECTIVE}
             $userMessage
             """.trimIndent()
         }
@@ -70,7 +70,7 @@ class GeminiRagManager @Inject constructor(
             onSuccess = { it },
             onFailure = { e ->
                 Log.e("Cortex", "Local AI generation failed", e)
-                "Cortex (Local) unavailable: ${e.localizedMessage ?: e.message ?: "unknown error"}"
+                "Cortex (local) indisponible : ${e.localizedMessage ?: e.message ?: "erreur inconnue"}"
             }
         )
     }
@@ -111,9 +111,9 @@ class GeminiRagManager @Inject constructor(
             val (name, content) = pair
             onProgress(index, usable.size)
             val prompt = buildString {
-                appendLine("Summarize this document in 1 to 2 concise sentences, in English.")
-                appendLine("Title: $name")
-                appendLine("Content:")
+                appendLine("Résume ce document en 1 à 2 phrases concises. ${AiLanguage.DIRECTIVE}")
+                appendLine("Titre : $name")
+                appendLine("Contenu :")
                 append(content.take(PER_FILE_CHARS))
             }
             localAiManager.generateResponse(prompt).fold(
@@ -143,22 +143,22 @@ class GeminiRagManager @Inject constructor(
         }
 
         val joined = perFile.joinToString("\n")
-        val skippedNote = if (skipped.isNotEmpty()) "\n\n> ⚠️ ${skipped.size} file(s) could not be summarized." else ""
+        val skippedNote = if (skipped.isNotEmpty()) "\n\n> ⚠️ ${skipped.size} fichier(s) n'ont pas pu être résumés." else ""
 
         // REDUCE: synthesize the folder from the (small) per-file summaries. If this step
         // fails, the per-file summaries are still a useful, complete result on their own.
         val overviewPrompt = buildString {
-            appendLine("Here are the summaries of the notes in a folder:")
+            appendLine("Voici les résumés des notes d'un dossier :")
             appendLine(joined)
             appendLine()
-            appendLine("Write a short markdown synthesis of the folder: common themes, key points and interesting links between the notes.")
+            appendLine("Rédige une courte synthèse markdown du dossier : thèmes communs, points clés et liens intéressants entre les notes. ${AiLanguage.DIRECTIVE}")
         }
         val overview = localAiManager.generateResponse(overviewPrompt).getOrNull()
 
         val body = if (overview.isNullOrBlank()) {
-            "## Folder synthesis\n\n$joined$skippedNote"
+            "## Synthèse du dossier\n\n$joined$skippedNote"
         } else {
-            "${overview.trim()}\n\n---\n\n### Per-file summaries\n$joined$skippedNote"
+            "${overview.trim()}\n\n---\n\n### Résumés par fichier\n$joined$skippedNote"
         }
         return Result.success(body)
     }

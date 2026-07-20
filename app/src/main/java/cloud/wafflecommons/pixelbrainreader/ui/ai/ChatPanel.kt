@@ -465,8 +465,12 @@ fun StealthInputBar(
                     onClick = {
                         if (textState.text.isBlank()) {
                              try {
+                                val french = java.util.Locale.FRANCE.toLanguageTag() // "fr-FR"
                                 val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                                     putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, french)
+                                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, french)
+                                    putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, french)
                                 }
                                 speechLauncher.launch(intent)
                             } catch (e: ActivityNotFoundException) { }
