@@ -7,7 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_No unreleased changes._
+### Fixed
+
+- **Cancelled syncs no longer masquerade as sync failures.** Every git/repository/AI
+  `catch (e: Exception)` that converted failures into results (JGitProvider's 10 op
+  wrappers, Mood/Habit/VaultDiscovery repository parse-and-push paths, the Gemini Nano
+  download stream) now rethrows `CancellationException` instead of swallowing it, so a
+  cancelled coroutine unwinds cleanly rather than surfacing a bogus `SyncState.Error`
+  or polluting logs.
+- **Explicit save-and-sync now stops on a rebase conflict instead of pushing.**
+  `FileRepository.syncRepository` treated a conflicted pull as non-fatal and relied on
+  the subsequent push being rejected; it now stops immediately with the same
+  actionable "Sync conflict: your local changes were saved" failure the foreground
+  `SyncOrchestrator` cycle reports, and never attempts to push into diverged history.
+
+- **Release builds no longer risk silently breaking web import, health synergy or the
+  gamification stat mapping.** R8 keep rules added for the flexmark html→markdown
+  converter (reflection-driven; used by the share-target / `pixelbrain://import`
+  pipeline) and for the two Gson-reflected types living outside the kept packages
+  (`DailyHealthMetrics`, the `Attribute` enum) — the same release-only failure class
+  as the old OpenMeteo weather bug.
+- **Release logcat no longer prints personal data.** The Google account e-mail and
+  vault file paths were logged at levels that survive minification (`Log.i`/`w`/`e`);
+  they are now debug-only (stripped by R8) or scrubbed, and the last `println` calls
+  are gone.
+
+### Removed
+
+- Dead code: `GenerativeModelStub` (unreferenced mock AI) and the unused
+  `BiometricHelper` (the private vault drives `BiometricPrompt` directly).
+
+### Changed
+
+- `DailyBriefingRepository` restructured to drop all `!!` unwraps (smart-cast-friendly
+  cache handling), rethrow cancellation, and log through `Log.d` instead of `println`;
+  the dead "freshness" computation in `DailyDashboardRepository.getOrGenerateBriefing`
+  was removed (the cache row is keyed by date — its presence is the policy).
+
+### Added
+
+- **Regression tests for the two highest-risk untested paths**: the daily-note
+  burn→parse round trip (external Google-sync keys must survive — the "items triple on
+  every sync" bug class, 25 tests) and the JGit rebase-conflict abort/backup recovery
+  flow with a real JGit repo harness (6 tests).
 
 ## [9.4.0] — 2026-07-20
 
