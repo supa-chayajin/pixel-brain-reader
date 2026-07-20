@@ -93,8 +93,15 @@ class FileRepository @Inject constructor(
            _syncStatus.value = SyncStep.PULLING.label
            val pullResult = jGitProvider.pull()
            if (pullResult is cloud.wafflecommons.pixelbrainreader.data.remote.SyncResult.ResolvedWithConflicts) {
-               Log.w("FileRepository", "Sync completed, but ${pullResult.backedUpFilesCount} conflicts were defensively backed up.")
-               // Eventual UI notification hook could go here
+               // The rebase was aborted and clean local copies backed up, so local now
+               // DIVERGES from remote — a push cannot fast-forward. Same terminal
+               // contract as SyncOrchestrator: stop here, never push into diverged
+               // history, and surface an actionable failure instead of relying on the
+               // push rejection downstream.
+               Log.w("FileRepository", "Sync stopped: ${pullResult.backedUpFilesCount} conflict(s), local copies backed up.")
+               return@withLock Result.failure(
+                   Exception("Sync conflict: your local changes were saved. Manual merge required.")
+               )
            } else if (pullResult is cloud.wafflecommons.pixelbrainreader.data.remote.SyncResult.Error) {
                Log.e("FileRepository", "Pull failed during sync", pullResult.exception)
                return@withLock Result.failure(pullResult.exception)
