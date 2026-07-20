@@ -59,18 +59,9 @@ class DailyDashboardRepository @Inject constructor(
     suspend fun getOrGenerateBriefing(date: LocalDate): Pair<String, String> = withContext(Dispatchers.IO) {
         val dashboard = dashboardDao.getDashboard(date)
         
-        // 1. Check Cache
+        // 1. Check Cache — the row is keyed by this date, so a stored briefing with
+        // both AI fields was generated for this date and is valid for it.
         if (dashboard != null && dashboard.aiWeatherBriefing != null && dashboard.aiQuoteOfTheDay != null) {
-            val isToday = date == LocalDate.now()
-            val hasTimestamp = dashboard.lastAiGenerationTimestamp != null
-            val isFresh = if (hasTimestamp) {
-                // Check if generated TODAY (Day of Year)
-                val genDate = java.time.Instant.ofEpochMilli(dashboard.lastAiGenerationTimestamp!!).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
-                genDate == date // Generated for this date implies it's valid for this date's report.
-                true 
-            } else false
-            
-            // If cached data exists and is targeted for this date, use it.
             return@withContext Pair(dashboard.aiWeatherBriefing, dashboard.aiQuoteOfTheDay)
         }
         
