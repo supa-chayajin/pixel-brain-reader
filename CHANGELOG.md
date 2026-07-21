@@ -17,6 +17,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **AI source citations are now tappable.** The source chips under a RAG answer open
   the cited vault note (chat → file browser detail pane) instead of doing nothing —
   the last dead button in the app.
+- **Rebase-conflict backups now actually happen for committed edits.** JGit reports a
+  committed-vs-committed conflict as `STOPPED` with a `null` conflict list, so the
+  documented "abort then back up the local files" flow silently backed up nothing
+  (the data only survived inside the local commit). The provider now reads the
+  conflicted paths from git status while the rebase is stopped and writes the
+  timestamped backups after the abort — making the "your local changes were saved"
+  sync message literally true. Also: `NOTHING_TO_COMMIT` now counts as a successful
+  pull, and `UNCOMMITTED_CHANGES` surfaces an error instead of a bogus success.
 
 - **Cancelled syncs no longer masquerade as sync failures.** Every git/repository/AI
   `catch (e: Exception)` that converted failures into results (JGitProvider's 10 op

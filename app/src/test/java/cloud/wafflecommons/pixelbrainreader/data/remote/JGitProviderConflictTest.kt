@@ -33,11 +33,12 @@ import org.junit.rules.TemporaryFolder
  * Contract pinned here (current actual behavior, JGit 6.8.0):
  *  - Conflicting divergence (both sides committed): pull() returns
  *    [SyncResult.ResolvedWithConflicts] (never Success), the rebase is aborted, the
- *    repository is left SAFE and clean, the local commit + content are fully preserved,
- *    and nothing is pushed to the remote. NOTE: in this path JGit reports
- *    RebaseResult.Status.STOPPED whose conflict list is null, so backedUpFilesCount
- *    is 0 and NO backup file is written — the user's data survives only because the
- *    abort restores the local branch (the local commit still holds the content).
+ *    repository is left SAFE with no uncommitted changes, the local commit + content
+ *    are fully preserved, and nothing is pushed to the remote. JGit reports
+ *    RebaseResult.Status.STOPPED whose conflict list is null, so the provider derives
+ *    the conflicted paths from git status WHILE the rebase is stopped, and after the
+ *    abort writes a timestamped backup of the restored local content — belt (local
+ *    commit) and suspenders (backup file).
  *  - Dirty uncommitted local edit vs a remote commit on the same file: JGit reports
  *    Status.CONFLICTS with the conflicting paths, so pull() returns
  *    ResolvedWithConflicts(1) and ConflictResolver DOES write a timestamped backup of
@@ -114,22 +115,27 @@ class JGitProviderConflictTest {
                 result is SyncResult.ResolvedWithConflicts
             )
 
-            // (b) PINNED CURRENT BEHAVIOR: no backup file is written in this path.
-            // JGit 6.8 returns RebaseResult.Status.STOPPED for a conflict on a
-            // committed edit, and a STOPPED result's getConflicts() is null —
-            // JGitProvider.pull() therefore iterates an empty list and never calls
-            // ConflictResolver. The local content survives via the aborted rebase
-            // (assertions below), NOT via a backup file. If a JGit upgrade or a
-            // provider fix starts producing backups here, this count changing to > 0
-            // is an improvement — re-pin deliberately.
-            assertEquals(0, (result as SyncResult.ResolvedWithConflicts).backedUpFilesCount)
-            assertEquals(emptyList<File>(), conflictBackups())
+            // (b) STOPPED's getConflicts() is null in JGit 6.8, so the provider derives
+            // the conflicted paths from git status while the rebase is stopped and,
+            // after the abort restores the clean local state, backs up the LOCAL
+            // content next to the original — the recoverable copy the sync-error
+            // message promises the user.
+            assertEquals(1, (result as SyncResult.ResolvedWithConflicts).backedUpFilesCount)
+            val backups = conflictBackups()
+            assertEquals(1, backups.size)
+            assertEquals(vaultFile(STORY).parentFile, backups.single().parentFile)
+            assertEquals(LOCAL, backups.single().readText())
 
-            // (c) The rebase was aborted: repository SAFE, working tree clean,
-            //     local branch restored to the local commit with the local content.
+            // (c) The rebase was aborted: repository SAFE, no uncommitted changes
+            //     (the backup file is deliberately untracked), local branch restored
+            //     to the local commit with the local content.
             Git.open(vaultDir).use { git ->
                 assertEquals(RepositoryState.SAFE, git.repository.repositoryState)
-                assertTrue("working tree must be clean after abort", git.status().call().isClean)
+                val status = git.status().call()
+                assertTrue(
+                    "no staged/modified changes may remain after abort",
+                    !status.hasUncommittedChanges()
+                )
             }
             assertEquals(localHeadBefore, vaultHead())
             assertEquals(LOCAL, vaultFile(STORY).readText())
