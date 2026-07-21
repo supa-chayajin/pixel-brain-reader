@@ -75,11 +75,11 @@ fun LoginScreen(
     deviceState?.let { device ->
         AlertDialog(
             onDismissRequest = { viewModel.cancelGitHubDeviceFlow() },
-            title = { Text("Sign in with GitHub") },
+            title = { Text("Se connecter avec GitHub") },
             text = {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        "Enter this code on GitHub:",
+                        "Saisissez ce code sur GitHub :",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -92,7 +92,7 @@ fun LoginScreen(
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
-                        "Waiting for authorization…",
+                        "En attente d'autorisation…",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -108,10 +108,10 @@ fun LoginScreen(
                             ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
                         )
                     }
-                }) { Text("Open GitHub") }
+                }) { Text("Ouvrir GitHub") }
             },
             dismissButton = {
-                TextButton(onClick = { viewModel.cancelGitHubDeviceFlow() }) { Text("Cancel") }
+                TextButton(onClick = { viewModel.cancelGitHubDeviceFlow() }) { Text("Annuler") }
             }
         )
     }
@@ -159,7 +159,7 @@ fun LoginScreen(
 
             StaggeredEntry(index = 2) {
                 Text(
-                    text = "Secure Second Brain Reader",
+                    text = "Lecteur sécurisé de second cerveau",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -171,7 +171,7 @@ fun LoginScreen(
             OutlinedTextField(
                 value = token,
                 onValueChange = viewModel::onTokenChanged,
-                label = { Text("Personal Access Token") },
+                label = { Text("Jeton d'accès personnel (PAT)") },
                 leadingIcon = { Icon(Icons.Outlined.VpnKey, null) },
                 singleLine = true,
                 visualTransformation = PasswordVisualTransformation(),
@@ -193,7 +193,7 @@ fun LoginScreen(
             OutlinedTextField(
                 value = repoUrl,
                 onValueChange = viewModel::onRepoUrlChanged,
-                label = { Text("Repo URL (GitHub / GitLab)") },
+                label = { Text("URL du dépôt (GitHub / GitLab)") },
                 leadingIcon = { Icon(Icons.Outlined.Link, null) },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
@@ -211,7 +211,7 @@ fun LoginScreen(
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = "The token is stored securely (EncryptedSharedPreferences) and is never shared.",
+                text = "Le jeton est stocké de manière sécurisée (EncryptedSharedPreferences) et n'est jamais partagé.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
@@ -234,7 +234,7 @@ fun LoginScreen(
                 ) {
                     Icon(Icons.Outlined.VpnKey, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.size(8.dp))
-                    Text("Sign in with GitHub")
+                    Text("Se connecter avec GitHub")
                 }
             }
 
@@ -273,7 +273,7 @@ fun LoginScreen(
                             )
                         ) {
                             Text(
-                                "Connect to Vault",
+                                "Se connecter au coffre",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )

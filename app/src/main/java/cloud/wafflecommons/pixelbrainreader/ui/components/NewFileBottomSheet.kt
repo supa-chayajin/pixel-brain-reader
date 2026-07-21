@@ -48,7 +48,7 @@ fun NewFileBottomSheet(
         ) {
             // Header: Handle is auto-included by ModalBottomSheet
             Text(
-                text = "New Note",
+                text = "Nouvelle note",
                 style = MaterialTheme.typography.headlineSmall,
                 modifier = Modifier.padding(bottom = 24.dp)
             )
@@ -57,8 +57,8 @@ fun NewFileBottomSheet(
             OutlinedTextField(
                 value = filename,
                 onValueChange = { filename = it },
-                label = { Text("Filename") },
-                placeholder = { Text("New file name (e.g. Project/Note)") },
+                label = { Text("Nom du fichier") },
+                placeholder = { Text("Nom du nouveau fichier (ex. Projet/Note)") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
                 shape = MaterialTheme.shapes.medium,
@@ -68,7 +68,7 @@ fun NewFileBottomSheet(
 
             // 2. Templates Section
             Text(
-                text = "Choose Template",
+                text = "Choisir un modèle",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(bottom = 12.dp)
@@ -82,7 +82,7 @@ fun NewFileBottomSheet(
                 // Option A: No Template (Blank)
                 item {
                     TemplateListItem(
-                        displayName = "No Template (Blank)",
+                        displayName = "Sans modèle (vierge)",
                         isSelected = selectedTemplate == null,
                         icon = Icons.AutoMirrored.Outlined.NoteAdd,
                         onClick = { selectedTemplate = null }
@@ -113,7 +113,7 @@ fun NewFileBottomSheet(
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Create Note")
+                Text("Créer la note")
             }
             
             Spacer(modifier = Modifier.height(16.dp)) // Extra padding for navigation bar

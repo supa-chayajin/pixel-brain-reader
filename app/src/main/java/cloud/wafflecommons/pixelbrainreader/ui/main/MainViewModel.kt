@@ -275,12 +275,12 @@ class MainViewModel @Inject constructor(
                 if (result.isSuccess) {
                     widgetSnapshotManager.updateSnapshot()
                 } else {
-                    val errorMsg = result.exceptionOrNull()?.localizedMessage ?: "Unknown error"
-                    _error.value = "Sync Failed: $errorMsg"
-                    _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Sync Failed ❌: $errorMsg"))
+                    val errorMsg = result.exceptionOrNull()?.localizedMessage ?: "Erreur inconnue"
+                    _error.value = "Échec de la synchronisation : $errorMsg"
+                    _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Échec de la synchronisation ❌ : $errorMsg"))
                 }
             } catch (e: Exception) {
-                 _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Sync Error ⚠️: ${e.localizedMessage}"))
+                 _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Erreur de synchronisation ⚠️ : ${e.localizedMessage}"))
             } finally {
                 _isRefreshing.value = false
                 _isSyncing.value = false
@@ -385,7 +385,7 @@ class MainViewModel @Inject constructor(
                     viewModelScope.launch {
                         gamificationRepository.processTaskCompletion(newLine)
                         // Show subtle feedback
-                        _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Quest Completed! ✨"))
+                        _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Quête accomplie ! ✨"))
                     }
                 }
             }
@@ -450,15 +450,15 @@ class MainViewModel @Inject constructor(
                             _saveState.value = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.IDLE
                         }
                     }
-                    _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Saved & Synced ✅"))
+                    _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Enregistré et synchronisé ✅"))
                 } else {
-                    val msg = result.exceptionOrNull()?.message ?: "Unknown"
+                    val msg = result.exceptionOrNull()?.message ?: "Erreur inconnue"
                     _saveState.value = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.ERROR
-                    _error.value = "Sync Warning: $msg"
-                    _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Saved Locally. Sync Failed"))
+                    _error.value = "Avertissement de synchronisation : $msg"
+                    _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Enregistré localement. Échec de la synchronisation"))
                 }
             } catch (e: Exception) {
-                 _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Save Failed ❌: ${e.message}"))
+                 _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Échec de l'enregistrement ❌ : ${e.message}"))
                  _saveState.value = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.ERROR
             } finally {
                 _isSyncing.value = false
@@ -475,7 +475,7 @@ class MainViewModel @Inject constructor(
             _isSyncing.value = true
             val result = repository.pushDirtyFiles(owner, repo)
             if (result.isFailure) {
-                _error.value = "Push Failed: ${result.exceptionOrNull()?.message}"
+                _error.value = "Échec du push : ${result.exceptionOrNull()?.message}"
             }
             _isSyncing.value = false
         }
@@ -559,7 +559,7 @@ class MainViewModel @Inject constructor(
              
              if (isExternalShare) {
                  dismissImport()
-                 _userMessage.value = "Imported & Saved"
+                 _userMessage.value = "Importé et enregistré"
                  _isExitPending.value = true
              } else {
                  val newDto = GithubFileDto(
@@ -571,7 +571,7 @@ class MainViewModel @Inject constructor(
                 )
                  dismissImport()
                  loadFile(newDto)
-                 _userMessage.value = "Imported successfully"
+                 _userMessage.value = "Importation réussie"
              }
 
              
@@ -581,13 +581,13 @@ class MainViewModel @Inject constructor(
                    try {
                        val result = repository.pushDirtyFiles(owner, repo)
                        if (result.isSuccess) {
-                           _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Synced with Git ✅"))
+                           _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Synchronisé avec Git ✅"))
                        } else {
-                           val msg = result.exceptionOrNull()?.message ?: "Unknown"
-                           _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Git Sync Failed ❌: $msg"))
+                           val msg = result.exceptionOrNull()?.message ?: "Erreur inconnue"
+                           _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Échec de la synchronisation Git ❌ : $msg"))
                        }
                    } catch (e: Exception) {
-                       _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Git Sync Failed ❌: ${e.message}"))
+                       _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Échec de la synchronisation Git ❌ : ${e.message}"))
                    }
                     _isSyncing.value = false
 
@@ -655,7 +655,7 @@ class MainViewModel @Inject constructor(
 
         viewModelScope.launch {
             _isSyncing.value = true
-            _userMessage.value = "Deleting file..."
+            _userMessage.value = "Suppression du fichier..."
 
             val result = repository.deleteFile(path, owner, repo)
 
@@ -664,13 +664,13 @@ class MainViewModel @Inject constructor(
                 // touch _currentPath — the user stays in the current folder's list (the
                 // Room flow drops the row after reindex), instead of jumping up a level.
                 if (wasOpenFile) closeFile()
-                _userMessage.value = "File Deleted"
+                _userMessage.value = "Fichier supprimé"
                 _isSyncing.value = false
             } else {
-                 val msg = result.exceptionOrNull()?.message ?: "Unknown"
-                 _error.value = "Delete Failed: $msg"
+                 val msg = result.exceptionOrNull()?.message ?: "Erreur inconnue"
+                 _error.value = "Échec de la suppression : $msg"
                  _isSyncing.value = false
-                 _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Delete Failed ❌: $msg"))
+                 _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Échec de la suppression ❌ : $msg"))
             }
         }
 
@@ -688,14 +688,14 @@ class MainViewModel @Inject constructor(
 
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             _isSyncing.value = true
-            _userMessage.value = "Renaming ${if(isDirectory) "folder" else "file"}..."
-            
+            _userMessage.value = "Renommage du ${if(isDirectory) "dossier" else "fichier"}..."
+
             val result = repository.renameAndSync(path, finalNewPath, owner, repo)
             if (result.isSuccess) {
                  if (targetFile == null) _selectedFileName.value = finalNewName
-                 _userMessage.value = "Renamed successfully"
+                 _userMessage.value = "Renommage réussi"
             } else {
-                 _error.value = "Rename Failed: ${result.exceptionOrNull()?.message}"
+                 _error.value = "Échec du renommage : ${result.exceptionOrNull()?.message}"
             }
             _isSyncing.value = false
         }
@@ -707,20 +707,20 @@ class MainViewModel @Inject constructor(
         val newPath = if (targetFolder.isEmpty()) file.name else "$targetFolder/${file.name}"
         
         if (currentPath == newPath) {
-             _userMessage.value = "Item is already in this folder"
+             _userMessage.value = "L'élément est déjà dans ce dossier"
              return
         }
 
         val (owner, repo) = secretManager.getRepoInfo()
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
              _isSyncing.value = true
-             _userMessage.value = "Moving to ${if(targetFolder.isEmpty()) "Root" else targetFolder}..."
+             _userMessage.value = "Déplacement vers ${if(targetFolder.isEmpty()) "la racine" else targetFolder}..."
 
             val result = repository.renameAndSync(currentPath, newPath, owner, repo)
              if (result.isSuccess) {
-                _userMessage.value = "Moved successfully"
+                _userMessage.value = "Déplacement réussi"
             } else {
-                 _error.value = "Move Failed: ${result.exceptionOrNull()?.message}"
+                 _error.value = "Échec du déplacement : ${result.exceptionOrNull()?.message}"
             }
             _isSyncing.value = false
         }
@@ -846,20 +846,20 @@ class MainViewModel @Inject constructor(
         // here; GeminiRagManager bounds the work internally and summarizes file-by-file.
         val files = uiState.value.files.filter { it.type == "file" }
         if (files.isEmpty()) {
-            _userMessage.value = "No files to analyze here."
+            _userMessage.value = "Aucun fichier à analyser ici."
             return
         }
 
         viewModelScope.launch {
             _isLoading.value = true
-            _userMessage.value = "Analyzing folder…"
+            _userMessage.value = "Analyse du dossier…"
             val fileContexts = files.mapNotNull { file ->
                 val content = repository.getFileContentFlow(file.path).firstOrNull()
                 if (content != null) Pair(file.name, content) else null
             }
 
             geminiRagManager.analyzeFolder(fileContexts) { done, total ->
-                _userMessage.value = "Analyzing folder… ($done/$total)"
+                _userMessage.value = "Analyse du dossier… ($done/$total)"
             }.fold(
                 onSuccess = { rawSummary ->
                     val summary = rawSummary
@@ -867,7 +867,7 @@ class MainViewModel @Inject constructor(
                         .replace(Regex("^```\\s*", RegexOption.IGNORE_CASE), "")
                         .replace(Regex("\\s*```$"), "").trim()
                     _isLoading.value = false
-                    _userMessage.value = "Folder summary ready ✨"
+                    _userMessage.value = "Résumé du dossier prêt ✨"
                     // Folder insight is a READ-ONLY, ephemeral pseudo-document. Detach it
                     // from any real file path FIRST — otherwise saveFile()/autosave would
                     // write this summary into whatever note was previously open in the
@@ -885,8 +885,8 @@ class MainViewModel @Inject constructor(
                 onFailure = { e ->
                     // Surface the real failure — NEVER write the error text into a note body.
                     _isLoading.value = false
-                    val reason = e.localizedMessage ?: e.message ?: "AI model unavailable"
-                    _userMessage.value = "Analysis failed: $reason"
+                    val reason = e.localizedMessage ?: e.message ?: "Modèle IA indisponible"
+                    _userMessage.value = "Échec de l'analyse : $reason"
                 }
             )
         }
@@ -896,14 +896,14 @@ class MainViewModel @Inject constructor(
     /** Export the whole vault as a ZIP to a user-picked SAF destination (outside the app). */
     fun exportVault(outputUri: android.net.Uri) {
         viewModelScope.launch {
-            _userMessage.value = "Exporting vault…"
+            _userMessage.value = "Exportation du coffre…"
             vaultExportRepository.exportVaultZip(outputUri) { done, total ->
-                _userMessage.value = "Exporting vault… ($done/$total)"
+                _userMessage.value = "Exportation du coffre… ($done/$total)"
             }.fold(
-                onSuccess = { count -> _userMessage.value = "$count files exported ✅" },
+                onSuccess = { count -> _userMessage.value = "$count fichiers exportés ✅" },
                 onFailure = { e ->
-                    val reason = e.localizedMessage ?: e.message ?: "unknown error"
-                    _userMessage.value = "Export failed: $reason"
+                    val reason = e.localizedMessage ?: e.message ?: "erreur inconnue"
+                    _userMessage.value = "Échec de l'exportation : $reason"
                 }
             )
         }
@@ -926,18 +926,18 @@ class MainViewModel @Inject constructor(
             val matchingFolder = allFolders.find { it.equals(cleanTarget, ignoreCase = true) || it.endsWith("/$cleanTarget", ignoreCase = true) }
             if (matchingFolder != null) {
                 loadFolder(matchingFolder)
-                _userMessage.value = "📂 Opened ${matchingFolder.substringAfterLast("/")}"
+                _userMessage.value = "📂 Dossier ouvert : ${matchingFolder.substringAfterLast("/")}"
                 return@launch
             }
             val entity = repository.resolveLink(cleanTarget)
             if (entity != null) {
                 if (entity.type == "dir") {
                     loadFolder(entity.path)
-                    _userMessage.value = "📂 Opened ${entity.name}"
+                    _userMessage.value = "📂 Dossier ouvert : ${entity.name}"
                 } else loadFile(entity.toDto())
                 return@launch
             }
-            _userMessage.value = "Target '$cleanTarget' not found"
+            _userMessage.value = "Cible '$cleanTarget' introuvable"
         }
     }
 
@@ -948,7 +948,7 @@ class MainViewModel @Inject constructor(
             val timestamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.getDefault()).format(java.util.Date())
             val fullPath = "$folderName/AI_Note_$timestamp.md"
             repository.saveFileLocally(fullPath, content)
-            _userMessage.value = "Saved to $folderName"
+            _userMessage.value = "Enregistré dans $folderName"
              val (owner, repo) = secretManager.getRepoInfo()
              if (owner != null && repo != null) repository.pushDirtyFiles(owner, repo)
         }
@@ -967,7 +967,7 @@ class MainViewModel @Inject constructor(
                 _navigationTrigger.value = "home"
             } catch (e: Exception) {
                 _isLoading.value = false
-                _error.value = "Failed to open Daily Note: ${e.message}"
+                _error.value = "Impossible d'ouvrir la note du jour : ${e.message}"
             }
         }
     }

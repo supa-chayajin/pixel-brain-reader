@@ -57,10 +57,10 @@ fun HomeConfigScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Home Configuration") },
+                title = { Text("Configuration de la maison") },
                 navigationIcon = {
                     CortexIconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Retour")
                     }
                 }
             )
@@ -78,15 +78,15 @@ fun HomeConfigScreen(
                     },
                     modifier = Modifier.padding(bottom = 8.dp)
                 ) {
-                    Icon(Icons.Rounded.Home, contentDescription = "Add Room")
+                    Icon(Icons.Rounded.Home, contentDescription = "Ajouter une pièce")
                 }
                 ExtendedFloatingActionButton(
                     onClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         showCreateChoreSheet = true
                     },
-                    icon = { Icon(Icons.Rounded.Add, contentDescription = "Add Chore") },
-                    text = { Text("Add Chore") }
+                    icon = { Icon(Icons.Rounded.Add, contentDescription = "Ajouter une corvée") },
+                    text = { Text("Ajouter une corvée") }
                 )
             }
         }
@@ -99,7 +99,7 @@ fun HomeConfigScreen(
         ) {
             item {
                 Text(
-                    text = "My Rooms",
+                    text = "Mes pièces",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(16.dp),
@@ -119,8 +119,8 @@ fun HomeConfigScreen(
                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 showCreateRoomDialog = true
                             },
-                            label = { Text("Add") },
-                            leadingIcon = { Icon(Icons.Rounded.Add, "Add", Modifier.size(18.dp)) }
+                            label = { Text("Ajouter") },
+                            leadingIcon = { Icon(Icons.Rounded.Add, "Ajouter", Modifier.size(18.dp)) }
                         )
                     }
 
@@ -141,7 +141,7 @@ fun HomeConfigScreen(
                                 ) {
                                     Icon(
                                         Icons.Rounded.Delete, 
-                                        contentDescription = "Delete",
+                                        contentDescription = "Supprimer",
                                         tint = MaterialTheme.colorScheme.error,
                                         modifier = Modifier.size(14.dp)
                                     )
@@ -153,7 +153,7 @@ fun HomeConfigScreen(
                 
                 if (rooms.isEmpty()) {
                     Text(
-                        text = "No rooms configured. Add a room to get started.",
+                        text = "Aucune pièce configurée. Ajoutez une pièce pour commencer.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 16.dp)
@@ -177,7 +177,7 @@ fun HomeConfigScreen(
                 if (chores.isEmpty()) {
                     item {
                         Text(
-                            text = "No chores in this room.",
+                            text = "Aucune corvée dans cette pièce.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
@@ -187,14 +187,14 @@ fun HomeConfigScreen(
                     items(chores, key = { it.id }) { chore ->
                         ListItem(
                             headlineContent = { Text(chore.name, fontWeight = FontWeight.Medium) },
-                            supportingContent = { Text("Every ${chore.frequencyDays} days • ${chore.baseEffort} XP") },
+                            supportingContent = { Text("Tous les ${chore.frequencyDays} jours • ${chore.baseEffort} XP") },
                             trailingContent = {
                                 Row {
                                     CortexIconButton(onClick = { showChoreSheet = chore }) {
-                                        Icon(Icons.Rounded.Edit, contentDescription = "Edit Chore")
+                                        Icon(Icons.Rounded.Edit, contentDescription = "Modifier la corvée")
                                     }
                                     CortexIconButton(onClick = { choreToDelete = chore }) {
-                                        Icon(Icons.Rounded.Delete, contentDescription = "Delete Chore", tint = MaterialTheme.colorScheme.error)
+                                        Icon(Icons.Rounded.Delete, contentDescription = "Supprimer la corvée", tint = MaterialTheme.colorScheme.error)
                                     }
                                 }
                             },
@@ -223,12 +223,12 @@ fun HomeConfigScreen(
                 showRoomDialog = null
                 showCreateRoomDialog = false 
             },
-            title = { Text(if (isEdit) "Edit Room" else "New Room") },
+            title = { Text(if (isEdit) "Modifier la pièce" else "Nouvelle pièce") },
             text = {
                 OutlinedTextField(
                     value = nameInput,
                     onValueChange = { nameInput = it },
-                    label = { Text("Room Name") },
+                    label = { Text("Nom de la pièce") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -251,7 +251,7 @@ fun HomeConfigScreen(
                     },
                     enabled = nameInput.isNotBlank()
                 ) {
-                    Text("Save")
+                    Text("Enregistrer")
                 }
             },
             dismissButton = {
@@ -259,7 +259,7 @@ fun HomeConfigScreen(
                     showRoomDialog = null
                     showCreateRoomDialog = false 
                 }) {
-                    Text("Cancel")
+                    Text("Annuler")
                 }
             }
         )
@@ -268,8 +268,8 @@ fun HomeConfigScreen(
     if (roomToDelete != null) {
         AlertDialog(
             onDismissRequest = { roomToDelete = null },
-            title = { Text("Delete Room?") },
-            text = { Text("Deleting '${roomToDelete?.name}' will permanently remove it and cascade delete all associated chores. This cannot be undone.") },
+            title = { Text("Supprimer la pièce ?") },
+            text = { Text("Supprimer '${roomToDelete?.name}' l'effacera définitivement, ainsi que toutes les corvées associées. Cette action est irréversible.") },
             confirmButton = {
                 Button(
                     onClick = {
@@ -278,12 +278,12 @@ fun HomeConfigScreen(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) {
-                    Text("Delete")
+                    Text("Supprimer")
                 }
             },
             dismissButton = {
                 TextButton(onClick = { roomToDelete = null }) {
-                    Text("Cancel")
+                    Text("Annuler")
                 }
             }
         )
@@ -292,8 +292,8 @@ fun HomeConfigScreen(
     if (choreToDelete != null) {
         AlertDialog(
             onDismissRequest = { choreToDelete = null },
-            title = { Text("Delete Chore?") },
-            text = { Text("Are you sure you want to delete '${choreToDelete?.name}'?") },
+            title = { Text("Supprimer la corvée ?") },
+            text = { Text("Voulez-vous vraiment supprimer '${choreToDelete?.name}' ?") },
             confirmButton = {
                 Button(
                     onClick = {
@@ -302,12 +302,12 @@ fun HomeConfigScreen(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) {
-                    Text("Delete")
+                    Text("Supprimer")
                 }
             },
             dismissButton = {
                 TextButton(onClick = { choreToDelete = null }) {
-                    Text("Cancel")
+                    Text("Annuler")
                 }
             }
         )
@@ -338,7 +338,7 @@ fun HomeConfigScreen(
                     .verticalScroll(rememberScrollState())
             ) {
                 Text(
-                    text = if (isEdit) "Edit Chore" else "New Chore",
+                    text = if (isEdit) "Modifier la corvée" else "Nouvelle corvée",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(bottom = 16.dp)
@@ -347,7 +347,7 @@ fun HomeConfigScreen(
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Chore Name") },
+                    label = { Text("Nom de la corvée") },
                     modifier = Modifier.fillMaxWidth(),
                     isError = nameError,
                     singleLine = true
@@ -356,7 +356,7 @@ fun HomeConfigScreen(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 var roomExpanded by remember { mutableStateOf(false) }
-                val selectedRoomName = rooms.find { it.id == selectedRoomId }?.name ?: "Select Room"
+                val selectedRoomName = rooms.find { it.id == selectedRoomId }?.name ?: "Sélectionner une pièce"
 
                 ExposedDropdownMenuBox(
                     expanded = roomExpanded,
@@ -366,7 +366,7 @@ fun HomeConfigScreen(
                         value = selectedRoomName,
                         onValueChange = { },
                         readOnly = true,
-                        label = { Text("Room") },
+                        label = { Text("Pièce") },
                         modifier = Modifier
                             .fillMaxWidth()
                             .menuAnchor(androidx.compose.material3.ExposedDropdownMenuAnchorType.PrimaryNotEditable),
@@ -394,7 +394,7 @@ fun HomeConfigScreen(
                 OutlinedTextField(
                     value = frequencyDays,
                     onValueChange = { frequencyDays = it.filter { char -> char.isDigit() } },
-                    label = { Text("Frequency (Days)") },
+                    label = { Text("Fréquence (jours)") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth(),
                     isError = frequencyError,
@@ -404,7 +404,7 @@ fun HomeConfigScreen(
                 Spacer(modifier = Modifier.height(24.dp))
 
                 Text(
-                    text = "Effort / Base XP Reward: ${baseEffort.roundToInt()}",
+                    text = "Effort / récompense XP de base : ${baseEffort.roundToInt()}",
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -442,7 +442,7 @@ fun HomeConfigScreen(
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !nameError && !frequencyError && selectedRoomId.isNotBlank()
                 ) {
-                    Text("Save Chore")
+                    Text("Enregistrer la corvée")
                 }
                 
                 Spacer(modifier = Modifier.height(32.dp))

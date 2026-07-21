@@ -63,6 +63,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **L'interface est désormais entièrement en français.** ~250 chaînes en dur
+  (écrans, boîtes de dialogue, boutons, descriptions d'accessibilité, messages,
+  libellés des widgets et raccourcis) unifiées en français pour s'accorder avec
+  l'IA French-first — l'app parlait jusqu'ici un mélange anglais/français. Les
+  identifiants techniques (routes, clés persistées, motifs de date, en-têtes
+  markdown du coffre) sont intacts ; l'externalisation `stringResource` reste
+  prévue pour une version ultérieure.
 - `DailyBriefingRepository` restructured to drop all `!!` unwraps (smart-cast-friendly
   cache handling), rethrow cancellation, and log through `Log.d` instead of `println`;
   the dead "freshness" computation in `DailyDashboardRepository.getOrGenerateBriefing`

@@ -44,13 +44,13 @@ fun EmptyState(
                 )
                 Spacer(Modifier.height(24.dp))
                 Text(
-                    text = "Your Brain is Empty",
+                    text = "Votre cerveau est vide",
                     style = MaterialTheme.typography.headlineMedium,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    text = "Start by creating a new file or importing a repository to fill your neural vault.",
+                    text = "Commencez par créer un fichier ou importer un dépôt pour remplir votre coffre neuronal.",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
@@ -61,7 +61,7 @@ fun EmptyState(
         Button(onClick = onActionClick) {
             Icon(Icons.Default.Create, null)
             Spacer(Modifier.width(8.dp))
-            Text("Create New Note")
+            Text("Créer une note")
         }
     }
 }

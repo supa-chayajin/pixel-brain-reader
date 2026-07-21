@@ -135,7 +135,7 @@ class CompanionWidget : GlanceAppWidget() {
                     style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Bold, color = GlanceTheme.colors.onSurface)
                 )
                 Text(
-                    "Lvl ${state.currentLevel}  ·  ${state.currentXp}/${state.maxXp} XP",
+                    "Niv. ${state.currentLevel}  ·  ${state.currentXp}/${state.maxXp} XP",
                     maxLines = 1,
                     style = TextStyle(fontSize = 11.sp, color = GlanceTheme.colors.onSurfaceVariant)
                 )
@@ -147,7 +147,7 @@ class CompanionWidget : GlanceAppWidget() {
     @Composable
     private fun XpBar(state: CompanionWidgetState) {
         val fraction = if (state.maxXp > 0) state.currentXp.toFloat() / state.maxXp else 0f
-        ProgressRow(label = "Level ${state.currentLevel}", fraction = fraction, trailing = "${state.currentXp}/${state.maxXp}", color = WidgetTokens.XpGold)
+        ProgressRow(label = "Niveau ${state.currentLevel}", fraction = fraction, trailing = "${state.currentXp}/${state.maxXp}", color = WidgetTokens.XpGold)
     }
 
     @Composable
@@ -176,9 +176,9 @@ class CompanionWidget : GlanceAppWidget() {
     private fun Graph(state: CompanionWidgetState, modifier: GlanceModifier) {
         Box(modifier = modifier, contentAlignment = Alignment.Center) {
             if (state.graphBitmap != null) {
-                Image(provider = ImageProvider(state.graphBitmap), contentDescription = "Vitality trend", modifier = GlanceModifier.fillMaxSize())
+                Image(provider = ImageProvider(state.graphBitmap), contentDescription = "Tendance de vitalité", modifier = GlanceModifier.fillMaxSize())
             } else {
-                Text("No vitality data yet", style = TextStyle(fontSize = 11.sp, color = GlanceTheme.colors.outline))
+                Text("Pas encore de données de vitalité", style = TextStyle(fontSize = 11.sp, color = GlanceTheme.colors.outline))
             }
         }
     }
@@ -186,11 +186,11 @@ class CompanionWidget : GlanceAppWidget() {
     @Composable
     private fun QuickRow(context: Context) {
         Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            ActionButton("🫧", "Mood", actionStartActivity(WidgetNav.openIntent(context, WidgetNav.SCREEN_MOOD)), GlanceModifier.defaultWeight())
+            ActionButton("🫧", "Humeur", actionStartActivity(WidgetNav.openIntent(context, WidgetNav.SCREEN_MOOD)), GlanceModifier.defaultWeight())
             Spacer(GlanceModifier.width(6.dp))
-            ActionButton("📓", "Daily", actionStartActivity(WidgetNav.openIntent(context, WidgetNav.SCREEN_DAILY)), GlanceModifier.defaultWeight())
+            ActionButton("📓", "Quotidien", actionStartActivity(WidgetNav.openIntent(context, WidgetNav.SCREEN_DAILY)), GlanceModifier.defaultWeight())
             Spacer(GlanceModifier.width(6.dp))
-            ActionButton("📝", "Capture", actionStartActivity(WidgetNav.captureIntent(context)), GlanceModifier.defaultWeight())
+            ActionButton("📝", "Capturer", actionStartActivity(WidgetNav.captureIntent(context)), GlanceModifier.defaultWeight())
         }
     }
 }

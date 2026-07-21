@@ -133,9 +133,9 @@ class SettingsViewModel @Inject constructor(
                         WorkInfo.State.RUNNING -> IndexingState.Running
                         WorkInfo.State.SUCCEEDED -> IndexingState.Succeeded
                         WorkInfo.State.FAILED -> IndexingState.Failed(
-                            latest.outputData.getString("error") ?: "Indexing failed"
+                            latest.outputData.getString("error") ?: "Échec de l'indexation"
                         )
-                        WorkInfo.State.CANCELLED -> IndexingState.Failed("Indexing cancelled")
+                        WorkInfo.State.CANCELLED -> IndexingState.Failed("Indexation annulée")
                         WorkInfo.State.BLOCKED, null -> IndexingState.Idle
                     }
                 }
@@ -280,18 +280,18 @@ class SettingsViewModel @Inject constructor(
 
     private fun describeNotReady(state: NanoState): String = when (state) {
         NanoState.NotDownloaded ->
-            "Download Gemini Nano first to use Local AI."
+            "Téléchargez d'abord Gemini Nano pour utiliser l'IA locale."
         is NanoState.Downloading -> {
             val pct = if (state.progress in 0f..1f) " (${(state.progress * 100).toInt()}%)" else ""
-            "Gemini Nano is still downloading$pct. Pick Local AI once it's ready."
+            "Gemini Nano est encore en téléchargement$pct. Choisissez l'IA locale une fois le téléchargement terminé."
         }
         NanoState.Checking, NanoState.Unknown ->
-            "Still checking on-device AI availability — try again in a moment."
+            "Vérification de la disponibilité de l'IA sur l'appareil — réessayez dans un instant."
         is NanoState.Unavailable ->
-            "Local AI isn't available on this device: ${state.reason}"
+            "L'IA locale n'est pas disponible sur cet appareil : ${state.reason}"
         is NanoState.Error ->
-            "Local AI hit an error: ${state.cause.localizedMessage ?: state.cause.message ?: "unknown"}"
-        NanoState.Ready -> "Local AI is ready." // unreachable
+            "L'IA locale a rencontré une erreur : ${state.cause.localizedMessage ?: state.cause.message ?: "inconnue"}"
+        NanoState.Ready -> "L'IA locale est prête." // unreachable
     }
 
     // Advanced Local Config setters
@@ -385,7 +385,7 @@ class SettingsViewModel @Inject constructor(
                     // Both Credential Manager AND AuthorizationClient failed —
                     // surface the more specific Credential Manager error if we have one.
                     val msg = signIn.exceptionOrNull()?.message
-                        ?: "Google connection failed; check Cloud Console config"
+                        ?: "Échec de la connexion Google ; vérifiez la configuration de la Cloud Console"
                     _googleAuthEvents.emit(GoogleAuthEvent.Failed(msg))
                 }
             }
@@ -400,7 +400,7 @@ class SettingsViewModel @Inject constructor(
                 _googleAuthEvents.emit(GoogleAuthEvent.Linked)
             } else {
                 _googleAuthEvents.emit(
-                    GoogleAuthEvent.Failed(res.exceptionOrNull()?.message ?: "Consent failed")
+                    GoogleAuthEvent.Failed(res.exceptionOrNull()?.message ?: "Échec du consentement")
                 )
             }
         }

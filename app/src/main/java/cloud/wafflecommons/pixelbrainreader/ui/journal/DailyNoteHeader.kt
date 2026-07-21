@@ -66,7 +66,7 @@ fun DailyNoteHeader(
                     ) {
                         Column {
                             Text(
-                                text = "Daily Summary",
+                                text = "Résumé du jour",
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.secondary
@@ -74,7 +74,7 @@ fun DailyNoteHeader(
                             
                             if (lastUpdate != null) {
                                 Text(
-                                    text = "Last update: $lastUpdate",
+                                    text = "Dernière mise à jour : $lastUpdate",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -84,7 +84,7 @@ fun DailyNoteHeader(
                     
                     if (topDailyTags.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(12.dp))
-                        Text("Today's Top Tags:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                        Text("Tags principaux du jour :", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                         Spacer(modifier = Modifier.height(4.dp))
                         FlowRow(
                             modifier = Modifier.fillMaxWidth(),
@@ -121,7 +121,7 @@ fun DailyNoteHeader(
                     ) {
                         if (healthMetrics != null) {
                             Text(
-                                text = "👟 ${String.format("%,d", healthMetrics.steps)} steps",
+                                text = "👟 ${String.format("%,d", healthMetrics.steps)} pas",
                                 style = MaterialTheme.typography.labelLarge,
                                 color = MaterialTheme.colorScheme.primary,
                                 fontWeight = FontWeight.SemiBold

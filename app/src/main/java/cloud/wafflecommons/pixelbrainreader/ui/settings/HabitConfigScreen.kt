@@ -52,10 +52,10 @@ fun HabitConfigScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Manage Habits & Automations") },
+                title = { Text("Gérer les habitudes et automatisations") },
                 navigationIcon = {
                     CortexIconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
                     }
                 }
             )
@@ -72,7 +72,7 @@ fun HabitConfigScreen(
                     )
                     isSheetOpen = true
                 }) {
-                    Icon(Icons.Filled.Add, contentDescription = "Add Habit")
+                    Icon(Icons.Filled.Add, contentDescription = "Ajouter une habitude")
                 }
             }
         }
@@ -190,12 +190,12 @@ fun HabitEditorForm(
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text("Edit Habit", style = MaterialTheme.typography.titleLarge)
+        Text("Modifier l'habitude", style = MaterialTheme.typography.titleLarge)
 
         OutlinedTextField(
             value = title,
             onValueChange = { title = it },
-            label = { Text("Title") },
+            label = { Text("Titre") },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true
         )
@@ -209,7 +209,7 @@ fun HabitEditorForm(
         )
 
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Type: ", style = MaterialTheme.typography.bodyLarge)
+            Text("Type : ", style = MaterialTheme.typography.bodyLarge)
             Spacer(Modifier.width(8.dp))
             SingleChoiceSegmentedButtonRow {
                 SegmentedButton(
@@ -217,14 +217,14 @@ fun HabitEditorForm(
                     onClick = { type = HabitType.BOOLEAN },
                     shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2)
                 ) {
-                    Text("Checklist")
+                    Text("À cocher")
                 }
                 SegmentedButton(
                     selected = type == HabitType.MEASURABLE,
                     onClick = { type = HabitType.MEASURABLE },
                     shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2)
                 ) {
-                    Text("Target")
+                    Text("Objectif")
                 }
             }
         }
@@ -234,7 +234,7 @@ fun HabitEditorForm(
                 OutlinedTextField(
                     value = targetValue,
                     onValueChange = { targetValue = it },
-                    label = { Text("Target") },
+                    label = { Text("Objectif") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.weight(1f),
                     singleLine = true
@@ -242,18 +242,18 @@ fun HabitEditorForm(
                 OutlinedTextField(
                     value = unit,
                     onValueChange = { unit = it },
-                    label = { Text("Unit (e.g. h, L)") },
+                    label = { Text("Unité (ex. h, L)") },
                     modifier = Modifier.weight(1f),
                     singleLine = true
                 )
             }
         }
 
-        Text("Schedule", style = MaterialTheme.typography.titleMedium)
+        Text("Planification", style = MaterialTheme.typography.titleMedium)
         val days = listOf("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN")
 
         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-            val modes = listOf("WEEKLY" to "Weekly", "BIWEEKLY" to "2 wk", "INTERVAL" to "Interval")
+            val modes = listOf("WEEKLY" to "Hebdo", "BIWEEKLY" to "2 sem", "INTERVAL" to "Intervalle")
             modes.forEachIndexed { index, (mode, lbl) ->
                 SegmentedButton(
                     selected = scheduleMode == mode,
@@ -269,7 +269,7 @@ fun HabitEditorForm(
         when (scheduleMode) {
             "INTERVAL" -> {
                 Text(
-                    "Repeats every N days / weeks / months since the last completion, regardless of the day of week.",
+                    "Se répète tous les N jours / semaines / mois depuis la dernière réalisation, quel que soit le jour de la semaine.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -280,13 +280,13 @@ fun HabitEditorForm(
                     OutlinedTextField(
                         value = intervalCount,
                         onValueChange = { intervalCount = it.filter { c -> c.isDigit() }.take(3) },
-                        label = { Text("Every") },
+                        label = { Text("Tous les") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.width(110.dp),
                         singleLine = true
                     )
                     SingleChoiceSegmentedButtonRow {
-                        val units = listOf("DAY" to "days", "WEEK" to "wk", "MONTH" to "months")
+                        val units = listOf("DAY" to "jours", "WEEK" to "sem", "MONTH" to "mois")
                         units.forEachIndexed { index, (u, lbl) ->
                             SegmentedButton(
                                 selected = intervalUnit == u,
@@ -299,7 +299,7 @@ fun HabitEditorForm(
             }
             "BIWEEKLY" -> {
                 listOf(1, 2).forEach { week ->
-                    Text("Week $week", style = MaterialTheme.typography.bodyMedium)
+                    Text("Semaine $week", style = MaterialTheme.typography.bodyMedium)
                     FlowRow(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -345,7 +345,7 @@ fun HabitEditorForm(
                 value = autoSource,
                 onValueChange = {},
                 readOnly = true,
-                label = { Text("Auto Source (Health Connect)") },
+                label = { Text("Source auto (Health Connect)") },
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedAutoSource) },
                 modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, true).fillMaxWidth()
             )
@@ -377,21 +377,21 @@ fun HabitEditorForm(
                 },
                 colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
             ) {
-                Icon(Icons.Filled.Delete, contentDescription = "Delete")
+                Icon(Icons.Filled.Delete, contentDescription = "Supprimer")
                 Spacer(Modifier.width(8.dp))
-                Text("Delete")
+                Text("Supprimer")
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(onClick = {
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     onCancel()
-                }) { Text("Cancel") }
+                }) { Text("Annuler") }
                 Button(onClick = {
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     val finalSource = if (autoSource == "None (Manual)") null else autoSource
                     val target = targetValue.toDoubleOrNull() ?: 0.0
                     val updated = initialHabit.copy(
-                        title = title.takeIf { it.isNotBlank() } ?: "Unnamed Habit",
+                        title = title.takeIf { it.isNotBlank() } ?: "Habitude sans nom",
                         description = description,
                         type = type,
                         targetValue = if (type == HabitType.MEASURABLE) target else 0.0,
@@ -409,7 +409,7 @@ fun HabitEditorForm(
                     )
                     onSave(updated)
                 }) {
-                    Text("Save")
+                    Text("Enregistrer")
                 }
             }
         }

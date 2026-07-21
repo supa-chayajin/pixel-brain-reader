@@ -41,7 +41,7 @@ fun GratitudeSection(
                 .animateContentSize()
         ) {
             Text(
-                text = "Gratitude Express ✨",
+                text = "Gratitude express ✨",
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.primary
             )
@@ -68,7 +68,7 @@ fun GratitudeSection(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Star,
-                            contentDescription = "Add Gratitude",
+                            contentDescription = "Ajouter une gratitude",
                             tint = MaterialTheme.colorScheme.primary
                         )
                     }

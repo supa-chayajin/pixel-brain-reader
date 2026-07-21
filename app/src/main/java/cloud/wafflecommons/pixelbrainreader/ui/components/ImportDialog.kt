@@ -27,13 +27,13 @@ fun ImportDialog(
     onDismiss: () -> Unit,
     onSave: (filename: String, folder: String, content: String) -> Unit
 ) {
-    var filename by remember { mutableStateOf(initialTitle.ifBlank { "Untitled" }) }
+    var filename by remember { mutableStateOf(initialTitle.ifBlank { "Sans titre" }) }
     var folder by remember { mutableStateOf("00_Inbox") }
     var content by remember { mutableStateOf(initialContent) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Save to Vault") },
+        title = { Text("Enregistrer dans le coffre") },
         text = {
             Column(
                 modifier = Modifier
@@ -43,7 +43,7 @@ fun ImportDialog(
                 OutlinedTextField(
                     value = filename,
                     onValueChange = { filename = it },
-                    label = { Text("Filename (no ext)") },
+                    label = { Text("Nom du fichier (sans extension)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -51,12 +51,12 @@ fun ImportDialog(
                 OutlinedTextField(
                     value = folder,
                     onValueChange = { folder = it },
-                    label = { Text("Target Folder") },
+                    label = { Text("Dossier cible") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(modifier = Modifier.height(16.dp))
-                Text("Content Preview:", style = MaterialTheme.typography.labelMedium)
+                Text("Aperçu du contenu :", style = MaterialTheme.typography.labelMedium)
                 OutlinedTextField(
                     value = content,
                     onValueChange = { content = it },
@@ -74,12 +74,12 @@ fun ImportDialog(
                     onSave(cleanName, folder, content) 
                 }
             ) {
-                Text("Import")
+                Text("Importer")
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                Text("Annuler")
             }
         }
     )

@@ -44,7 +44,7 @@ fun AddChoreBottomSheet(
                 .verticalScroll(rememberScrollState())
         ) {
             Text(
-                text = "New Chore",
+                text = "Nouvelle corvée",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary,
@@ -54,8 +54,8 @@ fun AddChoreBottomSheet(
             OutlinedTextField(
                 value = name,
                 onValueChange = { name = it },
-                label = { Text("Chore name") },
-                placeholder = { Text("Ex: Empty dishwasher") },
+                label = { Text("Nom de la corvée") },
+                placeholder = { Text("Ex : Vider le lave-vaisselle") },
                 modifier = Modifier.fillMaxWidth(),
                 isError = name.isNotBlank() && nameError,
                 singleLine = true
@@ -69,7 +69,7 @@ fun AddChoreBottomSheet(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
                 ) {
                     Text(
-                        text = "Create a room first to add chores",
+                        text = "Créez d'abord une pièce pour ajouter des corvées",
                         modifier = Modifier.padding(16.dp),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onErrorContainer
@@ -80,12 +80,12 @@ fun AddChoreBottomSheet(
                     expanded = isExpanded,
                     onExpandedChange = { isExpanded = it },
                 ) {
-                    val currentRoomName = allRooms.find { it.id == selectedRoomId }?.name ?: "Select a room"
+                    val currentRoomName = allRooms.find { it.id == selectedRoomId }?.name ?: "Sélectionner une pièce"
                     OutlinedTextField(
                         value = currentRoomName,
                         onValueChange = { },
                         readOnly = true,
-                        label = { Text("Room") },
+                        label = { Text("Pièce") },
                         modifier = Modifier
                             .fillMaxWidth()
                             .menuAnchor(androidx.compose.material3.ExposedDropdownMenuAnchorType.PrimaryNotEditable),
@@ -115,8 +115,8 @@ fun AddChoreBottomSheet(
             OutlinedTextField(
                 value = frequencyDays,
                 onValueChange = { frequencyDays = it.filter { char -> char.isDigit() } },
-                label = { Text("Frequency (Days)") },
-                placeholder = { Text("7 for once a week") },
+                label = { Text("Fréquence (jours)") },
+                placeholder = { Text("7 pour une fois par semaine") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = Modifier.fillMaxWidth(),
                 isError = frequencyDays.isNotBlank() && frequencyError,
@@ -126,7 +126,7 @@ fun AddChoreBottomSheet(
             Spacer(modifier = Modifier.height(24.dp))
 
             Text(
-                text = "Effort / XP Reward: ${baseEffort.roundToInt()}",
+                text = "Effort / récompense XP : ${baseEffort.roundToInt()}",
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.SemiBold
             )
@@ -156,7 +156,7 @@ fun AddChoreBottomSheet(
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !nameError && !frequencyError && selectedRoomId.isNotBlank()
             ) {
-                Text("Save chore")
+                Text("Enregistrer la corvée")
             }
             
             Spacer(modifier = Modifier.height(32.dp)) // Extra padding for the bottom bar/nav
