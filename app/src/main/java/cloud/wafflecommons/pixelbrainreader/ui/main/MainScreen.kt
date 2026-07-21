@@ -161,11 +161,11 @@ private fun ExpressiveNavBar(
 
     // First three = the folded set (Repo, Habits, Chores). Unfolded reveals the rest.
     val allRegular = listOf(
-        NavDest(Screen.Home, Icons.Rounded.Dashboard, "Repo", currentRoute == Screen.Home && !isViewingDailyNote),
-        NavDest("habits", Icons.Rounded.DateRange, "Habits", currentRoute == "habits"),
-        NavDest(Screen.HomeOS, Icons.Rounded.CleaningServices, "Chores", currentRoute == Screen.HomeOS),
+        NavDest(Screen.Home, Icons.Rounded.Dashboard, "Dépôt", currentRoute == Screen.Home && !isViewingDailyNote),
+        NavDest("habits", Icons.Rounded.DateRange, "Habitudes", currentRoute == "habits"),
+        NavDest(Screen.HomeOS, Icons.Rounded.CleaningServices, "Corvées", currentRoute == Screen.HomeOS),
         NavDest(Screen.Chat, Icons.Rounded.Psychology, "Chat", currentRoute == Screen.Chat),
-        NavDest(Screen.MoodTracker, Icons.Default.Mood, "Mood", currentRoute == Screen.MoodTracker),
+        NavDest(Screen.MoodTracker, Icons.Default.Mood, "Humeur", currentRoute == Screen.MoodTracker),
         NavDest(Screen.Stats, Icons.Default.Star, "Stats", currentRoute == Screen.Stats)
     )
     // Apply the user's custom order; any destination not present in `order` (e.g. added in a
@@ -337,9 +337,9 @@ private fun ExpressiveNavBar(
             contentAlignment = Alignment.Center
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(Icons.Rounded.AutoAwesome, contentDescription = "Daily", tint = dailyContent, modifier = Modifier.size(24.dp))
+                Icon(Icons.Rounded.AutoAwesome, contentDescription = "Quotidien", tint = dailyContent, modifier = Modifier.size(24.dp))
                 Spacer(Modifier.height(3.dp))
-                Text("Daily", style = MaterialTheme.typography.labelMedium, color = dailyContent, maxLines = 1)
+                Text("Quotidien", style = MaterialTheme.typography.labelMedium, color = dailyContent, maxLines = 1)
             }
         }
     }
@@ -668,8 +668,8 @@ fun MainScreen(
     if (uiState.showDeleteConfirmation) {
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { viewModel.dismissDeleteConfirmation() },
-            title = { Text("Delete this file?") },
-            text = { Text("This action cannot be undone and will delete the file from the Vault and Git repository.") },
+            title = { Text("Supprimer ce fichier ?") },
+            text = { Text("Cette action est irréversible et supprimera le fichier du coffre et du dépôt Git.") },
             icon = { Icon(Icons.Rounded.Delete, contentDescription = null) },
             confirmButton = {
                 androidx.compose.material3.TextButton(
@@ -679,12 +679,12 @@ fun MainScreen(
                     },
                     colors = androidx.compose.material3.ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 ) {
-                    Text("Delete")
+                    Text("Supprimer")
                 }
             },
             dismissButton = {
                 androidx.compose.material3.TextButton(onClick = { viewModel.dismissDeleteConfirmation() }) {
-                    Text("Cancel")
+                    Text("Annuler")
                 }
             }
         )
@@ -771,7 +771,7 @@ fun MainScreen(
                                     androidx.compose.material3.TextField(
                                         value = uiState.searchQuery,
                                         onValueChange = { viewModel.onSearchQueryChanged(it) },
-                                        placeholder = { Text("Search...") },
+                                        placeholder = { Text("Rechercher...") },
                                         singleLine = true,
                                         modifier = Modifier.fillMaxWidth().padding(end = 8.dp),
                                         shape = androidx.compose.foundation.shape.CircleShape,
@@ -783,7 +783,7 @@ fun MainScreen(
                                         trailingIcon = {
                                              if (uiState.searchQuery.isNotEmpty()) {
                                                  CortexIconButton(onClick = { viewModel.onSearchQueryChanged("") }) {
-                                                     Icon(Icons.Default.SearchOff, "Clear")
+                                                     Icon(Icons.Default.SearchOff, "Effacer")
                                                  }
                                              }
                                         }
@@ -811,7 +811,7 @@ fun MainScreen(
                                             contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     ) {
-                                        Icon(Icons.Default.SearchOff, "Close Search Mode")
+                                        Icon(Icons.Default.SearchOff, "Quitter la recherche")
                                     }
                                 } else {
                                     // VIEW MODE ACTIONS
@@ -827,7 +827,7 @@ fun MainScreen(
                                         ) {
                                             Icon(
                                                 imageVector = if (uiState.isEditing) Icons.Rounded.Visibility else Icons.Rounded.Edit,
-                                                contentDescription = if (uiState.isEditing) "View" else "Edit"
+                                                contentDescription = if (uiState.isEditing) "Afficher" else "Modifier"
                                             )
                                         }
 
@@ -844,7 +844,7 @@ fun MainScreen(
                                             ) {
                                                 Icon(
                                                     imageVector = if (uiState.isFocusMode) Icons.Rounded.CloseFullscreen else Icons.Rounded.OpenInFull,
-                                                    contentDescription = "Focus Mode"
+                                                    contentDescription = "Mode concentration"
                                                 )
                                             }
                                         }
@@ -862,7 +862,7 @@ fun MainScreen(
                                                 contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         ) {
-                                            Icon(Icons.Rounded.Close, "Close")
+                                            Icon(Icons.Rounded.Close, "Fermer")
                                         }
 
                                     } else {
@@ -874,7 +874,7 @@ fun MainScreen(
                                                 contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         ) {
-                                            Icon(Icons.Rounded.Search, "Search")
+                                            Icon(Icons.Rounded.Search, "Rechercher")
                                         }
 
                                         // Browser Actions
@@ -885,7 +885,7 @@ fun MainScreen(
                                                 contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         ) {
-                                            Icon(Icons.Rounded.Add, "New File")
+                                            Icon(Icons.Rounded.Add, "Nouveau fichier")
                                         }
 
                                         // Export the whole vault as a ZIP to phone storage (outside the app).
@@ -898,7 +898,7 @@ fun MainScreen(
                                                 contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         ) {
-                                            Icon(Icons.Rounded.Download, "Export vault")
+                                            Icon(Icons.Rounded.Download, "Exporter le coffre")
                                         }
                                     }
                                 }

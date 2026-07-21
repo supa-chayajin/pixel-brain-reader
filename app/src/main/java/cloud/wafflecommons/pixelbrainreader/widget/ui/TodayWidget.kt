@@ -57,18 +57,18 @@ class TodayWidget : GlanceAppWidget() {
             Column(modifier = GlanceModifier.fillMaxSize()) {
                 WidgetHeader(
                     emoji = "📋",
-                    title = "Today",
-                    subtitle = if (total > 0) "$done of $total tasks" else "No tasks yet",
+                    title = "Aujourd'hui",
+                    subtitle = if (total > 0) "$done sur $total tâches" else "Pas encore de tâches",
                     onTitleClick = openDaily,
                     trailingEmoji = "＋",
                     onTrailingClick = openDaily
                 )
                 Spacer(GlanceModifier.height(10.dp))
                 if (total == 0) {
-                    WidgetEmpty("🎉", "All clear — no tasks today")
+                    WidgetEmpty("🎉", "Tout est fait — aucune tâche aujourd'hui")
                 } else {
                     ProgressRow(
-                        label = "Progress",
+                        label = "Progression",
                         fraction = done.toFloat() / total,
                         trailing = "$done/$total",
                         color = GlanceTheme.colors.primary

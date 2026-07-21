@@ -154,7 +154,7 @@ class PrivateJournalViewModel @Inject constructor(
         // Check Cache
         val pwd = sessionPassword ?: run {
              // Session Expired
-             lockVault("Session expired. Please unlock again.")
+             lockVault("Session expirée. Veuillez déverrouiller à nouveau.")
              return
         }
         
@@ -168,7 +168,7 @@ class PrivateJournalViewModel @Inject constructor(
                     isCreatingNew = false
                 )
             } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(errorMessage = "Decryption Failed: ${e.message}")
+                _uiState.value = _uiState.value.copy(errorMessage = "Échec du déchiffrement : ${e.message}")
             }
         }
     }
@@ -181,8 +181,8 @@ class PrivateJournalViewModel @Inject constructor(
                 
                 // 2. Check Cache
                 val pwd = sessionPassword ?: run {
-                     _uiEvent.send(UiEvent.ShowToast("Session expired. Please re-authenticate."))
-                     lockVault("Session expired")
+                     _uiEvent.send(UiEvent.ShowToast("Session expirée. Veuillez vous authentifier à nouveau."))
+                     lockVault("Session expirée")
                      return@launch
                 }
 
@@ -204,11 +204,11 @@ class PrivateJournalViewModel @Inject constructor(
                 )
                 
                 // 5. Feedback
-                _uiEvent.send(UiEvent.ShowToast("Note created successfully"))
-                
+                _uiEvent.send(UiEvent.ShowToast("Note créée avec succès"))
+
             } catch (e: Exception) {
                 android.util.Log.e("PrivateVM", "Creation Error", e)
-                _uiEvent.send(UiEvent.ShowToast("Error: ${e.message}"))
+                _uiEvent.send(UiEvent.ShowToast("Erreur : ${e.message}"))
             }
         }
     }
@@ -246,7 +246,7 @@ class PrivateJournalViewModel @Inject constructor(
         
         // Check Cache
         val pwd = sessionPassword ?: run {
-             lockVault("Session expired during save.")
+             lockVault("Session expirée pendant l'enregistrement.")
              return
         }
         
@@ -263,7 +263,7 @@ class PrivateJournalViewModel @Inject constructor(
                     }
                 }
             } catch (e: Exception) {
-               _uiState.value = _uiState.value.copy(errorMessage = "Save Failed: ${e.message}")
+               _uiState.value = _uiState.value.copy(errorMessage = "Échec de l'enregistrement : ${e.message}")
                _saveState.value = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.ERROR
             }
         }

@@ -83,10 +83,10 @@ fun RemindersScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Reminders") },
+                title = { Text("Rappels") },
                 navigationIcon = {
                     CortexIconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
                     }
                 }
             )
@@ -104,13 +104,13 @@ fun RemindersScreen(
             ReminderSection(
                 icon = Icons.Rounded.Lock,
                 iconTint = MaterialTheme.colorScheme.primary,
-                title = "Private vault reminder",
-                subtitle = "A daily nudge to journal at your chosen time — always fires, never skipped.",
+                title = "Rappel du coffre privé",
+                subtitle = "Un rappel quotidien pour écrire dans votre journal à l'heure choisie — toujours envoyé, jamais ignoré.",
                 checked = vaultEnabled,
                 onCheckedChange = viewModel::setVaultEnabled
             ) {
                 TimeRow(
-                    label = "Reminder time",
+                    label = "Heure du rappel",
                     time = vaultTime,
                     onClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -123,12 +123,12 @@ fun RemindersScreen(
             ReminderSection(
                 icon = Icons.Rounded.CleaningServices,
                 iconTint = MaterialTheme.colorScheme.tertiary,
-                title = "Chores & habits reminder",
-                subtitle = "At each window, a summary of due chores and unfinished habits.",
+                title = "Rappel corvées et habitudes",
+                subtitle = "À chaque créneau, un résumé des corvées à faire et des habitudes non terminées.",
                 checked = choresEnabled,
                 onCheckedChange = viewModel::setChoresEnabled
             ) {
-                Text("Time windows", style = MaterialTheme.typography.labelLarge)
+                Text("Créneaux horaires", style = MaterialTheme.typography.labelLarge)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     choresWindows.forEach { win ->
                         InputChip(
@@ -139,7 +139,7 @@ fun RemindersScreen(
                             },
                             label = { Text(win) },
                             trailingIcon = {
-                                Icon(Icons.Default.Close, contentDescription = "Remove $win", modifier = Modifier.size(16.dp))
+                                Icon(Icons.Default.Close, contentDescription = "Supprimer $win", modifier = Modifier.size(16.dp))
                             }
                         )
                     }
@@ -150,7 +150,7 @@ fun RemindersScreen(
                 }) {
                     Icon(Icons.Default.Add, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Add window")
+                    Text("Ajouter un créneau")
                 }
             }
         }
@@ -278,7 +278,7 @@ private fun TimePickerDialog(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    "Select time",
+                    "Choisir l'heure",
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.fillMaxWidth()
@@ -290,7 +290,7 @@ private fun TimePickerDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
                 ) {
-                    TextButton(onClick = onDismiss) { Text("Cancel") }
+                    TextButton(onClick = onDismiss) { Text("Annuler") }
                     Spacer(Modifier.width(8.dp))
                     TextButton(onClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)

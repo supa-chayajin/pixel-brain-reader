@@ -37,7 +37,7 @@ fun MoodTrendsCard(
     Column(modifier = Modifier.padding(8.dp)) {
         Spacer(modifier = Modifier.height(24.dp))
         if (moodTrend.isEmpty()) {
-            Text("No mood data yet.", style = MaterialTheme.typography.bodyMedium)
+            Text("Pas encore de données d'humeur.", style = MaterialTheme.typography.bodyMedium)
         } else {
             MoodSparklineContent(moodTrend)
         }

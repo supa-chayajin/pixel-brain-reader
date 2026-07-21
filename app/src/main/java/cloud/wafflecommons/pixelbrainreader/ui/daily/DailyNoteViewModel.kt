@@ -34,7 +34,7 @@ data class DailyNoteState(
     val healthMetrics: cloud.wafflecommons.pixelbrainreader.data.health.DailyHealthMetrics? = null,
     
     // Core Dashboard Content (Room)
-    val mantra: String = "Stay safe my friend, and don't you dare go hollow!",
+    val mantra: String = "Reste prudent mon ami, et ne t'avise pas de devenir une carcasse !",
     val ideasContent: String = "",
     val notesContent: String = "",
     
@@ -192,8 +192,8 @@ class DailyNoteViewModel @Inject constructor(
     private val weatherUnavailable = cloud.wafflecommons.pixelbrainreader.data.repository.WeatherData(
         emoji = "⚠️",
         temperature = "—",
-        location = "Location or network unavailable",
-        description = "Unavailable",
+        location = "Position ou réseau indisponible",
+        description = "Indisponible",
         code = -2
     )
 
@@ -233,8 +233,8 @@ class DailyNoteViewModel @Inject constructor(
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), cloud.wafflecommons.pixelbrainreader.data.repository.WeatherData(
             emoji = "⌛",
             temperature = "--°C",
-            location = "Loading...",
-            description = "Loading",
+            location = "Chargement...",
+            description = "Chargement",
             code = -1
         ))
 
@@ -304,13 +304,13 @@ class DailyNoteViewModel @Inject constructor(
             moodData = moodData,
             moodTrend = moodTrendData,
             healthMetrics = healthMetrics,
-            mantra = dashboard?.dailyMantra ?: "Stay safe my friend, and don't you dare go hollow!",
+            mantra = dashboard?.dailyMantra ?: "Reste prudent mon ami, et ne t'avise pas de devenir une carcasse !",
             ideasContent = shieldedIdeas,
             notesContent = shieldedNotes,
             timelineEvents = timeline,
             dailyTasks = tasks,
             scratchNotes = scraps,
-            weather = weatherData ?: cloud.wafflecommons.pixelbrainreader.data.repository.WeatherData("⌛", "--°C", "Loading...", "Loading", -1),
+            weather = weatherData ?: cloud.wafflecommons.pixelbrainreader.data.repository.WeatherData("⌛", "--°C", "Chargement...", "Chargement", -1),
             weatherData = weatherData,
             isLoading = isLoading,
             topDailyTags = dailyTags,
@@ -320,7 +320,7 @@ class DailyNoteViewModel @Inject constructor(
                 moodTrend = moodTrendData,
                 isExpanded = isExpanded,
                 isLoading = false,
-                quote = "Stay safe my friend, and don't you dare go hollow!"
+                quote = "Reste prudent mon ami, et ne t'avise pas de devenir une carcasse !"
             )
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DailyNoteState())
@@ -404,7 +404,7 @@ class DailyNoteViewModel @Inject constructor(
             val newIdeas = if (currentIdeas.isBlank()) scrap.content else "$currentIdeas\n\n${scrap.content}"
             dashboardRepository.updateSecondBrain(_selectedDate.value, "IDEAS", newIdeas)
             scratchRepository.updateScrap(scrap.copy(isPromoted = true))
-            _userMessage.value = "Scrap promoted to Second Brain"
+            _userMessage.value = "Brouillon promu dans le Second Cerveau"
         }
     }
 
@@ -463,7 +463,7 @@ class DailyNoteViewModel @Inject constructor(
         val parsed = cloud.wafflecommons.pixelbrainreader.data.utils.MarkdownCommandParser
             .parseEvent(line, today = date)
             ?: run {
-                _userMessage.value = "Couldn't parse /event command"
+                _userMessage.value = "Impossible d'analyser la commande /event"
                 return
             }
         viewModelScope.launch(Dispatchers.IO) {
@@ -472,14 +472,14 @@ class DailyNoteViewModel @Inject constructor(
                 content = parsed.title,
                 time = parsed.startsAt.toLocalTime()
             )
-            _userMessage.value = "📅 Event added: ${parsed.title}"
+            _userMessage.value = "📅 Événement ajouté : ${parsed.title}"
         }
     }
 
     fun deleteTimelineEvent(entry: TimelineEntryEntity) {
         viewModelScope.launch(Dispatchers.IO) {
             dashboardRepository.deleteTimelineEntry(entry.id)
-            _userMessage.value = "Event removed"
+            _userMessage.value = "Événement supprimé"
         }
     }
 
@@ -503,9 +503,9 @@ class DailyNoteViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 dashboardRepository.burnToDisk(_selectedDate.value)
-                _userMessage.value = "Day exported and closed successfully"
+                _userMessage.value = "Journée exportée et clôturée avec succès"
             } catch (e: Exception) {
-                _userMessage.value = "Error during export"
+                _userMessage.value = "Erreur lors de l'exportation"
             }
         }
     }

@@ -353,13 +353,13 @@ fun WelcomeState(onCreateNew: () -> Unit) {
         )
         Spacer(Modifier.height(24.dp))
         Text(
-            "Ready to work",
+            "Prêt à travailler",
             style = MaterialTheme.typography.displaySmall,
             color = MaterialTheme.colorScheme.onSurface
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            "Select a file from the list or create a new one to get started.",
+            "Sélectionnez un fichier dans la liste ou créez-en un nouveau pour commencer.",
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
@@ -371,7 +371,7 @@ fun WelcomeState(onCreateNew: () -> Unit) {
         }) {
             Icon(Icons.Default.Add, null)
             Spacer(Modifier.width(8.dp))
-            Text("Create new file")
+            Text("Créer un fichier")
         }
     }
 }

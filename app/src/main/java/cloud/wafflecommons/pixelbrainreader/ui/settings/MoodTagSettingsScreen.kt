@@ -72,10 +72,10 @@ fun MoodTagSettingsScreen(
     Scaffold(
         topBar = {
             CortexTopAppBar(
-                title = "Mood Tags",
+                title = "Tags d'humeur",
                 navigationIcon = {
                     CortexIconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.Close, contentDescription = "Close")
+                        Icon(Icons.Default.Close, contentDescription = "Fermer")
                     }
                 }
             )
@@ -89,8 +89,8 @@ fun MoodTagSettingsScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
-                text = "Activity tags offered when you log a mood. Changes sync to your vault. " +
-                    "Existing mood entries keep the tags they were saved with.",
+                text = "Tags d'activité proposés lorsque vous enregistrez une humeur. Les modifications se synchronisent vers votre coffre. " +
+                    "Les humeurs déjà enregistrées conservent leurs tags.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -104,14 +104,14 @@ fun MoodTagSettingsScreen(
                 OutlinedTextField(
                     value = newTag,
                     onValueChange = { newTag = it },
-                    label = { Text("New tag") },
+                    label = { Text("Nouveau tag") },
                     singleLine = true,
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { commitNewTag() }),
                     modifier = Modifier.weight(1f)
                 )
                 FilledIconButton(onClick = { commitNewTag() }) {
-                    Icon(Icons.Default.Add, contentDescription = "Add tag")
+                    Icon(Icons.Default.Add, contentDescription = "Ajouter un tag")
                 }
             }
 
@@ -119,7 +119,7 @@ fun MoodTagSettingsScreen(
 
             if (tags.isEmpty()) {
                 Text(
-                    text = "No tags yet. Add one above.",
+                    text = "Aucun tag pour l'instant. Ajoutez-en un ci-dessus.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -145,7 +145,7 @@ fun MoodTagSettingsScreen(
                                                 viewModel.moveTag(index, index - 1)
                                             }
                                         ) {
-                                            Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Move up")
+                                            Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Monter")
                                         }
                                         IconButton(
                                             enabled = index < tags.lastIndex,
@@ -154,7 +154,7 @@ fun MoodTagSettingsScreen(
                                                 viewModel.moveTag(index, index + 1)
                                             }
                                         ) {
-                                            Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Move down")
+                                            Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Descendre")
                                         }
                                         IconButton(
                                             onClick = {
@@ -162,7 +162,7 @@ fun MoodTagSettingsScreen(
                                                 viewModel.removeTag(tag)
                                             }
                                         ) {
-                                            Icon(Icons.Default.Close, contentDescription = "Remove")
+                                            Icon(Icons.Default.Close, contentDescription = "Supprimer")
                                         }
                                     }
                                 }

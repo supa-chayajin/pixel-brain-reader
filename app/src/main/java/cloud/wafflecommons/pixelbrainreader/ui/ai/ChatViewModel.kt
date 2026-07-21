@@ -170,7 +170,7 @@ class ChatViewModel @Inject constructor(
             var sources = emptyList<String>()
             var ragContext: String? = null
             if (mode == ChatMode.ORACLE) {
-                loadingStage = "🔎 Searching your Second Brain…"
+                loadingStage = "🔎 Recherche dans votre Second Cerveau…"
                 val hits = vectorSearchEngine.search(query, limit = RAG_TOP_K)
                 ragContext = hits.takeIf { it.isNotEmpty() }
                     ?.joinToString(separator = "\n---\n") { it.content }
@@ -187,7 +187,7 @@ class ChatViewModel @Inject constructor(
             // 4. On-device Nano STREAMING call. Tokens are appended to a transient overlay
             // bubble as they arrive; the completed answer is then persisted to Room. Single
             // persona covers both modes — the mode only decides whether we ran RAG above.
-            loadingStage = "🔒 Asking Gemini Nano (on-device)…"
+            loadingStage = "🔒 Interrogation de Gemini Nano (sur l'appareil)…"
             _streamingMessage.value =
                 ChatMessage(content = "", isUser = false, isStreaming = true, sources = sources)
             val sb = StringBuilder()
@@ -211,7 +211,7 @@ class ChatViewModel @Inject constructor(
                     ChatMessageEntity(
                         mode = modeStorage,
                         role = "MODEL",
-                        content = finalText.ifBlank { "⚠️ The on-device model returned no response." },
+                        content = finalText.ifBlank { "⚠️ Le modèle sur l'appareil n'a renvoyé aucune réponse." },
                         sources = if (finalText.isBlank()) emptyList() else sources
                     )
                 )
@@ -223,8 +223,8 @@ class ChatViewModel @Inject constructor(
                     ChatMessageEntity(
                         mode = modeStorage,
                         role = "MODEL",
-                        content = if (partial.isNotBlank()) "$partial\n\n⚠️ (response interrupted — timed out)"
-                            else "⚠️ Gemini Nano didn't respond in time.",
+                        content = if (partial.isNotBlank()) "$partial\n\n⚠️ (réponse interrompue — délai dépassé)"
+                            else "⚠️ Gemini Nano n'a pas répondu à temps.",
                         sources = if (partial.isBlank()) emptyList() else sources
                     )
                 )
@@ -250,13 +250,13 @@ class ChatViewModel @Inject constructor(
     }
 
     private fun describeFailure(e: Throwable): String = when (e) {
-        is NanoException.ContextExceeded -> "Your message is too long for the on-device model."
+        is NanoException.ContextExceeded -> "Votre message est trop long pour le modèle sur l'appareil."
         is NanoException.Unavailable ->
-            "Gemini Nano is unavailable on this device (${e.reason}). Download it in Settings."
-        is NanoException.BadInput -> "The on-device model rejected the request (${e.reason})."
-        is NanoException.EmptyResponse -> "The on-device model returned no response."
-        is NanoException.Generation -> "Gemini Nano failed: ${e.cause?.message ?: e.message}"
-        else -> "On-device AI unavailable: ${e.message ?: "unknown error"}"
+            "Gemini Nano est indisponible sur cet appareil (${e.reason}). Téléchargez-le dans les Paramètres."
+        is NanoException.BadInput -> "Le modèle sur l'appareil a rejeté la requête (${e.reason})."
+        is NanoException.EmptyResponse -> "Le modèle sur l'appareil n'a renvoyé aucune réponse."
+        is NanoException.Generation -> "Échec de Gemini Nano : ${e.cause?.message ?: e.message}"
+        else -> "IA sur l'appareil indisponible : ${e.message ?: "erreur inconnue"}"
     }
 
     /**

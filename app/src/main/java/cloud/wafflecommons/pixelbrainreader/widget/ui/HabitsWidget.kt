@@ -57,18 +57,18 @@ class HabitsWidget : GlanceAppWidget() {
             Column(modifier = GlanceModifier.fillMaxSize()) {
                 WidgetHeader(
                     emoji = "✅",
-                    title = "Habits",
-                    subtitle = if (total > 0) "$done of $total done" else "Nothing scheduled",
+                    title = "Habitudes",
+                    subtitle = if (total > 0) "$done sur $total faites" else "Rien de prévu",
                     onTitleClick = openHabits,
                     trailingEmoji = "＋",
                     onTrailingClick = openHabits
                 )
                 Spacer(GlanceModifier.height(10.dp))
                 if (total == 0) {
-                    WidgetEmpty("🌱", "No habits scheduled today")
+                    WidgetEmpty("🌱", "Aucune habitude prévue aujourd'hui")
                 } else {
                     ProgressRow(
-                        label = "Today",
+                        label = "Aujourd'hui",
                         fraction = done.toFloat() / total,
                         trailing = "$done/$total",
                         color = WidgetTokens.Success

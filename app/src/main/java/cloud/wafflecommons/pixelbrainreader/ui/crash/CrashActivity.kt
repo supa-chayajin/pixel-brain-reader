@@ -45,7 +45,7 @@ class CrashActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val stackTrace = intent.getStringExtra(EXTRA_STACK_TRACE) ?: "No details available."
+        val stackTrace = intent.getStringExtra(EXTRA_STACK_TRACE) ?: "Aucun détail disponible."
 
         setContent {
             PixelBrainReaderTheme {
@@ -84,13 +84,13 @@ class CrashActivity : ComponentActivity() {
             ) {
                 Icon(
                     imageVector = Icons.Default.Warning,
-                    contentDescription = "Error",
+                    contentDescription = "Erreur",
                     modifier = Modifier.padding(bottom = 16.dp),
                     tint = MaterialTheme.colorScheme.error
                 )
 
                 Text(
-                    text = "Oops, Pixel's brain stumbled",
+                    text = "Oups, le cerveau de Pixel a trébuché",
                     style = MaterialTheme.typography.headlineMedium,
                     textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.onSurface
@@ -99,7 +99,7 @@ class CrashActivity : ComponentActivity() {
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Text(
-                    text = "An unexpected error occurred. We apologize for the inconvenience.",
+                    text = "Une erreur inattendue s'est produite. Veuillez nous excuser pour la gêne occasionnée.",
                     style = MaterialTheme.typography.bodyLarge,
                     textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -115,7 +115,7 @@ class CrashActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
-                    Text("Restart the app")
+                    Text("Redémarrer l'application")
                 }
 
                 // Technical details are ONLY visible in debug builds. In
@@ -130,13 +130,13 @@ class CrashActivity : ComponentActivity() {
                         onClick = { showDetails = !showDetails },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text(if (showDetails) "Hide technical details" else "Show technical details")
+                        Text(if (showDetails) "Masquer les détails techniques" else "Afficher les détails techniques")
                     }
 
                     AnimatedVisibility(visible = showDetails) {
                         Column(modifier = Modifier.padding(top = 16.dp)) {
                             Text(
-                                text = "Stack Trace:",
+                                text = "Stack trace :",
                                 style = MaterialTheme.typography.labelLarge,
                                 color = MaterialTheme.colorScheme.error
                             )
