@@ -348,9 +348,9 @@ private fun HabitsSummaryCard(uiState: LifeStatsUiState, sleepDurationMinutes: L
 @OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun ActivityRings(tasksProgress: Float, habitsProgress: Float, choresProgress: Float) {
-    var taskTarget by remember { mutableStateOf(0f) }
-    var habitTarget by remember { mutableStateOf(0f) }
-    var choreTarget by remember { mutableStateOf(0f) }
+    var taskTarget by remember { mutableFloatStateOf(0f) }
+    var habitTarget by remember { mutableFloatStateOf(0f) }
+    var choreTarget by remember { mutableFloatStateOf(0f) }
     LaunchedEffect(tasksProgress, habitsProgress, choresProgress) {
         taskTarget = tasksProgress
         habitTarget = habitsProgress

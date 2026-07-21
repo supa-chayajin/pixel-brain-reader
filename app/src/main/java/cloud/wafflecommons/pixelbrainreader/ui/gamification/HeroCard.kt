@@ -30,8 +30,8 @@ import cloud.wafflecommons.pixelbrainreader.ui.theme.SemanticPalette
 @Composable
 fun HeroCard(
     state: GamificationState,
-    isHealthSynergyActive: Boolean = false,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isHealthSynergyActive: Boolean = false
 ) {
     Card(
         modifier = modifier.fillMaxWidth(),

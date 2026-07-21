@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import android.content.Intent
 import android.os.Process
+import androidx.core.content.edit
 import java.io.PrintWriter
 import java.io.StringWriter
 import kotlin.system.exitProcess
@@ -60,10 +61,10 @@ class GlobalExceptionHandler(
             val now = System.currentTimeMillis()
             val withinWindow = now - prefs.getLong(KEY_LAST_CRASH_AT, 0L) < CRASH_LOOP_WINDOW_MS
             val newCount = if (withinWindow) prefs.getInt(KEY_RECENT_COUNT, 0) + 1 else 1
-            prefs.edit()
-                .putLong(KEY_LAST_CRASH_AT, now)
-                .putInt(KEY_RECENT_COUNT, newCount)
-                .commit()
+            prefs.edit(commit = true) {
+                putLong(KEY_LAST_CRASH_AT, now)
+                putInt(KEY_RECENT_COUNT, newCount)
+            }
             withinWindow && newCount >= CRASH_LOOP_THRESHOLD
         } catch (e: Exception) {
             false // Never let the guard itself swallow the crash path.

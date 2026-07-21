@@ -116,9 +116,9 @@ android {
                             else signingConfigs.getByName("debug")
         }
         debug {
-            // Debug builds stay unminified for fast iteration.
+            // Debug builds stay unminified for fast iteration (resource shrinking
+            // is already off by default for debug).
             isMinifyEnabled = false
-            isShrinkResources = false
         }
     }
     compileOptions {

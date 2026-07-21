@@ -26,6 +26,7 @@ import kotlinx.serialization.json.Json
 import java.time.Instant
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
+import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -75,7 +76,7 @@ class WidgetSnapshotManager @Inject constructor(
                 } catch (e: Exception) { emptyList() }
             } else emptyList()
 
-            val stepsStr = if (stepsVal > 1000) String.format("%.1fk", stepsVal / 1000.0) else stepsVal.toString()
+            val stepsStr = if (stepsVal > 1000) String.format(Locale.getDefault(), "%.1fk", stepsVal / 1000.0) else stepsVal.toString()
             val sleepStr = "${sleepMinutes / 60}h${(sleepMinutes % 60).toString().padStart(2, '0')}"
 
             // ---- 2. Gamification ----

@@ -10,6 +10,8 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.Shader
 import android.graphics.Typeface
+import androidx.core.graphics.createBitmap
+import androidx.core.graphics.toColorInt
 import cloud.wafflecommons.pixelbrainreader.data.health.HeartRatePoint
 import cloud.wafflecommons.pixelbrainreader.data.repository.MoodEntry
 import javax.inject.Inject
@@ -33,13 +35,13 @@ class WidgetChartRenderer @Inject constructor() {
         val width = (300 * density).toInt()
         val height = (80 * density).toInt()
 
-        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val bitmap = createBitmap(width, height)
         val canvas = Canvas(bitmap)
 
         // --- Style Config (LifeStats Replica) ---
         // Vitality Line: Warm Pink/Red Gradient
-        val colorStart = Color.parseColor("#FFD8E4") // Pink
-        val colorEnd = Color.parseColor("#6750A4")   // Purple
+        val colorStart = "#FFD8E4".toColorInt() // Pink
+        val colorEnd = "#6750A4".toColorInt()   // Purple
         
         // 1. Data Prep
         // Filter valid HR

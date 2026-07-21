@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.sp
 import cloud.wafflecommons.pixelbrainreader.data.health.DailyHealthMetrics
 import cloud.wafflecommons.pixelbrainreader.data.repository.WeatherData
 import cloud.wafflecommons.pixelbrainreader.ui.daily.DailyMoodPoint
+import androidx.compose.ui.text.intl.Locale as ComposeLocale
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -28,9 +29,9 @@ fun DailyNoteHeader(
     emoji: String?,
     lastUpdate: String?,
     topDailyTags: List<String>,
+    modifier: Modifier = Modifier,
     healthMetrics: DailyHealthMetrics? = null,
-    moodTrend: List<DailyMoodPoint> = emptyList(),
-    modifier: Modifier = Modifier
+    moodTrend: List<DailyMoodPoint> = emptyList()
 ) {
 
     ElevatedCard(
@@ -121,7 +122,7 @@ fun DailyNoteHeader(
                     ) {
                         if (healthMetrics != null) {
                             Text(
-                                text = "👟 ${String.format("%,d", healthMetrics.steps)} pas",
+                                text = "👟 ${String.format(ComposeLocale.current.platformLocale, "%,d", healthMetrics.steps)} pas",
                                 style = MaterialTheme.typography.labelLarge,
                                 color = MaterialTheme.colorScheme.primary,
                                 fontWeight = FontWeight.SemiBold

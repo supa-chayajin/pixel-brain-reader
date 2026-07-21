@@ -8,7 +8,6 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -34,7 +33,6 @@ object NotificationHelper {
     private const val NOTIF_CHORES = 2002
 
     fun ensureChannels(context: Context) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val nm = context.getSystemService(NotificationManager::class.java) ?: return
         // Category group first — channels below reference it so they nest under
         // one "Reminders" heading in the system notification settings.
@@ -105,11 +103,10 @@ object NotificationHelper {
     }
 
     private fun notify(context: Context, id: Int, builder: NotificationCompat.Builder) {
-        // POST_NOTIFICATIONS is a runtime permission on API 33+. If it isn't granted
-        // we silently drop rather than crash — the Settings toggle + the runtime
-        // request in MainActivity are the user's opt-in path.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+        // POST_NOTIFICATIONS is a runtime permission (no API gate needed at minSdk 36).
+        // If it isn't granted we silently drop rather than crash — the Settings toggle
+        // + the runtime request in MainActivity are the user's opt-in path.
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
             PackageManager.PERMISSION_GRANTED
         ) {
             return

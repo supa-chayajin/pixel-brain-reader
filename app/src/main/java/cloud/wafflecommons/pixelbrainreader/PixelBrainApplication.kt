@@ -106,16 +106,7 @@ class PixelBrainApplication : Application(), Configuration.Provider {
 
     /** True only inside the default app process (excludes `:crash`). */
     private fun isMainProcess(): Boolean {
-        val current = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
-            Application.getProcessName()
-        } else {
-            val pid = android.os.Process.myPid()
-            (getSystemService(ACTIVITY_SERVICE) as? android.app.ActivityManager)
-                ?.runningAppProcesses
-                ?.firstOrNull { it.pid == pid }
-                ?.processName
-        }
-        return current == packageName
+        return Application.getProcessName() == packageName
     }
 
     /**

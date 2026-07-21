@@ -29,6 +29,7 @@ import cloud.wafflecommons.pixelbrainreader.data.repository.MoodEntry
 import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import androidx.compose.ui.text.intl.Locale as ComposeLocale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -167,7 +168,7 @@ fun SummaryHeader(emoji: String?, avg: Double?) {
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = if (avg != null) "Score moyen : ${String.format("%.1f", avg)}/5.0" else "Aucune donnée pour l'instant",
+                    text = if (avg != null) "Score moyen : ${String.format(ComposeLocale.current.platformLocale, "%.1f", avg)}/5.0" else "Aucune donnée pour l'instant",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

@@ -2,7 +2,7 @@ package cloud.wafflecommons.pixelbrainreader.widget.ui
 
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
+import androidx.core.net.toUri
 import cloud.wafflecommons.pixelbrainreader.MainActivity
 
 /**
@@ -55,7 +55,7 @@ object WidgetNav {
     fun openIntent(context: Context, screen: String): Intent =
         Intent(context, MainActivity::class.java).apply {
             action = Intent.ACTION_VIEW
-            data = Uri.parse("$SCHEME://$HOST_OPEN?$QUERY_SCREEN=$screen")
+            data = "$SCHEME://$HOST_OPEN?$QUERY_SCREEN=$screen".toUri()
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         }
 
@@ -63,7 +63,7 @@ object WidgetNav {
     fun captureIntent(context: Context): Intent =
         Intent(context, MainActivity::class.java).apply {
             action = Intent.ACTION_VIEW
-            data = Uri.parse("$SCHEME://$HOST_CAPTURE")
+            data = "$SCHEME://$HOST_CAPTURE".toUri()
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         }
 }

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<lint>
+    <!-- Dependency-update advisories: the AGP 9.2.1 / Kotlin 2.2.10 / Compose
+         1.12-alpha / material3 1.5-alpha stack is deliberately pinned (see
+         CLAUDE.md "Bleeding-edge toolchain" + the resolutionStrategy force in
+         app/build.gradle.kts). Bumps are conscious decisions, not lint chores. -->
+    <issue id="GradleDependency" severity="informational" />
+    <issue id="NewerVersionAvailable" severity="informational" />
+    <issue id="AndroidGradlePluginVersion" severity="informational" />
+    <issue id="SimilarGradleDependency" severity="informational" />
+
+    <!-- Third-party artifacts we cannot fix from here: -->
+    <!-- TrustManagers live inside google-http-client / JGit jars, not our code. -->
+    <issue id="TrustAllX509TrustManager">
+        <ignore path="**/*.jar" />
+    </issue>
+    <!-- Native .so files from DJL / MediaPipe / TFLite are not 16KB-aligned;
+         revisit when upstream ships aligned binaries. -->
+    <issue id="Aligned16KB" severity="informational" />
+
+    <!-- targetSdk 36 with compileSdk 37 is deliberate while dogfooding the
+         Android 17 beta (see CLAUDE.md). -->
+    <issue id="OldTargetApi" severity="informational" />
+</lint>

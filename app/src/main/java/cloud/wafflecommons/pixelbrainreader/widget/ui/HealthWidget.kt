@@ -26,6 +26,7 @@ import androidx.glance.layout.width
 import cloud.wafflecommons.pixelbrainreader.widget.data.WidgetChartRenderer
 import cloud.wafflecommons.pixelbrainreader.widget.data.WidgetDataFetcher
 import cloud.wafflecommons.pixelbrainreader.widget.data.WidgetDataSnapshot
+import java.util.Locale
 
 /**
  * A glanceable dashboard of the day's Health Connect metrics — a steps goal bar plus a tile grid
@@ -92,7 +93,7 @@ class HealthWidget : GlanceAppWidget() {
                         Row(modifier = GlanceModifier.fillMaxWidth().defaultWeight(), verticalAlignment = Alignment.CenterVertically) {
                             StatTile("🍽️", "${s.caloriesBurned}", "kcal", GlanceModifier.defaultWeight().fillMaxHeight())
                             Spacer(GlanceModifier.width(8.dp))
-                            StatTile("📏", String.format("%.1f", s.distanceKm), "km", GlanceModifier.defaultWeight().fillMaxHeight())
+                            StatTile("📏", fmtKm(s.distanceKm), "km", GlanceModifier.defaultWeight().fillMaxHeight())
                             Spacer(GlanceModifier.width(8.dp))
                             StatTile("💧", fmtWater(s.hydrationMl), "water", GlanceModifier.defaultWeight().fillMaxHeight())
                         }
@@ -102,8 +103,9 @@ class HealthWidget : GlanceAppWidget() {
         }
     }
 
-    private fun fmtK(v: Long): String = if (v >= 1000) String.format("%.0fk", v / 1000.0) else v.toString()
-    private fun fmtWater(ml: Int): String = if (ml >= 1000) String.format("%.1fL", ml / 1000.0) else "${ml}ml"
+    private fun fmtKm(km: Double): String = String.format(Locale.getDefault(), "%.1f", km)
+    private fun fmtK(v: Long): String = if (v >= 1000) String.format(Locale.getDefault(), "%.0fk", v / 1000.0) else v.toString()
+    private fun fmtWater(ml: Int): String = if (ml >= 1000) String.format(Locale.getDefault(), "%.1fL", ml / 1000.0) else "${ml}ml"
 }
 
 class HealthWidgetReceiver : GlanceAppWidgetReceiver() {

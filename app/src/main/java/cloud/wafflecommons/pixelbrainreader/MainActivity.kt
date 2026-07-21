@@ -3,7 +3,6 @@ package cloud.wafflecommons.pixelbrainreader
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.os.Build
 import android.os.Bundle
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -11,6 +10,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -110,7 +110,6 @@ class MainActivity : FragmentActivity() {
             ) { /* result ignored */ }
             LaunchedEffect(loginState) {
                 if (loginState == true &&
-                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
                     ContextCompat.checkSelfPermission(
                         this@MainActivity,
                         Manifest.permission.POST_NOTIFICATIONS
@@ -155,7 +154,7 @@ class MainActivity : FragmentActivity() {
                 // logged in so it always overlays the main UI.
                 if (loginState == true) {
                     pendingImportUrl?.let { url ->
-                        val host = remember(url) { android.net.Uri.parse(url).host ?: url }
+                        val host = remember(url) { url.toUri().host ?: url }
                         androidx.compose.material3.AlertDialog(
                             onDismissRequest = { pendingImportUrl = null },
                             title = { androidx.compose.material3.Text("Import an article?") },

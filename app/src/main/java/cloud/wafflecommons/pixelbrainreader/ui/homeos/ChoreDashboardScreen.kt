@@ -21,7 +21,8 @@ import androidx.compose.ui.graphics.Color
 import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
 import cloud.wafflecommons.pixelbrainreader.ui.theme.RoomPalette
 import cloud.wafflecommons.pixelbrainreader.ui.theme.SemanticPalette
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import cloud.wafflecommons.pixelbrainreader.ui.theme.NavBarClearance
@@ -38,12 +39,12 @@ fun ChoreDashboardScreen(
     val syncState by viewModel.isSyncing.collectAsStateWithLifecycle()
     val isRefreshing = syncState is SyncState.Syncing
 
-    val configuration = LocalConfiguration.current
+    val windowWidthDp = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp() }
 
     // Adaptive: More granular columns for foldables/large tablets
     val columns = when {
-        configuration.screenWidthDp > 1200 -> 3
-        configuration.screenWidthDp > 600 -> 2
+        windowWidthDp > 1200.dp -> 3
+        windowWidthDp > 600.dp -> 2
         else -> 1
     }
 
@@ -78,7 +79,7 @@ fun ChoreDashboardScreen(
                 modifier = Modifier.fillMaxSize()
             )
         } else {
-            val horizontalPadding = if (configuration.screenWidthDp > 840) 32.dp else 16.dp
+            val horizontalPadding = if (windowWidthDp > 840.dp) 32.dp else 16.dp
             LazyVerticalStaggeredGrid(
                 columns = StaggeredGridCells.Fixed(columns),
                 contentPadding = PaddingValues(start = horizontalPadding, end = horizontalPadding, top = 16.dp, bottom = NavBarClearance),

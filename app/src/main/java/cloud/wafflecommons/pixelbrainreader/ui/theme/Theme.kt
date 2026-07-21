@@ -1,7 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.ui.theme
 
 import android.app.Activity
-import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -81,7 +80,7 @@ fun PixelBrainReaderTheme(
     val context = LocalContext.current
     // Full Material You: follow the SYSTEM light/dark + wallpaper colors (no dark-pin).
     val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
+        dynamicColor ->
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         darkTheme -> DarkColorScheme
         else -> LightColorScheme

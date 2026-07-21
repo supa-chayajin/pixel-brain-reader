@@ -39,9 +39,11 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
+import androidx.core.net.toUri
 import cloud.wafflecommons.pixelbrainreader.ui.components.MoodTrendsCard
 import cloud.wafflecommons.pixelbrainreader.ui.daily.MorningBriefingUiState
 import cloud.wafflecommons.pixelbrainreader.ui.daily.DailyMoodPoint
+import java.util.Locale
 
 @Composable
 fun MorningBriefingSection(
@@ -236,7 +238,7 @@ private fun NewsCard(article: cloud.wafflecommons.pixelbrainreader.data.local.en
                  Button(
                      onClick = {
                         try {
-                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("pixelbrain://import?url=${article.url}"))
+                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, "pixelbrain://import?url=${article.url}".toUri())
                             context.startActivity(intent)
                         } catch(e: Exception) {
                             // Toast?
@@ -418,7 +420,7 @@ private fun MoodSparkline(trend: List<cloud.wafflecommons.pixelbrainreader.ui.da
                         )
                         
                         // Score Label (Formatted Float)
-                        val label = String.format("%.1f", point.score)
+                        val label = String.format(Locale.getDefault(), "%.1f", point.score)
                         drawContext.canvas.nativeCanvas.drawText(
                             label,
                             x,

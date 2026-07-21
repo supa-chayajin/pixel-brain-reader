@@ -36,6 +36,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.core.graphics.toColorInt
 import cloud.wafflecommons.pixelbrainreader.data.model.HabitType
 import cloud.wafflecommons.pixelbrainreader.data.model.TimelineEvent
 
@@ -124,7 +125,7 @@ fun HabitCard(
     val fallbackColor = MaterialTheme.colorScheme.primary
     val themeColor = remember(config.color, fallbackColor) {
         try {
-            Color(android.graphics.Color.parseColor(config.color))
+            Color(config.color.toColorInt())
         } catch (e: Exception) {
             fallbackColor
         }
