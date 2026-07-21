@@ -123,6 +123,15 @@
     @dagger.assisted.AssistedInject <init>(...);
 }
 
+# WorkManager also instantiates InputMergers reflectively by class NAME with a
+# no-arg constructor — Glance's widget-session jobs use OverwritingInputMerger.
+# R8 stripped that constructor in release: every widget re-render job died with
+# NoSuchMethodException (widgets froze, v10 RC0 dogfood find). Same reflective
+# pattern for Glance ActionCallbacks (widget tap handlers).
+-keep class * extends androidx.work.InputMerger { <init>(); }
+-keep class androidx.work.OverwritingInputMerger { <init>(); }
+-keep class * implements androidx.glance.appwidget.action.ActionCallback { <init>(); }
+
 # -----------------------------------------------------------------------------
 # Jetpack Compose (mostly handled by AGP — defensive only)
 # -----------------------------------------------------------------------------

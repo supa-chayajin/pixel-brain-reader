@@ -17,6 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **AI source citations are now tappable.** The source chips under a RAG answer open
   the cited vault note (chat → file browser detail pane) instead of doing nothing —
   the last dead button in the app.
+- **Widgets froze in release builds — fixed.** WorkManager instantiates its
+  `InputMerger` reflectively by class name; R8 stripped the no-arg constructor of
+  `OverwritingInputMerger`, so every Glance widget re-render job died with
+  `NoSuchMethodException` (found while dogfooding the first minified release
+  candidate). Targeted keep rules added for InputMergers and Glance
+  `ActionCallback`s.
 - **Rebase-conflict backups now actually happen for committed edits.** JGit reports a
   committed-vs-committed conflict as `STOPPED` with a `null` conflict list, so the
   documented "abort then back up the local files" flow silently backed up nothing
