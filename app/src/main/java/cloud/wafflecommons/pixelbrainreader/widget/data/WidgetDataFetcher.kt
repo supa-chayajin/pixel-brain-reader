@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.util.Log
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.createBitmap
 import cloud.wafflecommons.pixelbrainreader.data.gamification.CharacterClass
 import cloud.wafflecommons.pixelbrainreader.data.health.HeartRatePoint
 import cloud.wafflecommons.pixelbrainreader.data.repository.MoodEntry
@@ -101,7 +102,7 @@ class WidgetDataFetcher @Inject constructor(
     private fun Context.drawableToBitmap(resId: Int, sizePx: Int): Bitmap? {
         return try {
             val drawable = ContextCompat.getDrawable(this, resId) ?: return null
-            val bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+            val bitmap = createBitmap(sizePx, sizePx)
             val canvas = Canvas(bitmap)
             drawable.setBounds(0, 0, sizePx, sizePx)
             drawable.draw(canvas)

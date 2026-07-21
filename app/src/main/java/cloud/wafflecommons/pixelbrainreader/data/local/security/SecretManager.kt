@@ -3,6 +3,7 @@ package cloud.wafflecommons.pixelbrainreader.data.local.security
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
+import androidx.core.content.edit
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -102,7 +103,7 @@ class SecretManager @Inject constructor(
             }
 
             // WIPE AND DESTROY
-            legacyPrefs.edit().clear().commit() // Clear content
+            legacyPrefs.edit(commit = true) { clear() } // Clear content
             // The file itself might remain but be empty. In strict environments, we might want to delete the file.
             if (legacyFile.delete()) {
                 Log.i("SecretManager", "Legacy file incinerated.")
@@ -113,7 +114,7 @@ class SecretManager @Inject constructor(
     }
 
     fun saveToken(token: String) {
-        encryptedPrefs.edit().putString(KEY_TOKEN, token).apply()
+        encryptedPrefs.edit { putString(KEY_TOKEN, token) }
     }
 
     fun getToken(): String? {
@@ -121,14 +122,14 @@ class SecretManager @Inject constructor(
     }
 
     fun saveRepoInfo(owner: String, repo: String) {
-        encryptedPrefs.edit()
-            .putString(KEY_REPO_OWNER, owner)
-            .putString(KEY_REPO_NAME, repo)
-            .apply()
+        encryptedPrefs.edit {
+            putString(KEY_REPO_OWNER, owner)
+            putString(KEY_REPO_NAME, repo)
+        }
     }
 
     fun saveProvider(type: String) {
-        encryptedPrefs.edit().putString(KEY_PROVIDER, type).apply()
+        encryptedPrefs.edit { putString(KEY_PROVIDER, type) }
     }
 
     fun getRepoInfo(): Pair<String?, String?> {
@@ -142,14 +143,14 @@ class SecretManager @Inject constructor(
     }
 
     fun clear() {
-        encryptedPrefs.edit().clear().apply()
+        encryptedPrefs.edit { clear() }
     }
 
     /**
      * V2.0: Private Vault Password Management
      */
     fun saveVaultPassword(password: String) {
-        encryptedPrefs.edit().putString(KEY_VAULT_PASSWORD, password).apply()
+        encryptedPrefs.edit { putString(KEY_VAULT_PASSWORD, password) }
     }
 
     fun getVaultPassword(): String? {
@@ -159,16 +160,16 @@ class SecretManager @Inject constructor(
     // --- V6: Google ecosystem credentials -------------------------------------
 
     fun saveGoogleEmail(email: String) {
-        encryptedPrefs.edit().putString(KEY_GOOGLE_EMAIL, email).apply()
+        encryptedPrefs.edit { putString(KEY_GOOGLE_EMAIL, email) }
     }
 
     fun getGoogleEmail(): String? = encryptedPrefs.getString(KEY_GOOGLE_EMAIL, null)
 
     fun saveGoogleAccessToken(token: String, expiresAtMillis: Long) {
-        encryptedPrefs.edit()
-            .putString(KEY_GOOGLE_ACCESS_TOKEN, token)
-            .putLong(KEY_GOOGLE_TOKEN_EXPIRES_AT, expiresAtMillis)
-            .apply()
+        encryptedPrefs.edit {
+            putString(KEY_GOOGLE_ACCESS_TOKEN, token)
+            putLong(KEY_GOOGLE_TOKEN_EXPIRES_AT, expiresAtMillis)
+        }
     }
 
     fun getGoogleAccessToken(): Pair<String, Long>? {
@@ -178,11 +179,11 @@ class SecretManager @Inject constructor(
     }
 
     fun clearGoogleAuth() {
-        encryptedPrefs.edit()
-            .remove(KEY_GOOGLE_EMAIL)
-            .remove(KEY_GOOGLE_ACCESS_TOKEN)
-            .remove(KEY_GOOGLE_TOKEN_EXPIRES_AT)
-            .apply()
+        encryptedPrefs.edit {
+            remove(KEY_GOOGLE_EMAIL)
+            remove(KEY_GOOGLE_ACCESS_TOKEN)
+            remove(KEY_GOOGLE_TOKEN_EXPIRES_AT)
+        }
     }
 
     /**
@@ -192,9 +193,9 @@ class SecretManager @Inject constructor(
      * silently via AuthorizationClient, without un-linking the account.
      */
     fun clearGoogleAccessToken() {
-        encryptedPrefs.edit()
-            .remove(KEY_GOOGLE_ACCESS_TOKEN)
-            .remove(KEY_GOOGLE_TOKEN_EXPIRES_AT)
-            .apply()
+        encryptedPrefs.edit {
+            remove(KEY_GOOGLE_ACCESS_TOKEN)
+            remove(KEY_GOOGLE_TOKEN_EXPIRES_AT)
+        }
     }
 }

@@ -20,8 +20,8 @@ import kotlinx.coroutines.delay
 @Composable
 fun StaggeredEntry(
     index: Int,
-    delayPerItem: Int = 50,
     modifier: Modifier = Modifier,
+    delayPerItem: Int = 50,
     content: @Composable () -> Unit
 ) {
     var isVisible by rememberSaveable { mutableStateOf(false) }

@@ -91,6 +91,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.RadialGradientShader
 import androidx.compose.ui.graphics.Shader
 import androidx.compose.ui.graphics.ShaderBrush
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.unit.dp
@@ -213,7 +214,7 @@ private fun ExpressiveNavBar(
             val hasSelection = selectedIndex >= 0
             // Park the sliding pill at the last selected slot; keep it there (faded out)
             // while a non-group tab (Daily) is active, so it slides back correctly on return.
-            var parkedIndex by remember { mutableStateOf(selectedIndex.coerceAtLeast(0)) }
+            var parkedIndex by remember { mutableIntStateOf(selectedIndex.coerceAtLeast(0)) }
             LaunchedEffect(selectedIndex) { if (selectedIndex >= 0) parkedIndex = selectedIndex }
 
             BoxWithConstraints(modifier = Modifier.fillMaxSize().padding(innerPad)) {

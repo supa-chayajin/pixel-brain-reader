@@ -9,7 +9,6 @@ import org.jsoup.parser.Parser
 import com.vladsch.flexmark.html2md.converter.FlexmarkHtmlConverter
 import android.text.Html
 import android.text.Spanned
-import android.os.Build
 
 data class ImportResult(val title: String, val markdownContent: String)
 
@@ -29,12 +28,7 @@ object ContentSanitizer {
         val document: Document = when {
             text is Spanned -> {
                 // RTF Handling: Convert Android Rich Text (Spanned) to HTML
-                val htmlString = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                    Html.toHtml(text, Html.TO_HTML_PARAGRAPH_LINES_INDIVIDUAL)
-                } else {
-                    @Suppress("DEPRECATION")
-                    Html.toHtml(text)
-                }
+                val htmlString = Html.toHtml(text, Html.TO_HTML_PARAGRAPH_LINES_INDIVIDUAL)
                 Jsoup.parseBodyFragment(htmlString)
             }
             URL_REGEX.matches(text.trim()) -> {

@@ -1,6 +1,7 @@
 package cloud.wafflecommons.pixelbrainreader.ui.theme
 
 import androidx.compose.ui.graphics.Color
+import androidx.core.graphics.toColorInt
 
 /**
  * App-wide semantic accents that aren't part of Material's standard color scheme.
@@ -107,7 +108,7 @@ object RoomPalette {
      */
     fun resolveColor(hex: String?, roomName: String): Color {
         if (!hex.isNullOrBlank() && hex != DEFAULT_HEX) {
-            runCatching { return Color(android.graphics.Color.parseColor(hex)) }
+            runCatching { return Color(hex.toColorInt()) }
         }
         return colorForName(roomName)
     }
@@ -116,7 +117,7 @@ object RoomPalette {
     fun colorForName(seed: String): Color {
         if (hexSwatches.isEmpty()) return Color(0xFF808080)
         val idx = ((seed.hashCode() % hexSwatches.size) + hexSwatches.size) % hexSwatches.size
-        return runCatching { Color(android.graphics.Color.parseColor(hexSwatches[idx])) }
+        return runCatching { Color(hexSwatches[idx].toColorInt()) }
             .getOrDefault(Color(0xFF808080))
     }
 }

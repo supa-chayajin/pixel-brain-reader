@@ -4,6 +4,7 @@ import ai.djl.huggingface.tokenizers.HuggingFaceTokenizer
 import android.content.Context
 import android.util.Base64
 import android.util.Log
+import androidx.core.content.edit
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.EmbeddingDao
 import cloud.wafflecommons.pixelbrainreader.data.local.security.CryptoManager
 import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
@@ -287,7 +288,7 @@ class VectorSearchEngine @Inject constructor(
         )
         runCatching { embeddingDao.deleteAll() }
             .onFailure { Log.w("RAG_DEBUG", "deleteAll failed: ${it.message}") }
-        prefs.edit().putString(PREFS_KEY_VERSION, EMBEDDER_SCHEMA_VERSION).apply()
+        prefs.edit { putString(PREFS_KEY_VERSION, EMBEDDER_SCHEMA_VERSION) }
     }
 
     private fun magnitude(v: FloatArray): Float {

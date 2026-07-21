@@ -1,5 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.ui.utils
 
+import androidx.core.graphics.toColorInt
 import io.noties.markwon.AbstractMarkwonPlugin
 import io.noties.markwon.MarkwonVisitor
 import org.commonmark.node.BlockQuote
@@ -31,7 +32,7 @@ class ObsidianCalloutPlugin : AbstractMarkwonPlugin() {
                         textNode.literal = if (lines.size > 1) lines.drop(1).joinToString("\n") else ""
                         
                         val (colorHex, icon) = getCalloutStyle(type)
-                        val color = android.graphics.Color.parseColor(colorHex)
+                        val color = colorHex.toColorInt()
                         val bg = (0x1F shl 24) or (color and 0x00FFFFFF)
                         val title = if (!userTitle.isNullOrBlank()) userTitle else type.replaceFirstChar { it.uppercase() }
                         

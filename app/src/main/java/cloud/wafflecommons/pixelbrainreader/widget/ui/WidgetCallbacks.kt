@@ -15,6 +15,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.firstOrNull
 import java.time.LocalDate
 import java.time.LocalTime
+import java.util.Locale
 
 /** Typed keys carried from a widget button into its [ActionCallback]. */
 object WidgetKeys {
@@ -59,7 +60,7 @@ class MoodLogCallback : ActionCallback {
         val ep = WidgetLiveData.entryPoint(context)
         val today = LocalDate.now()
         val now = LocalTime.now()
-        val time = String.format("%02d:%02d", now.hour, now.minute)
+        val time = String.format(Locale.ROOT, "%02d:%02d", now.hour, now.minute) // ROOT: persisted key, must stay ASCII
         runWidgetAction(context, refreshLive = { MoodWidget().updateAll(context) }) {
             // Skip an accidental same-minute, same-score double tap (and its double XP) — multiple
             // genuinely different check-ins a day are still allowed.

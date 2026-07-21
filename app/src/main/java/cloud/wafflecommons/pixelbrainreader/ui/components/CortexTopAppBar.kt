@@ -19,11 +19,11 @@ import androidx.compose.ui.text.style.TextOverflow
 @Composable
 fun CortexTopAppBar(
     title: String,
+    modifier: Modifier = Modifier,
     subtitle: String? = null,
     navigationIcon: @Composable () -> Unit = {},
     actions: @Composable RowScope.() -> Unit = {},
-    scrollBehavior: TopAppBarScrollBehavior? = null,
-    modifier: Modifier = Modifier
+    scrollBehavior: TopAppBarScrollBehavior? = null
 ) {
     CenterAlignedTopAppBar(
         title = {

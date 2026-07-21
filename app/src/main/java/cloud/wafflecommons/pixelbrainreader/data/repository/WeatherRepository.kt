@@ -4,7 +4,6 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Geocoder
-import android.os.Build
 import android.util.Log
 import androidx.core.content.ContextCompat
 import cloud.wafflecommons.pixelbrainreader.data.remote.OpenMeteoService
@@ -151,22 +150,15 @@ class WeatherRepository @Inject constructor(
         }
     }
 
-    @Suppress("DEPRECATION")
     private suspend fun getCityName(lat: Double, long: Double): String? = withContext(Dispatchers.IO) {
         try {
             val geocoder = Geocoder(context, Locale.getDefault())
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                // New Async API
-                suspendCancellableCoroutine<String?> { cont ->
-                    geocoder.getFromLocation(lat, long, 1) { addresses ->
-                         val city = addresses.firstOrNull()?.locality ?: addresses.firstOrNull()?.subAdminArea ?: "Unknown"
-                         cont.resume(city)
-                    }
+            // Async Geocoder API
+            suspendCancellableCoroutine<String?> { cont ->
+                geocoder.getFromLocation(lat, long, 1) { addresses ->
+                     val city = addresses.firstOrNull()?.locality ?: addresses.firstOrNull()?.subAdminArea ?: "Unknown"
+                     cont.resume(city)
                 }
-            } else {
-                // Legacy Blocking API
-                val addresses = geocoder.getFromLocation(lat, long, 1)
-                addresses?.firstOrNull()?.locality ?: addresses?.firstOrNull()?.subAdminArea
             }
         } catch (e: CancellationException) {
             throw e
