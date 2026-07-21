@@ -308,15 +308,32 @@ class JGitProvider @Inject constructor(
                     when (rebaseResult.status) {
                         org.eclipse.jgit.api.RebaseResult.Status.OK,
                         org.eclipse.jgit.api.RebaseResult.Status.UP_TO_DATE,
-                        org.eclipse.jgit.api.RebaseResult.Status.FAST_FORWARD -> {
+                        org.eclipse.jgit.api.RebaseResult.Status.FAST_FORWARD,
+                        org.eclipse.jgit.api.RebaseResult.Status.NOTHING_TO_COMMIT -> {
                             Log.i("JGitProvider", "Pull (rebase) successful: ${rebaseResult.status}")
+                        }
+                        org.eclipse.jgit.api.RebaseResult.Status.UNCOMMITTED_CHANGES -> {
+                            // The rebase never started (dirty tree blocked it): nothing was
+                            // pulled, so reporting Success would silently stall sync forever.
+                            Log.w("JGitProvider", "Pull blocked by uncommitted local changes; nothing pulled.")
+                            return@withContext SyncResult.Error(Exception("Pull blocked by uncommitted local changes"))
                         }
                         org.eclipse.jgit.api.RebaseResult.Status.STOPPED,
                         org.eclipse.jgit.api.RebaseResult.Status.CONFLICTS,
                         org.eclipse.jgit.api.RebaseResult.Status.FAILED -> {
                             Log.w("JGitProvider", "Rebase conflict/failure: ${rebaseResult.status}. Aborting, then backing up clean local copies.")
 
-                            val conflicts = rebaseResult.conflicts ?: emptyList()
+                            // STOPPED (committed-vs-committed conflict) reports null via
+                            // getConflicts(); the unmerged paths are only visible in git
+                            // status WHILE the rebase is in progress — read them BEFORE
+                            // the abort wipes that state, back them up after it.
+                            val conflicts = rebaseResult.conflicts
+                                ?: try {
+                                    git.status().call().conflicting.toList()
+                                } catch (e: Exception) {
+                                    if (e is CancellationException) throw e
+                                    emptyList()
+                                }
 
                             // Abort FIRST so the working tree is restored to the clean
                             // pre-pull local state. Backing up BEFORE the abort captures
