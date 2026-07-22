@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+_No unreleased changes._
+
+## [10.0.0] — 2026-07-22
+
+The **final-release milestone**: first release-signed, R8-minified build shipped to the
+daily-driver device. Release-hardening week — every keep-rule gap that only bites in
+minified builds was found and fixed (web import, Gson models, frozen widgets), the UI
+was unified in English (the AI keeps answering in French), fenced code finally
+highlights, the two highest-risk untested sync paths got regression harnesses, and
+lint went from 157 warnings to zero.
+
 ### Fixed
 
 - **Daily-note frontmatter no longer degrades over repeated burns.** The burner
