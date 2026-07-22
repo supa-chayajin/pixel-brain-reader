@@ -47,10 +47,10 @@ fun GamificationSettingsScreen(
     Scaffold(
         topBar = {
             CortexTopAppBar(
-                title = "Règles du moteur RPG",
+                title = "RPG Engine Rules",
                 navigationIcon = {
                     CortexIconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.Close, contentDescription = "Fermer")
+                        Icon(Icons.Default.Close, contentDescription = "Close")
                     }
                 }
             )
@@ -71,10 +71,10 @@ fun GamificationSettingsScreen(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    Text("Objectifs de synergie santé", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("Health Synergy Goals", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
 
                     Column {
-                        Text("Objectif de pas : $stepTarget", style = MaterialTheme.typography.bodyMedium)
+                        Text("Target Steps: $stepTarget", style = MaterialTheme.typography.bodyMedium)
                         Slider(
                             value = stepTarget.toFloat(),
                             onValueChange = { 
@@ -91,7 +91,7 @@ fun GamificationSettingsScreen(
                         val hours = sleepMinMinutes / 60
                         val mins = sleepMinMinutes % 60
                         val suffix = if (mins > 0) "h $mins" else "h"
-                        Text("Sommeil minimum : $hours$suffix", style = MaterialTheme.typography.bodyMedium)
+                        Text("Minimum Sleep: $hours$suffix", style = MaterialTheme.typography.bodyMedium)
                         Slider(
                             value = sleepMinMinutes.toFloat(),
                             onValueChange = { 
@@ -115,7 +115,7 @@ fun GamificationSettingsScreen(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    Text("Émojis d'humeur", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("Mood Emojis", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -147,7 +147,7 @@ fun GamificationSettingsScreen(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    Text("Correspondances de tags", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("Tag Mappings", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     
                     FlowRow(
                         modifier = Modifier.fillMaxWidth(),
@@ -176,7 +176,7 @@ fun GamificationSettingsScreen(
                                                     viewModel.removeTagMapping(tag)
                                                 }
                                             ) {
-                                                Icon(Icons.Default.Close, "Retirer")
+                                                Icon(Icons.Default.Close, "Remove")
                                             }
                                         }
                                     )
@@ -200,7 +200,7 @@ fun GamificationSettingsScreen(
                                     newTagText = "#$it"
                                 }
                             },
-                            label = { Text("Tag (ex. #sport)") },
+                            label = { Text("Tag (e.g. #sport)") },
                             modifier = Modifier.weight(1f),
                             singleLine = true
                         )
@@ -244,7 +244,7 @@ fun GamificationSettingsScreen(
                                 }
                             }
                         ) {
-                            Icon(Icons.Default.Add, "Ajouter une correspondance")
+                            Icon(Icons.Default.Add, "Add Mapping")
                         }
                     }
                 }

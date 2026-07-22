@@ -60,8 +60,8 @@ fun HabitDashboardScreen(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
-                title = "Habitudes",
-                subtitle = "${todayHabits.count { it.isCompletedToday }}/${todayHabits.size} terminées aujourd'hui",
+                title = "Habits",
+                subtitle = "${todayHabits.count { it.isCompletedToday }}/${todayHabits.size} done today",
                 scrollBehavior = scrollBehavior,
                 actions = {
                     FilledTonalIconButton(
@@ -71,7 +71,7 @@ fun HabitDashboardScreen(
                             contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     ) {
-                        Icon(Icons.AutoMirrored.Filled.ShowChart, "Voir les statistiques")
+                        Icon(Icons.AutoMirrored.Filled.ShowChart, "View Statistics")
                     }
                 }
             )
@@ -90,13 +90,13 @@ fun HabitDashboardScreen(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         LoadingIndicator()
                         Spacer(Modifier.height(16.dp))
-                        Text("Chargement des habitudes depuis le coffre...")
+                        Text("Loading habits from Vault...")
                     }
                 }
             } else if (state.habits.isEmpty()) {
                 Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), contentAlignment = Alignment.Center) {
                     Text(
-                        text = "Aucune habitude configurée.\nAllez dans Paramètres > Automatisations Life OS pour les créer.",
+                        text = "No habits configured.\nGo to Settings > Life OS Automations to set them up.",
                         textAlign = TextAlign.Center,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -130,12 +130,12 @@ fun HabitDashboardScreen(
                             selected = !showAll,
                             onClick = { showAll = false },
                             shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2)
-                        ) { Text("Aujourd'hui") }
+                        ) { Text("Today") }
                         SegmentedButton(
                             selected = showAll,
                             onClick = { showAll = true },
                             shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2)
-                        ) { Text("Toutes (${state.habits.size})") }
+                        ) { Text("All (${state.habits.size})") }
                     }
                 }
 
@@ -145,8 +145,8 @@ fun HabitDashboardScreen(
                     item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
                         Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
                             Text(
-                                if (showAll) "Aucune habitude configurée."
-                                else "Aucune habitude prévue aujourd'hui. Profitez de votre repos !",
+                                if (showAll) "No habits configured."
+                                else "No habits scheduled for today. Enjoy your rest!",
                                 textAlign = TextAlign.Center
                             )
                         }
@@ -218,7 +218,7 @@ fun HabitStreakRow(habit: HabitWithStats) {
             Column {
                 Text(habit.config.title, style = MaterialTheme.typography.bodyLarge)
                 Text(
-                    "🔥 Série de ${habit.currentStreak} jours",
+                    "🔥 ${habit.currentStreak} day streak",
                     style = MaterialTheme.typography.bodySmall,
                     color = if (habit.currentStreak > 2) SemanticPalette.StreakAccent else MaterialTheme.colorScheme.onSurfaceVariant
                 )

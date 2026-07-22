@@ -41,11 +41,11 @@ import cloud.wafflecommons.pixelbrainreader.ui.theme.NavBarClearance
 
 /** Route → (icon, label) for the reorderable regular nav destinations. */
 private val NAV_ITEM_META: Map<String, Pair<ImageVector, String>> = mapOf(
-    "home" to (Icons.Rounded.Dashboard to "Dépôt"),
-    "habits" to (Icons.Rounded.DateRange to "Habitudes"),
-    "home_os" to (Icons.Rounded.CleaningServices to "Corvées"),
+    "home" to (Icons.Rounded.Dashboard to "Repo"),
+    "habits" to (Icons.Rounded.DateRange to "Habits"),
+    "home_os" to (Icons.Rounded.CleaningServices to "Chores"),
     "chat" to (Icons.Rounded.Psychology to "Chat"),
-    "mood" to (Icons.Default.Mood to "Humeur"),
+    "mood" to (Icons.Default.Mood to "Mood"),
     "stats" to (Icons.Default.Star to "Stats")
 )
 
@@ -61,10 +61,10 @@ fun NavBarReorderScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Ordre de la barre de navigation") },
+                title = { Text("Navigation bar order") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
             )
@@ -77,8 +77,8 @@ fun NavBarReorderScreen(
         ) {
             item {
                 Text(
-                    text = "Réorganisez les onglets. Le bouton « Quotidien » reste fixe. " +
-                        "Sur les écrans compacts, seuls les trois premiers sont affichés.",
+                    text = "Reorder the tabs. The \"Daily\" button stays fixed. " +
+                        "On compact screens, the first three are shown.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(vertical = 8.dp)
@@ -103,7 +103,7 @@ fun NavBarReorderScreen(
                                 onOrderChange(order.swapped(index, index - 1))
                             }
                         ) {
-                            Icon(Icons.Rounded.KeyboardArrowUp, contentDescription = "Monter")
+                            Icon(Icons.Rounded.KeyboardArrowUp, contentDescription = "Move up")
                         }
                         // Move down
                         IconButton(
@@ -113,7 +113,7 @@ fun NavBarReorderScreen(
                                 onOrderChange(order.swapped(index, index + 1))
                             }
                         ) {
-                            Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = "Descendre")
+                            Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = "Move down")
                         }
                     }
                 }

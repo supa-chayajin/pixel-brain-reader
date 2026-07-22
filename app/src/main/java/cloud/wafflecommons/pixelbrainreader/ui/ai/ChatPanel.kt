@@ -124,7 +124,7 @@ fun ChatPanel(
         topBar = {
             Column(modifier = Modifier.background(MaterialTheme.colorScheme.surface)) {
                 cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
-                    title = "Interface neuronale",
+                    title = "Neural Interface",
                     actions = {
                         CortexIconButton(
                             onClick = { showClearConfirm = true },
@@ -132,7 +132,7 @@ fun ChatPanel(
                         ) {
                             Icon(
                                 Icons.Rounded.DeleteSweep,
-                                contentDescription = "Effacer la conversation"
+                                contentDescription = "Clear conversation"
                             )
                         }
                     }
@@ -218,7 +218,7 @@ fun ChatPanel(
                         }
                     },
                     isLoading = viewModel.loadingStage != null,
-                    hint = if (currentMode == ChatMode.ORACLE) "Interrogez votre second cerveau..." else "Lancez une idée créative...",
+                    hint = if (currentMode == ChatMode.ORACLE) "Ask your Second Brain..." else "Spark a creative idea...",
                     accentColor = modeColor,
                     accentContentColor = modeContentColor
                 )
@@ -242,7 +242,7 @@ fun BrainModeSwitch(
     // current mode's accent, so each mode shows its own colour when active.
     val modes = listOf(
         Triple(ChatMode.ORACLE, Icons.Rounded.Psychology, "Cortex (RAG)"),
-        Triple(ChatMode.SCRIBE, Icons.Rounded.AutoAwesome, "Spark (Créatif)")
+        Triple(ChatMode.SCRIBE, Icons.Rounded.AutoAwesome, "Spark (Creative)")
     )
     SingleChoiceSegmentedButtonRow(
         modifier = Modifier
@@ -343,7 +343,7 @@ fun ChatBubble(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Text(
-                        "Sources :",
+                        "Sources:",
                         style = MaterialTheme.typography.labelSmall,
                         color = accentColor,
                         fontWeight = FontWeight.Bold
@@ -392,7 +392,7 @@ fun ChatBubble(
                 TextButton(onClick = { onInsert(message.content) }) {
                     Icon(Icons.Outlined.SaveAlt, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("Enregistrer dans l'Inbox")
+                    Text("Save to Inbox")
                 }
             }
         }
@@ -510,32 +510,32 @@ fun NanoStatusIndicator(state: NanoState, modifier: Modifier = Modifier) {
         is NanoState.Ready -> Triple(
             Icons.Rounded.Bolt,
             MaterialTheme.colorScheme.primary,
-            "Gemini Nano · sur l'appareil"
+            "Gemini Nano · on-device"
         )
         is NanoState.Downloading -> Triple(
             Icons.Rounded.Bolt,
             MaterialTheme.colorScheme.tertiary,
-            "Gemini Nano · téléchargement…"
+            "Gemini Nano · downloading…"
         )
         NanoState.NotDownloaded -> Triple(
             Icons.Rounded.CloudOff,
             MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-            "Gemini Nano · à télécharger dans Paramètres"
+            "Gemini Nano · download in Settings"
         )
         is NanoState.Checking, NanoState.Unknown -> Triple(
             Icons.Rounded.Bolt,
             MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-            "Vérification de l'IA sur l'appareil…"
+            "Checking on-device AI…"
         )
         is NanoState.Unavailable -> Triple(
             Icons.Rounded.CloudOff,
             MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-            "Nano indisponible · ${state.reason}"
+            "Nano unavailable · ${state.reason}"
         )
         is NanoState.Error -> Triple(
             Icons.Rounded.CloudOff,
             MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
-            "Erreur Nano · ${state.cause.localizedMessage ?: state.cause.message ?: state.cause::class.java.simpleName}"
+            "Nano error · ${state.cause.localizedMessage ?: state.cause.message ?: state.cause::class.java.simpleName}"
         )
     }
 
@@ -575,10 +575,10 @@ fun ClearChatDialog(
                 tint = MaterialTheme.colorScheme.error
             )
         },
-        title = { Text("Effacer cette conversation ?") },
+        title = { Text("Clear this conversation?") },
         text = {
             Text(
-                "Les messages de ce panneau seront définitivement supprimés. L'autre panneau n'est pas affecté.",
+                "This permanently deletes this panel's messages. The other panel is unaffected.",
                 style = MaterialTheme.typography.bodyMedium
             )
         },
@@ -587,11 +587,11 @@ fun ClearChatDialog(
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 onConfirm()
             }) {
-                Text("Effacer", color = MaterialTheme.colorScheme.error)
+                Text("Clear", color = MaterialTheme.colorScheme.error)
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Annuler") }
+            TextButton(onClick = onDismiss) { Text("Cancel") }
         }
     )
 }
@@ -611,7 +611,7 @@ fun EmptyStatePlaceholder(mode: ChatMode) {
             )
             Spacer(modifier = Modifier.height(16.dp))
             Text(
-                if (mode == ChatMode.ORACLE) "Accès au Cortex..." else "Allumage de Spark...",
+                if (mode == ChatMode.ORACLE) "Accessing Cortex..." else "Igniting Spark...",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

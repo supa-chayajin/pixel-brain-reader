@@ -139,10 +139,10 @@ class MoodViewModel @Inject constructor(
                     // We don't throw here, DB entry was successful.
                 }
 
-                _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Humeur enregistrée et synchronisée ✅"))
+                _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Mood Saved & Synced ✅"))
                 _uiState.update { it.copy(isLoading = false) }
             } catch (e: Exception) {
-                _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Échec de la synchronisation ❌ : ${e.message}"))
+                _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Sync Failed ❌: ${e.message}"))
                 _uiState.update { it.copy(isLoading = false) }
             }
         }

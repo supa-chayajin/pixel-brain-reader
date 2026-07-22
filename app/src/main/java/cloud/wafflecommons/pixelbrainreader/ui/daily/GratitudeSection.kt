@@ -41,7 +41,7 @@ fun GratitudeSection(
                 .animateContentSize()
         ) {
             Text(
-                text = "Gratitude express ✨",
+                text = "Gratitude Express ✨",
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.primary
             )
@@ -53,7 +53,7 @@ fun GratitudeSection(
                 value = text,
                 onValueChange = { text = it },
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Un petit moment positif ?") },
+                placeholder = { Text("A little positive moment?") },
                 singleLine = true,
                 trailingIcon = {
                     CortexIconButton(
@@ -68,7 +68,7 @@ fun GratitudeSection(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Star,
-                            contentDescription = "Ajouter une gratitude",
+                            contentDescription = "Add Gratitude",
                             tint = MaterialTheme.colorScheme.primary
                         )
                     }

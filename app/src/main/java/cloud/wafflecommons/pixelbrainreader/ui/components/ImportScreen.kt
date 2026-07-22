@@ -38,17 +38,17 @@ fun ImportScreen(
     onSave: (filename: String, folder: String, content: String) -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
-    var filename by remember { mutableStateOf(initialTitle.ifBlank { "Sans titre" }) }
+    var filename by remember { mutableStateOf(initialTitle.ifBlank { "Untitled" }) }
     var folder by remember { mutableStateOf("00_Inbox") }
     var content by remember { mutableStateOf(initialContent) }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Enregistrer dans le coffre") },
+                title = { Text("Save to Vault") },
                 navigationIcon = {
                     CortexIconButton(onClick = onDismiss) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Annuler")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Cancel")
                     }
                 },
                 actions = {
@@ -61,7 +61,7 @@ fun ImportScreen(
                         modifier = Modifier.padding(end = 8.dp)
                     ) {
                         Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
-                        Text("Importer")
+                        Text("Import")
                     }
                 }
             )
@@ -77,7 +77,7 @@ fun ImportScreen(
             OutlinedTextField(
                 value = filename,
                 onValueChange = { filename = it },
-                label = { Text("Nom du fichier (sans extension)") },
+                label = { Text("Filename (no ext)") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -85,12 +85,12 @@ fun ImportScreen(
             OutlinedTextField(
                 value = folder,
                 onValueChange = { folder = it },
-                label = { Text("Dossier cible") },
+                label = { Text("Target Folder") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(modifier = Modifier.height(16.dp))
-            Text("Aperçu du contenu :", style = MaterialTheme.typography.labelMedium)
+            Text("Content Preview:", style = MaterialTheme.typography.labelMedium)
             Spacer(modifier = Modifier.height(8.dp))
             OutlinedTextField(
                 value = content,

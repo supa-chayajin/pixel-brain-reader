@@ -71,7 +71,7 @@ fun MoodCheckInSheet(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
-                text = "Comment vous sentez-vous en ce moment ?",
+                text = "How are you right now?",
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold
             )
@@ -119,7 +119,7 @@ fun MoodCheckInSheet(
                 ) {
                     Icon(Icons.Outlined.Schedule, contentDescription = null, modifier = Modifier.size(16.dp))
                     Text(
-                        text = if (java.time.Duration.between(selectedDateTime, java.time.LocalDateTime.now()).toMinutes() < 1) "Maintenant" else selectedDateTime.format(timeFormatter),
+                        text = if (java.time.Duration.between(selectedDateTime, java.time.LocalDateTime.now()).toMinutes() < 1) "Now" else selectedDateTime.format(timeFormatter),
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Medium
                     )
@@ -138,7 +138,7 @@ fun MoodCheckInSheet(
                 horizontalAlignment = Alignment.Start
             ) {
                 Text(
-                    text = "Activités",
+                    text = "Activities",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(start = 4.dp)
@@ -147,7 +147,7 @@ fun MoodCheckInSheet(
                 
                 if (availableTags.isEmpty()) {
                     Text(
-                        text = "Aucun tag pour l'instant. Ajoutez-en dans Paramètres ▸ Tags d'humeur.",
+                        text = "No tags yet. Add some in Settings ▸ Mood Tags.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -185,9 +185,9 @@ fun MoodCheckInSheet(
             OutlinedTextField(
                 value = noteText,
                 onValueChange = { noteText = it },
-                label = { Text("Note rapide (facultatif)") },
+                label = { Text("Quick Note (Optional)") },
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Qu'avez-vous en tête ?") },
+                placeholder = { Text("What's on your mind?") },
                 shape = MaterialTheme.shapes.large
             )
 
@@ -205,7 +205,7 @@ fun MoodCheckInSheet(
                 if (uiState.isLoading) {
                     CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary)
                 } else {
-                    Text("Enregistrer l'humeur", style = MaterialTheme.typography.titleMedium)
+                    Text("Save Mood", style = MaterialTheme.typography.titleMedium)
                 }
             }
         }
