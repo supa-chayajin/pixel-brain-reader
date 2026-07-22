@@ -3,33 +3,33 @@
     <string name="google_client_id">636663393986-inuq11b4rmo01k6hhbvk4mfrv44s6586.apps.googleusercontent.com</string>
 
     <!-- Home-screen widget labels + descriptions -->
-    <string name="widget_companion_label">Tableau de bord Pixel</string>
-    <string name="widget_companion_desc">Votre héros, XP, habitudes, tâches et vitalité en un coup d\'œil.</string>
-    <string name="widget_health_label">Santé du jour</string>
-    <string name="widget_health_desc">Pas, sommeil, fréquence cardiaque, calories et plus pour aujourd\'hui.</string>
-    <string name="widget_mood_label">Bilan d\'humeur</string>
-    <string name="widget_mood_desc">Enregistrez votre humeur d\'un simple appui.</string>
-    <string name="widget_habits_label">Habitudes</string>
-    <string name="widget_habits_desc">Cochez les habitudes du jour sans ouvrir l\'application.</string>
-    <string name="widget_today_label">Tâches du jour</string>
-    <string name="widget_today_desc">Consultez et cochez les tâches du jour directement.</string>
-    <string name="widget_chores_label">Corvées à faire</string>
-    <string name="widget_chores_desc">Corvées du jour — marquez-les faites et gagnez de l\'XP.</string>
-    <string name="widget_quickactions_label">Actions rapides</string>
-    <string name="widget_quickactions_desc">Capture, journal, humeur, habitudes, corvées et recherche — en un seul appui.</string>
+    <string name="widget_companion_label">Pixel Dashboard</string>
+    <string name="widget_companion_desc">Your hero, XP, habits, tasks and vitality at a glance.</string>
+    <string name="widget_health_label">Health Today</string>
+    <string name="widget_health_desc">Steps, sleep, heart rate, calories and more for today.</string>
+    <string name="widget_mood_label">Mood Check-in</string>
+    <string name="widget_mood_desc">Log how you feel with a single tap.</string>
+    <string name="widget_habits_label">Habits</string>
+    <string name="widget_habits_desc">Check off today\'s habits without opening the app.</string>
+    <string name="widget_today_label">Today\'s Tasks</string>
+    <string name="widget_today_desc">See and tick off today\'s tasks in place.</string>
+    <string name="widget_chores_label">Chores Due</string>
+    <string name="widget_chores_desc">Chores due today — mark them done and earn XP.</string>
+    <string name="widget_quickactions_label">Quick Actions</string>
+    <string name="widget_quickactions_desc">Capture, journal, mood, habits, chores and search — one tap away.</string>
 
     <!-- Launcher shortcuts (long-press the app icon) -->
-    <string name="shortcut_capture_short">Capturer</string>
-    <string name="shortcut_capture_long">Nouvelle note</string>
-    <string name="shortcut_daily_short">Quotidien</string>
-    <string name="shortcut_daily_long">Journal du jour</string>
-    <string name="shortcut_mood_short">Humeur</string>
-    <string name="shortcut_mood_long">Noter l\'humeur</string>
-    <string name="shortcut_habits_short">Habitudes</string>
-    <string name="shortcut_habits_long">Habitudes du jour</string>
-    <string name="shortcut_chores_short">Corvées</string>
-    <string name="shortcut_chores_long">Corvées à faire</string>
-    <string name="shortcut_search_short">Demander</string>
-    <string name="shortcut_search_long">Demander à Cortex</string>
-    <string name="shortcut_disabled">Connectez-vous d\'abord à Cortex</string>
+    <string name="shortcut_capture_short">Capture</string>
+    <string name="shortcut_capture_long">New note</string>
+    <string name="shortcut_daily_short">Daily</string>
+    <string name="shortcut_daily_long">Today\'s journal</string>
+    <string name="shortcut_mood_short">Mood</string>
+    <string name="shortcut_mood_long">Log mood</string>
+    <string name="shortcut_habits_short">Habits</string>
+    <string name="shortcut_habits_long">Today\'s habits</string>
+    <string name="shortcut_chores_short">Chores</string>
+    <string name="shortcut_chores_long">Chores due</string>
+    <string name="shortcut_search_short">Ask</string>
+    <string name="shortcut_search_long">Ask Cortex</string>
+    <string name="shortcut_disabled">Log in to Cortex first</string>
 </resources>

@@ -121,7 +121,7 @@ class LifeOSViewModel @Inject constructor(
             val categoryOf = { habitStat: HabitWithStats ->
                 val attr = cloud.wafflecommons.pixelbrainreader.data.gamification.AttributeParser
                     .parse(habitStat.config.description)
-                if (attr != null) "Entraînement ${attr.name}" else "Général"
+                if (attr != null) "${attr.name} Training" else "General"
             }
             val todayHabitsList = habitsWithStats.filter { it.isScheduledToday }
             val groupedHabits = todayHabitsList.groupBy(categoryOf)

@@ -49,7 +49,7 @@ fun TaskTimeline(
 ) {
     if (tasks.isEmpty()) {
         Text(
-            text = "Aucune tâche prioritaire prévue.",
+            text = "No focus tasks planned.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = modifier.padding(8.dp)
@@ -78,7 +78,7 @@ fun TaskTimelineItem(task: DailyTaskEntity, onToggle: (DailyTaskEntity) -> Unit)
     ) {
         // Time
         Text(
-            text = task.scheduledTime?.format(DateTimeFormatter.ofPattern("HH:mm")) ?: "Libre",
+            text = task.scheduledTime?.format(DateTimeFormatter.ofPattern("HH:mm")) ?: "Any",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.width(48.dp)
@@ -303,26 +303,26 @@ fun HabitCard(
                 if (config.type != HabitType.MEASURABLE) {
                      if (isAutomatic) {
                         Text(
-                            "Auto · Santé",
+                            "Auto · Health",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                         )
                     } else if (isDone) {
                         Text(
-                            "Terminé !",
+                            "Done!",
                             style = MaterialTheme.typography.labelLarge,
                             color = themeColor,
                             fontWeight = FontWeight.Bold
                         )
                     } else if (habit.isScheduledToday) {
                          Text(
-                            "Appuyer pour valider",
+                            "Tap to Complete",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     } else {
                          Text(
-                            "Pas aujourd'hui",
+                            "Not Today",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha=0.7f)
                         )
@@ -350,7 +350,7 @@ fun HabitEditDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Text(text = "Mettre à jour ${config.title}")
+            Text(text = "Update ${config.title}")
         },
         text = {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -393,7 +393,7 @@ fun HabitEditDialog(
                     onValueChange = { 
                         it.toDoubleOrNull()?.let { v -> tempValue = v }
                     },
-                    label = { Text("Valeur") },
+                    label = { Text("Value") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
                     modifier = Modifier.width(120.dp)
@@ -405,12 +405,12 @@ fun HabitEditDialog(
                 onClick = { onConfirm(tempValue) },
                 colors = ButtonDefaults.buttonColors(containerColor = color)
             ) {
-                Text("Enregistrer")
+                Text("Save")
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Annuler")
+                Text("Cancel")
             }
         }
     )
@@ -422,7 +422,7 @@ fun HabitEditDialog(
 fun DayTimeline(events: List<TimelineEvent>) {
     if (events.isEmpty()) {
         Text(
-            text = "Rien de prévu.",
+            text = "No items planned.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(8.dp)

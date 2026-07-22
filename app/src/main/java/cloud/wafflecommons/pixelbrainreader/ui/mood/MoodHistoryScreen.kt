@@ -55,7 +55,7 @@ fun MoodHistoryScreen(
     Scaffold(
         topBar = {
             cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
-                title = "Suivi d'humeur",
+                title = "Mood Tracker",
                 scrollBehavior = scrollBehavior
             )
         }
@@ -80,7 +80,7 @@ fun MoodHistoryScreen(
             ) { isEmpty ->
                 if (isEmpty) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("Aucune donnée d'humeur pour ce jour.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("No mood data for this day.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 } else {
                     LazyColumn(
@@ -119,13 +119,13 @@ fun DateSelector(
         verticalAlignment = Alignment.CenterVertically
     ) {
         CortexIconButton(onClick = { onDateSelected(selectedDate.minusDays(1)) }) {
-            Icon(Icons.Outlined.ChevronLeft, contentDescription = "Jour précédent")
+            Icon(Icons.Outlined.ChevronLeft, contentDescription = "Previous Day")
         }
 
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Icon(Icons.Outlined.CalendarMonth, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
             Text(
-                text = if (isToday) "Aujourd'hui" else selectedDate.format(DateTimeFormatter.ofPattern("MMM d, yyyy")),
+                text = if (isToday) "Today" else selectedDate.format(DateTimeFormatter.ofPattern("MMM d, yyyy")),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
@@ -137,7 +137,7 @@ fun DateSelector(
         ) {
             Icon(
                 Icons.Outlined.ChevronRight, 
-                contentDescription = "Jour suivant",
+                contentDescription = "Next Day",
                 tint = if (isToday) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f) else MaterialTheme.colorScheme.onSurface
             )
         }
@@ -163,12 +163,12 @@ fun SummaryHeader(emoji: String?, avg: Double?) {
             Text(text = emoji ?: "😐", fontSize = 56.sp)
             Column {
                 Text(
-                    text = "Résumé du jour",
+                    text = "Daily Summary",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = if (avg != null) "Score moyen : ${String.format(ComposeLocale.current.platformLocale, "%.1f", avg)}/5.0" else "Aucune donnée pour l'instant",
+                    text = if (avg != null) "Average score: ${String.format(ComposeLocale.current.platformLocale, "%.1f", avg)}/5.0" else "No data yet",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -214,7 +214,7 @@ fun MoodTimelineItem(entry: MoodEntry) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(text = entry.label, fontSize = 20.sp)
-                    Text(text = "Score : ${entry.score}", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                    Text(text = "Score: ${entry.score}", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
                 }
                 
                 if (entry.activities.isNotEmpty()) {

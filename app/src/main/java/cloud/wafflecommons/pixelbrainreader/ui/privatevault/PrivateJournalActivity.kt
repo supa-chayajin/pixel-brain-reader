@@ -116,7 +116,7 @@ class PrivateJournalActivity : FragmentActivity() {
             object : BiometricPrompt.AuthenticationCallback() {
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
                     super.onAuthenticationError(errorCode, errString)
-                     viewModel.onAuthError("Erreur d'authentification : $errString")
+                     viewModel.onAuthError("Auth Error: $errString")
                 }
 
                 override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
@@ -129,20 +129,20 @@ class PrivateJournalActivity : FragmentActivity() {
                     } else {
                         // Biometric Success, but no password stored.
                         // Force manual unlock to set the password.
-                        android.widget.Toast.makeText(this@PrivateJournalActivity, "Veuillez déverrouiller avec le mot de passe pour activer la biométrie.", android.widget.Toast.LENGTH_LONG).show()
+                        android.widget.Toast.makeText(this@PrivateJournalActivity, "Please unlock with password to enable biometrics.", android.widget.Toast.LENGTH_LONG).show()
                     }
                 }
 
                 override fun onAuthenticationFailed() {
                     super.onAuthenticationFailed()
-                    viewModel.onAuthError("Échec de l'authentification")
+                    viewModel.onAuthError("Authentication failed")
                 }
             })
 
         promptInfo = BiometricPrompt.PromptInfo.Builder()
-            .setTitle("Déverrouiller le coffre privé")
-            .setSubtitle("Authentifiez-vous avec vos données biométriques")
-            .setNegativeButtonText("Utiliser le mot de passe")
+            .setTitle("Unlock Private Vault")
+            .setSubtitle("Log in using your biometric credential")
+            .setNegativeButtonText("Use Password")
             .build()
     }
 
@@ -185,12 +185,12 @@ fun PrivateVaultScreen(
         
         AlertDialog(
             onDismissRequest = { showCreateDialog = false },
-            title = { Text("Nouvelle note privée") },
+            title = { Text("New Private Note") },
             text = {
                 OutlinedTextField(
                     value = filename,
                     onValueChange = { filename = it },
-                    label = { Text("Nom du fichier") },
+                    label = { Text("Filename") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -201,10 +201,10 @@ fun PrivateVaultScreen(
                         viewModel.createNote(filename)
                         showCreateDialog = false
                     }
-                }) { Text("Créer") }
+                }) { Text("Create") }
             },
             dismissButton = {
-                TextButton(onClick = { showCreateDialog = false }) { Text("Annuler") }
+                TextButton(onClick = { showCreateDialog = false }) { Text("Cancel") }
             }
         )
     }
@@ -222,20 +222,20 @@ fun PrivateVaultScreen(
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
                 Icon(
                     imageVector = Icons.Default.Lock,
-                    contentDescription = "Verrouillé",
+                    contentDescription = "Locked",
                     modifier = Modifier.size(72.dp),
                     tint = MaterialTheme.colorScheme.primary
                 )
                 Spacer(modifier = Modifier.height(24.dp))
                 Text(
-                    "Coffre privé verrouillé",
+                    "Private Vault Locked",
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    "Chiffrement sécurisé actif. Captures d'écran désactivées.",
+                    "Secure encryption active. Screenshot disabled.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -250,7 +250,7 @@ fun PrivateVaultScreen(
                     modifier = Modifier.fillMaxWidth().height(56.dp),
                     shape = MaterialTheme.shapes.large
                 ) {
-                    Text("Déverrouiller par biométrie")
+                    Text("Unlock with Biometrics")
                 }
                 
                 if (state.errorMessage != null) {
@@ -270,7 +270,7 @@ fun PrivateVaultScreen(
                 OutlinedTextField(
                     value = state.passwordInput,
                     onValueChange = { viewModel.onPasswordInputChanged(it) },
-                    label = { Text("Mot de passe principal") },
+                    label = { Text("Master Password") },
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
                     modifier = Modifier.fillMaxWidth()
@@ -284,7 +284,7 @@ fun PrivateVaultScreen(
                     enabled = state.passwordInput.isNotEmpty(),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Déverrouiller avec le mot de passe")
+                    Text("Unlock with Password")
                 }
             }
         }
@@ -306,7 +306,7 @@ fun PrivateVaultScreen(
                  file = state.selectedFile,
                  content = state.editorContent,
                  editorRevision = state.editorRevision,
-                 title = state.selectedFile?.name?.removeSuffix(".md.enc") ?: "Nouvelle note",
+                 title = state.selectedFile?.name?.removeSuffix(".md.enc") ?: "New Note",
                  saveState = viewModel.saveState.collectAsStateWithLifecycle().value,
                  onContentChange = { viewModel.onEditorContentChange(it) },
                  onClose = { viewModel.closeNote() },
@@ -332,9 +332,9 @@ fun PrivateVaultScreen(
                      TopAppBar(
                          title = { 
                              Column {
-                                 Text("Coffre privé", fontWeight = FontWeight.SemiBold)
+                                 Text("Private Vault", fontWeight = FontWeight.SemiBold)
                                  Text(
-                                     "${state.files.size} notes sécurisées",
+                                     "${state.files.size} secure notes",
                                      style = MaterialTheme.typography.bodySmall,
                                      color = MaterialTheme.colorScheme.onSurfaceVariant
                                  )
@@ -342,7 +342,7 @@ fun PrivateVaultScreen(
                          },
                          navigationIcon = {
                              CortexIconButton(onClick = onBack) {
-                                 Icon(Icons.AutoMirrored.Filled.ArrowBack, "Retour")
+                                 Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
                              }
                          }
                      )
@@ -356,7 +356,7 @@ fun PrivateVaultScreen(
                          containerColor = MaterialTheme.colorScheme.secondaryContainer,
                          contentColor = MaterialTheme.colorScheme.onSecondaryContainer
                      ) {
-                         Icon(Icons.Default.Add, "Nouvelle note")
+                         Icon(Icons.Default.Add, "New Note")
                      }
                  }
              ) { padding ->
@@ -374,7 +374,7 @@ fun PrivateVaultScreen(
                              )
                              Spacer(Modifier.height(16.dp))
                              Text(
-                                 "Le coffre est vide",
+                                 "Vault is empty",
                                  style = MaterialTheme.typography.titleMedium,
                                  color = MaterialTheme.colorScheme.onSurfaceVariant
                              )
@@ -425,7 +425,7 @@ fun VaultFileItem(file: File, onClick: () -> Unit) {
             ) {
                  Icon(
                     Icons.Default.Lock, 
-                    contentDescription = "Sécurisé",
+                    contentDescription = "Secure",
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(24.dp)
                 )
@@ -448,9 +448,9 @@ fun VaultFileItem(file: File, onClick: () -> Unit) {
                 )
                 val diff = ChronoUnit.MINUTES.between(lastMod, LocalDateTime.now())
                 val timeStr = when {
-                     diff < 1 -> "À l'instant"
-                     diff < 60 -> "il y a $diff min"
-                     diff < 1440 -> "il y a ${diff / 60} h"
+                     diff < 1 -> "Just now"
+                     diff < 60 -> "$diff m ago"
+                     diff < 1440 -> "${diff / 60} h ago"
                      else -> lastMod.format(DateTimeFormatter.ofPattern("MMM dd"))
                 }
                 Text(
@@ -542,12 +542,12 @@ fun PrivateEditor(
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, french)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, french)
             putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, french)
-            putExtra(RecognizerIntent.EXTRA_PROMPT, "Dictez votre note…")
+            putExtra(RecognizerIntent.EXTRA_PROMPT, "Dictate your note…")
         }
         try {
             speechLauncher.launch(intent)
         } catch (e: android.content.ActivityNotFoundException) {
-            Toast.makeText(context, "Reconnaissance vocale indisponible sur cet appareil", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "Speech recognition unavailable on this device", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -568,7 +568,7 @@ fun PrivateEditor(
                     val newText = baseText.substring(0, start) + formatted + baseText.substring(end)
                     applyChange(TextFieldValue(newText, TextRange(start, start + formatted.length)))
                 } else {
-                    Toast.makeText(context, "Note modifiée — embellissement ignoré", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Note changed — beautify skipped", Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -586,13 +586,13 @@ fun PrivateEditor(
                 },
                 navigationIcon = {
                     CortexIconButton(onClick = onClose) {
-                         Icon(Icons.Default.Close, "Fermer")
+                         Icon(Icons.Default.Close, "Close")
                     }
                 },
                 actions = {
                     // Dictate straight into the encrypted note.
                     CortexIconButton(onClick = { startDictation() }) {
-                        Icon(Icons.Default.Mic, contentDescription = "Dicter")
+                        Icon(Icons.Default.Mic, contentDescription = "Dictate")
                     }
                     // Beautify the SELECTED text as Markdown. Disabled when nothing is selected.
                     CortexIconButton(
@@ -605,11 +605,11 @@ fun PrivateEditor(
                                 strokeWidth = 2.dp
                             )
                         } else {
-                            Icon(Icons.Default.AutoFixHigh, contentDescription = "Embellir la sélection en Markdown")
+                            Icon(Icons.Default.AutoFixHigh, contentDescription = "Beautify selection as Markdown")
                         }
                     }
                     CortexIconButton(onClick = onOpenAssist) {
-                        Icon(Icons.Default.AutoAwesome, contentDescription = "Assistant d'écriture")
+                        Icon(Icons.Default.AutoAwesome, contentDescription = "Writing assistant")
                     }
                     cloud.wafflecommons.pixelbrainreader.ui.components.SaveStatusIndicator(
                         state = saveState,
@@ -652,9 +652,9 @@ private fun WritingAssistSheet(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text("Assistant d'écriture", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text("Writing assistant", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Text(
-                "Suggestions générées sur l'appareil, en français — rien ne quitte le téléphone.",
+                "Suggestions generated on-device, in French — nothing leaves the phone.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -663,16 +663,16 @@ private fun WritingAssistSheet(
                 androidx.compose.material3.FilledTonalButton(
                     onClick = { onAction(PrivateJournalViewModel.AssistAction.IMPROVE) },
                     modifier = Modifier.weight(1f)
-                ) { Text("✨ Améliorer") }
+                ) { Text("✨ Improve") }
                 androidx.compose.material3.FilledTonalButton(
                     onClick = { onAction(PrivateJournalViewModel.AssistAction.CONTINUE) },
                     modifier = Modifier.weight(1f)
-                ) { Text("➡️ Continuer") }
+                ) { Text("➡️ Continue") }
             }
             androidx.compose.material3.FilledTonalButton(
                 onClick = { onAction(PrivateJournalViewModel.AssistAction.INSPIRE) },
                 modifier = Modifier.fillMaxWidth()
-            ) { Text("💡 Inspire-moi") }
+            ) { Text("💡 Inspire me") }
 
             when {
                 state.isLoading -> {
@@ -696,10 +696,10 @@ private fun WritingAssistSheet(
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                         androidx.compose.material3.OutlinedButton(onClick = onAppend, modifier = Modifier.weight(1f)) {
-                            Text("Ajouter à la suite")
+                            Text("Append")
                         }
                         androidx.compose.material3.Button(onClick = onReplace, modifier = Modifier.weight(1f)) {
-                            Text("Remplacer")
+                            Text("Replace")
                         }
                     }
                 }

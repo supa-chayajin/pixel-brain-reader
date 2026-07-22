@@ -150,7 +150,7 @@ fun DailyNoteScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Archive,
-                            contentDescription = "Compiler la journée"
+                            contentDescription = "Compile/Burn Day"
                         )
                     }
 
@@ -175,7 +175,7 @@ fun DailyNoteScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Lock,
-                            contentDescription = "Coffre privé",
+                            contentDescription = "Private Vault",
                             tint = MaterialTheme.colorScheme.primary
                         )
                     }
@@ -187,26 +187,26 @@ fun DailyNoteScreen(
                             contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     ) {
-                        Icon(Icons.Outlined.Settings, contentDescription = "Paramètres")
+                        Icon(Icons.Outlined.Settings, contentDescription = "Settings")
                     }
                 }
             )
         },
         floatingActionButton = {
             val fabItems = listOf(
-                FabActionItem(icon = Icons.Rounded.Mood, label = "Bilan d'humeur") {
+                FabActionItem(icon = Icons.Rounded.Mood, label = "Mood Check-in") {
                     fabExpanded = false
                     onCheckInClicked()
                 },
-                FabActionItem(icon = Icons.Rounded.Event, label = "Chronologie") {
+                FabActionItem(icon = Icons.Rounded.Event, label = "Timeline") {
                     fabExpanded = false
                     showAddTimelineDialog = true
                 },
-                FabActionItem(icon = Icons.Rounded.Checklist, label = "Tâche") {
+                FabActionItem(icon = Icons.Rounded.Checklist, label = "Task") {
                     fabExpanded = false
                     showAddTaskDialog = true
                 },
-                FabActionItem(icon = Icons.Rounded.TextFields, label = "Brouillon") {
+                FabActionItem(icon = Icons.Rounded.TextFields, label = "Scratchpad") {
                     fabExpanded = false
                     showQuickCaptureSheet = true
                 }
@@ -272,7 +272,7 @@ fun DailyNoteScreen(
                     item {
                         cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 4) {
                             Text(
-                                text = "Prenez soin de vous mon ami, et ne devenez surtout pas carcasse !",
+                                text = "Stay safe my friend, and don't you dare go hollow!",
                                 style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.Medium,
                                 fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
@@ -499,7 +499,7 @@ private fun SecondBrainSection(
         // Ideas
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
-                text = "🧠 Idées / Second cerveau",
+                text = "🧠 Ideas / Second Brain",
                 style = MaterialTheme.typography.titleMedium,
                 color = secondaryColor,
                 fontWeight = FontWeight.Bold
@@ -510,7 +510,7 @@ private fun SecondBrainSection(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(160.dp),
-                placeholder = { Text("Capturez vos idées éclair...", color = textColor.copy(alpha = 0.4f)) },
+                placeholder = { Text("Capture lightning ideas...", color = textColor.copy(alpha = 0.4f)) },
                 visualTransformation = visualTransformation,
                 textStyle = MaterialTheme.typography.bodyLarge.copy(
                     lineHeight = 26.sp,
@@ -528,7 +528,7 @@ private fun SecondBrainSection(
         // Notes
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
-                text = "📑 Notes / Bien-être",
+                text = "📑 Notes / Self-care",
                 style = MaterialTheme.typography.titleMedium,
                 color = secondaryColor,
                 fontWeight = FontWeight.Bold
@@ -539,7 +539,7 @@ private fun SecondBrainSection(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(160.dp),
-                placeholder = { Text("Réflexion, gratitude, journal...", color = textColor.copy(alpha = 0.4f)) },
+                placeholder = { Text("Reflection, gratitude, logs...", color = textColor.copy(alpha = 0.4f)) },
                 visualTransformation = visualTransformation,
                 textStyle = MaterialTheme.typography.bodyLarge.copy(
                     lineHeight = 26.sp,
@@ -564,7 +564,7 @@ private fun TimelineHeader(modifier: Modifier = Modifier) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = "🗓️ Chronologie",
+            text = "🗓️ Timeline",
             color = MaterialTheme.colorScheme.secondary,
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
@@ -581,7 +581,7 @@ private fun JournalHeader(modifier: Modifier = Modifier) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = "📝 Tâches",
+            text = "📝 Tasks",
             color = MaterialTheme.colorScheme.secondary,
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
@@ -594,7 +594,7 @@ private fun JournalHeader(modifier: Modifier = Modifier) {
 private fun TimelineList(events: List<TimelineEntryEntity>, onEdit: (TimelineEntryEntity) -> Unit) {
     if (events.isEmpty()) {
         Text(
-            text = "Aucun événement enregistré pour le moment.",
+            text = "No events recorded yet.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(start = 8.dp)
@@ -666,7 +666,7 @@ private fun TimelineItem(event: TimelineEntryEntity, isLast: Boolean, onClick: (
 private fun TaskList(tasks: List<DailyTaskEntity>, onToggle: (String, Boolean) -> Unit, onEdit: (DailyTaskEntity) -> Unit) {
     if (tasks.isEmpty()) {
         Text(
-            text = "Tout est à jour.",
+            text = "All caught up.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(start = 8.dp)
@@ -763,13 +763,13 @@ private fun AddTimelineDialog(onDismiss: () -> Unit, onConfirm: (String, LocalTi
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Ajouter un moment") },
+        title = { Text("Add Moment") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 OutlinedTextField(
                     value = content,
                     onValueChange = { content = it },
-                    label = { Text("Que s'est-il passé ?") },
+                    label = { Text("What happened?") },
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
                         capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Sentences
                     ),
@@ -787,11 +787,11 @@ private fun AddTimelineDialog(onDismiss: () -> Unit, onConfirm: (String, LocalTi
                     onConfirm(content, LocalTime.of(timePickerState.hour, timePickerState.minute))
                 }
             }) {
-                Text("Ajouter")
+                Text("Add")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Annuler") }
+            TextButton(onClick = onDismiss) { Text("Cancel") }
         }
     )
 }
@@ -815,13 +815,13 @@ private fun AddTaskDialog(onDismiss: () -> Unit, onConfirm: (String, java.time.L
     
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Ajouter une tâche") },
+        title = { Text("Add Task") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 OutlinedTextField(
                     value = label,
                     onValueChange = { label = it },
-                    label = { Text("Objectif / Tâche") },
+                    label = { Text("Goal / Task") },
                     singleLine = true,
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
                         capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Sentences
@@ -846,7 +846,7 @@ private fun AddTaskDialog(onDismiss: () -> Unit, onConfirm: (String, java.time.L
                     Icon(Icons.Default.AddCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        text = if (selectedDate == java.time.LocalDate.now()) "Aujourd'hui" else selectedDate.format(dateFormatter),
+                        text = if (selectedDate == java.time.LocalDate.now()) "Today" else selectedDate.format(dateFormatter),
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
@@ -865,7 +865,7 @@ private fun AddTaskDialog(onDismiss: () -> Unit, onConfirm: (String, java.time.L
                         onCheckedChange = { useTime = it }
                     )
                     Spacer(Modifier.width(8.dp))
-                    Text("Heure planifiée ?")
+                    Text("Scheduled Time?")
                 }
                 
                 // Visible Time Input
@@ -883,11 +883,11 @@ private fun AddTaskDialog(onDismiss: () -> Unit, onConfirm: (String, java.time.L
                      onConfirm(label, selectedDate, time)
                 } 
             }) {
-                Text("Ajouter")
+                Text("Add")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Annuler") }
+            TextButton(onClick = onDismiss) { Text("Cancel") }
         }
     )
 }
@@ -925,7 +925,7 @@ private fun QuickCaptureSheet(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
-                text = "Capture rapide",
+                text = "Quick Capture",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
@@ -938,7 +938,7 @@ private fun QuickCaptureSheet(
                     .fillMaxWidth()
                     .heightIn(min = 120.dp)
                     .focusRequester(focusRequester),
-                placeholder = { Text("Qu'avez-vous en tête ?", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)) },
+                placeholder = { Text("What's on your mind?", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)) },
                 textStyle = MaterialTheme.typography.bodyLarge,
                 keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
                     capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Sentences
@@ -974,7 +974,7 @@ private fun QuickCaptureSheet(
                     onClick = { if (content.isNotBlank()) onSave(content, selectedColor.toArgb()) },
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Text("Enregistrer le brouillon")
+                    Text("Save Scrap")
                 }
             }
             
@@ -996,7 +996,7 @@ private fun ScratchpadWidget(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
-            text = "💡 Brouillons",
+            text = "💡 Scratchpad",
             color = MaterialTheme.colorScheme.secondary,
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold
@@ -1049,7 +1049,7 @@ private fun ScratchItem(
                 CortexIconButton(onClick = { onDelete(scrap) }) {
                     Icon(
                         imageVector = Icons.Outlined.Delete,
-                        contentDescription = "Supprimer",
+                        contentDescription = "Delete",
                         modifier = Modifier.size(20.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                     )
@@ -1057,7 +1057,7 @@ private fun ScratchItem(
                 CortexIconButton(onClick = { onPromote(scrap) }) {
                     Icon(
                         imageVector = Icons.Default.Upgrade,
-                        contentDescription = "Promouvoir vers les idées",
+                        contentDescription = "Promote to Ideas",
                         modifier = Modifier.size(20.dp),
                         tint = MaterialTheme.colorScheme.primary
                     )
@@ -1085,13 +1085,13 @@ private fun EditTimelineDialog(
     
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Modifier le moment") },
+        title = { Text("Edit Moment") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 OutlinedTextField(
                     value = content,
                     onValueChange = { content = it },
-                    label = { Text("Que s'est-il passé ?") },
+                    label = { Text("What happened?") },
                     modifier = Modifier.fillMaxWidth()
                 )
                 TimeInput(state = timePickerState)
@@ -1103,11 +1103,11 @@ private fun EditTimelineDialog(
                     onConfirm(content, LocalTime.of(timePickerState.hour, timePickerState.minute))
                 }
             }) {
-                Text("Enregistrer")
+                Text("Save")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Annuler") }
+            TextButton(onClick = onDismiss) { Text("Cancel") }
         }
     )
 }
@@ -1131,13 +1131,13 @@ private fun EditTaskDialog(
     
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Modifier la tâche") },
+        title = { Text("Edit Task") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 OutlinedTextField(
                     value = label,
                     onValueChange = { label = it },
-                    label = { Text("Objectif / Tâche") },
+                    label = { Text("Goal / Task") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -1153,7 +1153,7 @@ private fun EditTaskDialog(
                         onCheckedChange = { useTime = it }
                     )
                     Spacer(Modifier.width(8.dp))
-                    Text("Heure planifiée ?")
+                    Text("Scheduled Time?")
                 }
                 
                 AnimatedVisibility(visible = useTime) {
@@ -1170,11 +1170,11 @@ private fun EditTaskDialog(
                      onConfirm(label, time)
                 } 
             }) {
-                Text("Enregistrer")
+                Text("Save")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Annuler") }
+            TextButton(onClick = onDismiss) { Text("Cancel") }
         }
     )
 }

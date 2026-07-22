@@ -70,7 +70,7 @@ fun FileListPane(
         var newName by remember { mutableStateOf(file.name.removeSuffix(".md")) }
         AlertDialog(
             onDismissRequest = { showRenameDialog = null },
-            title = { Text("Renommer le fichier") },
+            title = { Text("Rename File") },
             shape = MaterialTheme.shapes.extraLarge,
             text = {
                 OutlinedTextField(
@@ -86,10 +86,10 @@ fun FileListPane(
                         onRenameFile(newName, file)
                         showRenameDialog = null
                     }
-                }) { Text("Renommer") }
+                }) { Text("Rename") }
             },
             dismissButton = {
-                TextButton(onClick = { showRenameDialog = null }) { Text("Annuler") }
+                TextButton(onClick = { showRenameDialog = null }) { Text("Cancel") }
             }
         )
     }
@@ -123,7 +123,7 @@ fun FileListPane(
                 Icon(Icons.Default.Folder, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(48.dp))
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    text = "Erreur : $error",
+                    text = "Error: $error",
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodyLarge,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -133,7 +133,7 @@ fun FileListPane(
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     onRefresh()
                 }, shape = CircleShape) {
-                    Text("Réessayer")
+                    Text("Retry")
                 }
             }
                     }
@@ -154,13 +154,13 @@ fun FileListPane(
                     )
                     Spacer(Modifier.height(16.dp))
                     Text(
-                        "Aucun résultat",
+                        "No results found",
                         style = MaterialTheme.typography.titleLarge,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "Aucun fichier ne correspond à \"$searchQuery\".\nEssayez un autre mot-clé.",
+                        "No files match \"$searchQuery\".\nTry a different keyword.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -181,13 +181,13 @@ fun FileListPane(
                     )
                     Spacer(Modifier.height(24.dp))
                     Text(
-                        "Prêt à travailler",
+                        "Ready to work",
                         style = MaterialTheme.typography.displaySmall,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "Sélectionnez un fichier dans la liste ou créez-en un nouveau pour commencer.",
+                        "Select a file from the list or create a new one to get started.",
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -199,7 +199,7 @@ fun FileListPane(
                     }, shape = CircleShape) {
                         Icon(Icons.Default.Add, null)
                         Spacer(Modifier.width(8.dp))
-                        Text("Créer un fichier")
+                        Text("Create new file")
                     }
                 }
              }
@@ -239,7 +239,7 @@ fun FileListPane(
                         ) {
                              Icon(Icons.Rounded.AutoAwesome, null, modifier = Modifier.size(18.dp))
                              Spacer(Modifier.width(8.dp))
-                             Text("Analyser le dossier")
+                             Text("Analyze Folder")
                         }
                     }
 
@@ -302,7 +302,7 @@ fun FileListPane(
                                     if (icon != null) {
                                         Icon(
                                             icon,
-                                            contentDescription = if (direction == SwipeToDismissBoxValue.EndToStart) "Supprimer" else "Renommer",
+                                            contentDescription = if (direction == SwipeToDismissBoxValue.EndToStart) "Delete" else "Rename",
                                             tint = if (direction == SwipeToDismissBoxValue.EndToStart) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer
                                         )
                                     }

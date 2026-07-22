@@ -154,7 +154,7 @@ class PrivateJournalViewModel @Inject constructor(
         // Check Cache
         val pwd = sessionPassword ?: run {
              // Session Expired
-             lockVault("Session expirée. Veuillez déverrouiller à nouveau.")
+             lockVault("Session expired. Please unlock again.")
              return
         }
         
@@ -168,7 +168,7 @@ class PrivateJournalViewModel @Inject constructor(
                     isCreatingNew = false
                 )
             } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(errorMessage = "Échec du déchiffrement : ${e.message}")
+                _uiState.value = _uiState.value.copy(errorMessage = "Decryption Failed: ${e.message}")
             }
         }
     }
@@ -181,8 +181,8 @@ class PrivateJournalViewModel @Inject constructor(
                 
                 // 2. Check Cache
                 val pwd = sessionPassword ?: run {
-                     _uiEvent.send(UiEvent.ShowToast("Session expirée. Veuillez vous authentifier à nouveau."))
-                     lockVault("Session expirée")
+                     _uiEvent.send(UiEvent.ShowToast("Session expired. Please re-authenticate."))
+                     lockVault("Session expired")
                      return@launch
                 }
 
@@ -204,11 +204,11 @@ class PrivateJournalViewModel @Inject constructor(
                 )
                 
                 // 5. Feedback
-                _uiEvent.send(UiEvent.ShowToast("Note créée avec succès"))
+                _uiEvent.send(UiEvent.ShowToast("Note created successfully"))
 
             } catch (e: Exception) {
                 android.util.Log.e("PrivateVM", "Creation Error", e)
-                _uiEvent.send(UiEvent.ShowToast("Erreur : ${e.message}"))
+                _uiEvent.send(UiEvent.ShowToast("Error: ${e.message}"))
             }
         }
     }
@@ -246,7 +246,7 @@ class PrivateJournalViewModel @Inject constructor(
         
         // Check Cache
         val pwd = sessionPassword ?: run {
-             lockVault("Session expirée pendant l'enregistrement.")
+             lockVault("Session expired during save.")
              return
         }
         
@@ -263,7 +263,7 @@ class PrivateJournalViewModel @Inject constructor(
                     }
                 }
             } catch (e: Exception) {
-               _uiState.value = _uiState.value.copy(errorMessage = "Échec de l'enregistrement : ${e.message}")
+               _uiState.value = _uiState.value.copy(errorMessage = "Save Failed: ${e.message}")
                _saveState.value = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.ERROR
             }
         }
@@ -340,7 +340,7 @@ class PrivateJournalViewModel @Inject constructor(
             val result = localAiManager.generateResponse(prompt)
             _assistState.value = result.fold(
                 onSuccess = { AssistState(visible = true, action = action, result = it.trim()) },
-                onFailure = { AssistState(visible = true, action = action, error = it.localizedMessage ?: "Modèle IA indisponible") }
+                onFailure = { AssistState(visible = true, action = action, error = it.localizedMessage ?: "AI model unavailable") }
             )
         }
     }
@@ -379,7 +379,7 @@ class PrivateJournalViewModel @Inject constructor(
         return localAiManager.generateResponse(prompt).fold(
             onSuccess = { it.trim() },
             onFailure = {
-                _uiEvent.send(UiEvent.ShowToast("Échec de la mise en forme : ${it.localizedMessage ?: "Modèle IA indisponible"}"))
+                _uiEvent.send(UiEvent.ShowToast("Formatting failed: ${it.localizedMessage ?: "AI model unavailable"}"))
                 null
             }
         )

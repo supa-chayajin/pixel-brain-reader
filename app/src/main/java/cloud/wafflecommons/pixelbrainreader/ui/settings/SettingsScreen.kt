@@ -113,11 +113,11 @@ fun SettingsScreen(
         PermissionController.createRequestPermissionResultContract()
     ) { granted ->
         if (granted.containsAll(permissions)) {
-             Toast.makeText(context, "Autorisations accordées !", Toast.LENGTH_SHORT).show()
+             Toast.makeText(context, "Permissions Granted!", Toast.LENGTH_SHORT).show()
              viewModel.checkHealthConnectStatus()
              viewModel.syncHealthData()
         } else {
-             Toast.makeText(context, "Autorisations refusées ou partielles", Toast.LENGTH_SHORT).show()
+             Toast.makeText(context, "Permissions Denied or Partial", Toast.LENGTH_SHORT).show()
              viewModel.checkHealthConnectStatus() // Update UI anyway
         }
     }
@@ -141,9 +141,9 @@ fun SettingsScreen(
                 is SettingsViewModel.GoogleAuthEvent.ConsentRequired ->
                     consentLauncher.launch(IntentSenderRequest.Builder(event.intentSender).build())
                 SettingsViewModel.GoogleAuthEvent.Linked ->
-                    Toast.makeText(context, "Compte Google associé", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Google account linked", Toast.LENGTH_SHORT).show()
                 is SettingsViewModel.GoogleAuthEvent.Failed ->
-                    Toast.makeText(context, "Google : ${event.message}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(context, "Google: ${event.message}", Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -159,12 +159,12 @@ fun SettingsScreen(
         },
         topBar = {
             cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
-                title = "Paramètres",
+                title = "Settings",
                 navigationIcon = {
                     CortexIconButton(onClick = onBack) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Retour"
+                            contentDescription = "Back"
                         )
                     }
                 }
@@ -183,7 +183,7 @@ fun SettingsScreen(
             // 0. Integrations (Health Connect)
             StaggeredEntry(index = 0) {
             SettingsSection(
-                title = "Intégrations",
+                title = "Integrations",
                 icon = Icons.Default.HealthAndSafety
             ) {
                  val status = uiState.healthConnectStatus
@@ -199,7 +199,7 @@ fun SettingsScreen(
                              if (status == HealthConnectClient.SDK_UNAVAILABLE || status == HealthConnectClient.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED) {
                                  // Prompt install (simplified)
                              } else {
-                                 Toast.makeText(context, "Demande des autorisations...", Toast.LENGTH_SHORT).show()
+                                 Toast.makeText(context, "Requesting Permissions...", Toast.LENGTH_SHORT).show()
                                  val perms = setOf(
                                      HealthPermission.getReadPermission(StepsRecord::class),
                                      HealthPermission.getReadPermission(SleepSessionRecord::class),
@@ -222,13 +222,13 @@ fun SettingsScreen(
                                  fontWeight = FontWeight.Bold
                              )
                              Text(
-                                 text = if (isConnected) "Connecté, synchronisation active" else "Synchroniser pas et sommeil",
+                                 text = if (isConnected) "Connected & Syncing Active" else "Sync Steps & Sleep",
                                  style = MaterialTheme.typography.bodyMedium
                              )
                          }
                          if (!isConnected) {
                              Button(onClick = { 
-                                 Toast.makeText(context, "Demande des autorisations...", Toast.LENGTH_SHORT).show()
+                                 Toast.makeText(context, "Requesting Permissions...", Toast.LENGTH_SHORT).show()
                                  val perms = setOf(
                                      HealthPermission.getReadPermission(StepsRecord::class),
                                      HealthPermission.getReadPermission(SleepSessionRecord::class),
@@ -236,10 +236,10 @@ fun SettingsScreen(
                                  )
                                  healthPermissionLauncher.launch(perms)
                              }) {
-                                 Text("Connecter")
+                                 Text("Connect")
                              }
                          } else {
-                             Icon(imageVector = Icons.Default.CheckCircle, contentDescription = "Connecté")
+                             Icon(imageVector = Icons.Default.CheckCircle, contentDescription = "Connected")
                          }
                      }
                  }
@@ -249,7 +249,7 @@ fun SettingsScreen(
             // 0b. Google Ecosystem
             StaggeredEntry(index = 1) {
             SettingsSection(
-                title = "Écosystème Google",
+                title = "Google Ecosystem",
                 icon = Icons.Rounded.AccountCircle
             ) {
                 val isEnabled = uiState.isGoogleSyncEnabled
@@ -280,7 +280,7 @@ fun SettingsScreen(
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = if (isLinked) "Synchronisé (lecture seule)" else "Connectez votre compte Google",
+                                text = if (isLinked) "Synced (Read-Only)" else "Connect your Google account",
                                 style = MaterialTheme.typography.bodyMedium
                             )
                         }
@@ -310,7 +310,7 @@ fun SettingsScreen(
                     val isSelected = (uiState.currentAiModel == model)
 
                     val subtitle = when(model) {
-                         cloud.wafflecommons.pixelbrainreader.data.model.AiModel.CORTEX_LOCAL -> "Gemini Nano. 100 % privé et hors ligne."
+                         cloud.wafflecommons.pixelbrainreader.data.model.AiModel.CORTEX_LOCAL -> "Gemini Nano. 100% Private & Offline."
                     }
 
                     // Local AI radio is disabled while the on-device model is not yet
@@ -343,7 +343,7 @@ fun SettingsScreen(
             // 3. Knowledge Vault — manual RAG indexing (kept beside Intelligence — both are the on-device brain)
             StaggeredEntry(index = 3) {
             SettingsSection(
-                title = "Coffre de connaissances (RAG)",
+                title = "Knowledge Vault (RAG)",
                 icon = Icons.Default.Psychology
             ) {
                 val indexingState by viewModel.indexingState.collectAsStateWithLifecycle()
@@ -351,7 +351,7 @@ fun SettingsScreen(
                     indexingState is SettingsViewModel.IndexingState.Enqueued
 
                 Text(
-                    text = "L'indexation du coffre est désormais manuelle. Appuyez ci-dessous pour n'indexer que les fichiers modifiés depuis votre dernier index. Les notes privées sont incluses si le coffre a été déverrouillé.",
+                    text = "Embedding the vault is now manual. Tap below to embed only the files that changed since your last index. Private notes are included if the vault has been unlocked.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -372,15 +372,15 @@ fun SettingsScreen(
                         Spacer(Modifier.width(8.dp))
                         Text(
                             when (indexingState) {
-                                SettingsViewModel.IndexingState.Enqueued -> "En file d'attente…"
-                                SettingsViewModel.IndexingState.Running -> "Indexation…"
-                                else -> "En cours…"
+                                SettingsViewModel.IndexingState.Enqueued -> "Queued…"
+                                SettingsViewModel.IndexingState.Running -> "Indexing…"
+                                else -> "Working…"
                             }
                         )
                     } else {
                         Icon(Icons.Default.Memory, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
-                        Text("Indexer le coffre de connaissances (delta)")
+                        Text("Index Knowledge Vault (delta)")
                     }
                 }
 
@@ -391,7 +391,7 @@ fun SettingsScreen(
                         Spacer(Modifier.height(8.dp))
                         AssistChip(
                             onClick = { viewModel.dismissIndexingState() },
-                            label = { Text("Dernière exécution : réussie ✓") },
+                            label = { Text("Last run: succeeded ✓") },
                             leadingIcon = {
                                 Icon(
                                     Icons.Default.CheckCircle,
@@ -405,7 +405,7 @@ fun SettingsScreen(
                         Spacer(Modifier.height(8.dp))
                         AssistChip(
                             onClick = { viewModel.dismissIndexingState() },
-                            label = { Text("Échec de la dernière exécution : ${state.reason}") },
+                            label = { Text("Last run failed: ${state.reason}") },
                             colors = AssistChipDefaults.assistChipColors(
                                 labelColor = MaterialTheme.colorScheme.error
                             )
@@ -419,7 +419,7 @@ fun SettingsScreen(
             // 4. Life OS Automations
             StaggeredEntry(index = 4) {
             SettingsSection(
-                title = "Automatisations Life OS",
+                title = "Life OS Automations",
                 icon = Icons.AutoMirrored.Filled.List
             ) {
                 ListItem(
@@ -429,7 +429,7 @@ fun SettingsScreen(
                     },
                     leadingContent = { Icon(Icons.Rounded.DateRange, contentDescription = null) }
                 ) {
-                    Text("Gérer les habitudes et automatisations")
+                    Text("Manage Habits & Automations")
                 }
 
                 ListItem(
@@ -439,7 +439,7 @@ fun SettingsScreen(
                     },
                     leadingContent = { Icon(Icons.Rounded.CleaningServices, contentDescription = null) }
                 ) {
-                    Text("Gérer la maison et les corvées")
+                    Text("Manage House & Chores")
                 }
 
                 ListItem(
@@ -449,7 +449,7 @@ fun SettingsScreen(
                     },
                     leadingContent = { Icon(Icons.Filled.Notifications, contentDescription = null) }
                 ) {
-                    Text("Rappels et notifications")
+                    Text("Reminders & Notifications")
                 }
 
                 ListItem(
@@ -459,7 +459,7 @@ fun SettingsScreen(
                     },
                     leadingContent = { Icon(Icons.Rounded.Mood, contentDescription = null) }
                 ) {
-                    Text("Gérer les tags d'humeur")
+                    Text("Manage Mood Tags")
                 }
 
                 Spacer(Modifier.height(8.dp))
@@ -472,7 +472,7 @@ fun SettingsScreen(
                 // the same set back to the vault and pushes. Both wipe-and-replace,
                 // so Import first after a sign-in, Export after local edits.
                 Text(
-                    text = "Importer ramène les habitudes, pièces et corvées du coffre dans l'application. Exporter les renvoie vers le coffre et pousse. Les deux remplacent l'ensemble complet — importez d'abord après connexion, exportez après vos modifications ici.",
+                    text = "Import brings Habits, Rooms & Chores from the vault into the app. Export sends them back and pushes. Both replace the whole set — import first after signing in, export after making changes here.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -484,8 +484,8 @@ fun SettingsScreen(
                         viewModel.importAllFromVault { success ->
                             coroutineScope.launch {
                                 snackbarHostState.showSnackbar(
-                                    if (success) "Tout importé (habitudes, pièces, corvées) depuis le coffre."
-                                    else "Échec de l'import. Vérifiez les journaux Git."
+                                    if (success) "Imported all (Habits, Rooms, Chores) from the vault."
+                                    else "Import failed. Check Git logs."
                                 )
                             }
                         }
@@ -498,7 +498,7 @@ fun SettingsScreen(
                     } else {
                         Icon(Icons.Default.Download, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
-                        Text("Tout importer (Coffre → App)")
+                        Text("Import All (Vault → App)")
                     }
                 }
 
@@ -509,8 +509,8 @@ fun SettingsScreen(
                         viewModel.exportAllToVault { success ->
                             coroutineScope.launch {
                                 snackbarHostState.showSnackbar(
-                                    if (success) "Tout exporté (habitudes, pièces, corvées) vers le coffre et poussé."
-                                    else "Échec de l'export. Vérifiez les journaux Git."
+                                    if (success) "Exported all (Habits, Rooms, Chores) to the vault & pushed."
+                                    else "Export failed. Check Git logs."
                                 )
                             }
                         }
@@ -520,7 +520,7 @@ fun SettingsScreen(
                 ) {
                     Icon(Icons.Default.Upload, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Tout exporter (App → Coffre)")
+                    Text("Export All (App → Vault)")
                 }
             }
             }
@@ -528,7 +528,7 @@ fun SettingsScreen(
             // 5. Interface & Sound — app-level UI preferences
             StaggeredEntry(index = 5) {
             SettingsSection(
-                title = "Interface et son",
+                title = "Interface & Sound",
                 icon = Icons.Default.Tune
             ) {
                 ListItem(
@@ -538,7 +538,7 @@ fun SettingsScreen(
                     },
                     leadingContent = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) }
                 ) {
-                    Text("Ordre de la barre de navigation")
+                    Text("Navigation bar order")
                 }
 
                 ListItem(
@@ -553,7 +553,7 @@ fun SettingsScreen(
                         )
                     }
                 ) {
-                    Text("Effets sonores")
+                    Text("Sound effects")
                 }
             }
             }
@@ -561,7 +561,7 @@ fun SettingsScreen(
             // 6. About
             StaggeredEntry(index = 6) {
              SettingsSection(
-                title = "À propos",
+                title = "About",
                 icon = Icons.Default.Info
             ) {
                 Text(
@@ -674,7 +674,7 @@ private fun NanoModelLifecyclePanel(
                         )
                         Spacer(Modifier.width(12.dp))
                         Text(
-                            text = "Vérification de la disponibilité du modèle…",
+                            text = "Checking model availability…",
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }
@@ -686,20 +686,20 @@ private fun NanoModelLifecyclePanel(
                     ) {
                         Icon(Icons.Default.Download, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
-                        Text("Télécharger Gemini Nano (~1,5 Go)")
+                        Text("Download Gemini Nano (~1.5 GB)")
                     }
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        text = "Reste sur l'appareil. Requis avant de sélectionner l'IA locale.",
+                        text = "Stays on-device. Required before selecting Local AI.",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 is NanoState.Downloading -> {
                     val label = if (state.totalBytes > 0L) {
-                        "Téléchargement du modèle… ${formatBytes(state.bytesDownloaded)} / ${formatBytes(state.totalBytes)}"
+                        "Downloading model… ${formatBytes(state.bytesDownloaded)} / ${formatBytes(state.totalBytes)}"
                     } else {
-                        "Téléchargement du modèle…"
+                        "Downloading model…"
                     }
                     Text(text = label, style = MaterialTheme.typography.bodyMedium)
                     Spacer(Modifier.height(8.dp))
@@ -722,12 +722,12 @@ private fun NanoModelLifecyclePanel(
                         Spacer(Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Modèle prêt pour une utilisation hors ligne",
+                                text = "Model ready for offline use",
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold
                             )
                             Text(
-                                text = "Gérer le stockage dans les paramètres AICore",
+                                text = "Manage storage in AICore settings",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -735,21 +735,21 @@ private fun NanoModelLifecyclePanel(
                         CortexIconButton(onClick = onManageStorage) {
                             Icon(
                                 imageVector = Icons.Outlined.FolderOpen,
-                                contentDescription = "Gérer le stockage du modèle dans les paramètres AICore"
+                                contentDescription = "Manage model storage in AICore settings"
                             )
                         }
                     }
                 }
                 is NanoState.Unavailable -> {
                     Text(
-                        text = "IA locale indisponible sur cet appareil : ${state.reason}",
+                        text = "Local AI unavailable on this device: ${state.reason}",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.error
                     )
                 }
                 is NanoState.Error -> {
                     Text(
-                        text = "Échec du téléchargement : ${state.cause.localizedMessage ?: state.cause.message ?: state.cause::class.java.simpleName}",
+                        text = "Download failed: ${state.cause.localizedMessage ?: state.cause.message ?: state.cause::class.java.simpleName}",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.error
                     )
@@ -758,7 +758,7 @@ private fun NanoModelLifecyclePanel(
                         onClick = onDownload,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Réessayer le téléchargement")
+                        Text("Retry download")
                     }
                 }
             }
@@ -767,8 +767,8 @@ private fun NanoModelLifecyclePanel(
 }
 
 private fun formatBytes(bytes: Long): String {
-    if (bytes <= 0L) return "0 Mo"
+    if (bytes <= 0L) return "0 MB"
     val mb = bytes / 1_000_000.0
-    if (mb >= 1024.0) return "%.2f Go".format(mb / 1024.0)
-    return "%.0f Mo".format(mb)
+    if (mb >= 1024.0) return "%.2f GB".format(mb / 1024.0)
+    return "%.0f MB".format(mb)
 }
