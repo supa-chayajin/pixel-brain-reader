@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "636663393986-lu645tlf8c6l98hu158sfe8gskgrg61f.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "cloud.wafflecommons.pixelbrainreader",
+            "certificate_hash": "e0024c780cc31bde6aac9a9e8ad46cf1e61e8806"
+          }
+        },
+        {
           "client_id": "636663393986-inuq11b4rmo01k6hhbvk4mfrv44s6586.apps.googleusercontent.com",
           "client_type": 3
         }
