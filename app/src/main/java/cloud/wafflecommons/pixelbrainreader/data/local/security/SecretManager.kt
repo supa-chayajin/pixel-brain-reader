@@ -32,12 +32,17 @@ class SecretManager @Inject constructor(
         private const val KEY_GOOGLE_TOKEN_EXPIRES_AT = "google_token_expires_at"
     }
 
-    private val masterKey = MasterKey.Builder(context)
-        .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-        .build()
+    // Everything Keystore-backed is created on FIRST USE, never at injection. SecretManager is
+    // injected into MainActivity and the start screen's graph — on the main thread at cold start —
+    // where building the MasterKey (and running the legacy migration) blocked the first frame.
+    private val masterKey: MasterKey by lazy {
+        MasterKey.Builder(context)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build()
+    }
 
     private val encryptedPrefs: SharedPreferences by lazy {
-        try {
+        val prefs = try {
             createEncryptedPrefs()
         } catch (e: Exception) {
             // GeneralSecurityException, AEADBadTagException, KeyStoreException
@@ -57,6 +62,8 @@ class SecretManager @Inject constructor(
                 throw retryException
             }
         }
+        migrateFromLegacy(prefs)
+        prefs
     }
 
     private fun createEncryptedPrefs(): SharedPreferences {
@@ -69,47 +76,46 @@ class SecretManager @Inject constructor(
         )
     }
 
-    init {
-        migrateFromLegacy()
-    }
-
     /**
      * V2.0 SECURITY MIGRATION
      * Checks for the existence of the legacy unencrypted file.
      * If found, reads the token, executes a secure save, and WANTONLY DESTROYS the old file.
+     *
+     * Writes straight into [target]: this runs while [encryptedPrefs] is being initialized, so going
+     * through the public setters would re-enter that lazy.
      */
-    private fun migrateFromLegacy() {
+    private fun migrateFromLegacy(target: SharedPreferences) {
         // We check if the file exists on disk to avoid creating an empty one by accessing it
         val legacyFile = File(context.filesDir.parent, "shared_prefs/$LEGACY_PREFS_NAME.xml")
+        if (!legacyFile.exists()) return
 
-        if (legacyFile.exists()) {
-            Log.i(
-                "SecretManager",
-                "Legacy unencrypted credentials found. Initiating migration protocol."
-            )
+        Log.i(
+            "SecretManager",
+            "Legacy unencrypted credentials found. Initiating migration protocol."
+        )
 
-            val legacyPrefs = context.getSharedPreferences(LEGACY_PREFS_NAME, Context.MODE_PRIVATE)
-            val token = legacyPrefs.getString(KEY_TOKEN, null)
-            val owner = legacyPrefs.getString(KEY_REPO_OWNER, null)
-            val repo = legacyPrefs.getString(KEY_REPO_NAME, null)
+        val legacyPrefs = context.getSharedPreferences(LEGACY_PREFS_NAME, Context.MODE_PRIVATE)
+        val token = legacyPrefs.getString(KEY_TOKEN, null)
+        val owner = legacyPrefs.getString(KEY_REPO_OWNER, null)
+        val repo = legacyPrefs.getString(KEY_REPO_NAME, null)
 
-            if (!token.isNullOrEmpty()) {
-                saveToken(token)
-                Log.d("SecretManager", "Token migrated to Vault.")
-            }
-
+        // Persisted synchronously BEFORE the legacy copy is destroyed.
+        target.edit(commit = true) {
+            if (!token.isNullOrEmpty()) putString(KEY_TOKEN, token)
             if (!owner.isNullOrEmpty() && !repo.isNullOrEmpty()) {
-                saveRepoInfo(owner, repo)
+                putString(KEY_REPO_OWNER, owner)
+                putString(KEY_REPO_NAME, repo)
             }
+        }
+        if (!token.isNullOrEmpty()) Log.d("SecretManager", "Token migrated to Vault.")
 
-            // WIPE AND DESTROY
-            legacyPrefs.edit(commit = true) { clear() } // Clear content
-            // The file itself might remain but be empty. In strict environments, we might want to delete the file.
-            if (legacyFile.delete()) {
-                Log.i("SecretManager", "Legacy file incinerated.")
-            } else {
-                Log.w("SecretManager", "Failed to delete legacy file path.")
-            }
+        // WIPE AND DESTROY
+        legacyPrefs.edit(commit = true) { clear() } // Clear content
+        // The file itself might remain but be empty. In strict environments, we might want to delete the file.
+        if (legacyFile.delete()) {
+            Log.i("SecretManager", "Legacy file incinerated.")
+        } else {
+            Log.w("SecretManager", "Failed to delete legacy file path.")
         }
     }
 

@@ -5,7 +5,6 @@ import kotlinx.coroutines.withContext
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
-import org.jsoup.parser.Parser
 import com.vladsch.flexmark.html2md.converter.FlexmarkHtmlConverter
 import android.text.Html
 import android.text.Spanned
@@ -16,14 +15,17 @@ object ContentSanitizer {
     // Simple URL regex
     val URL_REGEX = "^(https?://.+)$".toRegex(RegexOption.IGNORE_CASE)
 
+    private const val MOBILE_USER_AGENT =
+        "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36"
+
     suspend fun processSharedContent(text: CharSequence, isPreConvertedMarkdown: Boolean = false): ImportResult = withContext(Dispatchers.IO) {
         if (isPreConvertedMarkdown) {
             val polishedMarkdown = text.toString().replace(Regex("\\n{3,}"), "\n\n").trim()
             return@withContext ImportResult("Imported Content", polishedMarkdown)
         }
-        
+
         var finalTitle = "Imported Content"
-        
+
         // 1. FETCH & PARSE / NORMALIZE
         val document: Document = when {
             text is Spanned -> {
@@ -32,23 +34,22 @@ object ContentSanitizer {
                 Jsoup.parseBodyFragment(htmlString)
             }
             URL_REGEX.matches(text.trim()) -> {
-                // If text is a URL, fetch the HTML content
+                // A shared link: fetch the page. ANY app can share text to us, so the link is
+                // untrusted — SafeWebFetcher applies the import SSRF guard to every redirect hop
+                // (this used to fetch whatever it was given, following redirects freely).
                 try {
-                    val conn = Jsoup.connect(text.toString().trim())
-                        .userAgent("Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36")
-                        .timeout(10000)
-                    val fetchedDoc = conn.get()
+                    val fetchedDoc = SafeWebFetcher.fetch(text.toString().trim(), MOBILE_USER_AGENT, 10_000)
                     finalTitle = fetchedDoc.title().ifBlank { finalTitle }
                     fetchedDoc
                 } catch (e: Exception) {
-                    // Fallback: treat the URL as text content
-                    Jsoup.parseBodyFragment("<p>${text}</p>")
+                    // Unreachable, refused (internal address) or not HTML: keep the link as text.
+                    textDocument(text.toString(), "p")
                 }
             }
             isRtf(text) -> {
                 // Raw RTF String detected (e.g. starting with {\rtf)
                 // Since we lack a raw RTF parser, we treat this as a code block to preserve data
-                Jsoup.parseBodyFragment("<pre>${text}</pre>")
+                textDocument(text.toString(), "pre")
             }
             else -> {
                 // Treat input string as potential Raw HTML
@@ -72,6 +73,10 @@ object ContentSanitizer {
 
         ImportResult(finalTitle, polishedMarkdown)
     }
+
+    /** A document holding [text] as literal text inside a [tag] element — escaped, never parsed as markup. */
+    private fun textDocument(text: String, tag: String): Document =
+        Jsoup.parseBodyFragment("").also { it.body().appendElement(tag).text(text) }
 
     private fun isRtf(text: CharSequence): Boolean {
         // Basic heuristic for Raw RTF
@@ -104,10 +109,10 @@ object ContentSanitizer {
 
         // Priority 3: Common IDs or Classes
         val candidates = listOf(
-            "main", "content", "main-content", "article-body", 
+            "main", "content", "main-content", "article-body",
             "post-content", "entry-content", "page-content"
         )
-        
+
         for (id in candidates) {
             val element = body.getElementById(id)
             if (element != null) return element
@@ -129,21 +134,21 @@ object ContentSanitizer {
 
         // 2. REMOVE NOISE BY CLASS/ID (Heuristic)
         val noisePatterns = listOf(
-            "sidebar", "widget", "ad-", "ads", "advertisement", 
+            "sidebar", "widget", "ad-", "ads", "advertisement",
             "comment", "share", "related", "cookie", "newsletter", "popup", "modal", "banner", "social"
         )
-        
+
         val allElements = root.select("*")
         val iter = allElements.iterator()
         while (iter.hasNext()) {
             val el = iter.next()
             val id = el.id().lowercase()
             val cls = el.className().lowercase()
-            
-            val isNoise = noisePatterns.any { pattern -> 
-                id.contains(pattern) || cls.contains(pattern) 
+
+            val isNoise = noisePatterns.any { pattern ->
+                id.contains(pattern) || cls.contains(pattern)
             }
-            
+
             if (isNoise) {
                 el.remove()
             }
@@ -152,7 +157,7 @@ object ContentSanitizer {
         // 3. ATTRIBUTE STRIPPING & UNWRAPPING
         // We re-select elements because the DOM has changed (removals)
         val remainingElements = root.select("*")
-        
+
         for (element in remainingElements) {
             if (element != root && !element.hasParent()) continue
 
@@ -162,7 +167,7 @@ object ContentSanitizer {
             if (tagName in listOf("div", "span", "article", "section", "main", "header", "footer")) {
                 if (element != root) {
                     element.unwrap()
-                    continue 
+                    continue
                 }
             }
 
@@ -170,14 +175,14 @@ object ContentSanitizer {
             val attributes = element.attributes().asList().map { it.key }
             for (attr in attributes) {
                 val attrLower = attr.lowercase()
-                
+
                 var keep = false
                 when (tagName) {
                     "a" -> if (attrLower == "href") keep = true
                     "img" -> if (attrLower == "src" || attrLower == "alt" || attrLower == "title") keep = true
                     "td", "th" -> if (attrLower == "colspan" || attrLower == "rowspan") keep = true
                 }
-                
+
                 if (!keep) {
                     element.removeAttr(attr)
                 }
@@ -193,42 +198,42 @@ object ContentSanitizer {
         text = text.replace(Regex("<br\\s*/?>", RegexOption.IGNORE_CASE), "\n")
         text = text.replace(Regex("</p>", RegexOption.IGNORE_CASE), "\n")
         text = text.replace(Regex("</div>", RegexOption.IGNORE_CASE), "\n")
-        
+
         // 2. Bold
         text = text.replace(Regex("<b>|<strong>", RegexOption.IGNORE_CASE), "**")
         text = text.replace(Regex("</b>|</strong>", RegexOption.IGNORE_CASE), "**")
-        
+
         // 3. Italic
         text = text.replace(Regex("<i>|<em>", RegexOption.IGNORE_CASE), "*")
         text = text.replace(Regex("</i>|</em>", RegexOption.IGNORE_CASE), "*")
-        
+
         // 4. Headers
         text = text.replace(Regex("<h([1-6])>", RegexOption.IGNORE_CASE)) { match ->
             val level = match.groupValues[1].toInt()
             "\n" + "#".repeat(level) + " "
         }
         text = text.replace(Regex("</h[1-6]>", RegexOption.IGNORE_CASE), "\n")
-        
+
         // 5. Lists
         text = text.replace(Regex("<li>", RegexOption.IGNORE_CASE), "\n- ")
         text = text.replace(Regex("</li>", RegexOption.IGNORE_CASE), "")
         text = text.replace(Regex("<ul>|<ol>|</ul>|</ol>", RegexOption.IGNORE_CASE), "\n")
-        
+
         // 6. Links: <a href="...">text</a>
         text = text.replace(Regex("<a\\s+(?:[^>]*?\\s+)?href=\"([^\"]*)\"[^>]*>(.*?)</a>", RegexOption.IGNORE_CASE)) { match ->
             "[${match.groupValues[2]}](${match.groupValues[1]})"
         }
-        
+
         // 7. Code
         text = text.replace(Regex("<code>", RegexOption.IGNORE_CASE), "`")
         text = text.replace(Regex("</code>", RegexOption.IGNORE_CASE), "`")
-        
+
         // 8. Strip remaining tags
         text = text.replace(Regex("<[^>]*>"), "")
-        
+
         // 9. Decode entities
         text = org.jsoup.parser.Parser.unescapeEntities(text, false)
-        
+
         return text.trim()
     }
 }

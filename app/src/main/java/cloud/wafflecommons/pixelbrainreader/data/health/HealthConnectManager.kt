@@ -137,23 +137,15 @@ class HealthConnectManager @Inject constructor(
             }
         }
 
-        // 3. Read Heart Rate Samples
+        // 3. Average heart rate, aggregated (and deduplicated across apps) by Health Connect. Reading
+        // every sample of the day built thousands of objects per refresh from one page of records.
         var averageHeartRate = 0
         if (granted.contains(HealthPermission.getReadPermission(HeartRateRecord::class))) {
             try {
-                val heartRateRequest = ReadRecordsRequest(HeartRateRecord::class, timeRangeFilter)
-                val heartRateResponse = healthConnectClient.readRecords(heartRateRequest)
-                var totalBpm = 0L
-                var heartRateCount = 0
-                heartRateResponse.records.forEach { record ->
-                    record.samples.forEach { sample ->
-                        totalBpm += sample.beatsPerMinute
-                        heartRateCount++
-                    }
-                }
-                if (heartRateCount > 0) {
-                    averageHeartRate = (totalBpm / heartRateCount).toInt()
-                }
+                val heartRate = healthConnectClient.aggregate(
+                    AggregateRequest(metrics = setOf(HeartRateRecord.BPM_AVG), timeRangeFilter = timeRangeFilter)
+                )
+                averageHeartRate = heartRate[HeartRateRecord.BPM_AVG]?.toInt() ?: 0
             } catch (e: Exception) {
                 Log.e("HealthConnectManager", "Failed to read heart rate", e)
             }

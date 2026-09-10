@@ -4,23 +4,26 @@ import android.content.Context
 import android.util.Log
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.FileEntity
 import cloud.wafflecommons.pixelbrainreader.data.remote.JGitProvider
-import dagger.hilt.android.qualifiers.ApplicationContext
+import cloud.wafflecommons.pixelbrainreader.data.remote.SyncResult
 import cloud.wafflecommons.pixelbrainreader.data.sync.GitSyncCoordinator
 import cloud.wafflecommons.pixelbrainreader.data.sync.SyncStep
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.flow.MutableSharedFlow // Kept for compatibility but unused
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
  * Facade for the new Repo Architecture.
- * Delegates to NoteRepository, VaultDiscoveryRepository, AssetRepository.
+ * Delegates to NoteRepository and VaultDiscoveryRepository.
  * @deprecated Use specific repositories directly.
  */
 @Singleton
@@ -32,9 +35,8 @@ class FileRepository @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
 
-    // Legacy Bus - No-op now as flow is SSOT
-    private val _fileUpdates = MutableSharedFlow<String>(replay = 0)
-    val fileUpdates = _fileUpdates.asSharedFlow()
+    private val vaultRoot: File
+        get() = File(context.filesDir, "vault")
 
     // Live label of the current repo-sync sub-step (null when idle) so the Repo/File-detail
     // pull-to-refresh indicator can show WHAT is being refreshed, not a generic string.
@@ -42,30 +44,23 @@ class FileRepository @Inject constructor(
     val syncStatus: StateFlow<String?> = _syncStatus.asStateFlow()
 
     fun getFilesFlow(path: String): Flow<List<FileEntity>> = vaultDiscoveryRepository.getAllFilesFlow(path)
-    
+
     // Compatibility alias
     fun getFiles(path: String) = getFilesFlow(path)
-    
+
     suspend fun getAllFolders(): List<String> = vaultDiscoveryRepository.getAllFolderPaths()
 
     fun searchFiles(query: String) = vaultDiscoveryRepository.searchFiles(query)
 
     suspend fun readFile(path: String): String? = noteRepository.getNoteContent(path)
 
+    /** One-shot read wrapped in a Flow; re-collect it (e.g. keyed on a refresh counter) to re-read. */
     fun getFileContentFlow(path: String): Flow<String?> = flow {
-         emit(readFile(path))
-         // No more bus tracking, UI should reload on DB trigger if we had a full reactive stack
-         // For now, this is a simple one-shot or manual reload.
-    }
-    
-    suspend fun saveFileLocally(path: String, content: String) {
-        noteRepository.saveNote(path, content)
-        _fileUpdates.emit(path)
+        emit(readFile(path))
     }
 
-    suspend fun saveAndSync(path: String, content: String, owner: String? = null, repo: String? = null): Result<Unit> {
+    suspend fun saveFileLocally(path: String, content: String) {
         noteRepository.saveNote(path, content)
-        return syncRepository(owner, repo)
     }
 
     suspend fun syncRepository(owner: String? = null, repo: String? = null, branch: String = "main"): Result<Unit> {
@@ -79,20 +74,19 @@ class FileRepository @Inject constructor(
           // 1. Setup/Clone
            _syncStatus.value = "Connecting to repository…"
            val remoteUrl = if (owner != null && repo != null) "https://github.com/$owner/$repo.git" else null
-           jGitProvider.setupRepository(remoteUrl).onFailure { error ->
+           jGitProvider.setupRepository(remoteUrl, branch).onFailure { error ->
                Log.e("FileRepository", "Setup repository failed during sync", error)
                return@withLock Result.failure(error)
            }
 
-           // 2. Commit
+           // 2. Commit (commit() stages everything itself)
            _syncStatus.value = "Committing locally…"
-           jGitProvider.addAll()
            jGitProvider.commit("Auto-sync")
 
            // 3. Pull
            _syncStatus.value = SyncStep.PULLING.label
            val pullResult = jGitProvider.pull()
-           if (pullResult is cloud.wafflecommons.pixelbrainreader.data.remote.SyncResult.ResolvedWithConflicts) {
+           if (pullResult is SyncResult.ResolvedWithConflicts) {
                // The rebase was aborted and clean local copies backed up, so local now
                // DIVERGES from remote — a push cannot fast-forward. Same terminal
                // contract as SyncOrchestrator: stop here, never push into diverged
@@ -102,7 +96,7 @@ class FileRepository @Inject constructor(
                return@withLock Result.failure(
                    Exception("Sync conflict: your local changes were saved. Manual merge required.")
                )
-           } else if (pullResult is cloud.wafflecommons.pixelbrainreader.data.remote.SyncResult.Error) {
+           } else if (pullResult is SyncResult.Error) {
                Log.e("FileRepository", "Pull failed during sync", pullResult.exception)
                return@withLock Result.failure(pullResult.exception)
            }
@@ -112,9 +106,6 @@ class FileRepository @Inject constructor(
            val pushResult = jGitProvider.push()
 
            // 5. Reindex file table (so the UI sees post-pull state).
-           // Embedding indexing is now exclusively triggered by the user from
-           // Settings → "Index Knowledge Vault" (manual). We do NOT enqueue
-           // IndexingWorker here.
            _syncStatus.value = SyncStep.INDEXING.label
            vaultDiscoveryRepository.reindexAll()
 
@@ -124,69 +115,70 @@ class FileRepository @Inject constructor(
         }
       }
     }
-    
+
     // --- Shim Methods ---
-    
-    suspend fun createLocalFolder(path: String) {
-        // Simple mkdir logic, better in VaultDiscovery or NoteRepo
-        java.io.File(context.filesDir, "vault/$path").mkdirs()
+
+    suspend fun createLocalFolder(path: String) = withContext(Dispatchers.IO) {
+        val dir = File(vaultRoot, path)
+        // Nothing to do — and, crucially, no full-vault reindex — when the folder already exists.
+        // This used to reindex the entire vault on every XP grant and chore/habit config export.
+        if (dir.isDirectory) return@withContext
+        if (dir.mkdirs()) vaultDiscoveryRepository.reindexAll()
+    }
+
+    /**
+     * Renames/moves a file or folder inside the vault and records it in a local commit (the commit
+     * stages both the new path and the removal of the old one). Refuses to overwrite an existing
+     * target and reports failures instead of throwing.
+     */
+    suspend fun renameFileSafe(oldPath: String, newPath: String): Result<Unit> = withContext(Dispatchers.IO) {
+        val old = File(vaultRoot, oldPath)
+        val new = File(vaultRoot, newPath)
+        if (!old.exists()) return@withContext Result.failure(IOException("Source not found: $oldPath"))
+        if (new.exists()) return@withContext Result.failure(IOException("An item named ${new.name} already exists there"))
+        new.parentFile?.mkdirs()
+        if (!old.renameTo(new)) return@withContext Result.failure(IOException("Could not rename $oldPath"))
         vaultDiscoveryRepository.reindexAll()
+        jGitProvider.commit("Rename $oldPath to $newPath")
+        Result.success(Unit)
     }
-    
-    suspend fun renameFileSafe(oldPath: String, newPath: String) {
-         val root = java.io.File(context.filesDir, "vault")
-         val old = java.io.File(root, oldPath)
-         val new = java.io.File(root, newPath)
-         
-         jGitProvider.removeFile(oldPath)
-         if(old.renameTo(new)) {
-             // Reindex updates Room Database
-             vaultDiscoveryRepository.reindexAll()
-             jGitProvider.addFile(newPath)
-             jGitProvider.commit("Rename $oldPath to $newPath")
-         }
+
+    /** Deletes a file or a whole folder and records the deletion in a local commit. */
+    suspend fun deleteFile(path: String): Result<Unit> = withContext(Dispatchers.IO) {
+        val file = File(vaultRoot, path)
+        if (!file.exists()) return@withContext Result.failure(IOException("File not found: $path"))
+        val deleted = if (file.isDirectory) file.deleteRecursively() else file.delete()
+        if (!deleted) return@withContext Result.failure(IOException("Could not delete $path"))
+        vaultDiscoveryRepository.reindexAll()
+        jGitProvider.commit("Delete $path")
+        Result.success(Unit)
     }
-    
-    suspend fun deleteFile(path: String, owner: String? = null, repo: String? = null): Result<Unit> {
-         val root = java.io.File(context.filesDir, "vault")
-         val file = java.io.File(root, path)
-         if(file.delete()) {
-             jGitProvider.addAll()
-             jGitProvider.commit("Delete $path")
-             vaultDiscoveryRepository.reindexAll()
-         }
-         return Result.success(Unit)
-    }
-    
-     suspend fun resolveLink(targetPath: String): FileEntity? =
+
+    suspend fun resolveLink(targetPath: String): FileEntity? =
         vaultDiscoveryRepository.resolveLink(targetPath)
-    
+
+    /** Commit + push, WITHOUT pulling (callers that must not bring remote changes in). */
     suspend fun pushDirtyFiles(owner: String, repo: String, message: String? = null): Result<Unit> {
         jGitProvider.commit(message ?: "Auto-sync")
         return jGitProvider.push()
     }
 
-    suspend fun refreshFileContent(path: String, downloadUrl: String): Result<Unit> {
-        val res = jGitProvider.pull()
-        vaultDiscoveryRepository.reindexAll()
-        return if (res is cloud.wafflecommons.pixelbrainreader.data.remote.SyncResult.Error) {
-            Result.failure(res.exception)
-        } else {
-            Result.success(Unit)
-        }
+    // Helpers
+    suspend fun fileExists(path: String) = withContext(Dispatchers.IO) { File(vaultRoot, path).exists() }
+    suspend fun createFile(path: String, initialContent: String) = saveFileLocally(path, initialContent)
+    fun getLocalFile(path: String): File {
+        return File(vaultRoot, path)
     }
 
-    suspend fun renameAndSync(oldPath: String, newPath: String, owner: String?, repo: String?): Result<Unit> {
-        renameFileSafe(oldPath, newPath)
-        return saveAndSync(newPath, readFile(newPath) ?: "", owner, repo)
-    }
-    
-    // Helpers
-    suspend fun fileExists(path: String) = java.io.File(context.filesDir, "vault/$path").exists()
-    suspend fun createFile(path: String, initialContent: String) = saveFileLocally(path, initialContent)
-    suspend fun updateFile(path: String, content: String) = saveFileLocally(path, content)
-    suspend fun getFileContentFlowLegacy(path: String) = getFileContentFlow(path)
-    fun getLocalFile(path: String): java.io.File {
-        return java.io.File(context.filesDir, "vault/$path")
+    /**
+     * Moves an unreadable vault file aside (`<name>.corrupt-<epochMillis>`, next to the original) so
+     * that rewriting the path can never silently destroy what it held. Returns the backup, or null
+     * when the file is missing or could not be moved. Blocking — call from Dispatchers.IO.
+     */
+    fun moveAsideCorrupt(path: String): File? {
+        val source = getLocalFile(path)
+        if (!source.exists()) return null
+        val backup = File(source.parentFile, "${source.name}.corrupt-${System.currentTimeMillis()}")
+        return backup.takeIf { source.renameTo(it) }
     }
 }

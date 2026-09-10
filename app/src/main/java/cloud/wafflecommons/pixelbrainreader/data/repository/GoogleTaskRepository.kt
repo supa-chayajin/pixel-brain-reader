@@ -1,18 +1,23 @@
 package cloud.wafflecommons.pixelbrainreader.data.repository
 
 import android.util.Log
+import androidx.room.withTransaction
 import cloud.wafflecommons.pixelbrainreader.data.auth.GoogleAuthRepository
+import cloud.wafflecommons.pixelbrainreader.data.local.AppDatabase
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.TaskDao
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyTaskEntity
+import cloud.wafflecommons.pixelbrainreader.widget.ui.WidgetUpdateManager
 import com.google.api.client.http.HttpRequestInitializer
 import com.google.api.client.http.HttpTransport
 import com.google.api.client.http.HttpUnsuccessfulResponseHandler
-import kotlinx.coroutines.runBlocking
 import com.google.api.client.json.JsonFactory
 import com.google.api.client.util.DateTime
 import com.google.api.services.tasks.Tasks
+import com.google.api.services.tasks.model.Task
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.ZoneId
@@ -34,6 +39,8 @@ class GoogleTaskRepository @Inject constructor(
     private val authRepository: GoogleAuthRepository,
     private val userPreferences: UserPreferencesRepository,
     private val taskDao: TaskDao,
+    private val database: AppDatabase,
+    private val widgetUpdateManager: WidgetUpdateManager,
     private val transport: HttpTransport,
     private val jsonFactory: JsonFactory
 ) {
@@ -89,12 +96,11 @@ class GoogleTaskRepository @Inject constructor(
                 val dueMin = DateTime(startInstant.toEpochMilli(), offsetMinutes).toStringRfc3339()
                 val dueMax = DateTime(endInstant.toEpochMilli(), offsetMinutes).toStringRfc3339()
 
-                // Wipe today's Google-sourced rows first so the freshly fetched
-                // batch is the truth (handles user deletions / completion flips on Google's side).
-                taskDao.purgeGoogleTasksForDate(today.toString())
-
                 Log.i(TAG, "syncPendingTasks window: $dueMin .. $dueMax (zone=$zone)")
-                var total = 0
+
+                // 1. Fetch EVERYTHING first. Today's Google rows used to be purged before the
+                // network calls, so a failed fetch emptied the task list until the next sync.
+                val fetched = mutableListOf<Task>()
                 val lists = service.tasklists().list().execute().items.orEmpty()
                 Log.d(TAG, "Task lists discovered: ${lists.size} -> ${lists.map { it.title ?: it.id }}")
                 for (list in lists) {
@@ -122,27 +128,38 @@ class GoogleTaskRepository @Inject constructor(
                         dueLocal != null && dueLocal == today
                     }
                     Log.d(TAG, "  '${list.title ?: list.id}': $rawCount returned, ${todayOnly.size} match today after strict filter")
-
-                    todayOnly.forEach { gt ->
-                        val isCompleted = gt.status == "completed"
-                        val existing = taskDao.getTaskByGoogleTaskId(gt.id)
-                        val entity = DailyTaskEntity(
-                            id = existing?.id ?: java.util.UUID.randomUUID().toString(),
-                            scheduledDate = today.toString(),
-                            label = gt.title ?: "Untitled Task",
-                            isDone = isCompleted,
-                            googleTaskId = gt.id,
-                            source = "GoogleTasks"
-                        )
-                        taskDao.insertTask(entity)
-                        total++
-                    }
+                    fetched += todayOnly
                 }
-                // Heal any pre-marker orphan duplicates (rows whose googleTaskId/source were
-                // stripped by the old burn↔parse round-trip) now that the keyed rows are back.
-                taskDao.collapseOrphanTasksForDate(today.toString())
-                Log.i(TAG, "syncPendingTasks complete: imported $total task(s)")
-                Result.success(total)
+
+                // 2. Replace today's Google rows in ONE transaction: a single Room invalidation and
+                // never a half-imported list.
+                database.withTransaction {
+                    // The fetched batch is the truth (handles user deletions / completion flips on
+                    // Google's side). Locally-created tasks are preserved.
+                    taskDao.purgeGoogleTasksForDate(today.toString())
+                    fetched.forEach { gt ->
+                        val existing = taskDao.getTaskByGoogleTaskId(gt.id)
+                        taskDao.insertTask(
+                            DailyTaskEntity(
+                                id = existing?.id ?: java.util.UUID.randomUUID().toString(),
+                                scheduledDate = today.toString(),
+                                label = gt.title ?: "Untitled Task",
+                                isDone = gt.status == "completed",
+                                googleTaskId = gt.id,
+                                source = "GoogleTasks"
+                            )
+                        )
+                    }
+                    // Heal any pre-marker orphan duplicates (rows whose googleTaskId/source were
+                    // stripped by the old burn↔parse round-trip) now that the keyed rows are back.
+                    taskDao.collapseOrphanTasksForDate(today.toString())
+                }
+                // The Today and Companion widgets show these tasks.
+                runCatching { widgetUpdateManager.scheduleSnapshotUpdate() }
+                Log.i(TAG, "syncPendingTasks complete: imported ${fetched.size} task(s)")
+                Result.success(fetched.size)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 // A 403 here almost always means the Google Tasks API is not enabled in
                 // this app's Cloud project (Calendar can work while Tasks 403 — they are

@@ -2,6 +2,8 @@ package cloud.wafflecommons.pixelbrainreader.data.repository
 
 import android.content.Context
 import android.util.Log
+import androidx.room.withTransaction
+import cloud.wafflecommons.pixelbrainreader.data.local.AppDatabase
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.FileDao
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.FileEntity
 import cloud.wafflecommons.pixelbrainreader.data.utils.FrontmatterManager
@@ -10,6 +12,8 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import javax.inject.Inject
@@ -23,18 +27,25 @@ import javax.inject.Singleton
 class VaultDiscoveryRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val fileDao: FileDao,
+    private val database: AppDatabase,
     private val gson: Gson // For JSON serialization of simplified metadata
 ) {
 
     private val rootDir: File
         get() = File(context.filesDir, "vault")
 
+    /**
+     * Serializes full scans. Cold start, the IndexingWorker, sync phases and file operations can all
+     * request one at the same moment; running them concurrently duplicated the vault walk and let a
+     * scan with a stale filesystem snapshot delete rows another scan had just inserted.
+     */
+    private val reindexMutex = Mutex()
+
     fun getAllFilesFlow(path: String?): Flow<List<FileEntity>> {
-        // If path is null/empty, we might return all or root. 
-        // Existing DAO getFiles(path) usually filters by parent folder.
+        // Existing DAO getFiles(path) filters by parent folder ("" = vault root).
         return fileDao.getFiles(path ?: "")
     }
-    
+
     fun searchFiles(query: String): Flow<List<FileEntity>> {
         return fileDao.searchFiles(query)
     }
@@ -72,7 +83,16 @@ class VaultDiscoveryRepository @Inject constructor(
         matchPath?.let { fileDao.getFile(it) }
     }
 
+    /**
+     * Full delta scan of the vault into the `files` table. Returns the entities whose content
+     * actually changed (new or different fingerprint). [sinceTimestamp] is kept for API
+     * compatibility; the scan always relies on mtime + content fingerprints.
+     */
     suspend fun reindexAll(sinceTimestamp: Long = 0L): List<FileEntity> = withContext(Dispatchers.IO) {
+        reindexMutex.withLock { scanAndApply() }
+    }
+
+    private suspend fun scanAndApply(): List<FileEntity> {
         val start = System.currentTimeMillis()
         if (!rootDir.exists()) rootDir.mkdirs()
 
@@ -88,11 +108,8 @@ class VaultDiscoveryRepository @Inject constructor(
 
         // Prune at descent time, NOT inside the loop. `walkTopDown().forEach`
         // with a name check is `continue`, not `prune` — by the time we react,
-        // the walker has already queued every child of `.git`. The result is
-        // that `.git/refs/heads`, `.git/objects/...`, etc. get treated as
-        // vault files. Using `.onEnter` keeps the entire subtree out of the
-        // scan in the first place. Mirrors Obsidian's own "what is a note"
-        // convention — anything that's app/runtime state, not user content.
+        // the walker has already queued every child of `.git`. Using `.onEnter`
+        // keeps the entire subtree out of the scan in the first place.
         rootDir.walkTopDown().onEnter { dir ->
             dir.name !in EXCLUDED_DIRS
         }.forEach { file ->
@@ -113,45 +130,39 @@ class VaultDiscoveryRepository @Inject constructor(
             }
 
             // EXISTING FILE — fast path: mtime unchanged ⇒ content unchanged.
-            // Skip without recomputing the SHA. This is the steady-state path.
             if (dbEntity.localModifiedTimestamp == onDiskMtime && dbEntity.sha != null) {
                 return@forEach
             }
 
-            // mtime drifted (or sha was null from a legacy row).
-            // Compute a content fingerprint and compare.
+            // mtime drifted (or sha was null from a legacy row): compare content fingerprints.
             val newEntity = createFileEntity(file, relativePath)
             if (newEntity.sha != null && newEntity.sha == dbEntity.sha) {
-                // Content identical — bump stored mtime via UPDATE so we hit the
-                // fast path next time. Critically, this is NOT a REPLACE, so the
-                // FK CASCADE on EmbeddingEntity does not fire and the existing
-                // embeddings for this file are preserved.
+                // Content identical — bump stored mtime via UPDATE so we hit the fast path next
+                // time. NOT a REPLACE, so the FK CASCADE on EmbeddingEntity does not fire and the
+                // existing embeddings for this file are preserved.
                 mtimeRefreshes.add(relativePath to onDiskMtime)
                 return@forEach
             }
 
-            // Content actually changed — REPLACE-insert. This will (correctly)
-            // cascade-delete this file's old embeddings; IndexingWorker will
-            // re-embed it on its next pass.
+            // Content actually changed — REPLACE-insert (correctly cascade-deletes the stale
+            // embeddings; IndexingWorker re-embeds it on its next pass).
             newFiles.add(newEntity)
             changedFiles.add(newEntity)
         }
 
-        // 3. Batch Updates to DB
-        if (newFiles.isNotEmpty()) {
-            fileDao.insertAll(newFiles)
-            Log.i("VaultDiscovery", "Indexed ${newFiles.size} new/modified items.")
-        }
-        if (mtimeRefreshes.isNotEmpty()) {
-            mtimeRefreshes.forEach { (path, mtime) -> fileDao.updateMtime(path, mtime) }
-            Log.d("VaultDiscovery", "Refreshed mtime for ${mtimeRefreshes.size} unchanged item(s).")
-        }
-
         val toDelete = dbPaths.minus(fsPaths)
-        if (toDelete.isNotEmpty()) {
-            fileDao.deleteFiles(toDelete.toList())
-            Log.i("VaultDiscovery", "Pruned ${toDelete.size} deleted items.")
+
+        // 3. Apply all changes in ONE transaction = ONE invalidation, so every Flow observing
+        // `files` (file browser, search) re-queries once instead of once per changed row.
+        if (newFiles.isNotEmpty() || mtimeRefreshes.isNotEmpty() || toDelete.isNotEmpty()) {
+            database.withTransaction {
+                if (newFiles.isNotEmpty()) fileDao.insertAll(newFiles)
+                mtimeRefreshes.forEach { (path, mtime) -> fileDao.updateMtime(path, mtime) }
+                toDelete.chunked(DELETE_CHUNK_SIZE).forEach { fileDao.deleteFiles(it) }
+            }
         }
+        if (newFiles.isNotEmpty()) Log.i("VaultDiscovery", "Indexed ${newFiles.size} new/modified items.")
+        if (toDelete.isNotEmpty()) Log.i("VaultDiscovery", "Pruned ${toDelete.size} deleted items.")
 
         Log.d(
             "VaultDiscovery",
@@ -159,61 +170,61 @@ class VaultDiscoveryRepository @Inject constructor(
                 "${mtimeRefreshes.size} mtime-only drift(s) absorbed."
         )
 
-        return@withContext changedFiles
+        return changedFiles
     }
-    
+
     suspend fun reindexFileSystem() {
-         // Legacy overload
-         reindexAll(0L)
+        // Legacy overload
+        reindexAll(0L)
     }
-    
+
     suspend fun scanSingleFile(path: String) = withContext(Dispatchers.IO) {
         // Lightweight update for single file
         val file = File(rootDir, path)
         if (file.exists()) {
-             val entity = createFileEntity(file, path)
-             fileDao.insertFile(entity) // Insert or Update
+            val entity = createFileEntity(file, path)
+            fileDao.insertFile(entity) // Insert or Update
         } else {
             fileDao.deleteFiles(listOf(path))
         }
     }
-    
+
     private fun createFileEntity(file: File, path: String): FileEntity {
-         var tags: String? = null
-         var metaBlob: String? = null
-         var contentSha: String? = null
+        var tags: String? = null
+        var metaBlob: String? = null
+        var contentSha: String? = null
 
-         if (file.isFile && file.extension.equals("md", ignoreCase = true)) {
-             try {
-                 val content = file.reader().use { it.readText() }
+        if (file.isFile && file.extension.equals("md", ignoreCase = true)) {
+            try {
+                val content = file.reader().use { it.readText() }
 
-                 val metadata = FrontmatterManager.extractMetadata(content)
-                 if (metadata.tags.isNotEmpty()) {
-                     tags = metadata.tags.joinToString(",")
-                 }
-                 val extra = mutableMapOf<String, Any>()
-                 if (metadata.aliases.isNotEmpty()) extra["aliases"] = metadata.aliases
-                 if (extra.isNotEmpty()) {
-                     metaBlob = gson.toJson(extra)
-                 }
+                val metadata = FrontmatterManager.extractMetadata(content)
+                if (metadata.tags.isNotEmpty()) {
+                    tags = metadata.tags.joinToString(",")
+                }
+                val extra = mutableMapOf<String, Any>()
+                if (metadata.aliases.isNotEmpty()) extra["aliases"] = metadata.aliases
+                if (extra.isNotEmpty()) {
+                    metaBlob = gson.toJson(extra)
+                }
 
-                 contentSha = sha1Of(content.toByteArray(Charsets.UTF_8))
-             } catch (e: Exception) {
-                 if (e is CancellationException) throw e
-                 // Log.w("VaultDiscovery", "Failed to extract metadata for $path")
-             }
-         } else if (file.isFile) {
-             // Binary or encrypted file (e.g. .md.enc). Hash the raw bytes so
-             // delta-scan can detect real changes without inspecting plaintext.
-             try {
-                 contentSha = sha1Of(file.readBytes())
-             } catch (e: Exception) {
-                 if (e is CancellationException) throw e
-                 // Leave SHA null; the reindex falls back to mtime comparison.
-             }
-         }
+                contentSha = sha1Of(content.toByteArray(Charsets.UTF_8))
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                // Leave metadata empty; the reindex falls back to mtime comparison.
+            }
+        } else if (file.isFile) {
+            // Binary or encrypted file (e.g. .md.enc). Hash the raw bytes so
+            // delta-scan can detect real changes without inspecting plaintext.
+            try {
+                contentSha = sha1Of(file.readBytes())
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                // Leave SHA null; the reindex falls back to mtime comparison.
+            }
+        }
 
-         return FileEntity(
+        return FileEntity(
             path = path,
             name = file.name,
             type = if (file.isDirectory) "dir" else "file",
@@ -236,12 +247,22 @@ class VaultDiscoveryRepository @Inject constructor(
             ".idea",
             ".opencode",
         )
+
+        /** Stay well under SQLite's bound-variable limit for `DELETE … WHERE path IN (…)`. */
+        const val DELETE_CHUNK_SIZE = 500
+
+        val HEX_DIGITS = "0123456789abcdef".toCharArray()
     }
 
+    /** Lower-case hex SHA-1 (same output as the old per-byte String.format, without its cost). */
     private fun sha1Of(bytes: ByteArray): String {
         val digest = java.security.MessageDigest.getInstance("SHA-1").digest(bytes)
-        val sb = StringBuilder(digest.size * 2)
-        digest.forEach { b -> sb.append(String.format("%02x", b)) }
-        return sb.toString()
+        val out = CharArray(digest.size * 2)
+        digest.forEachIndexed { i, b ->
+            val v = b.toInt() and 0xFF
+            out[i * 2] = HEX_DIGITS[v ushr 4]
+            out[i * 2 + 1] = HEX_DIGITS[v and 0x0F]
+        }
+        return String(out)
     }
 }

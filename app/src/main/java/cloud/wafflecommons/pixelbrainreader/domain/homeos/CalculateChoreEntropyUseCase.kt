@@ -12,17 +12,15 @@ class CalculateChoreEntropyUseCase @Inject constructor() {
         val today = LocalDate.now()
         
         return chores.map { chore ->
-            val lastDone = try {
-                LocalDate.parse(chore.lastDoneDate)
-            } catch (e: Exception) {
-                today // Fallback if parsing fails
-            }
-            
-            // Days since last done
-            val daysElapsed = ChronoUnit.DAYS.between(lastDone, today).coerceAtLeast(0)
-            
-            // Dirtiness as a percentage (can exceed 100f)
             val frequency = chore.frequencyDays.takeIf { it > 0 } ?: 1
+
+            // Days since last done. A chore without a readable completion date has never been done,
+            // so it is due — it used to count as done today (clean) while the widgets listed it as due.
+            val daysElapsed = runCatching { LocalDate.parse(chore.lastDoneDate) }.getOrNull()
+                ?.let { lastDone -> ChronoUnit.DAYS.between(lastDone, today).coerceAtLeast(0) }
+                ?: frequency.toLong()
+
+            // Dirtiness as a percentage (can exceed 100f)
             val dirtinessPercentage = (daysElapsed.toFloat() / frequency.toFloat()) * 100f
             
             // Derive color status based on thresholds

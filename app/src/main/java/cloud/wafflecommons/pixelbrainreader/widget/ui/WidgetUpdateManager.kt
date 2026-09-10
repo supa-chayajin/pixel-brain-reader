@@ -5,6 +5,7 @@ import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.updateAll
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.OutOfQuotaPolicy
 import androidx.work.WorkManager
 import cloud.wafflecommons.pixelbrainreader.widget.data.WidgetUpdateWorker
 import kotlinx.coroutines.CoroutineScope
@@ -54,9 +55,15 @@ class WidgetUpdateManager @Inject constructor(
      * Enqueued as UNIQUE work with [ExistingWorkPolicy.REPLACE] so a burst of mutations (e.g. a
      * sync reconciling many habits/chores, or several quick taps) coalesces into a single rebuild
      * against the latest state instead of spawning one worker per mutation.
+     *
+     * Expedited: a regular job enqueued from a widget tap or a backgrounded app can be deferred by
+     * the system for minutes, leaving the Companion/Health widgets visibly stale. When the expedited
+     * quota is exhausted it silently runs as regular work.
      */
     fun scheduleSnapshotUpdate() {
-        val request = OneTimeWorkRequestBuilder<WidgetUpdateWorker>().build()
+        val request = OneTimeWorkRequestBuilder<WidgetUpdateWorker>()
+            .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+            .build()
         WorkManager.getInstance(context).enqueueUniqueWork(
             UNIQUE_SNAPSHOT_WORK,
             ExistingWorkPolicy.REPLACE,

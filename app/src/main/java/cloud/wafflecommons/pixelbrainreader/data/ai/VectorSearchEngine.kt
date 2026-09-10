@@ -6,10 +6,14 @@ import android.util.Base64
 import android.util.Log
 import androidx.core.content.edit
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.EmbeddingDao
+import cloud.wafflecommons.pixelbrainreader.data.local.dao.EmbeddingTableSignature
 import cloud.wafflecommons.pixelbrainreader.data.local.security.CryptoManager
 import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.tensorflow.lite.Interpreter
 import javax.inject.Inject
@@ -67,9 +71,30 @@ class VectorSearchEngine @Inject constructor(
         val attentionMaskIndex: Int,
     )
 
+    /** One stored chunk as similarity scoring needs it: parsed vector, no text. */
+    private class IndexedChunk(
+        val id: String,
+        val fileId: String,
+        val isPrivate: Boolean,
+        val vector: FloatArray
+    )
+
+    /** Parsed vectors, valid while the embeddings table keeps the same [signature]. */
+    private class ChunkIndex(val signature: EmbeddingTableSignature, val chunks: List<IndexedChunk>)
+
     @Volatile private var engine: Engine? = null
     @Volatile private var multilingualProbeDone = false
     @Volatile private var schemaCheckDone = false
+
+    // TFLite's Interpreter (and the tokenizer feeding it) are NOT thread-safe, and the indexing
+    // worker and a chat search used to run inference on the same instance at the same time: a
+    // native crash or silently corrupted vectors.
+    private val inferenceLock = Any()
+
+    // Every search used to load the whole embeddings table and re-parse each stored vector from its
+    // comma-separated text (hundreds of float parses per chunk, for every chunk, per query).
+    @Volatile private var chunkIndex: ChunkIndex? = null
+    private val chunkIndexMutex = Mutex()
 
     /**
      * Stage an asset (model or tokenizer) into `cacheDir` and return the
@@ -305,7 +330,7 @@ class VectorSearchEngine @Inject constructor(
      * invariant. Output is a unit-length vector (the TFLite graph ends in
      * `tf.math.l2_normalize`, so cosine == dot product on these).
      */
-    private fun embedInternal(eng: Engine, text: String): FloatArray {
+    private fun embedInternal(eng: Engine, text: String): FloatArray = synchronized(inferenceLock) {
         val encoding = eng.tokenizer.encode(text)
         val srcIds = encoding.ids
         val srcMask = encoding.attentionMask
@@ -332,7 +357,7 @@ class VectorSearchEngine @Inject constructor(
             inputs,
             mapOf<Int, Any>(0 to output)
         )
-        return output[0]
+        output[0]
     }
 
     suspend fun embed(text: String): FloatArray = withContext(Dispatchers.Default) {
@@ -347,6 +372,18 @@ class VectorSearchEngine @Inject constructor(
                 "head=${vector.take(3).map { "%.3f".format(it) }}"
         )
         vector
+    }
+
+    /** The parsed vectors of every stored chunk, re-read only when the embeddings table changed. */
+    private suspend fun loadChunkIndex(): List<IndexedChunk> = chunkIndexMutex.withLock {
+        val signature = embeddingDao.signature()
+        chunkIndex?.takeIf { it.signature == signature }?.let { return@withLock it.chunks }
+
+        val chunks = embeddingDao.getAllVectors().map { row ->
+            IndexedChunk(row.id, row.fileId, row.isPrivate, row.vector.toFloatArray())
+        }
+        chunkIndex = ChunkIndex(signature, chunks)
+        chunks
     }
 
     /**
@@ -399,29 +436,25 @@ class VectorSearchEngine @Inject constructor(
             )
         }
 
-        val allEmbeddings = embeddingDao.getAllEmbeddings()
-        Log.d("RAG_DEBUG", "search: ${allEmbeddings.size} embedding(s) in DB to compare against")
-        if (allEmbeddings.isEmpty()) {
+        val chunks = loadChunkIndex()
+        Log.d("RAG_DEBUG", "search: ${chunks.size} embedding(s) to compare against")
+        if (chunks.isEmpty()) {
             Log.w("RAG_DEBUG", "search: embeddings table is EMPTY — IndexingWorker has not produced any embeddings yet")
             return@withContext emptyList()
         }
 
-        // Reify so we can dump the top-5 AND iterate for decryption. Also
-        // skip stale-dim embeddings (e.g. left over from the prior 100-dim
-        // USE-Lite model) instead of letting cosineSimilarity return 0 for
-        // every comparison — those rows should be wiped by the schema-
-        // version migration, but defend in depth.
-        val scored = allEmbeddings.mapNotNull { entity ->
-            val chunkVec = entity.vector.toFloatArray()
-            if (chunkVec.size != queryVector.size) return@mapNotNull null
-            val similarity = cosineSimilarity(queryVector, chunkVec)
-            Triple(entity, similarity, magnitude(chunkVec))
+        // Skip stale-dim embeddings (e.g. left over from the prior 100-dim USE-Lite model) instead of
+        // letting cosineSimilarity return 0 for every comparison — those rows should be wiped by the
+        // schema-version migration, but defend in depth.
+        val scored = chunks.mapNotNull { chunk ->
+            if (chunk.vector.size != queryVector.size) return@mapNotNull null
+            chunk to cosineSimilarity(queryVector, chunk.vector)
         }.sortedByDescending { it.second }
 
         if (scored.isEmpty()) {
             Log.w(
                 "RAG_DEBUG",
-                "search: all ${allEmbeddings.size} embeddings have wrong dim (expected $EMBED_DIM); " +
+                "search: all ${chunks.size} embeddings have wrong dim (expected $EMBED_DIM); " +
                     "they need to be wiped + re-embedded. Returning empty."
             )
             return@withContext emptyList()
@@ -448,16 +481,11 @@ class VectorSearchEngine @Inject constructor(
             return@withContext emptyList()
         }
         Log.d("RAG_DEBUG", "search: TOP-5 candidates (pre-decrypt, pre-limit):")
-        scored.take(5).forEachIndexed { idx, (entity, sim, mag) ->
-            val preview = if (entity.isPrivate) {
-                "[ciphertext ${entity.content.length} chars — JIT-decrypt at resolution]"
-            } else {
-                entity.content.take(120).replace("\n", " ")
-            }
+        scored.take(5).forEachIndexed { idx, (chunk, sim) ->
             Log.d(
                 "RAG_DEBUG",
-                "  #${idx + 1} sim=${"%.3f".format(sim)} chunkMag=${"%.4f".format(mag)} " +
-                    "private=${entity.isPrivate} id=${entity.id.take(8)} file=${entity.fileId}\n      '$preview'"
+                "  #${idx + 1} sim=${"%.3f".format(sim)} private=${chunk.isPrivate} " +
+                    "id=${chunk.id.take(8)} file=${chunk.fileId}"
             )
         }
 
@@ -475,26 +503,34 @@ class VectorSearchEngine @Inject constructor(
             return@withContext emptyList()
         }
 
+        // Only the candidates' text is loaded (with slack for private chunks dropped below).
+        val candidates = relevant.take(maxOf(limit, 1) * CANDIDATE_SLACK)
+        val contentById = embeddingDao.getContents(candidates.map { it.first.id })
+            .associate { it.id to it.content }
+
         val vaultPassword = secretManager.getVaultPassword()
         var privateDecrypted = 0
         var privateDropped = 0
         val hits = mutableListOf<SearchHit>()
-        for ((entity, _, _) in relevant) {
+        for ((chunk, _) in candidates) {
             if (hits.size >= limit) break
+            val content = contentById[chunk.id] ?: continue // removed since the index was loaded
 
-            if (entity.isPrivate) {
+            if (chunk.isPrivate) {
                 if (vaultPassword.isNullOrBlank()) {
                     privateDropped++
                     continue
                 }
                 val pwd = vaultPassword.toCharArray()
                 val plaintext = try {
-                    val ciphertext = Base64.decode(entity.content, Base64.NO_WRAP)
+                    val ciphertext = Base64.decode(content, Base64.NO_WRAP)
                     cryptoManager.decrypt(ciphertext, pwd)
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     Log.w(
                         "RAG_DEBUG",
-                        "Failed to decrypt private chunk for ${entity.fileId}: ${e.message}"
+                        "Failed to decrypt private chunk for ${chunk.fileId}: ${e.message}"
                     )
                     privateDropped++
                     continue
@@ -502,9 +538,9 @@ class VectorSearchEngine @Inject constructor(
                     java.util.Arrays.fill(pwd, ' ')
                 }
                 privateDecrypted++
-                hits.add(SearchHit(entity.fileId, plaintext, isPrivate = true))
+                hits.add(SearchHit(chunk.fileId, plaintext, isPrivate = true))
             } else {
-                hits.add(SearchHit(entity.fileId, entity.content, isPrivate = false))
+                hits.add(SearchHit(chunk.fileId, content, isPrivate = false))
             }
         }
 
@@ -579,5 +615,8 @@ class VectorSearchEngine @Inject constructor(
          * off-topic chunks as "notes".
          */
         private const val MIN_SIMILARITY = 0.35f
+
+        /** Candidates whose text is loaded per requested hit (private chunks may be dropped). */
+        private const val CANDIDATE_SLACK = 4
     }
 }

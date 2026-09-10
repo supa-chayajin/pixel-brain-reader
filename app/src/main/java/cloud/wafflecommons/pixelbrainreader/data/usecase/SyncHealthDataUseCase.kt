@@ -5,7 +5,9 @@ import android.util.Log
 import androidx.health.connect.client.HealthConnectClient
 import cloud.wafflecommons.pixelbrainreader.data.health.HealthConnectManager
 import cloud.wafflecommons.pixelbrainreader.data.repository.FileRepository
+import cloud.wafflecommons.pixelbrainreader.data.repository.HealthMetricsRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
@@ -17,6 +19,7 @@ import javax.inject.Inject
 class SyncHealthDataUseCase @Inject constructor(
     private val healthConnectManager: HealthConnectManager,
     private val fileRepository: FileRepository,
+    private val healthMetricsRepository: HealthMetricsRepository,
     private val widgetUpdateManager: cloud.wafflecommons.pixelbrainreader.widget.ui.WidgetUpdateManager,
     @ApplicationContext private val context: Context
 ) {
@@ -37,16 +40,19 @@ class SyncHealthDataUseCase @Inject constructor(
             // into the git-tracked vault root so the next push commits them.
             migrateLegacyMetricsIntoVault()
 
-            // 2) Pull today's metrics from Health Connect and persist into the vault.
+            // 2) Pull the day's metrics from Health Connect and persist them into the vault.
             val metrics = healthConnectManager.getDailyMetrics(date)
             val encoded = json.encodeToString(metrics)
             val vaultRelPath = "10_Journal/data/health/metrics/$date.json"
             fileRepository.saveFileLocally(vaultRelPath, encoded)
 
-            // Health drives the snapshot-backed Health/Companion widgets — rebuild after new metrics.
+            // Let the screens re-read the fresh numbers, and rebuild the Health/Companion widgets.
+            healthMetricsRepository.notifyChanged()
             runCatching { widgetUpdateManager.scheduleSnapshotUpdate() }
 
             Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -83,6 +89,8 @@ class SyncHealthDataUseCase @Inject constructor(
                 }
                 file.delete()
                 migrated++
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.w("SyncHealthDataUseCase", "Failed to migrate ${file.name}: ${e.message}")
             }

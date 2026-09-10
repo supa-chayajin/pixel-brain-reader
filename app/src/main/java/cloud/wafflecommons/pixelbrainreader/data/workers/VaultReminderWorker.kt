@@ -6,9 +6,11 @@ import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import cloud.wafflecommons.pixelbrainreader.data.notifications.NotificationHelper
+import cloud.wafflecommons.pixelbrainreader.data.notifications.ReminderScheduler
 import cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 
 /**
@@ -21,17 +23,28 @@ import kotlinx.coroutines.flow.first
 class VaultReminderWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted workerParams: WorkerParameters,
-    private val userPrefs: UserPreferencesRepository
+    private val userPrefs: UserPreferencesRepository,
+    private val reminderScheduler: ReminderScheduler
 ) : CoroutineWorker(appContext, workerParams) {
 
     override suspend fun doWork(): Result {
-        return try {
-            if (!userPrefs.vaultReminderEnabled.first()) return Result.success()
-            NotificationHelper.postVaultReminder(applicationContext)
-            Result.success()
+        try {
+            if (userPrefs.vaultReminderEnabled.first()) {
+                NotificationHelper.postVaultReminder(applicationContext)
+            }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.w("VaultReminderWorker", "Vault reminder failed (non-fatal)", e)
-            Result.success()
         }
+        try {
+            // Keep tomorrow's run on the chosen time instead of 24 h after this run finished.
+            reminderScheduler.repinVaultReminder()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w("VaultReminderWorker", "Could not re-pin the next vault reminder", e)
+        }
+        return Result.success()
     }
 }

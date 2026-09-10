@@ -4,18 +4,11 @@ import android.content.Context
 import androidx.glance.GlanceId
 import androidx.glance.action.ActionParameters
 import androidx.glance.appwidget.action.ActionCallback
-import androidx.glance.appwidget.updateAll
-import cloud.wafflecommons.pixelbrainreader.di.WidgetEntryPoint
-import dagger.hilt.android.EntryPointAccessors
 
 class RefreshWidgetCallback : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        val entryPoint = EntryPointAccessors.fromApplication(
-            context.applicationContext,
-            WidgetEntryPoint::class.java
-        )
-        // Monitor or Trigger Update
-        val request = androidx.work.OneTimeWorkRequestBuilder<cloud.wafflecommons.pixelbrainreader.widget.data.WidgetUpdateWorker>().build()
-        androidx.work.WorkManager.getInstance(context).enqueue(request)
+        // The shared unique, expedited rebuild: a plain enqueue here bypassed the coalescing (one
+        // rebuild per tap) and could be deferred by the system.
+        WidgetLiveData.entryPoint(context).widgetUpdateManager().scheduleSnapshotUpdate()
     }
 }

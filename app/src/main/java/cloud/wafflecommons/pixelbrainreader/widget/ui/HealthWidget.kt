@@ -110,4 +110,17 @@ class HealthWidget : GlanceAppWidget() {
 
 class HealthWidgetReceiver : GlanceAppWidgetReceiver() {
     override val glanceAppWidget: GlanceAppWidget = HealthWidget()
+
+    /**
+     * The periodic system refresh used to only re-render the existing snapshot, so the numbers
+     * stayed as old as the last in-app change. Rebuild the snapshot too (it re-renders when done).
+     */
+    override fun onUpdate(
+        context: android.content.Context,
+        appWidgetManager: android.appwidget.AppWidgetManager,
+        appWidgetIds: IntArray
+    ) {
+        super.onUpdate(context, appWidgetManager, appWidgetIds)
+        runCatching { WidgetLiveData.entryPoint(context).widgetUpdateManager().scheduleSnapshotUpdate() }
+    }
 }

@@ -1,22 +1,22 @@
 package cloud.wafflecommons.pixelbrainreader.data.sync
 
-import android.content.Context
 import cloud.wafflecommons.pixelbrainreader.data.remote.JGitProvider
 import cloud.wafflecommons.pixelbrainreader.data.remote.SyncResult
-import cloud.wafflecommons.pixelbrainreader.data.repository.ChoreRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.DailyDashboardRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.GoogleCalendarRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.GoogleTaskRepository
-import cloud.wafflecommons.pixelbrainreader.data.repository.HabitRepository
-import cloud.wafflecommons.pixelbrainreader.data.repository.MoodRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.VaultDiscoveryRepository
 import cloud.wafflecommons.pixelbrainreader.data.usecase.SyncHealthDataUseCase
-import cloud.wafflecommons.pixelbrainreader.domain.gamification.AutomateHabitsUseCase
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
@@ -26,8 +26,10 @@ import org.junit.Test
 
 /**
  * Regression guards for the sync-correctness fixes:
- *  - P0.2: a failed push (or a rebase-conflict) must surface [SyncState.Error], NEVER Success.
- *  - P0.5: a [CancellationException] must propagate, not be swallowed into an Error toast.
+ *  - a failed push (or a rebase-conflict) must surface [SyncState.Error], NEVER Success;
+ *  - a [CancellationException] must propagate, not be swallowed into an Error toast;
+ *  - a cancelled cycle must never leave the state stuck on [SyncState.Syncing];
+ *  - a user-forced sync waits for a busy git lock instead of silently doing nothing.
  */
 class SyncOrchestratorTest {
 
@@ -36,11 +38,8 @@ class SyncOrchestratorTest {
     private lateinit var calendar: GoogleCalendarRepository
     private lateinit var tasks: GoogleTaskRepository
     private lateinit var vault: VaultDiscoveryRepository
-    private lateinit var mood: MoodRepository
-    private lateinit var habit: HabitRepository
-    private lateinit var chore: ChoreRepository
-    private lateinit var automate: AutomateHabitsUseCase
     private lateinit var daily: DailyDashboardRepository
+    private lateinit var coordinator: GitSyncCoordinator
     private lateinit var orchestrator: SyncOrchestrator
 
     @Before
@@ -50,11 +49,8 @@ class SyncOrchestratorTest {
         calendar = mockk(relaxed = true)
         tasks = mockk(relaxed = true)
         vault = mockk(relaxed = true)
-        mood = mockk(relaxed = true)
-        habit = mockk(relaxed = true)
-        chore = mockk(relaxed = true)
-        automate = mockk(relaxed = true)
         daily = mockk(relaxed = true)
+        coordinator = GitSyncCoordinator()
 
         // Happy-path defaults; individual tests override the interesting call.
         every { jGit.isReady() } returns true
@@ -68,18 +64,20 @@ class SyncOrchestratorTest {
         coEvery { vault.reindexAll(any()) } returns emptyList()
 
         orchestrator = SyncOrchestrator(
-            context = mockk<Context>(relaxed = true),
             jGitProvider = jGit,
             syncHealthDataUseCase = health,
             googleCalendarRepository = calendar,
             googleTaskRepository = tasks,
             vaultDiscoveryRepository = vault,
-            moodRepository = mood,
-            habitRepository = habit,
-            choreRepository = chore,
-            automateHabitsUseCase = automate,
+            moodRepository = mockk(relaxed = true),
+            moodTagRepository = mockk(relaxed = true),
+            habitRepository = mockk(relaxed = true),
+            choreRepository = mockk(relaxed = true),
+            gamificationRepository = mockk(relaxed = true),
+            automateHabitsUseCase = mockk(relaxed = true),
             dailyDashboardRepository = daily,
-            gitSyncCoordinator = GitSyncCoordinator()
+            gitSyncCoordinator = coordinator,
+            appScope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
         )
     }
 
@@ -121,5 +119,55 @@ class SyncOrchestratorTest {
         assertThrows(CancellationException::class.java) {
             runBlocking { orchestrator.executeFullSyncCycle(force = true) }
         }
+    }
+
+    @Test
+    fun `a cancelled cycle never leaves the state stuck on Syncing and releases the git lock`() {
+        coEvery { health.invoke(any()) } throws CancellationException("navigated away")
+
+        assertThrows(CancellationException::class.java) {
+            runBlocking { orchestrator.executeFullSyncCycle(force = true) }
+        }
+
+        assertFalse(
+            "a cancelled cycle must not leave the pull-to-refresh spinner running",
+            orchestrator.syncState.value is SyncState.Syncing
+        )
+        assertFalse("the git lock must be released", coordinator.mutex.isLocked)
+    }
+
+    @Test
+    fun `an unexpected exception surfaces Error instead of a stuck spinner`() = runBlocking {
+        coEvery { jGit.pull() } throws IllegalStateException("boom")
+
+        val ran = orchestrator.executeFullSyncCycle(force = true)
+
+        assertFalse(ran)
+        assertTrue(orchestrator.syncState.value is SyncState.Error)
+        assertFalse(coordinator.mutex.isLocked)
+    }
+
+    @Test
+    fun `automatic sync skips while the git lock is busy`() = runBlocking {
+        coordinator.mutex.lock()
+        try {
+            assertFalse(orchestrator.executeFullSyncCycle(force = false))
+            coVerify(exactly = 0) { jGit.pull() }
+        } finally {
+            coordinator.mutex.unlock()
+        }
+    }
+
+    @Test
+    fun `forced sync waits for a busy git lock instead of silently skipping`() = runBlocking {
+        coordinator.mutex.lock()
+        val pending = async(Dispatchers.Default) { orchestrator.executeFullSyncCycle(force = true) }
+        delay(150)
+        assertTrue("forced sync must wait, not return early", pending.isActive)
+
+        coordinator.mutex.unlock()
+
+        assertTrue(pending.await())
+        assertTrue(orchestrator.syncState.value is SyncState.Success)
     }
 }

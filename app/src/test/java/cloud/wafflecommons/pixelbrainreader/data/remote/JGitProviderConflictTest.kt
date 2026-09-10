@@ -232,6 +232,75 @@ class JGitProviderConflictTest {
         }
     }
 
+    @Test
+    fun `push of a fast-forward commit succeeds and updates the remote`() {
+        runBlocking {
+            seedRemote(mapOf(STORY to BASE))
+            assertTrue(provider.setupRepository(remoteUri, "main").isSuccess)
+
+            vaultFile(STORY).writeText(LOCAL)
+            assertTrue(provider.commit("local edit").isSuccess)
+
+            val result = provider.push()
+
+            assertTrue("fast-forward push must succeed, got $result", result.isSuccess)
+            assertEquals(vaultHead(), remoteHead())
+        }
+    }
+
+    @Test
+    fun `push rejected by the remote as non-fast-forward is reported as a failure`() {
+        runBlocking {
+            seedRemote(mapOf(STORY to BASE))
+            assertTrue(provider.setupRepository(remoteUri, "main").isSuccess)
+
+            // Local commit on one file…
+            vaultFile(OTHER).writeText(REMOTE_Y)
+            assertTrue(provider.commit("local edit").isSuccess)
+            // …while the remote moved ahead: the push can no longer fast-forward.
+            pushRemoteEdit(STORY, REMOTE)
+            val remoteHeadBefore = remoteHead()
+
+            val result = provider.push()
+
+            // JGit reports the refusal per ref instead of throwing; the provider must surface it.
+            assertTrue("a rejected push must not report success", result.isFailure)
+            assertEquals(remoteHeadBefore, remoteHead())
+        }
+    }
+
+    @Test
+    fun `commit with nothing to commit is a successful no-op`() {
+        runBlocking {
+            seedRemote(mapOf(STORY to BASE))
+            assertTrue(provider.setupRepository(remoteUri, "main").isSuccess)
+            val headBefore = vaultHead()
+
+            val result = provider.commit("nothing changed")
+
+            assertTrue(result.isSuccess)
+            assertEquals("an empty commit must not be created", headBefore, vaultHead())
+        }
+    }
+
+    @Test
+    fun `commit stages new, modified and deleted files`() {
+        runBlocking {
+            seedRemote(mapOf(STORY to BASE, OTHER to "contenu initial Y\n"))
+            assertTrue(provider.setupRepository(remoteUri, "main").isSuccess)
+
+            vaultFile(STORY).writeText(LOCAL)           // modified
+            vaultFile(OTHER).delete()                   // deleted
+            vaultFile("notes/new.md").writeText("new\n") // added
+
+            assertTrue(provider.commit("mixed changes").isSuccess)
+
+            Git.open(vaultDir).use { git ->
+                assertTrue("every change must be committed", git.status().call().isClean)
+            }
+        }
+    }
+
     // ------------------------------------------------------------------ helpers
 
     /** Creates the bare remote seeded with one commit on `main` containing [files]. */

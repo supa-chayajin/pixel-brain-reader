@@ -68,7 +68,7 @@ fun PremiumWeatherCard(
                     )
                 }
             } else if (weather.code == -2) {
-                // Unavailable State (code -2, set by DailyNoteViewModel.weatherUnavailable):
+                // Unavailable State (code -2, see ui.daily.WEATHER_UNAVAILABLE):
                 // distinct from loading so the card never spins forever when location is
                 // denied or the network/parse fails.
                 AliveWeatherIcon(R.drawable.weather_offline, "Weather unavailable")

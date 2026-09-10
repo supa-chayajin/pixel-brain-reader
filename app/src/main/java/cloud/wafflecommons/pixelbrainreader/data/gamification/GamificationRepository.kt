@@ -1,33 +1,29 @@
 package cloud.wafflecommons.pixelbrainreader.data.gamification
 
 import android.util.Log
+import cloud.wafflecommons.pixelbrainreader.data.local.preferences.GamificationPreferences
 import cloud.wafflecommons.pixelbrainreader.data.repository.FileRepository
+import cloud.wafflecommons.pixelbrainreader.widget.ui.WidgetUpdateManager
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import java.io.File
+import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
-
-import cloud.wafflecommons.pixelbrainreader.data.gamification.Attribute
-import cloud.wafflecommons.pixelbrainreader.data.local.preferences.GamificationPreferences
-import cloud.wafflecommons.pixelbrainreader.domain.gamification.GrantXpUseCase
-import dagger.Lazy
-import kotlinx.coroutines.flow.first
 
 @Singleton
 class GamificationRepository @Inject constructor(
     private val fileRepository: FileRepository,
     private val gamificationPreferences: GamificationPreferences,
-    private val lazyGrantXpUseCase: Lazy<GrantXpUseCase>,
-    private val widgetUpdateManager: cloud.wafflecommons.pixelbrainreader.widget.ui.WidgetUpdateManager
+    private val widgetUpdateManager: WidgetUpdateManager
 ) {
     private val _gamificationState = MutableStateFlow(GamificationState())
     val gamificationState: Flow<GamificationState> = _gamificationState.asStateFlow()
@@ -43,45 +39,64 @@ class GamificationRepository @Inject constructor(
         encodeDefaults = true
     }
 
-    init {
-        // Load on init? Or explicit load?
-        // Let's do lazy load via a suspend fun or Fire-and-forget in scope?
-        // Better: Expose a load function or have User call it. 
-        // We'll load immediately in a coroutine but we need a scope.
-        // Usually Repositories shouldn't launch, but we can have a suspend init.
+    /** What is on disk. "Absent" and "unreadable" must never be conflated: only absent may be seeded. */
+    private sealed interface DiskProfile {
+        data object Absent : DiskProfile
+
+        /** Present but not parseable (merge-conflict markers, a hand edit, …). */
+        data object Corrupt : DiskProfile
+
+        /** Present but could not be read right now (I/O error). */
+        data object Unavailable : DiskProfile
+
+        data class Loaded(val state: GamificationState) : DiskProfile
     }
 
-    suspend fun loadState() = withContext(Dispatchers.IO) {
-        val disk = readStateFromDisk()
-        if (disk != null) {
-            _gamificationState.value = disk
-        } else {
-            // No valid file yet — persist the current (default) so the file exists.
-            saveState(_gamificationState.value)
+    /**
+     * Hydrates the in-memory profile from disk. The file is only created when it does not exist: a
+     * profile that exists but cannot be read is left untouched — this used to overwrite it with a
+     * level-1 default.
+     */
+    suspend fun loadState() = mutex.withLock {
+        withContext(Dispatchers.IO) {
+            when (val disk = readProfile()) {
+                is DiskProfile.Loaded -> {
+                    _gamificationState.value = disk.state
+                }
+                DiskProfile.Absent -> {
+                    saveState(_gamificationState.value)
+                }
+                DiskProfile.Corrupt, DiskProfile.Unavailable -> {
+                    Log.e(TAG, "Gamification profile unreadable ($disk); left untouched")
+                }
+            }
         }
     }
 
     suspend fun getStateSnapshot(): GamificationState = withContext(Dispatchers.IO) {
-        readStateFromDisk() ?: GamificationState() // Fallback
+        (readProfile() as? DiskProfile.Loaded)?.state ?: _gamificationState.value
     }
 
-    /** Reads the persisted profile fresh from disk, or null if it is absent / blank / corrupt. */
-    private fun readStateFromDisk(): GamificationState? {
+    private fun readProfile(): DiskProfile {
+        val file = fileRepository.getLocalFile(profileFile)
+        if (!file.exists()) return DiskProfile.Absent
+        val content = try {
+            file.readText()
+        } catch (e: IOException) {
+            Log.e(TAG, "Could not read the gamification profile", e)
+            return DiskProfile.Unavailable
+        }
+        if (content.isBlank()) return DiskProfile.Absent
         return try {
-            val file = fileRepository.getLocalFile(profileFile)
-            if (!file.exists()) return null
-            val content = file.readText()
-            if (content.isBlank()) null else jsonParser.decodeFromString<GamificationState>(content)
+            DiskProfile.Loaded(jsonParser.decodeFromString<GamificationState>(content))
         } catch (e: Exception) {
-            if (cloud.wafflecommons.pixelbrainreader.BuildConfig.DEBUG) {
-                Log.e("Gamification", "Error reading profile from disk", e)
-            }
-            null
+            Log.e(TAG, "The gamification profile is not valid JSON", e)
+            DiskProfile.Corrupt
         }
     }
 
     suspend fun updateState(transform: (GamificationState) -> GamificationState) = mutex.withLock {
-        withContext(Dispatchers.IO) {
+        withContext<Unit>(Dispatchers.IO) {
             // CRITICAL: base the mutation on the freshest ON-DISK state, not a possibly-unhydrated
             // in-memory default. A widget ActionCallback (or any caller) can run before loadState()
             // has hydrated _gamificationState, so it would still hold the default; mutating THAT and
@@ -89,7 +104,25 @@ class GamificationRepository @Inject constructor(
             // widget chore reset a level-9 profile to level 1). Reading disk first makes every
             // mutation additive to persisted progress. `mutex` serialises writes within the process,
             // and Glance callbacks share this same process, so disk is always current here.
-            val current = readStateFromDisk() ?: _gamificationState.value
+            val current = when (val disk = readProfile()) {
+                is DiskProfile.Loaded -> disk.state
+                DiskProfile.Absent -> _gamificationState.value
+                DiskProfile.Corrupt -> {
+                    // Never write over a profile we cannot parse: move it aside first so the saved
+                    // progress stays recoverable, then build on the best state we have.
+                    val backup = fileRepository.moveAsideCorrupt(profileFile)
+                    if (backup == null) {
+                        Log.e(TAG, "Gamification update skipped: the unparseable profile could not be preserved")
+                        return@withContext
+                    }
+                    Log.e(TAG, "Unparseable gamification profile moved aside to ${backup.name}")
+                    _gamificationState.value
+                }
+                DiskProfile.Unavailable -> {
+                    Log.e(TAG, "Gamification update skipped: the profile could not be read")
+                    return@withContext
+                }
+            }
             val newState = transform(current)
             _gamificationState.value = newState
             saveState(newState)
@@ -101,18 +134,17 @@ class GamificationRepository @Inject constructor(
 
     private suspend fun saveState(state: GamificationState) {
         try {
-            val json = jsonParser.encodeToString(state)
             fileRepository.createLocalFolder(systemDir)
-            fileRepository.saveFileLocally(profileFile, json)
+            fileRepository.saveFileLocally(profileFile, jsonParser.encodeToString(state))
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-            if (cloud.wafflecommons.pixelbrainreader.BuildConfig.DEBUG) {
-                Log.e("Gamification", "Error saving profile", e)
-            }
+            Log.e(TAG, "Error saving profile", e)
         }
     }
 
     suspend fun processTaskCompletion(taskContent: String) {
-        val tags = extractTags(taskContent)
+        val tags = TAG_REGEX.findAll(taskContent).map { it.value }.toList()
         val tagMappings = gamificationPreferences.tagToStatMappingFlow.first()
 
         tags.forEach { tag ->
@@ -131,7 +163,7 @@ class GamificationRepository @Inject constructor(
                 if (newXp >= newXpTarget) {
                     newXp -= newXpTarget
                     newLevel++
-                    newXpTarget = cloud.wafflecommons.pixelbrainreader.data.gamification.XpCalculator.getXpForNextLevel(newLevel)
+                    newXpTarget = XpCalculator.getXpForNextLevel(newLevel)
                 }
 
                 val newProfile = currentProfile.copy(
@@ -140,7 +172,7 @@ class GamificationRepository @Inject constructor(
                     xpToNextLevel = newXpTarget
                 )
 
-                val historyEntry = cloud.wafflecommons.pixelbrainreader.data.gamification.XpGainEntry(
+                val historyEntry = XpGainEntry(
                     timestamp = System.currentTimeMillis(),
                     amount = 20.0,
                     source = "Task Completed: $tag",
@@ -156,8 +188,8 @@ class GamificationRepository @Inject constructor(
         }
     }
 
-    private fun extractTags(content: String): List<String> {
-        val regex = Regex("#\\w+")
-        return regex.findAll(content).map { it.value }.toList()
+    private companion object {
+        const val TAG = "Gamification"
+        val TAG_REGEX = Regex("#\\w+")
     }
 }

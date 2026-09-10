@@ -1,28 +1,29 @@
 package cloud.wafflecommons.pixelbrainreader.data.repository
 
 import android.util.Log
-import com.google.gson.Gson
+import androidx.room.withTransaction
+import cloud.wafflecommons.pixelbrainreader.data.local.AppDatabase
+import cloud.wafflecommons.pixelbrainreader.data.local.dao.MoodDao
+import cloud.wafflecommons.pixelbrainreader.data.local.entity.MoodEntity
+import cloud.wafflecommons.pixelbrainreader.data.sync.VaultPushScheduler
+import cloud.wafflecommons.pixelbrainreader.widget.ui.WidgetUpdateManager
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.flow.onStart
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import java.io.IOException
 import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.ZoneId
 import javax.inject.Inject
 import javax.inject.Singleton
-import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
-import java.time.format.DateTimeFormatter
-import kotlin.math.roundToInt
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.decodeFromString
-import kotlinx.serialization.encodeToString
 
 /**
  * Standalone Mood Entry model (Domain).
@@ -78,189 +79,176 @@ data class DailyMoodDataDto(
 @Singleton
 class MoodRepository @Inject constructor(
     private val fileRepository: FileRepository,
-    private val moodDao: cloud.wafflecommons.pixelbrainreader.data.local.dao.MoodDao,
-    private val database: cloud.wafflecommons.pixelbrainreader.data.local.AppDatabase,
-    private val secretManager: SecretManager,
-    private val widgetUpdateManager: cloud.wafflecommons.pixelbrainreader.widget.ui.WidgetUpdateManager
+    private val moodDao: MoodDao,
+    private val database: AppDatabase,
+    private val pushScheduler: VaultPushScheduler,
+    private val widgetUpdateManager: WidgetUpdateManager
 ) {
     private val moodDir = "10_Journal/data/health/mood"
-    
-    private val jsonParser = Json { 
-        ignoreUnknownKeys = true 
-        isLenient = true 
+
+    private val jsonParser = Json {
+        ignoreUnknownKeys = true
+        isLenient = true
         prettyPrint = true
     }
 
+    /** Serializes read-modify-write of a day's JSON file (app + widget taps can race). */
+    private val writeMutex = Mutex()
+
     // SSOT: Room Database
-    fun getMoodFlow(): Flow<List<cloud.wafflecommons.pixelbrainreader.data.local.entity.MoodEntity>> {
-         return moodDao.getAllMoods()
+    fun getMoodFlow(): Flow<List<MoodEntity>> {
+        return moodDao.getAllMoods()
     }
 
+    /** Moods for an inclusive date range — cheaper than streaming the whole table. */
+    fun getMoodsBetween(start: LocalDate, end: LocalDate): Flow<List<MoodEntity>> =
+        moodDao.getMoodsBetween(start.toString(), end.toString())
+
     /**
-     * Sync Bridge: Scans local JSON files and upserts to Room.
-     * Called by Workers or on App Start.
+     * Sync Bridge: scans the mood JSON files and reconciles them into Room.
+     *
+     * Rows are replaced per DAY, and only for days whose content differs from Room: no write (so no
+     * invalidation and no screen recomputation) when nothing changed, and rows whose timestamp was
+     * derived in another timezone — or entries removed from the JSON — no longer linger as duplicates.
      */
-    /**
-     * Sync Bridge: Scans local JSON files and upserts to Room.
-     * Called by Workers or on App Start.
-     */
-    suspend fun syncWithFileSystem() = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+    suspend fun syncWithFileSystem() = withContext(Dispatchers.IO) {
         val root = fileRepository.getLocalFile(moodDir)
         if (!root.exists()) {
-             Log.d("DataSync", "Mood directory not found: ${root.absolutePath}")
-             return@withContext
+            Log.d("DataSync", "Mood directory not found")
+            return@withContext
         }
-        
-        Log.d("PBR_SYNC", "Scanning mood folder: ${root.absolutePath}")
 
-        // Phase 1: read + parse every JSON file OUTSIDE any DB transaction. Doing the
-        // filesystem walk inside runInTransaction held Room's single writer lock for the
-        // whole scan, stalling every other DAO write app-wide. Build the entity list first.
-        val entities = mutableListOf<cloud.wafflecommons.pixelbrainreader.data.local.entity.MoodEntity>()
-        var filesCount = 0
+        // Phase 1: read + parse every JSON file OUTSIDE any DB transaction.
+        val parsedByDate = mutableMapOf<String, MutableMap<Long, MoodEntity>>()
         root.walk().filter { it.isFile && it.name.endsWith(".json") }.forEach { file ->
             try {
                 val content = file.readText()
-                if (content.isNotBlank()) {
-                     val data = jsonParser.decodeFromString<DailyMoodDataDto>(content)
-
-                     // 1. Validate Date
-                     var dateKey = data.date
-                     if (dateKey.isBlank()) {
-                         dateKey = file.nameWithoutExtension.take(10) // Fallback to filename (YYYY-MM-DD)
-                     }
-
-                     // 2. Map Entries
-                     if (data.entries.isNotEmpty()) {
-                        data.entries.forEach { entry ->
-                             // Calc Timestamp
-                             val timeStr = if (entry.time.length == 5) entry.time else "12:00" // Simple Validation
-                             val localDateTime = java.time.LocalDateTime.parse("${dateKey}T${timeStr}")
-                             val timestamp = localDateTime.atZone(java.time.ZoneId.systemDefault()).toEpochSecond() * 1000
-
-                             entities.add(cloud.wafflecommons.pixelbrainreader.data.local.entity.MoodEntity(
-                                 timestamp = timestamp,
-                                 date = dateKey,
-                                 time = timeStr,
-                                 score = entry.score,
-                                 label = entry.label,
-                                 activities = entry.activities.joinToString(","),
-                                 note = entry.note
-                             ))
-                        }
-                        filesCount++
-                     }
-                }
+                if (content.isBlank()) return@forEach
+                val data = jsonParser.decodeFromString<DailyMoodDataDto>(content)
+                val dateKey = data.date.ifBlank { file.nameWithoutExtension.take(10) }
+                val day = parsedByDate.getOrPut(dateKey) { mutableMapOf() }
+                // Keyed by timestamp: two entries in the same minute collapse exactly like the
+                // REPLACE insert would, so the comparison below stays stable.
+                data.entries.forEach { entry -> toEntity(dateKey, entry).let { day[it.timestamp] = it } }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                if (e is CancellationException) throw e
                 Log.e("PBR_SYNC", "Failed to parse ${file.name}: ${e.message}")
             }
         }
+        if (parsedByDate.isEmpty()) return@withContext
 
-        // Phase 2: commit the parsed entities in one short transaction (just DB writes).
-        database.runInTransaction {
-            entities.forEach { moodDao.insertMoodBlocking(it) }
+        // Phase 2: one short transaction for the days that actually changed.
+        val existingByDate = moodDao.getAllMoodsOnce().groupBy { it.date }
+        val changed = parsedByDate
+            .mapValues { (_, byTimestamp) -> byTimestamp.values.toList() }
+            .filter { (date, entities) -> entities.toSet() != existingByDate[date].orEmpty().toSet() }
+        if (changed.isEmpty()) return@withContext
+
+        database.withTransaction {
+            changed.keys.chunked(DATE_CHUNK_SIZE).forEach { moodDao.deleteMoodsForDates(it) }
+            moodDao.insertMoods(changed.values.flatten())
         }
-        Log.d("PBR_SYNC", "Imported ${entities.size} mood entries (from $filesCount files)")
+        Log.d("PBR_SYNC", "Reconciled moods for ${changed.size} day(s)")
     }
 
     /**
      * Observes mood data for a specific date (Reactive from DB).
      */
     fun getDailyMood(date: LocalDate): Flow<DailyMoodData?> {
-         return moodDao.getMood(date.toString()).map { entities ->
-             if (entities.isNotEmpty()) mapToDomain(entities, date.toString()) else null
-         }
+        return moodDao.getMood(date.toString()).map { entities ->
+            if (entities.isNotEmpty()) mapToDomain(entities, date.toString()) else null
+        }
     }
 
     /**
      * Legacy synchronous accessor for Stats
      */
     suspend fun getMood(date: LocalDate): MoodEntry? {
-         // Return the LATEST entry for the day based on time
-         return getDailyMood(date).first()?.entries?.maxByOrNull { it.time }
+        // Return the LATEST entry for the day based on time
+        return getDailyMood(date).first()?.entries?.maxByOrNull { it.time }
     }
 
     /**
-     * Adds a new mood entry:
+     * Adds a new mood entry: vault JSON first, then Room, then an immediate widget refresh. The git
+     * push is only REQUESTED (batched in the background) — the UI and the widgets never wait on the
+     * network any more.
      */
     suspend fun addEntry(date: LocalDate, entry: MoodEntry) {
-        val path = "$moodDir/$date.json"
-        
-        // 1. Read existing JSON from Disk
-        val currentContent = try {
-            fileRepository.readFile(path)
-        } catch (e: Exception) {
-            if (e is CancellationException) throw e
-            null
-        }
-        val currentData = try {
-             if (!currentContent.isNullOrBlank()) {
-                 jsonParser.decodeFromString<DailyMoodDataDto>(currentContent)
-             } else {
-                 DailyMoodDataDto(date = date.toString())
-             }
-        } catch (e: Exception) {
-             if (e is CancellationException) throw e
-             DailyMoodDataDto(date = date.toString())
-        }
+        withContext(Dispatchers.IO) {
+            writeMutex.withLock {
+                val path = "$moodDir/$date.json"
+                val currentData = readDayForUpdate(path, date)
 
-        // 2. Add
-        val newDto = MoodEntryDto(entry.time, entry.score, entry.label, entry.activities, entry.note)
-        val updatedEntries = currentData.entries + newDto
-        
-        // 3. Calc Summary
-        val avg = updatedEntries.map { it.score }.average()
-        val summary = MoodSummaryDto(avg, calculateDailyEmoji(avg))
-        
-        val updatedData = currentData.copy(entries = updatedEntries, summary = summary)
+                val newDto = MoodEntryDto(entry.time, entry.score, entry.label, entry.activities, entry.note)
+                val updatedEntries = currentData.entries + newDto
+                val avg = updatedEntries.map { it.score }.average()
+                val updatedData = currentData.copy(
+                    entries = updatedEntries,
+                    summary = MoodSummaryDto(avg, calculateDailyEmoji(avg))
+                )
+                fileRepository.saveFileLocally(path, jsonParser.encodeToString(updatedData))
 
-        // 4. Save
-        val jsonString = jsonParser.encodeToString(updatedData)
-        fileRepository.saveFileLocally(path, jsonString)
-
-        // 5. Update DB
-        // 5. Update DB
-        val localDateTime = java.time.LocalDateTime.parse("${date}T${entry.time}")
-        val timestamp = localDateTime.atZone(java.time.ZoneId.systemDefault()).toEpochSecond() * 1000
-
-        val entity = cloud.wafflecommons.pixelbrainreader.data.local.entity.MoodEntity(
-             timestamp = timestamp,
-             date = date.toString(),
-             time = entry.time,
-             score = entry.score,
-             label = entry.label,
-             activities = entry.activities.joinToString(","),
-             note = entry.note
-        )
-        moodDao.insertMood(entity)
-        
-        // 6. Push
-        try {
-            val (owner, repo) = secretManager.getRepoInfo()
-            if (!owner.isNullOrBlank() && !repo.isNullOrBlank()) {
-                fileRepository.pushDirtyFiles(owner, repo, "feat(health): update mood $date")
+                moodDao.insertMood(toEntity(date.toString(), newDto))
             }
-        } catch (e: Exception) {
-            if (e is CancellationException) throw e
         }
-        
-        // Trigger Widget Update. triggerUpdate() re-renders the live MoodWidget instantly;
-        // scheduleSnapshotUpdate() rebuilds the snapshot so the Companion widget's mood emoji
-        // (which reads the snapshot, not live data) also reflects the new entry.
+
+        // triggerUpdate() re-renders the live MoodWidget instantly; scheduleSnapshotUpdate() rebuilds
+        // the snapshot so the Companion widget's mood emoji (read from the snapshot) follows too.
         widgetUpdateManager.triggerUpdate()
         runCatching { widgetUpdateManager.scheduleSnapshotUpdate() }
+        pushScheduler.requestPush()
+    }
+
+    /**
+     * The day's current JSON, or a fresh one. An unreadable file is moved aside (kept next to the
+     * original, never overwritten) instead of being silently replaced by a file holding only the
+     * new entry — which used to wipe the day's history.
+     */
+    private suspend fun readDayForUpdate(path: String, date: LocalDate): DailyMoodDataDto {
+        val content = try {
+            fileRepository.readFile(path)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        }
+        if (content.isNullOrBlank()) return DailyMoodDataDto(date = date.toString())
+        return try {
+            jsonParser.decodeFromString<DailyMoodDataDto>(content)
+        } catch (e: Exception) {
+            val backup = fileRepository.moveAsideCorrupt(path)
+                ?: throw IOException("Unreadable mood file for $date could not be preserved", e)
+            Log.e("MoodRepository", "Unreadable mood file for $date moved aside to ${backup.name}", e)
+            DailyMoodDataDto(date = date.toString())
+        }
     }
 
     // --- Mappers ---
-    
-    private fun mapToDomain(entities: List<cloud.wafflecommons.pixelbrainreader.data.local.entity.MoodEntity>, dateIdx: String): DailyMoodData {
-         val entries = entities.map { 
-             MoodEntry(it.time, it.score, it.label, it.activities.split(",").filter { s -> s.isNotBlank() }, it.note)
-         }
-         val avg = if (entries.isNotEmpty()) entries.map { it.score }.average() else 0.0
-         val summary = MoodSummary(avg, calculateDailyEmoji(avg))
-         return DailyMoodData(dateIdx, entries, summary)
+
+    private fun toEntity(dateKey: String, entry: MoodEntryDto): MoodEntity {
+        val timeStr = if (entry.time.length == 5) entry.time else "12:00" // Simple Validation
+        val timestamp = LocalDateTime.parse("${dateKey}T$timeStr")
+            .atZone(ZoneId.systemDefault())
+            .toEpochSecond() * 1000
+        return MoodEntity(
+            timestamp = timestamp,
+            date = dateKey,
+            time = timeStr,
+            score = entry.score,
+            label = entry.label,
+            activities = entry.activities.joinToString(","),
+            note = entry.note
+        )
+    }
+
+    private fun mapToDomain(entities: List<MoodEntity>, dateIdx: String): DailyMoodData {
+        val entries = entities.map {
+            MoodEntry(it.time, it.score, it.label, it.activities.split(",").filter { s -> s.isNotBlank() }, it.note)
+        }
+        val avg = if (entries.isNotEmpty()) entries.map { it.score }.average() else 0.0
+        val summary = MoodSummary(avg, calculateDailyEmoji(avg))
+        return DailyMoodData(dateIdx, entries, summary)
     }
 
     private fun calculateDailyEmoji(avg: Double): String {
@@ -274,22 +262,7 @@ class MoodRepository @Inject constructor(
         }
     }
 
-    suspend fun getWeeklySparkline(): String {
-        val all = moodDao.getAllMoods().first()
-        // Map: Date -> Average Score
-        val map = all.groupBy { it.date }.mapValues { (_, list) -> 
-            list.map { it.score }.average()
-        }
-        
-        val scores = (0..6).map { i ->
-             val d = LocalDate.now().minusDays(6L - i).toString()
-             map[d]?.roundToInt() ?: 0
-        }
-        
-        val bars = listOf(" ", " ", "▂", "▃", "▅", "▆", "▇", "█")
-        return scores.joinToString("") { score ->
-            val index = ((score / 10.0) * (bars.size - 1)).roundToInt().coerceIn(0, bars.size - 1)
-            bars[index]
-        }
+    private companion object {
+        const val DATE_CHUNK_SIZE = 500
     }
 }

@@ -253,4 +253,38 @@ class DailyMarkdownParserTest {
         val parsed = DailyMarkdownParser.parse(date, md)
         assertEquals(listOf("Grateful for coffee"), parsed.gratitude)
     }
+
+    @Test
+    fun `headings written inside ideas and notes survive the round trip`() {
+        val dashboard = DailyDashboardEntity(
+            date = date,
+            ideasContent = "## Project plan\n- step one\n### Details\nmore text\n## Notes on the side",
+            notesContent = "## Notes about the meeting\nit went well"
+        )
+
+        val parsed = DailyMarkdownParser.parse(date, MarkdownBurner.burn(dashboard, emptyList(), emptyList()))
+
+        assertEquals(dashboard.ideasContent, parsed.ideas)
+        assertEquals(dashboard.notesContent, parsed.notes)
+    }
+
+    @Test
+    fun `legacy french ideas header still opens the ideas section`() {
+        val md = """
+            # 2026-07-17
+
+            ## 🧠 Idées / Second Cerveau
+
+            Une idée
+
+            ## 📑 Notes / Self-care
+
+            Une note
+        """.trimIndent()
+
+        val parsed = DailyMarkdownParser.parse(date, md)
+
+        assertEquals("Une idée", parsed.ideas)
+        assertEquals("Une note", parsed.notes)
+    }
 }

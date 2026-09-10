@@ -424,15 +424,22 @@ fun HomeConfigScreen(
                         if (selectedRoomId.isBlank()) return@Button // Should never happen unless no rooms exist
                         
                         val finalFreq = frequencyDays.toIntOrNull() ?: 1
-                        val newChore = ChoreEntity(
-                            id = targetChore?.id ?: UUID.randomUUID().toString(),
+                        // Editing keeps every field the form doesn't show (archived flag, manual sort
+                        // order): rebuilding the entity used to un-archive the chore and reset its order.
+                        val newChore = targetChore?.copy(
+                            name = name.trim(),
+                            roomId = selectedRoomId,
+                            baseEffort = baseEffort.roundToInt(),
+                            frequencyDays = finalFreq
+                        ) ?: ChoreEntity(
+                            id = UUID.randomUUID().toString(),
                             name = name.trim(),
                             roomId = selectedRoomId,
                             baseEffort = baseEffort.roundToInt(),
                             frequencyDays = finalFreq,
-                            lastDoneDate = targetChore?.lastDoneDate ?: LocalDate.now().toString(),
-                            icon = targetChore?.icon ?: "cleaning_services",
-                            createdAt = targetChore?.createdAt ?: System.currentTimeMillis()
+                            lastDoneDate = LocalDate.now().toString(),
+                            icon = "cleaning_services",
+                            createdAt = System.currentTimeMillis()
                         )
                         viewModel.upsertChore(newChore)
                         

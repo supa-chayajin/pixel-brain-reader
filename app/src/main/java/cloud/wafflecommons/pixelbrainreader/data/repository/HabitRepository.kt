@@ -1,51 +1,48 @@
 package cloud.wafflecommons.pixelbrainreader.data.repository
 
 import android.util.Log
+import cloud.wafflecommons.pixelbrainreader.data.local.dao.HabitDao
+import cloud.wafflecommons.pixelbrainreader.data.local.entity.HabitConfigEntity
+import cloud.wafflecommons.pixelbrainreader.data.local.entity.HabitLogEntity
+import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
 import cloud.wafflecommons.pixelbrainreader.data.model.HabitConfig
 import cloud.wafflecommons.pixelbrainreader.data.model.HabitLogEntry
 import cloud.wafflecommons.pixelbrainreader.data.model.HabitStatus
 import cloud.wafflecommons.pixelbrainreader.data.model.HabitType
-import androidx.room.withTransaction
-import cloud.wafflecommons.pixelbrainreader.data.local.dao.HabitDao
-import cloud.wafflecommons.pixelbrainreader.data.local.entity.HabitConfigEntity
-import cloud.wafflecommons.pixelbrainreader.data.local.entity.HabitLogEntity
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.decodeFromString
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
-import java.time.LocalDate
-import javax.inject.Inject
-import javax.inject.Singleton
+import cloud.wafflecommons.pixelbrainreader.data.sync.VaultPushScheduler
+import cloud.wafflecommons.pixelbrainreader.widget.ui.WidgetUpdateManager
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonSyntaxException
 import com.google.gson.reflect.TypeToken
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import java.io.IOException
+import java.time.LocalDate
+import javax.inject.Inject
+import javax.inject.Singleton
 
 @Singleton
 class HabitRepository @Inject constructor(
     private val fileRepository: FileRepository,
     private val habitDao: HabitDao,
     private val choreRepository: ChoreRepository,
-    private val jGitProvider: cloud.wafflecommons.pixelbrainreader.data.remote.JGitProvider,
-    private val database: cloud.wafflecommons.pixelbrainreader.data.local.AppDatabase,
-    private val secretManager: cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager,
-    private val widgetUpdateManager: cloud.wafflecommons.pixelbrainreader.widget.ui.WidgetUpdateManager
+    private val secretManager: SecretManager,
+    private val widgetUpdateManager: WidgetUpdateManager,
+    private val pushScheduler: VaultPushScheduler
 ) {
-    private val jsonParser = Json { 
-        ignoreUnknownKeys = true 
-        isLenient = true 
-        encodeDefaults = true 
+    private val jsonParser = Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+        encodeDefaults = true
         prettyPrint = true
     }
     private val gson: Gson = GsonBuilder().setPrettyPrinting().create()
@@ -53,19 +50,10 @@ class HabitRepository @Inject constructor(
     private val habitsDir = "10_Journal/data/habits"
     private val configFile = "10_Journal/data/habits/config.json"
 
-    /**
-     * Repository-owned scope for fire-and-forget background work (Git push after
-     * a habit log). Outlives any ViewModelScope so a fast user navigation can't
-     * cancel the push. SupervisorJob means a single push failure doesn't tear
-     * down sibling pushes.
-     */
-    private val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-
     // --- Auto-Initialization ---
-    
+
     suspend fun initialize() = withContext(Dispatchers.IO) {
-        val configs = habitDao.getAllConfigs()
-        if (configs.isEmpty()) {
+        if (habitDao.getAllConfigs().isEmpty()) {
             importConfigFromJson()
         }
     }
@@ -79,13 +67,17 @@ class HabitRepository @Inject constructor(
     }
 
     fun getLogsForYearFlow(year: Int): Flow<Map<String, List<HabitLogEntry>>> {
-        return habitDao.getLogsForYearFlow(year.toString()).map { entities ->
-             entities.groupBy { it.habitId }
-                 .mapValues { (_, logs) -> logs.map { mapLogToDomain(it) } }
-        }
+        return habitDao.getLogsForYearFlow(year.toString()).map { groupByHabit(it) }
     }
 
-    
+    /** Logs of an inclusive date range, grouped by habit id. */
+    fun getLogsBetweenFlow(start: LocalDate, end: LocalDate): Flow<Map<String, List<HabitLogEntry>>> {
+        return habitDao.getLogsBetweenFlow(start.toString(), end.toString()).map { groupByHabit(it) }
+    }
+
+    private fun groupByHabit(entities: List<HabitLogEntity>): Map<String, List<HabitLogEntry>> =
+        entities.groupBy { it.habitId }.mapValues { (_, logs) -> logs.map { mapLogToDomain(it) } }
+
     // --- DTOs ---
     @Serializable
     data class HabitConfigDto(
@@ -120,53 +112,53 @@ class HabitRepository @Inject constructor(
 
     // --- Bridge Logic ---
 
-    suspend fun syncWithFileSystem() = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+    /**
+     * Sync Bridge: reconciles the vault's habit config and yearly log files into Room.
+     *
+     * Files are parsed OUTSIDE any transaction (the walk used to hold Room's writer lock) and only
+     * rows that actually differ are written: an unchanged vault causes no Room invalidation, where
+     * every reconcile (startup, each sync) used to rewrite every habit row and recompute the Habits
+     * and Stats screens.
+     */
+    suspend fun syncWithFileSystem() = withContext(Dispatchers.IO) {
         val root = fileRepository.getLocalFile(habitsDir)
         if (!root.exists()) {
-             Log.d("DataSync", "Habits directory not found: ${root.absolutePath}")
-             return@withContext
+            Log.d("DataSync", "Habits directory not found")
+            return@withContext
         }
-        
-        // Atomic Transaction for Data Consistency
-        database.withTransaction {
-            try {
-                // Call the new import function
-                importConfigFromJson()
 
-                // Sync Logs
-                var logsCount = 0
-                root.walk().filter { it.isFile && it.name.startsWith("log_") && it.name.endsWith(".json") }.forEach { file ->
-                    try {
-                        val content = file.readText()
-                        if (content.isNotBlank()) {
-                            val logs: Map<String, List<HabitLogDto>> = jsonParser.decodeFromString(content)
-                            
-                            val entities = logs.flatMap { (habitId, entries) ->
-                                entries.map { dto ->
-                                    HabitLogEntity(
-                                        habitId = habitId,
-                                        date = dto.date,
-                                        value = dto.value,
-                                        status = try { HabitStatus.valueOf(dto.status) } catch (e: Exception) { HabitStatus.FAILED }
-                                    )
-                                }
-                            }
-                            if (entities.isNotEmpty()) {
-                                habitDao.insertLogsBlocking(entities)
-                                logsCount += entities.size
-                            }
+        importConfigFromJson()
+
+        val parsed = LinkedHashMap<Pair<String, String>, HabitLogEntity>()
+        root.walk()
+            .filter { it.isFile && it.name.startsWith("log_") && it.name.endsWith(".json") }
+            .forEach { file ->
+                try {
+                    val content = file.readText()
+                    if (content.isBlank()) return@forEach
+                    val logs: Map<String, List<HabitLogDto>> = jsonParser.decodeFromString(content)
+                    logs.forEach { (habitId, entries) ->
+                        entries.forEach { dto ->
+                            parsed[habitId to dto.date] = HabitLogEntity(
+                                habitId = habitId,
+                                date = dto.date,
+                                value = dto.value,
+                                status = parseStatus(dto.status)
+                            )
                         }
-                    } catch (e: Exception) {
-                        if (e is CancellationException) throw e
-                        Log.e("PBR_SYNC", "Failed to parse ${file.name}: ${e.message}")
                     }
+                } catch (e: Exception) {
+                    Log.e("PBR_SYNC", "Failed to parse ${file.name}: ${e.message}")
                 }
-                Log.d("PBR_SYNC", "Total Logs Imported: $logsCount")
-                
-            } catch (e: Exception) {
-                Log.e("HabitSync", "Transaction Failed", e)
-                throw e // Rollback
             }
+        if (parsed.isEmpty()) return@withContext
+
+        val years = parsed.values.map { it.date.take(4) }.toSet()
+        val existing = years.flatMap { habitDao.getLogsForYear(it) }.associateBy { it.habitId to it.date }
+        val changed = parsed.values.filter { existing[it.habitId to it.date] != it }
+        if (changed.isNotEmpty()) {
+            habitDao.insertLogs(changed)
+            Log.d("PBR_SYNC", "Reconciled ${changed.size} habit log(s)")
         }
     }
 
@@ -176,38 +168,18 @@ class HabitRepository @Inject constructor(
             if (content.isNullOrBlank()) return@withContext
 
             val type = object : TypeToken<List<HabitConfigDto>>() {}.type
-            val configs: List<HabitConfigDto> = gson.fromJson(content, type)
+            val configs: List<HabitConfigDto> = gson.fromJson(content, type) ?: return@withContext
+            val entities = configs.map { it.toEntity() }
+            // Unchanged → no delete + re-insert, so no invalidation of every habit observer.
+            if (entities.toSet() == habitDao.getAllConfigs().toSet()) return@withContext
 
-            database.withTransaction {
-                habitDao.deleteAllConfigsBlocking()
-                configs.forEach { config ->
-                    habitDao.insertConfigBlocking(
-                        HabitConfigEntity(
-                            id = config.id,
-                            title = config.title,
-                            description = config.description,
-                            frequency = config.frequency,
-                            targetValue = config.targetValue,
-                            unit = config.unit,
-                            type = config.type,
-                            color = config.color,
-                            icon = config.icon,
-                            autoSource = config.autoSource,
-                            createdDate = config.createdDate,
-                            archived = config.archived,
-                            sortOrder = config.sortOrder,
-                            scheduleMode = config.scheduleMode ?: "WEEKLY",
-                            intervalCount = config.intervalCount,
-                            intervalUnit = config.intervalUnit ?: "DAY"
-                        )
-                    )
-                }
-            }
-            Log.d("HabitRepository", "Successfully imported configs from JSON.")
+            habitDao.replaceAllConfigs(entities)
+            Log.d("HabitRepository", "Imported ${entities.size} habit config(s) from JSON")
         } catch (e: JsonSyntaxException) {
             Log.e("HabitRepository", "JSON Syntax Error in habit config", e)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-            if (e is CancellationException) throw e
             Log.e("HabitRepository", "Error importing config", e)
         }
     }
@@ -216,159 +188,179 @@ class HabitRepository @Inject constructor(
         try {
             fileRepository.createLocalFolder(habitsDir)
 
-            val entities = habitDao.getAllConfigs()
-            val activeEntities = entities.filter { !it.archived }
-            
-            val dtos = activeEntities.map { entity ->
-                HabitConfigDto(
-                    id = entity.id,
-                    title = entity.title,
-                    description = entity.description,
-                    frequency = entity.frequency,
-                    type = entity.type,
-                    targetValue = entity.targetValue,
-                    unit = entity.unit,
-                    color = entity.color,
-                    icon = entity.icon,
-                    autoSource = entity.autoSource,
-                    createdDate = entity.createdDate,
-                    archived = entity.archived,
-                    sortOrder = entity.sortOrder,
-                    scheduleMode = entity.scheduleMode,
-                    intervalCount = entity.intervalCount,
-                    intervalUnit = entity.intervalUnit
-                )
-            }
+            val dtos = habitDao.getAllConfigs()
+                .filter { !it.archived }
+                .map { entity ->
+                    HabitConfigDto(
+                        id = entity.id,
+                        title = entity.title,
+                        description = entity.description,
+                        frequency = entity.frequency,
+                        type = entity.type,
+                        targetValue = entity.targetValue,
+                        unit = entity.unit,
+                        color = entity.color,
+                        icon = entity.icon,
+                        autoSource = entity.autoSource,
+                        createdDate = entity.createdDate,
+                        archived = entity.archived,
+                        sortOrder = entity.sortOrder,
+                        scheduleMode = entity.scheduleMode,
+                        intervalCount = entity.intervalCount,
+                        intervalUnit = entity.intervalUnit
+                    )
+                }
 
-            val jsonOutput = gson.toJson(dtos)
-            fileRepository.saveFileLocally(configFile, jsonOutput)
+            fileRepository.saveFileLocally(configFile, gson.toJson(dtos))
             Log.d("HabitRepository", "Exported configs to JSON successfully")
-
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-            if (e is CancellationException) throw e
             Log.e("HabitRepository", "Error exporting config to JSON", e)
         }
     }
+
+    /**
+     * Settings "Export all to vault": writes habits + rooms + chores JSON, then runs a full
+     * commit → pull → push. Throws on any failure so the Settings screen reports it — the previous
+     * push-only version ignored the push result and failed silently whenever the remote was ahead.
+     */
     suspend fun performBulkConfigSync() = withContext(Dispatchers.IO) {
-        try {
-            // 1. Export both Configs
-            exportConfigToJson()
-            choreRepository.exportHomeConfigToJson()
+        exportConfigToJson()
+        choreRepository.exportHomeConfigToJson()
 
-            // 2. Add to Git Index (Critical Success Condition 3)
-            jGitProvider.addFile(configFile)
-            jGitProvider.addFile("10_Journal/data/home/rooms.json")
-            jGitProvider.addFile("10_Journal/data/home/chores.json")
-
-            // 3. Commit & Push
-            val (owner, repo) = secretManager.getRepoInfo()
-            if (!owner.isNullOrBlank() && !repo.isNullOrBlank()) {
-                fileRepository.pushDirtyFiles(owner, repo, "chore: Sync configuration (Habits, Home OS)")
-            } else {
-                Log.e("HabitRepository", "Sync failed: Repo info missing")
-            }
-        } catch (e: Exception) {
-            Log.e("HabitRepository", "Bulk sync failed", e)
-            throw e
+        val (owner, repo) = secretManager.getRepoInfo()
+        if (owner.isNullOrBlank() || repo.isNullOrBlank()) {
+            throw IllegalStateException("Repository is not configured")
         }
+        fileRepository.syncRepository(owner, repo).getOrThrow()
     }
 
     // --- Operations ---
 
     suspend fun getHabitConfigs(): List<HabitConfig> = withContext(Dispatchers.IO) {
-        // Fallback to DB if synced, else force sync?
-        // Let's rely on DB.
         habitDao.getAllConfigs().map { mapConfigToDomain(it) }
     }
 
     suspend fun getLogsForYear(year: Int): Map<String, List<HabitLogEntry>> = withContext(Dispatchers.IO) {
-        val entities = habitDao.getLogsForYear(year.toString())
-        entities.groupBy { it.habitId }
-             .mapValues { (_, logs) -> logs.map { mapLogToDomain(it) } }
+        groupByHabit(habitDao.getLogsForYear(year.toString()))
     }
 
-    suspend fun logHabit(date: LocalDate, entry: HabitLogEntry) {
+    suspend fun logHabit(date: LocalDate, entry: HabitLogEntry) = logHabits(date, listOf(entry))
+
+    /**
+     * Records log entries of ONE day: Room first (the checkbox flips on the next frame), then the
+     * vault's yearly JSON, then one widget refresh and one batched push request for the whole batch.
+     */
+    suspend fun logHabits(date: LocalDate, entries: List<HabitLogEntry>) {
+        if (entries.isEmpty()) return
+
         // Phase 1 — Optimistic UI: write Room FIRST, off the mutex.
-        // This is what drives the Habit Flow → Compose recomposition, so the
-        // checkbox flips on the next frame instead of after the JSON+network round-trip.
         withContext(Dispatchers.IO) {
-            habitDao.insertLog(mapLogToEntity(entry))
+            habitDao.insertLogs(entries.map { mapLogToEntity(it) })
         }
 
-        // Phase 2 — Vault persistence (JSON file). Still suspending so a caller
-        // that needs to await disk consistency (e.g. before a manual sync) can
-        // join here. Held under the mutex to serialize concurrent toggles on
-        // the same year file, but no longer blocks the UI update.
-        habitMutex.withLock {
-            withContext(Dispatchers.IO) {
-                val year = date.year
-                val logPath = "$habitsDir/log_$year.json"
-
-                val currentJson = fileRepository.readFile(logPath)
-                val allLogs: MutableMap<String, MutableList<HabitLogDto>> = try {
-                    if (!currentJson.isNullOrBlank()) jsonParser.decodeFromString(currentJson)
-                    else mutableMapOf()
-                } catch (e: Exception) {
-                    mutableMapOf()
+        // Phase 2 — Vault persistence (yearly JSON). The mutex serializes concurrent writers of the
+        // same year file (app + widget), so they can't drop each other's entries.
+        val savedToVault = try {
+            habitMutex.withLock {
+                withContext(Dispatchers.IO) {
+                    val logPath = "$habitsDir/log_${date.year}.json"
+                    val allLogs = readYearLogsForUpdate(logPath, date.year)
+                    entries.forEach { entry ->
+                        val habitLogs = allLogs.getOrPut(entry.habitId) { mutableListOf() }
+                        habitLogs.removeAll { it.date == entry.date }
+                        habitLogs.add(HabitLogDto(entry.habitId, entry.date, entry.value, entry.status.name))
+                    }
+                    fileRepository.saveFileLocally(logPath, jsonParser.encodeToString(allLogs))
                 }
-
-                val dto = HabitLogDto(
-                    habitId = entry.habitId,
-                    date = entry.date,
-                    value = entry.value,
-                    status = entry.status.name
-                )
-                val habitLogs = allLogs.getOrPut(entry.habitId) { mutableListOf() }
-                habitLogs.removeIf { it.date == entry.date }
-                habitLogs.add(dto)
-
-                val newJson = jsonParser.encodeToString(allLogs)
-                fileRepository.saveFileLocally(logPath, newJson)
             }
+            true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Room holds the entries, so every screen and widget stays correct; only the vault copy
+            // misses them.
+            Log.e("HabitRepository", "Failed to write the habit log of $date to the vault", e)
+            false
         }
 
         // Refresh widgets so the Habits/Companion widgets reflect the new completion state.
         runCatching { widgetUpdateManager.scheduleSnapshotUpdate() }
 
-        // Phase 3 — Git push. Fire-and-forget on the repository's own scope so a
-        // fast follow-up toggle never waits for the network. Errors are logged;
-        // SyncOrchestrator picks up un-pushed work on the next foreground sync.
-        backgroundScope.launch {
-            try {
-                val (owner, repo) = secretManager.getRepoInfo()
-                if (!owner.isNullOrBlank() && !repo.isNullOrBlank()) {
-                    fileRepository.pushDirtyFiles(
-                        owner, repo,
-                        "feat(habits): log habit ${entry.habitId} for $date"
-                    )
+        // Phase 3 — Git: queued and batched in the background; a toggle never waits for the network.
+        if (savedToVault) pushScheduler.requestPush()
+    }
+
+    /**
+     * The year's logs for a read-modify-write. An unreadable file is never overwritten with one
+     * holding only the new entries — that wiped the whole year's history: it is moved aside, and the
+     * year is rebuilt from Room, which holds every log previously imported from it.
+     */
+    private suspend fun readYearLogsForUpdate(path: String, year: Int): MutableMap<String, MutableList<HabitLogDto>> {
+        val content = fileRepository.readFile(path)
+        if (content.isNullOrBlank()) return mutableMapOf()
+        return try {
+            jsonParser.decodeFromString<MutableMap<String, MutableList<HabitLogDto>>>(content)
+        } catch (e: Exception) {
+            val backup = fileRepository.moveAsideCorrupt(path)
+                ?: throw IOException("Unreadable habit log $path could not be preserved", e)
+            Log.e("HabitRepository", "Unreadable habit log moved aside to ${backup.name}", e)
+            habitDao.getLogsForYear(year.toString())
+                .groupBy { it.habitId }
+                .mapValues { (_, logs) ->
+                    logs.map { HabitLogDto(it.habitId, it.date, it.value, it.status.name) }.toMutableList()
                 }
-            } catch (e: Exception) {
-                if (e is CancellationException) throw e
-                Log.e("HabitRepository", "Background push failed for ${entry.habitId}@$date", e)
-            }
+                .toMutableMap()
         }
     }
 
     /** Most recent COMPLETED date for a habit (this + last year), for INTERVAL scheduling. */
-    suspend fun getLastCompletedDate(habitId: String): java.time.LocalDate? = withContext(Dispatchers.IO) {
-        val year = java.time.LocalDate.now().year
+    suspend fun getLastCompletedDate(habitId: String): LocalDate? = withContext(Dispatchers.IO) {
+        val year = LocalDate.now().year
         val logs = habitDao.getLogsForYear(year.toString()) + habitDao.getLogsForYear((year - 1).toString())
         logs.asSequence()
             .filter { it.habitId == habitId && it.status == HabitStatus.COMPLETED }
             .maxByOrNull { it.date }
-            ?.date?.let { runCatching { java.time.LocalDate.parse(it) }.getOrNull() }
+            ?.date?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
     }
 
     suspend fun addHabitConfig(config: HabitConfig) = habitMutex.withLock {
         withContext(Dispatchers.IO) {
-            val entity = mapConfigToEntity(config)
-            habitDao.insertConfig(entity)
-            exportConfigToJson() // Instantly sync changes to JSON vault
+            habitDao.insertConfig(mapConfigToEntity(config))
+            exportConfigToJson() // Instantly mirror the change into the vault JSON
             runCatching { widgetUpdateManager.scheduleSnapshotUpdate() }
+            pushScheduler.requestPush()
         }
     }
 
     // --- Mappers ---
+
+    private fun parseStatus(raw: String): HabitStatus =
+        try {
+            HabitStatus.valueOf(raw)
+        } catch (e: IllegalArgumentException) {
+            HabitStatus.FAILED
+        }
+
+    private fun HabitConfigDto.toEntity() = HabitConfigEntity(
+        id = id,
+        title = title,
+        description = description,
+        frequency = frequency,
+        targetValue = targetValue,
+        unit = unit,
+        type = type,
+        color = color,
+        icon = icon,
+        autoSource = autoSource,
+        createdDate = createdDate,
+        archived = archived,
+        sortOrder = sortOrder,
+        scheduleMode = scheduleMode ?: "WEEKLY",
+        intervalCount = intervalCount,
+        intervalUnit = intervalUnit ?: "DAY"
+    )
 
     private fun mapConfigToEntity(domain: HabitConfig): HabitConfigEntity {
         return HabitConfigEntity(
@@ -436,23 +428,5 @@ class HabitRepository @Inject constructor(
         } else {
             value > 0
         }
-    }
-
-    suspend fun updateHabitValue(date: LocalDate, habitId: String, value: Double) {
-        val configs = getHabitConfigs()
-        val habit = configs.find { it.id == habitId } ?: return
-
-        val isCompleted = calculateCompletion(value, habit.targetValue, habit.type)
-        val status = if (isCompleted) HabitStatus.COMPLETED else HabitStatus.PARTIAL
-
-        val entry = HabitLogEntry(
-            habitId = habitId,
-            date = date.toString(),
-            value = value,
-            status = status
-        )
-        
-        logHabit(date, entry)
-        Log.d("HabitRepository", "Updated habit $habitId value to $value (Status: $status)")
     }
 }

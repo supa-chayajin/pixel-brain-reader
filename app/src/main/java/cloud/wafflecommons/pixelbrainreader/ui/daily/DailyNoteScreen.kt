@@ -69,8 +69,7 @@ import androidx.compose.material.icons.sharp.Mood
 fun DailyNoteScreen(
     onCheckInClicked: () -> Unit,
     onNavigateToSettings: () -> Unit,
-    viewModel: DailyNoteViewModel = hiltViewModel(),
-    lifeOSViewModel: cloud.wafflecommons.pixelbrainreader.ui.lifeos.LifeOSViewModel = hiltViewModel() // Legacy
+    viewModel: DailyNoteViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val saveState by viewModel.saveState.collectAsStateWithLifecycle()
@@ -95,29 +94,14 @@ fun DailyNoteScreen(
         }
     }
 
-    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner) {
-        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
-            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
-                viewModel.refreshWeather()
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-        }
-    }
-
-    // Weather needs a coarse location. The app previously NEVER requested it at
-    // runtime, so WeatherRepository.getLastKnownLocation() always saw
-    // PERMISSION_DENIED and the card stayed stuck on "Loading...". Ask once when
-    // the daily note is shown; refresh weather the instant it's granted (the
-    // ON_RESUME observer above also re-triggers it after the system dialog closes).
+    // Weather needs a coarse location. Ask once when the daily note is shown and fetch the weather
+    // the instant it's granted. Returning to the app re-checks it on its own (AppClock foreground
+    // events, served from the reading cache while it is recent).
     val locationContext = LocalContext.current
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (granted) viewModel.refreshWeather()
+        if (granted) viewModel.refreshWeather(force = true)
     }
     LaunchedEffect(Unit) {
         val granted = androidx.core.content.ContextCompat.checkSelfPermission(
@@ -154,12 +138,11 @@ fun DailyNoteScreen(
                         )
                     }
 
-                    if (state.isLoading) {
-                        cloud.wafflecommons.pixelbrainreader.ui.components.SaveStatusIndicator(
-                            state = saveState,
-                            modifier = Modifier.padding(horizontal = 4.dp)
-                        )
-                    }
+                    // Second Brain save feedback (it was gated on isLoading, so it never showed).
+                    cloud.wafflecommons.pixelbrainreader.ui.components.SaveStatusIndicator(
+                        state = saveState,
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    )
                 },
                 actions = {
                     val context = androidx.compose.ui.platform.LocalContext.current
@@ -272,7 +255,7 @@ fun DailyNoteScreen(
                     item {
                         cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 4) {
                             Text(
-                                text = "Stay safe my friend, and don't you dare go hollow!",
+                                text = state.mantra,
                                 style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.Medium,
                                 fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
@@ -367,8 +350,8 @@ fun DailyNoteScreen(
                     item {
                         cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 8) {
                             SecondBrainSection(
-                                ideas = state.ideasContent,
-                                notes = state.notesContent,
+                                ideas = viewModel.ideasText,
+                                notes = viewModel.notesText,
                                 onIdeasChange = viewModel::onIdeasChanged,
                                 onNotesChange = viewModel::onNotesChanged
                             )

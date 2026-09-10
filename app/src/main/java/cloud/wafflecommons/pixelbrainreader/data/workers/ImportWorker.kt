@@ -1,16 +1,22 @@
 package cloud.wafflecommons.pixelbrainreader.data.workers
 
 import android.content.Context
+import android.util.Log
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import cloud.wafflecommons.pixelbrainreader.data.ai.AiLanguage
+import cloud.wafflecommons.pixelbrainreader.data.ai.LocalAiManager
 import cloud.wafflecommons.pixelbrainreader.data.repository.FileRepository
+import cloud.wafflecommons.pixelbrainreader.data.sync.VaultPushScheduler
+import cloud.wafflecommons.pixelbrainreader.data.utils.BlockedAddressException
+import cloud.wafflecommons.pixelbrainreader.data.utils.SafeWebFetcher
 import com.vladsch.flexmark.html2md.converter.FlexmarkHtmlConverter
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 
@@ -28,20 +34,17 @@ class ImportWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted workerParams: WorkerParameters,
     private val fileRepository: FileRepository,
-    private val secretManager: cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager,
-    private val geminiRagManager: cloud.wafflecommons.pixelbrainreader.data.ai.GeminiRagManager
+    private val localAiManager: LocalAiManager,
+    private val pushScheduler: VaultPushScheduler
 ) : CoroutineWorker(appContext, workerParams) {
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         val url = inputData.getString("url") ?: return@withContext Result.failure()
 
         try {
-            // 1. Fetch
-            val doc = Jsoup.connect(url)
-                .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
-                .timeout(20_000)
-                .followRedirects(true)
-                .get()
+            // 1. Fetch. Every redirect hop is re-validated against the SSRF guard: following
+            // redirects freely let a public page send the fetch to an internal address.
+            val doc = SafeWebFetcher.fetch(url, DESKTOP_USER_AGENT, 20_000)
 
             // 2. Metadata (Open Graph first, then sensible fallbacks)
             val meta = extractMetadata(doc, url)
@@ -68,19 +71,19 @@ class ImportWorker @AssistedInject constructor(
             }
             fileRepository.createFile(finalPath, finalContent)
 
-            // 7. Git sync
-            val (owner, repo) = secretManager.getRepoInfo()
-            if (owner != null && repo != null) {
-                fileRepository.pushDirtyFiles(owner, repo, "docs(import): add $sanitizedTitle")
-            }
+            // 7. Git: batched background push.
+            pushScheduler.requestPush()
 
             Result.success()
-        } catch (e: kotlinx.coroutines.CancellationException) {
+        } catch (e: CancellationException) {
             throw e
+        } catch (e: BlockedAddressException) {
+            Log.w(TAG, "Import refused: the page is on a non-public address")
+            Result.failure()
         } catch (e: Exception) {
             // Transient fetch/parse/summary failure → retry (network flakiness) rather than
             // silently dropping the import, but cap attempts so a bad URL doesn't spin.
-            android.util.Log.w("ImportWorker", "Import failed (attempt ${runAttemptCount + 1})", e)
+            Log.w(TAG, "Import failed (attempt ${runAttemptCount + 1})", e)
             if (runAttemptCount < 3) Result.retry() else Result.failure()
         }
     }
@@ -155,20 +158,16 @@ class ImportWorker @AssistedInject constructor(
         return paragraphs * 15 + textLen / 50
     }
 
+    /**
+     * Optional on-device summary. LocalAiManager reports failures AS failures: the chat wrapper used
+     * here before turned them into an "unavailable" sentence, which was then written into the note
+     * as its summary.
+     */
     private suspend fun summarize(markdownBody: String): String? {
         if (markdownBody.length <= 500) return null
-        return try {
-            val prompt = "Résume cet article en 3 puces concises, en français :\n\n${markdownBody.take(4000)}"
-            val sb = StringBuilder()
-            geminiRagManager.generateResponse(prompt, useRAG = false).collect { chunk ->
-                if (!chunk.startsWith("Thinking")) sb.append(chunk)
-            }
-            sb.toString().trim().ifBlank { null }
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            null // Summary is optional — never fail the import over it.
-        }
+        val prompt = "Résume cet article en 3 puces concises, en français :\n\n" +
+            "${markdownBody.take(4000)}\n\n${AiLanguage.DIRECTIVE}"
+        return localAiManager.generateResponse(prompt).getOrNull()?.trim()?.ifBlank { null }
     }
 
     /** Collapse excess blank lines and stray whitespace left by the HTML→MD converter. */
@@ -218,5 +217,11 @@ class ImportWorker @AssistedInject constructor(
         sb.append("---\n\n")
         sb.append(body).append("\n")
         return sb.toString()
+    }
+
+    private companion object {
+        const val TAG = "ImportWorker"
+        const val DESKTOP_USER_AGENT =
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
     }
 }

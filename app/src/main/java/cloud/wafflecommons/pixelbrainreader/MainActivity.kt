@@ -25,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
 import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
 import cloud.wafflecommons.pixelbrainreader.data.repository.AppThemeConfig
 import cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
@@ -35,6 +36,7 @@ import cloud.wafflecommons.pixelbrainreader.ui.theme.PixelBrainReaderTheme
 import cloud.wafflecommons.pixelbrainreader.widget.ui.WidgetNav
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
@@ -136,13 +138,17 @@ class MainActivity : FragmentActivity() {
             }
 
             PixelBrainReaderTheme(darkTheme = useDarkTheme) {
-                when (val state = loginState) {
+                when (loginState) {
                     null -> SplashScreen()
                     true -> MainScreen(
                         viewModel = viewModel,
                         onLogout = {
-                            loginState = false
-                            secretManager.clear()
+                            // Clearing the Keystore-backed prefs is disk + crypto work: keep it off
+                            // the main thread, and only show the login screen once it is done.
+                            lifecycleScope.launch {
+                                withContext(Dispatchers.IO) { secretManager.clear() }
+                                loginState = false
+                            }
                         },
                         onExitApp = { finishAffinity() }
                     )
@@ -176,7 +182,13 @@ class MainActivity : FragmentActivity() {
             }
         }
 
-        handleIntent(intent)
+        // Only a FRESH launch carries a new request. After a recreation (theme or configuration
+        // change, process restore) or a relaunch from Recents the same intent comes back, and
+        // re-handling it re-imported the shared content and replayed the widget navigation.
+        val launchedFromHistory = (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0
+        if (savedInstanceState == null && !launchedFromHistory) {
+            handleIntent(intent)
+        }
     }
 
     @OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
@@ -196,12 +208,12 @@ class MainActivity : FragmentActivity() {
 
     private fun handleIntent(intent: Intent?) {
         if (intent == null) return
-        
+
         // Share Intent
         if (intent.action == Intent.ACTION_SEND) {
             viewModel.handleShareIntent(intent)
         }
-        
+
         // pixelbrain:// deep links. `import` is a PUBLIC, BROWSABLE entry point (any web page can
         // fire it) so it stays untrusted: validate the URL (SSRF guard) and require explicit
         // confirmation before writing to the vault. `open`/`capture` are fired only by our own

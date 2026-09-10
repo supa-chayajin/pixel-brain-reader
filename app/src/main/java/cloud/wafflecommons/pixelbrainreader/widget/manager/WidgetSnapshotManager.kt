@@ -4,13 +4,16 @@ import android.content.Context
 import android.util.Log
 import cloud.wafflecommons.pixelbrainreader.data.gamification.CharacterClass
 import cloud.wafflecommons.pixelbrainreader.data.gamification.GamificationRepository
+import cloud.wafflecommons.pixelbrainreader.data.health.DailyHealthMetrics
 import cloud.wafflecommons.pixelbrainreader.data.health.HealthConnectManager
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.ChoreEntity
 import cloud.wafflecommons.pixelbrainreader.data.model.HabitStatus
 import cloud.wafflecommons.pixelbrainreader.data.repository.ChoreRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.DailyDashboardRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.HabitRepository
+import cloud.wafflecommons.pixelbrainreader.data.repository.HealthMetricsRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.MoodRepository
+import cloud.wafflecommons.pixelbrainreader.data.system.AppClock
 import cloud.wafflecommons.pixelbrainreader.domain.lifeos.HabitScheduler
 import cloud.wafflecommons.pixelbrainreader.widget.data.SnapshotMood
 import cloud.wafflecommons.pixelbrainreader.widget.data.SnapshotPoint
@@ -20,9 +23,14 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import java.io.File
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.time.Instant
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
@@ -41,107 +49,150 @@ import javax.inject.Singleton
 class WidgetSnapshotManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val healthConnectManager: HealthConnectManager,
+    private val healthMetricsRepository: HealthMetricsRepository,
     private val gamificationRepository: GamificationRepository,
     private val moodRepository: MoodRepository,
     private val widgetUpdateManager: WidgetUpdateManager,
     private val habitRepository: HabitRepository,
     private val choreRepository: ChoreRepository,
-    private val dailyDashboardRepository: DailyDashboardRepository
+    private val dailyDashboardRepository: DailyDashboardRepository,
+    private val appClock: AppClock
 ) {
     private val snapshotFileName = "widget_snapshot.json"
     private val json = Json { ignoreUnknownKeys = true; prettyPrint = true }
 
+    /** Rebuilds can overlap (worker, app start, pull-to-refresh): one at a time. */
+    private val rebuildMutex = Mutex()
+
     suspend fun updateSnapshot() = withContext(Dispatchers.IO) {
-        try {
-            val today = LocalDate.now()
-            val startOfDay = today.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant()
-            val now = Instant.now()
-            val sixHoursAgo = now.minus(6, ChronoUnit.HOURS)
-
-            // ---- 1. Health (one aggregate round-trip, permission-guarded) ----
-            val hasPermissions = try { healthConnectManager.checkPermissions() } catch (e: Exception) { false }
-            val metrics = if (hasPermissions) {
-                try { healthConnectManager.getDailyMetrics(today) } catch (e: Exception) { null }
-            } else null
-
-            val stepsVal = metrics?.steps ?: 0L
-
-            // Sleep: Habit repo is the source of truth (manual logging), Health Connect is fallback.
-            var sleepMinutes = readSleepFromHabit(today)
-            if (sleepMinutes <= 0L) sleepMinutes = metrics?.sleepDurationMinutes ?: 0L
-
-            val heartRates = if (hasPermissions) {
-                try {
-                    healthConnectManager.readHeartRateHistory(sixHoursAgo, now, java.time.Duration.ofMinutes(15))
-                } catch (e: Exception) { emptyList() }
-            } else emptyList()
-
-            val stepsStr = if (stepsVal > 1000) String.format(Locale.getDefault(), "%.1fk", stepsVal / 1000.0) else stepsVal.toString()
-            val sleepStr = "${sleepMinutes / 60}h${(sleepMinutes % 60).toString().padStart(2, '0')}"
-
-            // ---- 2. Gamification ----
-            val profile = try { gamificationRepository.getStateSnapshot().profile } catch (e: Exception) { null }
-
-            // ---- 3. Mood ----
-            val dailyMood = moodRepository.getDailyMood(today).firstOrNull()
-            val lastMoodEmoji = dailyMood?.summary?.mainEmoji
-
-            val chartPoints = heartRates.map { SnapshotPoint(it.timestamp.epochSecond, it.avgBpm) }
-            val chartMoods = dailyMood?.entries?.mapNotNull { entry ->
-                try {
-                    val dt = java.time.LocalDateTime.parse("${today}T${entry.time}")
-                    val epoch = dt.atZone(java.time.ZoneId.systemDefault()).toEpochSecond()
-                    if (epoch > sixHoursAgo.epochSecond) SnapshotMood(epoch, entry.score) else null
-                } catch (e: Exception) { null }
-            } ?: emptyList()
-
-            // ---- 4. Life-OS progress rings ----
-            val (habitsDone, habitsTotal) = countHabits(today)
-            val tasks = (try { dailyDashboardRepository.getLiveTasks(today).firstOrNull() } catch (e: Exception) { null }).orEmpty()
-            val chores = (try { choreRepository.getAllChoresStream().firstOrNull() } catch (e: Exception) { null }).orEmpty()
-            val choresDue = chores.count { !it.archived && isChoreDue(it, today) }
-
-            // ---- 5. Assemble + persist ----
-            val snapshot = WidgetDataSnapshot(
-                heroClass = profile?.characterClass ?: CharacterClass.PEASANT,
-                level = profile?.level ?: 1,
-                currentXp = profile?.currentXp?.toInt() ?: 0,
-                xpToNext = profile?.xpToNextLevel?.toInt() ?: 100,
-                avatarResName = profile?.avatarResName,
-                lastMoodEmoji = lastMoodEmoji,
-                moodEntryCount = dailyMood?.entries?.size ?: 0,
-                steps = stepsStr,
-                stepsRaw = stepsVal,
-                sleep = sleepStr,
-                distanceKm = metrics?.distanceKm ?: 0.0,
-                activeMinutes = metrics?.activeMinutes ?: 0L,
-                caloriesBurned = (metrics?.caloriesBurned ?: 0.0).toInt(),
-                hydrationMl = (metrics?.waterConsumedMl ?: 0.0).toInt(),
-                mindfulnessMinutes = metrics?.mindfulnessMinutes ?: 0L,
-                avgHeartRate = metrics?.averageHeartRate ?: 0,
-                weightKg = metrics?.weight ?: 0.0,
-                habitsDone = habitsDone,
-                habitsTotal = habitsTotal,
-                tasksDone = tasks.count { it.isDone },
-                tasksTotal = tasks.size,
-                choresDue = choresDue,
-                chartHeartRate = chartPoints,
-                chartMoods = chartMoods,
-                lastUpdatedAt = System.currentTimeMillis()
-            )
-
-            context.openFileOutput(snapshotFileName, Context.MODE_PRIVATE).use {
-                it.write(json.encodeToString(snapshot).toByteArray())
+        rebuildMutex.withLock {
+            try {
+                buildAndPersistSnapshot()
+                // Re-render every widget that reads the snapshot.
+                widgetUpdateManager.triggerUpdate()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e("WidgetSnapshotManager", "Failed to update snapshot", e)
             }
-
-            // Re-render every widget that reads the snapshot.
-            widgetUpdateManager.triggerUpdate()
-            Log.d("WidgetSnapshotManager", "Snapshot updated (steps=$stepsVal habits=$habitsDone/$habitsTotal chores=$choresDue).")
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Log.e("WidgetSnapshotManager", "Failed to update snapshot", e)
         }
+    }
+
+    private suspend fun buildAndPersistSnapshot() {
+        val today = LocalDate.now()
+        val now = Instant.now()
+        val sixHoursAgo = now.minus(6, ChronoUnit.HOURS)
+        val previous = readPreviousSnapshot()
+
+        // ---- 1. Health ----
+        // Health Connect only answers a FOREGROUND app (no background-read permission): a rebuild
+        // triggered by a widget tap or the widget refresh period used to read zeros and publish
+        // them. In the background, use the metrics the last foreground refresh wrote to the vault.
+        val liveHealth = appClock.isInForeground.value &&
+            (try { healthConnectManager.checkPermissions() } catch (e: Exception) { false })
+        val metrics: DailyHealthMetrics? = if (liveHealth) {
+            try { healthConnectManager.getDailyMetrics(today) } catch (e: Exception) { null }
+        } else {
+            readVaultMetrics(today)
+        }
+
+        val stepsVal = metrics?.steps ?: 0L
+
+        // Sleep: Habit repo is the source of truth (manual logging), Health Connect is fallback.
+        var sleepMinutes = readSleepFromHabit(today)
+        if (sleepMinutes <= 0L) sleepMinutes = metrics?.sleepDurationMinutes ?: 0L
+
+        val chartPoints = if (liveHealth) {
+            try {
+                healthConnectManager.readHeartRateHistory(sixHoursAgo, now, java.time.Duration.ofMinutes(15))
+                    .map { SnapshotPoint(it.timestamp.epochSecond, it.avgBpm) }
+            } catch (e: Exception) {
+                emptyList()
+            }
+        } else {
+            // Keep the last live heart-rate points that are still inside the 6-hour window.
+            previous?.chartHeartRate.orEmpty().filter { it.timestamp > sixHoursAgo.epochSecond }
+        }
+
+        val stepsStr = if (stepsVal > 1000) String.format(Locale.getDefault(), "%.1fk", stepsVal / 1000.0) else stepsVal.toString()
+        val sleepStr = "${sleepMinutes / 60}h${(sleepMinutes % 60).toString().padStart(2, '0')}"
+
+        // ---- 2. Gamification ----
+        val profile = try { gamificationRepository.getStateSnapshot().profile } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
+
+        // ---- 3. Mood ----
+        val dailyMood = moodRepository.getDailyMood(today).firstOrNull()
+        val lastMoodEmoji = dailyMood?.summary?.mainEmoji
+
+        val chartMoods = dailyMood?.entries?.mapNotNull { entry ->
+            try {
+                val dt = java.time.LocalDateTime.parse("${today}T${entry.time}")
+                val epoch = dt.atZone(java.time.ZoneId.systemDefault()).toEpochSecond()
+                if (epoch > sixHoursAgo.epochSecond) SnapshotMood(epoch, entry.score) else null
+            } catch (e: Exception) { null }
+        } ?: emptyList()
+
+        // ---- 4. Life-OS progress rings ----
+        val (habitsDone, habitsTotal) = countHabits(today)
+        val tasks = (try { dailyDashboardRepository.getLiveTasks(today).firstOrNull() } catch (e: CancellationException) { throw e } catch (e: Exception) { null }).orEmpty()
+        val chores = (try { choreRepository.getAllChoresStream().firstOrNull() } catch (e: CancellationException) { throw e } catch (e: Exception) { null }).orEmpty()
+        val choresDue = chores.count { !it.archived && isChoreDue(it, today) }
+
+        // ---- 5. Assemble + persist ----
+        val snapshot = WidgetDataSnapshot(
+            heroClass = profile?.characterClass ?: CharacterClass.PEASANT,
+            level = profile?.level ?: 1,
+            currentXp = profile?.currentXp?.toInt() ?: 0,
+            xpToNext = profile?.xpToNextLevel?.toInt() ?: 100,
+            avatarResName = profile?.avatarResName,
+            lastMoodEmoji = lastMoodEmoji,
+            moodEntryCount = dailyMood?.entries?.size ?: 0,
+            steps = stepsStr,
+            stepsRaw = stepsVal,
+            sleep = sleepStr,
+            distanceKm = metrics?.distanceKm ?: 0.0,
+            activeMinutes = metrics?.activeMinutes ?: 0L,
+            caloriesBurned = (metrics?.caloriesBurned ?: 0.0).toInt(),
+            hydrationMl = (metrics?.waterConsumedMl ?: 0.0).toInt(),
+            mindfulnessMinutes = metrics?.mindfulnessMinutes ?: 0L,
+            avgHeartRate = metrics?.averageHeartRate ?: 0,
+            weightKg = metrics?.weight ?: 0.0,
+            habitsDone = habitsDone,
+            habitsTotal = habitsTotal,
+            tasksDone = tasks.count { it.isDone },
+            tasksTotal = tasks.size,
+            choresDue = choresDue,
+            chartHeartRate = chartPoints,
+            chartMoods = chartMoods,
+            lastUpdatedAt = System.currentTimeMillis()
+        )
+
+        // Atomic replace: a widget rendering concurrently must never read a half-written file.
+        val target = File(context.filesDir, snapshotFileName)
+        val temp = File(context.filesDir, "$snapshotFileName.tmp")
+        temp.writeText(json.encodeToString(snapshot))
+        Files.move(temp.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+
+        Log.d(
+            "WidgetSnapshotManager",
+            "Snapshot updated (liveHealth=$liveHealth steps=$stepsVal habits=$habitsDone/$habitsTotal chores=$choresDue)."
+        )
+    }
+
+    private fun readPreviousSnapshot(): WidgetDataSnapshot? = try {
+        val file = File(context.filesDir, snapshotFileName)
+        if (file.exists()) json.decodeFromString<WidgetDataSnapshot>(file.readText()) else null
+    } catch (e: Exception) {
+        null
+    }
+
+    /** Today's metrics as last written to the vault by a foreground health refresh, or null. */
+    private suspend fun readVaultMetrics(today: LocalDate): DailyHealthMetrics? = try {
+        healthMetricsRepository.getMetrics(today)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        null
     }
 
     /** Today's sleep (minutes) from the Habit repo ("sleep"/"sommeil" habit, value in hours), or 0. */
