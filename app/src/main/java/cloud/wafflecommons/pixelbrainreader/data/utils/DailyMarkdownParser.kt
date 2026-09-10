@@ -24,6 +24,36 @@ object DailyMarkdownParser {
         val gratitude: List<String>
     )
 
+    private enum class Section { HEADER, TIMELINE, JOURNAL, IDEAS, NOTES, SCRAPS, GRATITUDE }
+
+    /**
+     * Section titles as [MarkdownBurner] writes them — current and legacy spellings (the French
+     * "Idées / Second Cerveau" predates the localization), plus the bare names — lower-cased and
+     * without their decorative emoji. A `## ` heading is a section header only when its WHOLE title
+     * matches: prefix matching turned a user's "## Notes about Monday" inside Ideas into a switch to
+     * the Notes section, and every other heading written in Ideas or Notes was dropped on ingest.
+     */
+    private val sectionTitles: Map<String, Section> = mapOf(
+        "timeline" to Section.TIMELINE,
+        "journal" to Section.JOURNAL,
+        "ideas / second brain" to Section.IDEAS,
+        "idées / second cerveau" to Section.IDEAS,
+        "ideas" to Section.IDEAS,
+        "idées" to Section.IDEAS,
+        "notes / self-care" to Section.NOTES,
+        "notes" to Section.NOTES,
+        "scraps (unprocessed)" to Section.SCRAPS,
+        "scraps" to Section.SCRAPS,
+        "gratitude" to Section.GRATITUDE
+    )
+
+    private val timelineRegex = Regex("^\\s*-\\s+(\\d{1,2}:\\d{2})\\s+(.*)")
+
+    // The burner writes the scheduled time as a LEADING "at HH:mm " prefix, so only match it there.
+    // An unanchored match would corrupt a label that merely CONTAINS the text
+    // (e.g. "Meet Bob at 10:00" -> "Meet Bob", time 10:00).
+    private val taskTimeRegex = Regex("^at (\\d{1,2}:\\d{2})(?:\\s|$)")
+
     fun parse(date: LocalDate, content: String): ParsedDaily {
         val lines = content.lines()
         val timelineEvents = mutableListOf<TimelineEntryEntity>()
@@ -33,41 +63,39 @@ object DailyMarkdownParser {
         val scraps = mutableListOf<String>()
         val gratitude = mutableListOf<String>()
 
-        var section = "HEADER"
-        val timelineRegex = Regex("^\\s*-\\s+(\\d{1,2}:\\d{2})\\s+(.*)")
+        var section = Section.HEADER
 
         lines.forEach { line ->
             val trimmed = line.trim()
-            if (trimmed.startsWith("## 🗓️ Timeline") || trimmed.startsWith("## Timeline")) { section = "TIMELINE"; return@forEach }
-            if (trimmed.startsWith("## 📝 Journal") || trimmed.startsWith("## Journal")) { section = "JOURNAL"; return@forEach }
-            // Accept the English header (current burner output) AND the legacy French header
-            // ("Idées / Second Cerveau") so daily notes written before the localization still parse.
-            if (trimmed.startsWith("## 🧠 Ideas") || trimmed.startsWith("## Ideas") ||
-                trimmed.startsWith("## 🧠 Idées") || trimmed.startsWith("## Idées")) { section = "IDEAS"; return@forEach }
-            if (trimmed.startsWith("## 📑 Notes") || trimmed.startsWith("## Notes")) { section = "NOTES"; return@forEach }
-            if (trimmed.startsWith("## 💡 Scraps") || trimmed.startsWith("## Scraps")) { section = "SCRAPS"; return@forEach }
-            if (trimmed.startsWith("## 🌟 Gratitude") || trimmed.startsWith("## Gratitude")) { section = "GRATITUDE"; return@forEach }
-            if (trimmed.startsWith("##")) return@forEach // Skip other headers
+            sectionOf(trimmed)?.let {
+                section = it
+                return@forEach
+            }
+            // Any other heading is the user's own: kept inside the free-text sections, skipped elsewhere.
+            if (trimmed.startsWith("##") && section != Section.IDEAS && section != Section.NOTES) return@forEach
 
             when (section) {
-                "TIMELINE" -> {
-                     val match = timelineRegex.find(line)
-                     if (match != null) {
-                         val (timeStr, text) = match.destructured
-                         // Pull the googleEventId back out of its invisible marker (and strip
-                         // it from the visible content) so the row stays Calendar-reclaimable.
-                         val (cleanContent, googleEventId) = DailyMarkers.stripCalendarMarker(text)
-                         try {
-                              timelineEvents.add(TimelineEntryEntity(
-                                  date = date,
-                                  time = LocalTime.parse(timeStr, DateTimeFormatter.ofPattern("H:mm")),
-                                  content = cleanContent,
-                                  googleEventId = googleEventId
-                              ))
-                         } catch (e: Exception) {}
-                     }
+                Section.TIMELINE -> {
+                    val match = timelineRegex.find(line)
+                    if (match != null) {
+                        val (timeStr, text) = match.destructured
+                        // Pull the googleEventId back out of its invisible marker (and strip
+                        // it from the visible content) so the row stays Calendar-reclaimable.
+                        val (cleanContent, googleEventId) = DailyMarkers.stripCalendarMarker(text)
+                        try {
+                            timelineEvents.add(
+                                TimelineEntryEntity(
+                                    date = date,
+                                    time = LocalTime.parse(timeStr, DateTimeFormatter.ofPattern("H:mm")),
+                                    content = cleanContent,
+                                    googleEventId = googleEventId
+                                )
+                            )
+                        } catch (e: Exception) {
+                        }
+                    }
                 }
-                "JOURNAL" -> {
+                Section.JOURNAL -> {
                     if (trimmed.startsWith("- [")) {
                         val isDone = trimmed.startsWith("- [x]")
                         val afterCheckbox = trimmed.substringAfter("] ").trim()
@@ -79,37 +107,37 @@ object DailyMarkdownParser {
                         var scheduledTime: LocalTime? = null
                         var finalLabel = cleanLabel
 
-                        // The burner writes the scheduled time as a LEADING "at HH:mm " prefix, so
-                        // only match it there. An unanchored match would corrupt a label that merely
-                        // CONTAINS the text (e.g. "Meet Bob at 10:00" -> "Meet Bob", time 10:00).
-                        val timeMatch = Regex("^at (\\d{1,2}:\\d{2})(?:\\s|$)").find(cleanLabel)
+                        val timeMatch = taskTimeRegex.find(cleanLabel)
                         if (timeMatch != null) {
                             try {
                                 scheduledTime = LocalTime.parse(timeMatch.groupValues[1], DateTimeFormatter.ofPattern("H:mm"))
                                 finalLabel = cleanLabel.removeRange(timeMatch.range).trim()
-                            } catch (e: Exception) {}
+                            } catch (e: Exception) {
+                            }
                         }
 
-                        tasks.add(DailyTaskEntity(
-                            scheduledDate = date.format(DateTimeFormatter.ISO_LOCAL_DATE),
-                            label = finalLabel,
-                            isDone = isDone,
-                            priority = priority,
-                            scheduledTime = scheduledTime?.format(DateTimeFormatter.ofPattern("HH:mm")),
-                            googleTaskId = googleTaskId,
-                            source = if (googleTaskId != null) "GoogleTasks" else "Local"
-                        ))
+                        tasks.add(
+                            DailyTaskEntity(
+                                scheduledDate = date.format(DateTimeFormatter.ISO_LOCAL_DATE),
+                                label = finalLabel,
+                                isDone = isDone,
+                                priority = priority,
+                                scheduledTime = scheduledTime?.format(DateTimeFormatter.ofPattern("HH:mm")),
+                                googleTaskId = googleTaskId,
+                                source = if (googleTaskId != null) "GoogleTasks" else "Local"
+                            )
+                        )
                     }
                 }
-                "IDEAS" -> { if (line.isNotBlank() || ideas.isNotEmpty()) ideas.append(line).append("\n") }
-                "NOTES" -> { if (line.isNotBlank() || notes.isNotEmpty()) notes.append(line).append("\n") }
-                "SCRAPS" -> {
+                Section.IDEAS -> { if (line.isNotBlank() || ideas.isNotEmpty()) ideas.append(line).append("\n") }
+                Section.NOTES -> { if (line.isNotBlank() || notes.isNotEmpty()) notes.append(line).append("\n") }
+                Section.SCRAPS -> {
                     if (trimmed.startsWith("-")) {
                         val s = trimmed.removePrefix("-").trim()
                         if (s.isNotBlank()) scraps.add(s)
                     }
                 }
-                "GRATITUDE" -> {
+                Section.GRATITUDE -> {
                     if (trimmed.startsWith("-")) {
                         // Burned as "- [x] content" — strip the bullet and checkbox.
                         val g = trimmed.removePrefix("-").trim()
@@ -117,6 +145,7 @@ object DailyMarkdownParser {
                         if (g.isNotBlank()) gratitude.add(g)
                     }
                 }
+                Section.HEADER -> Unit
             }
         }
 
@@ -128,6 +157,16 @@ object DailyMarkdownParser {
             scraps = scraps,
             gratitude = gratitude
         )
+    }
+
+    /** The section a `## ` line opens, or null when it isn't one of the burner's section headers. */
+    private fun sectionOf(trimmedLine: String): Section? {
+        if (!trimmedLine.startsWith("## ")) return null
+        val title = trimmedLine.removePrefix("## ").trim()
+        // Drop the decorative emoji (and its variation selector) in front of the title.
+        val start = title.indexOfFirst { it.isLetterOrDigit() }
+        if (start < 0) return null
+        return sectionTitles[title.substring(start).trim().lowercase()]
     }
 
     /**

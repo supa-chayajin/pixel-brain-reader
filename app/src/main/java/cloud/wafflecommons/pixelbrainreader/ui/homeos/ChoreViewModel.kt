@@ -3,18 +3,21 @@ package cloud.wafflecommons.pixelbrainreader.ui.homeos
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cloud.wafflecommons.pixelbrainreader.data.gamification.Attribute
-import cloud.wafflecommons.pixelbrainreader.data.local.entity.ChoreEntity
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.HomeRoomEntity
 import cloud.wafflecommons.pixelbrainreader.data.repository.ChoreRepository
+import cloud.wafflecommons.pixelbrainreader.data.sync.SyncOrchestrator
+import cloud.wafflecommons.pixelbrainreader.data.sync.SyncState
 import cloud.wafflecommons.pixelbrainreader.domain.gamification.GrantXpUseCase
 import cloud.wafflecommons.pixelbrainreader.domain.homeos.CalculateChoreEntropyUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import javax.inject.Inject
 
@@ -23,7 +26,7 @@ class ChoreViewModel @Inject constructor(
     private val choreRepository: ChoreRepository,
     private val calculateChoreEntropyUseCase: CalculateChoreEntropyUseCase,
     private val grantXpUseCase: GrantXpUseCase,
-    private val syncOrchestrator: cloud.wafflecommons.pixelbrainreader.data.sync.SyncOrchestrator
+    private val syncOrchestrator: SyncOrchestrator
 ) : ViewModel() {
 
     // Sorted and grouped by Room natively for the UI, carrying each room's identity colour.
@@ -54,53 +57,57 @@ class ChoreViewModel @Inject constructor(
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = emptyList()
         )
-    
-    val isSyncing: StateFlow<cloud.wafflecommons.pixelbrainreader.data.sync.SyncState> = syncOrchestrator.syncState
 
+    val isSyncing: StateFlow<SyncState> = syncOrchestrator.syncState
+
+    /** Chore taps being processed — a fast double tap must not complete (and reward) twice. Main thread only. */
+    private val choresInFlight = mutableSetOf<String>()
+
+    /** Pull-to-refresh: a full, user-initiated sync (bypasses the automatic cooldown). */
     fun triggerSync() {
-        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            syncOrchestrator.executeFullSyncCycle()
-        }
+        syncOrchestrator.requestSync(force = true)
     }
 
     fun doChore(choreId: String) {
-        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            // Find the chore in the current state to check for anti-cheat and calculate dynamic XP
-            val targetUiModel = groupedChores.value.flatMap { it.chores }
-                .find { it.entity.id == choreId } ?: return@launch
-            
-            // ANTI-CHEAT: If it was cleaned today or yesterday (dirtiness very low), grant no XP
-            if (targetUiModel.dirtinessPercentage < 5f) {
-                // We still update the date just for accuracy, but we abort the XP sequence
-                choreRepository.updateLastDoneDate(choreId, LocalDate.now().toString())
-                return@launch
+        if (!choresInFlight.add(choreId)) return
+        viewModelScope.launch {
+            try {
+                completeChore(choreId)
+            } finally {
+                choresInFlight.remove(choreId)
             }
-
-            // Normal gamification path
-            var finalXp = targetUiModel.entity.baseEffort.toDouble()
-
-            // Restoring Order Bonus: Give extra +15 XP if it was deeply dirty (> 100%)
-            if (targetUiModel.dirtinessPercentage >= 100f) {
-                finalXp += 15.0
-            }
-
-            // Persistence
-            choreRepository.updateLastDoneDate(choreId, LocalDate.now().toString())
-
-            // Gamification integration
-            grantXpUseCase.executeCustom(
-                attribute = Attribute.END, // Physical cleaning maps to Endurance
-                xpBase = finalXp,
-                sourceId = "Cleaned: ${targetUiModel.entity.name}"
-            )
         }
     }
 
+    private suspend fun completeChore(choreId: String) = withContext(Dispatchers.IO) {
+        // Read the chore fresh: the dashboard list can lag a tap behind, and a stale "dirty" model
+        // used to grant the XP twice.
+        val chore = choreRepository.getAllChoresStream().first().find { it.id == choreId } ?: return@withContext
+        val dirtiness = calculateChoreEntropyUseCase(listOf(chore)).firstOrNull()?.dirtinessPercentage
+            ?: return@withContext
+
+        // Persistence (also when no XP is due, so the date stays accurate).
+        choreRepository.updateLastDoneDate(choreId, LocalDate.now().toString())
+
+        // ANTI-CHEAT: cleaned today or yesterday (dirtiness very low) → no XP.
+        if (dirtiness < 5f) return@withContext
+
+        // Restoring Order Bonus: +15 XP when it was deeply dirty (>= 100%).
+        val finalXp = chore.baseEffort.toDouble() + if (dirtiness >= 100f) 15.0 else 0.0
+
+        // Gamification integration — physical cleaning maps to Endurance.
+        grantXpUseCase.executeCustom(
+            attribute = Attribute.END,
+            xpBase = finalXp,
+            sourceId = "Cleaned: ${chore.name}"
+        )
+    }
+
     fun addChoreWithRoomId(name: String, roomId: String, frequencyDays: Int, baseEffort: Int, pastDays: Int = 0) {
-        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+        viewModelScope.launch(Dispatchers.IO) {
             val randomId = java.util.UUID.randomUUID().toString()
             val safeFreq = frequencyDays.takeIf { it > 0 } ?: 1
-            
+
             choreRepository.insertChore(
                 cloud.wafflecommons.pixelbrainreader.data.local.entity.ChoreEntity(
                     id = randomId,
@@ -115,17 +122,16 @@ class ChoreViewModel @Inject constructor(
     }
 
     fun addChore(name: String, room: String, frequencyDays: Int, baseEffort: Int, pastDays: Int = 0) {
-        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            val randomId = java.util.UUID.randomUUID().toString()
+        viewModelScope.launch(Dispatchers.IO) {
             val safeRoomName = room.trim().takeIf { it.isNotEmpty() } ?: "Uncategorized"
             val safeFreq = frequencyDays.takeIf { it > 0 } ?: 1
-            
+
             // Bridge: Find existing Room UUID by name, or create it dynamically
             val allRoomsList = choreRepository.getAllRoomsStream().first()
             var matchingRoom = allRoomsList.find { it.name.equals(safeRoomName, ignoreCase = true) }
-            
+
             if (matchingRoom == null) {
-                matchingRoom = cloud.wafflecommons.pixelbrainreader.data.local.entity.HomeRoomEntity(
+                matchingRoom = HomeRoomEntity(
                     id = java.util.UUID.randomUUID().toString(),
                     name = safeRoomName,
                     // New rooms get a random identity colour (like habits carry a colour).
@@ -133,20 +139,18 @@ class ChoreViewModel @Inject constructor(
                 )
                 choreRepository.upsertRoom(matchingRoom)
             }
-            
+
             addChoreWithRoomId(name, matchingRoom.id, safeFreq, baseEffort, pastDays)
         }
     }
 
     fun addDebugChore() {
-        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            addChore(
-                name = "Chore ${java.util.UUID.randomUUID().toString().take(4)}",
-                room = listOf("Kitchen", "Bathroom", "Living Room").random(),
-                baseEffort = listOf(10, 25, 50).random(),
-                frequencyDays = listOf(3, 7, 14, 30).random(),
-                pastDays = (0..20).random()
-            )
-        }
+        addChore(
+            name = "Chore ${java.util.UUID.randomUUID().toString().take(4)}",
+            room = listOf("Kitchen", "Bathroom", "Living Room").random(),
+            baseEffort = listOf(10, 25, 50).random(),
+            frequencyDays = listOf(3, 7, 14, 30).random(),
+            pastDays = (0..20).random()
+        )
     }
 }

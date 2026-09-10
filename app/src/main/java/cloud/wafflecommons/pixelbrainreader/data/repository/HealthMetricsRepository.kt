@@ -4,9 +4,12 @@ import android.util.Log
 import cloud.wafflecommons.pixelbrainreader.data.health.DailyHealthMetrics
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
-import kotlinx.serialization.decodeFromString
+import kotlinx.coroutines.flow.update
 import kotlinx.serialization.json.Json
 import java.time.LocalDate
 import javax.inject.Inject
@@ -19,6 +22,19 @@ class HealthMetricsRepository @Inject constructor(
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
+    }
+
+    private val _changes = MutableStateFlow(0L)
+
+    /**
+     * Bumped every time health metrics are (re)written to the vault. The metrics flows below are
+     * one-shot file reads, so observers key on this to re-read — the Daily and Stats screens used
+     * to show stale steps/sleep until the next manual sync.
+     */
+    val changes: StateFlow<Long> = _changes.asStateFlow()
+
+    fun notifyChanged() {
+        _changes.update { it + 1 }
     }
 
     private fun pathFor(date: LocalDate): String =
@@ -37,9 +53,14 @@ class HealthMetricsRepository @Inject constructor(
         emit(history)
     }.flowOn(Dispatchers.IO)
 
+    /** The last metrics persisted for [date] by a foreground health sync, or null. */
+    suspend fun getMetrics(date: LocalDate): DailyHealthMetrics? = decodeMetricsAt(pathFor(date))
+
     private suspend fun decodeMetricsAt(path: String): DailyHealthMetrics? {
         val content = try {
             fileRepository.readFile(path)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.w("HealthMetricsRepository", "Failed to read $path: ${e.message}")
             null

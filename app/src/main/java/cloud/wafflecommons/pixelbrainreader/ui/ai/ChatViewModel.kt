@@ -148,6 +148,9 @@ class ChatViewModel @Inject constructor(
      */
     fun sendMessage(query: String) {
         if (query.isBlank()) return
+        // One answer at a time: a second send used to start a parallel generation that wrote into
+        // the same streaming bubble.
+        if (generationJob?.isActive == true) return
 
         generationJob = viewModelScope.launch {
             val mode = _currentMode.value

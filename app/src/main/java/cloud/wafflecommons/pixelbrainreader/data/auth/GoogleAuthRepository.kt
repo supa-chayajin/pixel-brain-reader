@@ -22,10 +22,13 @@ import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.api.services.calendar.CalendarScopes
 import com.google.api.services.tasks.TasksScopes
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeoutOrNull
+import java.util.concurrent.TimeoutException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -35,6 +38,9 @@ private const val TAG = "GoogleAuthV2"
 // refresh 1 min before that, leaving headroom for clock skew between device & Google.
 private const val ACCESS_TOKEN_TTL_MS = 55L * 60L * 1000L
 private const val TOKEN_SKEW_MS = 60L * 1000L
+
+// A Play-services authorization Task can stay pending indefinitely (no network, stuck GMS).
+private const val AUTHORIZE_TIMEOUT_MS = 20_000L
 
 /**
  * Modern Google auth, two-step:
@@ -57,8 +63,13 @@ class GoogleAuthRepository @Inject constructor(
     private val credentialManager: CredentialManager by lazy { CredentialManager.create(context) }
     private val authClient by lazy { Identity.getAuthorizationClient(context) }
 
-    private val _isAccountLinked = MutableStateFlow(secretManager.getGoogleEmail() != null)
-    val isAccountLinked: StateFlow<Boolean> = _isAccountLinked.asStateFlow()
+    // Lazy: reading the linked email touches the Keystore-backed prefs, which must not happen at
+    // injection time (this repository is created with the start screen's ViewModels, on Main).
+    private val _isAccountLinked: MutableStateFlow<Boolean> by lazy {
+        MutableStateFlow(secretManager.getGoogleEmail() != null)
+    }
+    val isAccountLinked: StateFlow<Boolean>
+        get() = _isAccountLinked.asStateFlow()
 
     // --- Step 1: Identity (Credential Manager) -------------------------------
 
@@ -84,7 +95,7 @@ class GoogleAuthRepository @Inject constructor(
             // to surface the full account picker. We check both the exception type and the
             // type string because framework-to-jetpack conversion isn't always
             // subclass-perfect on all Android versions/devices.
-            val isNoCredential = (e is NoCredentialException || 
+            val isNoCredential = (e is NoCredentialException ||
                     e.type == "android.credentials.GetCredentialException.TYPE_NO_CREDENTIAL")
             val isCancellation = (e is GetCredentialCancellationException ||
                     e.type == "android.credentials.GetCredentialException.TYPE_USER_CANCELED")
@@ -94,7 +105,7 @@ class GoogleAuthRepository @Inject constructor(
                 try {
                     tryGetCredential(activity, filterAuthorized = false)
                 } catch (full: GetCredentialException) {
-                    val isFullNoCredential = (full is NoCredentialException || 
+                    val isFullNoCredential = (full is NoCredentialException ||
                             full.type == "android.credentials.GetCredentialException.TYPE_NO_CREDENTIAL")
                     val isFullCancellation = (full is GetCredentialCancellationException ||
                             full.type == "android.credentials.GetCredentialException.TYPE_USER_CANCELED")
@@ -125,6 +136,8 @@ class GoogleAuthRepository @Inject constructor(
                 Log.e(TAG, "Credential Manager failure (silent): type=${e.type}; msg=${e.errorMessage}", e)
                 Result.failure(e)
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "Sign-in failure", e)
             Result.failure(e)
@@ -176,7 +189,10 @@ class GoogleAuthRepository @Inject constructor(
                     )
                 )
                 .build()
-            val result = authClient.authorize(request).await()
+            // Bounded: an authorization that never answered used to hang the whole sync cycle
+            // (which holds the git lock) in its Google phase.
+            val result = withTimeoutOrNull(AUTHORIZE_TIMEOUT_MS) { authClient.authorize(request).await() }
+                ?: return Result.failure(TimeoutException("Google authorization timed out"))
             val token = result.accessToken
             if (token != null) {
                 // Opportunistically capture the email from the authorized account
@@ -192,6 +208,8 @@ class GoogleAuthRepository @Inject constructor(
                     )
                 Result.success(AuthorizationOutcome.NeedsUserConsent(pending.intentSender))
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "Authorization failure", e)
             Result.failure(e)
@@ -292,6 +310,8 @@ class GoogleAuthRepository @Inject constructor(
     suspend fun signOut() {
         try {
             credentialManager.clearCredentialState(ClearCredentialStateRequest())
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.w(TAG, "CredentialManager clear warning", e)
         }

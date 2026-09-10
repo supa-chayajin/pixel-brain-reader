@@ -1,19 +1,23 @@
 package cloud.wafflecommons.pixelbrainreader.data.repository
 
 import android.util.Log
+import androidx.room.withTransaction
 import cloud.wafflecommons.pixelbrainreader.data.auth.GoogleAuthRepository
+import cloud.wafflecommons.pixelbrainreader.data.local.AppDatabase
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.DailyDashboardDao
+import cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyDashboardEntity
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.TimelineEntryEntity
 import com.google.api.client.http.HttpRequestInitializer
 import com.google.api.client.http.HttpTransport
 import com.google.api.client.http.HttpUnsuccessfulResponseHandler
-import kotlinx.coroutines.runBlocking
 import com.google.api.client.json.JsonFactory
 import com.google.api.client.util.DateTime
 import com.google.api.services.calendar.Calendar
 import com.google.api.services.calendar.model.Event
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.LocalTime
@@ -37,6 +41,7 @@ class GoogleCalendarRepository @Inject constructor(
     private val authRepository: GoogleAuthRepository,
     private val userPreferences: UserPreferencesRepository,
     private val dailyDashboardDao: DailyDashboardDao,
+    private val database: AppDatabase,
     private val transport: HttpTransport,
     private val jsonFactory: JsonFactory
 ) {
@@ -90,20 +95,10 @@ class GoogleCalendarRepository @Inject constructor(
                 val timeMax = DateTime(endInstant.toEpochMilli(), offsetMinutes)
                 Log.i(TAG, "syncTodayEvents window: $timeMin .. $timeMax (zone=$zone)")
 
-                // FK guard: timeline_entries(date) -> daily_dashboard(date). Insert
-                // the parent dashboard row first (IGNORE on conflict) so the
-                // upserts below don't trip SQLITE_CONSTRAINT_FOREIGNKEY when
-                // today's dashboard hasn't been materialized yet.
-                dailyDashboardDao.insertDashboard(
-                    cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyDashboardEntity(date = today)
-                )
-
-                // Wipe today's Google-sourced timeline rows first so the freshly
-                // fetched batch is the truth (handles user deletions / moves on Google's side).
-                // Locally-created entries (googleEventId IS NULL) are preserved.
-                dailyDashboardDao.purgeGoogleTimelineForDate(today)
-
-                var total = 0
+                // 1. Fetch EVERYTHING first. Today's Google rows used to be purged before the
+                // network calls, so a failed or slow fetch left the timeline without its Google
+                // events until the next successful sync.
+                val fetched = mutableListOf<Pair<Event, String>>() // event + calendar label
                 val calendars = service.calendarList().list().execute().items.orEmpty()
                 Log.d(TAG, "Calendars discovered: ${calendars.size} -> ${calendars.map { it.summary ?: it.id }}")
                 for (cal in calendars) {
@@ -119,25 +114,40 @@ class GoogleCalendarRepository @Inject constructor(
                         .execute()
                     val items = events.items.orEmpty()
                     Log.d(TAG, "  '${cal.summary ?: cal.id}': ${items.size} event(s) in window")
-                    items.forEach { evt ->
-                        val existing = dailyDashboardDao
-                            .getTimelineEntryByGoogleEventId(evt.id)
-                        val entity = TimelineEntryEntity(
-                            id = existing?.id ?: java.util.UUID.randomUUID().toString(),
-                            date = today,
-                            time = extractStartTime(evt),
-                            content = "[${cal.summary ?: "Calendar"}] ${evt.summary ?: "No title"}",
-                            googleEventId = evt.id
-                        )
-                        dailyDashboardDao.insertTimelineEntry(entity)
-                        total++
-                    }
+                    items.forEach { evt -> fetched += evt to (cal.summary ?: "Calendar") }
                 }
-                // Heal any pre-marker orphan duplicates (rows whose googleEventId was stripped
-                // by the old burn↔parse round-trip) now that the keyed rows are back in place.
-                dailyDashboardDao.collapseOrphanTimelineForDate(today)
-                Log.i(TAG, "syncTodayEvents complete: imported $total event(s)")
-                Result.success(total)
+
+                // 2. Replace today's Google rows in ONE transaction: a single Room invalidation (no
+                // timeline flicker while rows trickle in) and never a half-imported day.
+                database.withTransaction {
+                    // FK guard: timeline_entries(date) -> daily_dashboard(date). Insert the parent
+                    // dashboard row first (IGNORE on conflict).
+                    dailyDashboardDao.insertDashboard(DailyDashboardEntity(date = today))
+
+                    // The fetched batch is the truth (handles user deletions / moves on Google's
+                    // side). Locally-created entries (googleEventId IS NULL) are preserved.
+                    dailyDashboardDao.purgeGoogleTimelineForDate(today)
+
+                    fetched.forEach { (evt, calendarName) ->
+                        val existing = dailyDashboardDao.getTimelineEntryByGoogleEventId(evt.id)
+                        dailyDashboardDao.insertTimelineEntry(
+                            TimelineEntryEntity(
+                                id = existing?.id ?: java.util.UUID.randomUUID().toString(),
+                                date = today,
+                                time = extractStartTime(evt),
+                                content = "[$calendarName] ${evt.summary ?: "No title"}",
+                                googleEventId = evt.id
+                            )
+                        )
+                    }
+                    // Heal any pre-marker orphan duplicates (rows whose googleEventId was stripped
+                    // by the old burn↔parse round-trip) now that the keyed rows are back in place.
+                    dailyDashboardDao.collapseOrphanTimelineForDate(today)
+                }
+                Log.i(TAG, "syncTodayEvents complete: imported ${fetched.size} event(s)")
+                Result.success(fetched.size)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e(TAG, "Calendar import failed", e)
                 Result.failure(e)

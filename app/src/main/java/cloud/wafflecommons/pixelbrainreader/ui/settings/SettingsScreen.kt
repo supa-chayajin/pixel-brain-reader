@@ -100,14 +100,8 @@ fun SettingsScreen(
         }
     }
     
-    // Health Connect Permission Launcher
-    val permissions = remember {
-        setOf(
-            HealthPermission.getReadPermission(StepsRecord::class),
-            HealthPermission.getReadPermission(SleepSessionRecord::class),
-            HealthPermission.getReadPermission(HeartRateRecord::class)
-        )
-    }
+    // Health Connect Permission Launcher — the full set the "Connected" check requires.
+    val permissions = remember { viewModel.getHealthPermissions() }
 
     val healthPermissionLauncher = rememberLauncherForActivityResult(
         PermissionController.createRequestPermissionResultContract()
@@ -200,11 +194,9 @@ fun SettingsScreen(
                                  // Prompt install (simplified)
                              } else {
                                  Toast.makeText(context, "Requesting Permissions...", Toast.LENGTH_SHORT).show()
-                                 val perms = setOf(
-                                     HealthPermission.getReadPermission(StepsRecord::class),
-                                     HealthPermission.getReadPermission(SleepSessionRecord::class),
-                                     HealthPermission.getReadPermission(HeartRateRecord::class)
-                                 )
+                                 // Every permission the "Connected" check requires: requesting only three
+                                 // left the card stuck on "Connect" and most metrics at 0.
+                                 val perms = viewModel.getHealthPermissions()
                                  healthPermissionLauncher.launch(perms)
                              }
                          }
@@ -229,11 +221,9 @@ fun SettingsScreen(
                          if (!isConnected) {
                              Button(onClick = { 
                                  Toast.makeText(context, "Requesting Permissions...", Toast.LENGTH_SHORT).show()
-                                 val perms = setOf(
-                                     HealthPermission.getReadPermission(StepsRecord::class),
-                                     HealthPermission.getReadPermission(SleepSessionRecord::class),
-                                     HealthPermission.getReadPermission(HeartRateRecord::class)
-                                 )
+                                 // Every permission the "Connected" check requires: requesting only three
+                                 // left the card stuck on "Connect" and most metrics at 0.
+                                 val perms = viewModel.getHealthPermissions()
                                  healthPermissionLauncher.launch(perms)
                              }) {
                                  Text("Connect")

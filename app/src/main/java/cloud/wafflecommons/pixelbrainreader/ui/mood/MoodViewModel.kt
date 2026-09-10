@@ -6,13 +6,22 @@ import androidx.lifecycle.viewModelScope
 import cloud.wafflecommons.pixelbrainreader.data.repository.DailyMoodData
 import cloud.wafflecommons.pixelbrainreader.data.repository.MoodEntry
 import cloud.wafflecommons.pixelbrainreader.data.repository.MoodRepository
+import cloud.wafflecommons.pixelbrainreader.data.repository.MoodTagRepository
+import cloud.wafflecommons.pixelbrainreader.data.repository.NoteRepository
+import cloud.wafflecommons.pixelbrainreader.data.system.AppClock
+import cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -32,21 +41,36 @@ data class MoodState(
 @HiltViewModel
 class MoodViewModel @Inject constructor(
     private val moodRepository: MoodRepository,
-    private val moodTagRepository: cloud.wafflecommons.pixelbrainreader.data.repository.MoodTagRepository,
-    private val noteRepository: cloud.wafflecommons.pixelbrainreader.data.repository.NoteRepository
+    moodTagRepository: MoodTagRepository,
+    private val noteRepository: NoteRepository,
+    appClock: AppClock
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(MoodState())
+    private val _uiState = MutableStateFlow(MoodState(selectedDate = appClock.today.value))
     val uiState: StateFlow<MoodState> = _uiState.asStateFlow()
 
     /** Canonical, vault-synced activity tags offered in the check-in sheet. */
     val availableTags: StateFlow<List<String>> = moodTagRepository.tags
 
+    // One-shot UI events (toasts). Buffered so emitting never suspends the save coroutine.
+    private val _uiEvent = MutableSharedFlow<UiEvent>(extraBufferCapacity = 8)
+    val uiEvent: SharedFlow<UiEvent> = _uiEvent.asSharedFlow()
+
+    private var loadJob: Job? = null
+
     init {
-        // Initial load for today
-        loadMood(LocalDate.now())
+        loadMood(appClock.today.value)
         // Hydrate the offered-tags list from the vault (seeds defaults on first run).
         viewModelScope.launch { moodTagRepository.ensureLoaded() }
+        // Keep "Today" on the real day: if the date rolls over while today is shown, follow it.
+        // A past day the user navigated to stays selected.
+        var previousToday = appClock.today.value
+        appClock.today
+            .onEach { today ->
+                if (today != previousToday && _uiState.value.selectedDate == previousToday) loadMood(today)
+                previousToday = today
+            }
+            .launchIn(viewModelScope)
     }
 
     /**
@@ -57,13 +81,7 @@ class MoodViewModel @Inject constructor(
     }
 
     /**
-     * Observes mood data for a specific date.
-     */
-    private var loadJob: kotlinx.coroutines.Job? = null
-
-    /**
-     * Observes mood data for a specific date.
-     * Uses UNDISPATCHED start to ensure immediate execution on the current thread until the first suspension.
+     * Observes mood data for a specific date (a live Room flow: it follows new entries and syncs).
      */
     fun loadMood(date: LocalDate) {
         loadJob?.cancel()
@@ -82,28 +100,17 @@ class MoodViewModel @Inject constructor(
     }
 
     /**
-     * Refreshes the mood data for the currently selected date.
-     * Can be called from UI onResume or after a Git Sync.
+     * Records a new mood entry. Saving is local (vault JSON + Room); the git push is batched in the
+     * background, so the sheet no longer waits on the network.
      */
-    fun refreshData() {
-        loadMood(_uiState.value.selectedDate)
-    }
-
-    /**
-     * Records a new mood entry for the currently selected date.
-     */
-    // Event Channel
-    private val _uiEvent = kotlinx.coroutines.flow.MutableSharedFlow<cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent>()
-    val uiEvent = _uiEvent.asSharedFlow()
-
     fun addMoodEntry(score: Int, activities: List<String>, note: String, customTimestamp: LocalDateTime? = null) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
-            try {
+            val message = try {
                 val timestamp = customTimestamp ?: LocalDateTime.now()
-                
+
                 // Auto-map score to label for simplicity
-                val label = when(score) {
+                val label = when (score) {
                     1 -> "😫"
                     2 -> "😞"
                     3 -> "😐"
@@ -120,10 +127,10 @@ class MoodViewModel @Inject constructor(
                     note = note.ifBlank { null }
                 )
                 val targetDate = timestamp.toLocalDate()
-                
-                // 1. Insert into Room Database (SSOT for fast queries)
+
+                // 1. Vault JSON + Room (SSOT for fast queries)
                 moodRepository.addEntry(targetDate, entry)
-                
+
                 // 2. Dual-Sync: Write to Markdown Frontmatter
                 try {
                     val path = "10_Journal/diary/${targetDate.format(DateTimeFormatter.ISO_LOCAL_DATE)}.md"
@@ -134,21 +141,22 @@ class MoodViewModel @Inject constructor(
                             "mood_emoji" to label
                         )
                     )
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
+                    // Not fatal: the entry itself was saved.
                     Log.e("MoodViewModel", "Failed to sync mood to markdown frontmatter", e)
-                    // We don't throw here, DB entry was successful.
                 }
-
-                _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Mood Saved & Synced ✅"))
-                _uiState.update { it.copy(isLoading = false) }
+                "Mood saved ✅"
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                _uiEvent.emit(cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent.ShowToast("Sync Failed ❌: ${e.message}"))
+                Log.e("MoodViewModel", "Failed to save mood", e)
+                "Couldn't save mood ❌: ${e.message}"
+            } finally {
                 _uiState.update { it.copy(isLoading = false) }
             }
+            _uiEvent.emit(UiEvent.ShowToast(message))
         }
-    }
-
-    fun resetState() {
-        // No longer using success/error for simple autonomous design
     }
 }

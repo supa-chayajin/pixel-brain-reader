@@ -562,12 +562,9 @@ fun MainScreen(
     // Custom nav-bar order (persisted); drives the order of the regular tabs.
     val navBarOrder by viewModel.navBarOrder.collectAsStateWithLifecycle()
 
-    // Smart Active State Logic
-    val todayName = remember {
-        val now = LocalDateTime.now()
-        val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
-        "${now.format(formatter)}.md"
-    }
+    // Smart Active State Logic — follows the real day (a date remembered once went stale after midnight).
+    val today by viewModel.today.collectAsStateWithLifecycle()
+    val todayName = remember(today) { "$today.md" }
     val isViewingDailyNote = uiState.selectedFileName == todayName
 
     // -- NAVIGATION LOGIC --
@@ -971,7 +968,7 @@ fun MainScreen(
                                     AnimatedPane {
                                     if (uiState.selectedFileName != null) {
                                         FileDetailPane(
-                                            content = uiState.unsavedContent
+                                            content = viewModel.unsavedContent
                                                 ?: uiState.selectedFileContent,
                                             onContentChange = { viewModel.onContentChanged(it) },
                                             fileName = uiState.selectedFileName,
@@ -981,7 +978,7 @@ fun MainScreen(
                                             onRefresh = { viewModel.refreshCurrentFile() },
                                             isExpandedScreen = isLargeScreen,
                                             isEditing = uiState.isEditing,
-                                            hasUnsavedChanges = uiState.hasUnsavedChanges,
+                                            hasUnsavedChanges = viewModel.hasUnsavedChanges,
                                             saveState = uiState.saveState,
                                             onWikiLinkClick = { target -> viewModel.onWikiLinkClick(target) },
                                             onCreateNew = { viewModel.createNewFile() },
@@ -1121,23 +1118,10 @@ fun MainScreen(
             }
 
             composable(Screen.DailyNote) {
-                val dailyViewModel: cloud.wafflecommons.pixelbrainreader.ui.daily.DailyNoteViewModel = hiltViewModel()
-                
-                // Refresh Trigger: When Sync finishes, reload Daily View
-                // We use isSyncing going from True -> False
-                val isSyncing = uiState.isSyncing
-                val currentIsSyncing by androidx.compose.runtime.rememberUpdatedState(isSyncing)
-                
-                LaunchedEffect(isSyncing) {
-                     if (!isSyncing) { 
-                         // Sync Finished. Room Flow naturally updates UI.
-                         moodViewModel.refreshData() 
-                     }
-                }
-            
+                // The board, mood and health cards observe Room/vault flows and follow syncs on
+                // their own — no manual reload trigger needed.
                 cloud.wafflecommons.pixelbrainreader.ui.daily.DailyNoteScreen(
                     onCheckInClicked = { showMoodSheet = true },
-                    viewModel = dailyViewModel,
                     onNavigateToSettings = { navController.navigate(Screen.Settings) }
                 )
             }

@@ -1,27 +1,37 @@
 package cloud.wafflecommons.pixelbrainreader.ui.lifestats
 
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cloud.wafflecommons.pixelbrainreader.data.gamification.GamificationRepository
-import cloud.wafflecommons.pixelbrainreader.data.repository.MoodRepository
+import cloud.wafflecommons.pixelbrainreader.data.health.DailyHealthMetrics
+import cloud.wafflecommons.pixelbrainreader.data.local.entity.ChoreEntity
+import cloud.wafflecommons.pixelbrainreader.data.local.entity.MoodEntity
+import cloud.wafflecommons.pixelbrainreader.data.local.preferences.GamificationPreferences
+import cloud.wafflecommons.pixelbrainreader.data.model.HabitConfig
+import cloud.wafflecommons.pixelbrainreader.data.model.HabitLogEntry
+import cloud.wafflecommons.pixelbrainreader.data.repository.ChoreRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.HabitRepository
-import cloud.wafflecommons.pixelbrainreader.data.model.HabitType
-import cloud.wafflecommons.pixelbrainreader.data.model.HabitStatus
+import cloud.wafflecommons.pixelbrainreader.data.repository.HealthMetricsRepository
+import cloud.wafflecommons.pixelbrainreader.data.repository.MoodRepository
+import cloud.wafflecommons.pixelbrainreader.data.repository.TaskRepository
+import cloud.wafflecommons.pixelbrainreader.data.sync.SyncOrchestrator
+import cloud.wafflecommons.pixelbrainreader.data.sync.SyncState
+import cloud.wafflecommons.pixelbrainreader.data.system.AppClock
+import cloud.wafflecommons.pixelbrainreader.domain.homeos.CalculateChoreEntropyUseCase
+import cloud.wafflecommons.pixelbrainreader.domain.lifeos.HabitStatsCalculator
+import cloud.wafflecommons.pixelbrainreader.ui.homeos.StatusColor
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.flow.flatMapLatest
-import androidx.compose.runtime.Immutable
-import cloud.wafflecommons.pixelbrainreader.data.repository.TaskRepository
-import cloud.wafflecommons.pixelbrainreader.data.repository.ChoreRepository
-import cloud.wafflecommons.pixelbrainreader.domain.homeos.CalculateChoreEntropyUseCase
-import cloud.wafflecommons.pixelbrainreader.domain.lifeos.HabitScheduler
-import cloud.wafflecommons.pixelbrainreader.ui.homeos.StatusColor
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.flow
 import java.time.LocalDate
 import javax.inject.Inject
 
@@ -73,191 +83,60 @@ data class LifeStatsUiState(
 )
 
 @HiltViewModel
+@OptIn(ExperimentalCoroutinesApi::class)
 class LifeStatsViewModel @Inject constructor(
-    private val gamificationRepository: GamificationRepository,
+    gamificationRepository: GamificationRepository,
     moodRepository: MoodRepository,
     habitRepository: HabitRepository,
     choreRepository: ChoreRepository,
-    private val taskRepository: TaskRepository,
+    taskRepository: TaskRepository,
     private val calculateChoreEntropyUseCase: CalculateChoreEntropyUseCase,
-    private val gamificationPreferences: cloud.wafflecommons.pixelbrainreader.data.local.preferences.GamificationPreferences,
-    @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context,
-    private val syncOrchestrator: cloud.wafflecommons.pixelbrainreader.data.sync.SyncOrchestrator,
-    private val healthMetricsRepository: cloud.wafflecommons.pixelbrainreader.data.repository.HealthMetricsRepository
+    gamificationPreferences: GamificationPreferences,
+    private val syncOrchestrator: SyncOrchestrator,
+    healthMetricsRepository: HealthMetricsRepository,
+    appClock: AppClock
 ) : ViewModel() {
 
-    // Dummy flow to re-trigger when the date changes.
-    private val todayFlow = flow { emit(LocalDate.now()) }
+    private class Inputs(
+        val today: LocalDate,
+        val moods: List<MoodEntity>,
+        val logsByHabit: Map<String, List<HabitLogEntry>>,
+        val configs: List<HabitConfig>,
+        val chores: List<ChoreEntity>,
+        val health: List<DailyHealthMetrics>
+    )
 
-    private val healthMetricsFlow = syncOrchestrator.syncState
-        .flatMapLatest { healthMetricsRepository.getMetricsHistoryFlow(LocalDate.now(), 7) }
-
-    private fun isHabitLogComplete(
-        habit: cloud.wafflecommons.pixelbrainreader.data.model.HabitConfig,
-        log: cloud.wafflecommons.pixelbrainreader.data.model.HabitLogEntry?
-    ): Boolean {
-        if (log == null) return false
-        return if (habit.type == HabitType.MEASURABLE) log.value >= habit.targetValue
-        else log.status == HabitStatus.COMPLETED
-    }
-
-    val uiState: StateFlow<LifeStatsUiState> = combine(
-        moodRepository.getMoodFlow(),
-        habitRepository.getLogsForYearFlow(LocalDate.now().year),
-        choreRepository.getAllChoresStream(),
-        combine(todayFlow, habitRepository.getHabitConfigsFlow()) { today, configs -> today to configs },
-        healthMetricsFlow
-    ) { moods, habitLogsMap, chores, todayAndConfigs, healthMetricsList ->
-        val today = todayAndConfigs.first
-        val configs = todayAndConfigs.second
-
-        // --- Mental Health (Mood) ---
-        val mood7Days = moods.filter { it.date >= today.minusDays(7).toString() }
-        val mood30Days = moods.filter { it.date >= today.minusDays(30).toString() }
-        val avgMood7Days = if (mood7Days.isNotEmpty()) mood7Days.map { it.score }.average().toFloat() else 0f
-        val avgMood30Days = if (mood30Days.isNotEmpty()) mood30Days.map { it.score }.average().toFloat() else 0f
-
-        // --- Physical Health (7-day metrics) ---
-        var totalHrSum = 0
-        var hrDaysCount = 0
-
-        val moodHistoryLine = mutableListOf<LifeStatsMoodPoint>()
-        val distanceHistory = mutableListOf<Float>()
-        val activeMinHistory = mutableListOf<Float>()
-        val sleepHistory = mutableListOf<Float>()
-
-        var todayDistanceKm = 0.0
-        var todayActiveMinutes = 0L
-        var todaySleepMinutes = 0L
-        var todaySteps = 0L
-        var todayCaloriesBurned = 0
-
-        (6 downTo 0).forEach { offset ->
-            val d = today.minusDays(offset.toLong())
-            var dayAvgBpm = 0
-            val dhm = healthMetricsList.find { it.date == d.toString() }
-            if (dhm != null) {
-                dayAvgBpm = dhm.averageHeartRate
-                if (dayAvgBpm > 0) { totalHrSum += dayAvgBpm; hrDaysCount++ }
-                distanceHistory.add(dhm.distanceKm.toFloat())
-                activeMinHistory.add(dhm.activeMinutes.toFloat())
-                sleepHistory.add(dhm.sleepDurationMinutes.toFloat())
-                if (offset == 0) {
-                    todayDistanceKm = dhm.distanceKm
-                    todayActiveMinutes = dhm.activeMinutes
-                    todaySleepMinutes = dhm.sleepDurationMinutes
-                    todaySteps = dhm.steps
-                    todayCaloriesBurned = dhm.caloriesBurned.toInt()
-                }
-            } else {
-                distanceHistory.add(0f); activeMinHistory.add(0f); sleepHistory.add(0f)
+    /**
+     * Keyed on the REAL current day ([AppClock.today]) — the dates used to be captured once at
+     * ViewModel creation — and computed off the main thread: the previous version filtered the whole
+     * mood table nine times and walked up to 366 days per habit on every emission, on Main. Health
+     * metrics are re-read whenever they are rewritten ([HealthMetricsRepository.changes]).
+     */
+    val uiState: StateFlow<LifeStatsUiState> = appClock.today
+        .flatMapLatest { today ->
+            combine(
+                moodRepository.getMoodsBetween(today.minusDays(30), today),
+                // Two years of logs so streaks continue across January 1st.
+                habitRepository.getLogsBetweenFlow(LocalDate.of(today.year - 1, 1, 1), LocalDate.of(today.year, 12, 31)),
+                habitRepository.getHabitConfigsFlow(),
+                choreRepository.getAllChoresStream(),
+                healthMetricsRepository.changes.flatMapLatest { healthMetricsRepository.getMetricsHistoryFlow(today, 7) }
+            ) { moods, logsByHabit, configs, chores, health ->
+                Inputs(today, moods, logsByHabit, configs, chores, health)
             }
-
-            val dayMoods = moods.filter { it.date == d.toString() }
-            val avg = if (dayMoods.isNotEmpty()) dayMoods.map { it.score }.average() else 0.0
-            val emoji = when {
-                avg == 0.0 -> "∅"
-                avg < 1.8 -> "😫"
-                avg.isNaN() -> "😐"
-                avg < 2.6 -> "😞"
-                avg < 3.4 -> "😐"
-                avg < 4.2 -> "🙂"
-                else -> "🤩"
-            }
-            moodHistoryLine.add(LifeStatsMoodPoint(d, avg.toFloat(), emoji, dayAvgBpm))
         }
-        val avgHeartRate = if (hrDaysCount > 0) totalHrSum / hrDaysCount else 0
+        .map { buildState(it) }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), LifeStatsUiState(isLoading = true))
 
-        // --- Productivity (Habits): today's completion + best current streak ---
-        // Scheduling goes through the shared HabitScheduler (weekly / bi-weekly / interval).
-        val todayString = today.toString()
-
-        val activeConfigs = configs.filter { !it.archived }
-        var totalHabitsScheduledToday = 0
-        var completedHabitsToday = 0
-        var bestHabitStreak = 0
-
-        activeConfigs.forEach { habit ->
-            val logs = habitLogsMap[habit.id] ?: emptyList()
-            val lastCompleted = logs.filter { isHabitLogComplete(habit, it) }
-                .maxByOrNull { it.date }
-                ?.date?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
-
-            val isScheduled = HabitScheduler.isScheduledOn(habit, today, lastCompleted)
-            val completedToday = isHabitLogComplete(habit, logs.find { it.date == todayString })
-            if (isScheduled) {
-                totalHabitsScheduledToday++
-                if (completedToday) completedHabitsToday++
-            }
-
-            val streak = if (habit.scheduleMode.equals("INTERVAL", ignoreCase = true)) {
-                logs.count { isHabitLogComplete(habit, it) }
-            } else {
-                var s = 0
-                var cd = if (completedToday) today else today.minusDays(1)
-                for (i in 0..365) {
-                    val sched = HabitScheduler.isScheduledOn(habit, cd, null)
-                    val lg = logs.find { it.date == cd.toString() }
-                    if (isHabitLogComplete(habit, lg)) { s++; cd = cd.minusDays(1) }
-                    else if (!sched) { cd = cd.minusDays(1) }
-                    else break
-                }
-                s
-            }
-            bestHabitStreak = maxOf(bestHabitStreak, streak)
-        }
-        val habitCompletionRate = if (totalHabitsScheduledToday == 0) 1f
-        else completedHabitsToday.toFloat() / totalHabitsScheduledToday.toFloat()
-
-        // --- Home OS (Chores) ---
-        val choreModels = calculateChoreEntropyUseCase(chores)
-        val criticalChoresCount = choreModels.count { it.statusColor == StatusColor.RED }
-        val cleanChoresCount = choreModels.count { it.statusColor == StatusColor.GREEN }
-        val warningChoresCount = choreModels.count { it.statusColor == StatusColor.YELLOW }
-
-        LifeStatsUiState(
-            moodHistory = moodHistoryLine,
-            avgMood7Days = avgMood7Days,
-            avgMood30Days = avgMood30Days,
-            avgHeartRate = avgHeartRate,
-            caloriesBurned = todayCaloriesBurned,
-            activeMinutes7Days = activeMinHistory,
-            distance7Days = distanceHistory,
-            sleepDuration7Days = sleepHistory,
-            todayDistanceKm = todayDistanceKm,
-            todayActiveMinutes = todayActiveMinutes,
-            todaySleepMinutes = todaySleepMinutes,
-            todaySteps = todaySteps,
-            habitCompletionRate = habitCompletionRate,
-            taskCompletionRate = 0f, // resolved in finalUiState
-            completedHabitsToday = completedHabitsToday,
-            scheduledHabitsToday = totalHabitsScheduledToday,
-            totalActiveHabits = activeConfigs.size,
-            bestHabitStreak = bestHabitStreak,
-            criticalChoresCount = criticalChoresCount,
-            cleanChoresCount = cleanChoresCount,
-            warningChoresCount = warningChoresCount,
-            totalChoresCount = choreModels.size,
-            isLoading = false
-        )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), LifeStatsUiState(isLoading = true))
-
-    // Task completion rate (7 days) — suspend snapshot, kept out of the main combine.
-    private val taskRatiosFlow = flow {
-        var totalTasks = 0
-        var completedTasks = 0
-        (0..6).forEach { offset ->
-            val date = LocalDate.now().minusDays(offset.toLong())
-            val tasksSnapshot = taskRepository.getTasks(date)
-            totalTasks += tasksSnapshot.size
-            completedTasks += tasksSnapshot.count { it.isDone }
-        }
-        emit(if (totalTasks > 0) completedTasks.toFloat() / totalTasks.toFloat() else 0f)
-    }
+    // Task completion over the last 7 days — reactive now; it used to be a one-shot snapshot.
+    private val taskCompletionRate: Flow<Float> = appClock.today
+        .flatMapLatest { today -> taskRepository.getTasksInRangeFlow(today.minusDays(6), today) }
+        .map { tasks -> if (tasks.isEmpty()) 0f else tasks.count { it.isDone }.toFloat() / tasks.size }
 
     val finalUiState: StateFlow<LifeStatsUiState> = combine(
         uiState,
-        taskRatiosFlow,
+        taskCompletionRate,
         gamificationRepository.gamificationState,
         gamificationPreferences.stepTargetFlow,
         gamificationPreferences.sleepMinMinutesFlow
@@ -274,12 +153,11 @@ class LifeStatsViewModel @Inject constructor(
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), LifeStatsUiState(isLoading = true))
 
-    val isSyncing: StateFlow<cloud.wafflecommons.pixelbrainreader.data.sync.SyncState> = syncOrchestrator.syncState
+    val isSyncing: StateFlow<SyncState> = syncOrchestrator.syncState
 
+    /** Pull-to-refresh: a full, user-initiated sync (bypasses the automatic cooldown). */
     fun triggerSync() {
-        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            syncOrchestrator.executeFullSyncCycle()
-        }
+        syncOrchestrator.requestSync(force = true)
     }
 
     val sleepDurationState: StateFlow<Long> = finalUiState.map { it.todaySleepMinutes }
@@ -290,4 +168,100 @@ class LifeStatsViewModel @Inject constructor(
         val choreRate = if (totalChores > 0) state.cleanChoresCount.toFloat() / totalChores.toFloat() else 0f
         (state.taskCompletionRate + state.habitCompletionRate + choreRate) / 3f
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0f)
+
+    private fun buildState(inputs: Inputs): LifeStatsUiState {
+        val today = inputs.today
+
+        // --- Mental Health (Mood) ---
+        val weekStart = today.minusDays(7).toString()
+        val avgMood7Days = inputs.moods.filter { it.date >= weekStart }.averageScore()
+        val avgMood30Days = inputs.moods.averageScore()
+        val moodsByDate = inputs.moods.groupBy { it.date }
+
+        // --- Physical Health (7-day metrics) ---
+        val healthByDate = inputs.health.associateBy { it.date }
+        var totalHrSum = 0
+        var hrDaysCount = 0
+        val moodHistoryLine = ArrayList<LifeStatsMoodPoint>(7)
+        val distanceHistory = ArrayList<Float>(7)
+        val activeMinHistory = ArrayList<Float>(7)
+        val sleepHistory = ArrayList<Float>(7)
+        var todayMetrics: DailyHealthMetrics? = null
+
+        (6 downTo 0).forEach { offset ->
+            val day = today.minusDays(offset.toLong())
+            val key = day.toString()
+            val dhm = healthByDate[key]
+            val dayAvgBpm = dhm?.averageHeartRate ?: 0
+            if (dayAvgBpm > 0) {
+                totalHrSum += dayAvgBpm
+                hrDaysCount++
+            }
+            distanceHistory.add(dhm?.distanceKm?.toFloat() ?: 0f)
+            activeMinHistory.add(dhm?.activeMinutes?.toFloat() ?: 0f)
+            sleepHistory.add(dhm?.sleepDurationMinutes?.toFloat() ?: 0f)
+            if (offset == 0) todayMetrics = dhm
+
+            val dayMoods = moodsByDate[key].orEmpty()
+            val avg = if (dayMoods.isNotEmpty()) dayMoods.map { it.score }.average() else 0.0
+            moodHistoryLine.add(LifeStatsMoodPoint(day, avg.toFloat(), moodEmoji(avg), dayAvgBpm))
+        }
+
+        // --- Productivity (Habits): today's completion + best current streak ---
+        val activeConfigs = inputs.configs.filter { !it.archived }
+        var scheduledToday = 0
+        var completedToday = 0
+        var bestHabitStreak = 0
+        activeConfigs.forEach { habit ->
+            val stats = HabitStatsCalculator.compute(habit, inputs.logsByHabit[habit.id].orEmpty(), today)
+            if (stats.isScheduledToday) {
+                scheduledToday++
+                if (stats.isCompletedToday) completedToday++
+            }
+            bestHabitStreak = maxOf(bestHabitStreak, stats.currentStreak)
+        }
+        val habitCompletionRate = if (scheduledToday == 0) 1f else completedToday.toFloat() / scheduledToday
+
+        // --- Home OS (Chores) ---
+        val choreModels = calculateChoreEntropyUseCase(inputs.chores)
+
+        return LifeStatsUiState(
+            moodHistory = moodHistoryLine,
+            avgMood7Days = avgMood7Days,
+            avgMood30Days = avgMood30Days,
+            avgHeartRate = if (hrDaysCount > 0) totalHrSum / hrDaysCount else 0,
+            caloriesBurned = todayMetrics?.caloriesBurned?.toInt() ?: 0,
+            activeMinutes7Days = activeMinHistory,
+            distance7Days = distanceHistory,
+            sleepDuration7Days = sleepHistory,
+            todayDistanceKm = todayMetrics?.distanceKm ?: 0.0,
+            todayActiveMinutes = todayMetrics?.activeMinutes ?: 0L,
+            todaySleepMinutes = todayMetrics?.sleepDurationMinutes ?: 0L,
+            todaySteps = todayMetrics?.steps ?: 0L,
+            habitCompletionRate = habitCompletionRate,
+            taskCompletionRate = 0f, // resolved in finalUiState
+            completedHabitsToday = completedToday,
+            scheduledHabitsToday = scheduledToday,
+            totalActiveHabits = activeConfigs.size,
+            bestHabitStreak = bestHabitStreak,
+            criticalChoresCount = choreModels.count { it.statusColor == StatusColor.RED },
+            cleanChoresCount = choreModels.count { it.statusColor == StatusColor.GREEN },
+            warningChoresCount = choreModels.count { it.statusColor == StatusColor.YELLOW },
+            totalChoresCount = choreModels.size,
+            isLoading = false
+        )
+    }
+
+    private fun List<MoodEntity>.averageScore(): Float =
+        if (isEmpty()) 0f else map { it.score }.average().toFloat()
+
+    private fun moodEmoji(avg: Double): String = when {
+        avg == 0.0 -> "∅"
+        avg < 1.8 -> "😫"
+        avg.isNaN() -> "😐"
+        avg < 2.6 -> "😞"
+        avg < 3.4 -> "😐"
+        avg < 4.2 -> "🙂"
+        else -> "🤩"
+    }
 }

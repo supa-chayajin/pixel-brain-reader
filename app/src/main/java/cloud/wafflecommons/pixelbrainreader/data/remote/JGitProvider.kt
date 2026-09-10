@@ -5,20 +5,22 @@ import android.util.Log
 import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
 import cloud.wafflecommons.pixelbrainreader.data.sync.ConflictResolver
 import dagger.hilt.android.qualifiers.ApplicationContext
-import org.eclipse.jgit.api.Git
-import org.eclipse.jgit.api.errors.RefNotAdvertisedException
-import org.eclipse.jgit.lib.TextProgressMonitor
-import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider
-import org.eclipse.jgit.api.CheckoutCommand
-import java.io.File
-import java.io.Writer
-import javax.inject.Inject
-import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import org.eclipse.jgit.api.Git
+import org.eclipse.jgit.api.errors.EmptyCommitException
+import org.eclipse.jgit.api.errors.RefNotAdvertisedException
+import org.eclipse.jgit.lib.TextProgressMonitor
+import org.eclipse.jgit.transport.PushResult
+import org.eclipse.jgit.transport.RemoteRefUpdate
+import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider
+import java.io.File
+import java.io.Writer
+import javax.inject.Inject
+import javax.inject.Singleton
 
 sealed class SyncResult {
     object Success : SyncResult()
@@ -37,45 +39,51 @@ class JGitProvider @Inject constructor(
     private val conflictResolver: ConflictResolver
 ) {
 
-    // Stale .git/*.lock cleanup is deliberately NOT done in the constructor: as a
-    // @Singleton, first injection can land on the main thread (e.g. a ViewModel
-    // built during composition), and walking the .git tree there is main-thread
-    // disk I/O. Every git operation below calls cleanStaleLocks() under gitMutex,
-    // which already covers the crashed-with-held-lock recovery case.
-
     /**
-     * Serializes every JGit write across all callers (HabitRepository background
-     * push, SyncOrchestrator foreground sync, NoteRepository save, etc.). JGit's
-     * own .git/index.lock file is per-operation and gives a hard failure on
-     * contention — this mutex prevents concurrent writers from racing into it.
-     * cleanStaleLocks() runs under the lock so a previously-crashed lock from
-     * a process that died with a held mutex still gets cleared.
+     * Serializes every JGit write across all callers (background vault pushes, the foreground
+     * sync cycle, file operations…). JGit's own .git/index.lock file is per-operation and gives a
+     * hard failure on contention — this mutex prevents concurrent writers from racing into it.
      */
     private val gitMutex = Mutex()
+
+    /**
+     * A stale `.lock` can only be left behind by a process that died mid-operation: inside one
+     * process every JGit op is serialized by [gitMutex] and JGit releases its locks in `finally`.
+     * So the cleanup runs once per process (and again after a lock failure) instead of walking the
+     * entire `.git` directory — every loose object included — before EVERY git operation, which
+     * grew slower with each auto-commit.
+     */
+    @Volatile
+    private var staleLocksChecked = false
 
     private val rootDir: File
         get() = File(context.filesDir, "vault")
 
-    /**
-     * Removes stale '.lock' files left over from crashes or restore operations.
-     */
-    private fun cleanStaleLocks() {
+    /** Removes stale '.lock' files (top-level and under refs/) left over from a crash. Call under [gitMutex]. */
+    private fun cleanStaleLocksIfNeeded() {
+        if (staleLocksChecked) return
         val gitDir = File(rootDir, ".git")
-        if (!gitDir.exists()) return
+        if (!gitDir.isDirectory) return
 
         try {
-            gitDir.walkBottomUp()
-                .filter { it.isFile && it.name.endsWith(".lock") }
-                .forEach { lockFile ->
-                    val deleted = lockFile.delete()
-                    if (deleted) {
-                        Log.d("JGitProvider", "Cleaned stale lock file: ${lockFile.absolutePath}")
-                    }
+            val topLevel = gitDir.listFiles { f -> f.isFile && f.name.endsWith(".lock") }.orEmpty().asSequence()
+            val refs = File(gitDir, "refs").walkBottomUp().filter { it.isFile && it.name.endsWith(".lock") }
+            (topLevel + refs).forEach { lockFile ->
+                if (lockFile.delete()) {
+                    Log.d("JGitProvider", "Cleaned stale lock file: ${lockFile.name}")
                 }
+            }
+            staleLocksChecked = true
         } catch (e: Exception) {
-            if (e is CancellationException) throw e
             Log.e("JGitProvider", "Failed to clean stale locks", e)
         }
+    }
+
+    /** A lock failure means a stale lock may exist after all: re-check before the next operation. */
+    private fun onGitFailure(e: Exception) {
+        val lockRelated = e.javaClass.simpleName.contains("Lock", ignoreCase = true) ||
+            e.message?.contains("lock", ignoreCase = true) == true
+        if (lockRelated) staleLocksChecked = false
     }
 
     /**
@@ -95,7 +103,7 @@ class JGitProvider @Inject constructor(
      */
     suspend fun setupRepository(remoteUrl: String?, branch: String = "main"): Result<Unit> = withContext(Dispatchers.IO) {
         gitMutex.withLock {
-            cleanStaleLocks()
+            cleanStaleLocksIfNeeded()
             try {
                 if (isReady()) {
                     // Already initialized
@@ -105,7 +113,7 @@ class JGitProvider @Inject constructor(
                 if (!remoteUrl.isNullOrEmpty()) {
                     // CLONE STRATEGY
                     Log.i("JGitProvider", "Starting fresh clone from $remoteUrl branch: $branch")
-                    val provider = getCredentialsProvider(remoteUrl) ?: throw Exception("Clone requires API Token")
+                    val provider = getCredentialsProvider() ?: throw Exception("Clone requires API Token")
 
                     // Ensure clean slate
                     if (rootDir.exists()) {
@@ -119,6 +127,7 @@ class JGitProvider @Inject constructor(
                             .setDirectory(rootDir)
                             .setBranch(branch)
                             .setCredentialsProvider(provider)
+                            .setTimeout(NETWORK_TIMEOUT_SECONDS)
                             .setProgressMonitor(AndroidLogProgressMonitor())
                             .call()
                             .close() // Close Git instance
@@ -140,6 +149,7 @@ class JGitProvider @Inject constructor(
                 }
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
+                onGitFailure(e)
                 Result.failure(e)
             }
         }
@@ -149,20 +159,21 @@ class JGitProvider @Inject constructor(
     suspend fun initRepository(): Result<Unit> = setupRepository(null)
 
     /**
-     * Stages all changes (git add .).
+     * Stages all changes (git add .). [commit] already stages everything itself, so callers that
+     * commit right afterwards don't need this.
      */
     suspend fun addAll(): Result<Unit> = withContext(Dispatchers.IO) {
         gitMutex.withLock {
-            cleanStaleLocks()
+            cleanStaleLocksIfNeeded()
             try {
                 Git.open(rootDir).use { git ->
-                    // Directive: Use git.add().addFilepattern(".").call() effectively acting as a git add .
                     git.add().addFilepattern(".").call()
                     git.add().addFilepattern(".").setUpdate(true).call()
                 }
                 Result.success(Unit)
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
+                onGitFailure(e)
                 Result.failure(e)
             }
         }
@@ -173,7 +184,7 @@ class JGitProvider @Inject constructor(
      */
     suspend fun removeFile(relativePath: String): Result<Unit> = withContext(Dispatchers.IO) {
         gitMutex.withLock {
-            cleanStaleLocks()
+            cleanStaleLocksIfNeeded()
             try {
                 Git.open(rootDir).use { git ->
                     git.rm().addFilepattern(relativePath).setCached(true).call()
@@ -181,6 +192,7 @@ class JGitProvider @Inject constructor(
                 Result.success(Unit)
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
+                onGitFailure(e)
                 Result.failure(e)
             }
         }
@@ -191,7 +203,7 @@ class JGitProvider @Inject constructor(
      */
     suspend fun addFile(relativePath: String): Result<Unit> = withContext(Dispatchers.IO) {
         gitMutex.withLock {
-            cleanStaleLocks()
+            cleanStaleLocksIfNeeded()
             try {
                 Git.open(rootDir).use { git ->
                     git.add().addFilepattern(relativePath).call()
@@ -199,22 +211,19 @@ class JGitProvider @Inject constructor(
                 Result.success(Unit)
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
+                onGitFailure(e)
                 Result.failure(e)
             }
         }
     }
 
     /**
-     * Commits staged changes.
-     */
-    /**
-     * Commits staged changes.
-     * Includes "Force Add" to ensure new files (especially in subdirs) are caught.
-     * Handles Detached HEAD by switching to main if needed.
+     * Stages everything (new, modified and deleted files) and commits it. A no-op when nothing
+     * changed. Handles Detached HEAD by switching back to main first.
      */
     suspend fun commit(message: String): Result<Unit> = withContext(Dispatchers.IO) {
         gitMutex.withLock {
-            cleanStaleLocks()
+            cleanStaleLocksIfNeeded()
             try {
                 Git.open(rootDir).use { git ->
                     // 1. Fix Detached HEAD
@@ -226,27 +235,36 @@ class JGitProvider @Inject constructor(
                         git.checkout().setName("main").call()
                     }
 
-                    // 2. Force Add (Stage All)
-                    // Add new/modified files
+                    // 2. Stage All: new/modified files, then deletions.
                     git.add().addFilepattern(".").call()
-                    // Stage deletions
                     git.add().addFilepattern(".").setUpdate(true).call()
 
-                    // 3. Commit
-                    val status = git.status().call()
-                    if (status.hasUncommittedChanges()) {
+                    // A repository without any commit yet can't be compared to HEAD; keep the old
+                    // "nothing to commit" behaviour there with an explicit status check.
+                    val hasHead = repo.resolve("HEAD") != null
+                    if (!hasHead && git.status().call().isClean) {
+                        Log.d("JGitProvider", "No changes to commit after adding.")
+                        return@use
+                    }
+
+                    // 3. Commit. setAllowEmpty(false) makes JGit throw EmptyCommitException when
+                    // the index matches HEAD — this replaces a separate `git status`, which was a
+                    // third full working-tree walk on every commit.
+                    try {
                         val revCommit = git.commit()
                             .setMessage(message)
                             .setAuthor("PixelBrain User", "user@pixelbrain.local")
+                            .setAllowEmpty(false)
                             .call()
                         Log.i("JGitProvider", "Committed: $message (Hash: ${revCommit.name})")
-                    } else {
+                    } catch (e: EmptyCommitException) {
                         Log.d("JGitProvider", "No changes to commit after adding.")
                     }
                 }
                 Result.success(Unit)
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
+                onGitFailure(e)
                 Log.e("JGitProvider", "Commit Failed", e)
                 Result.failure(e)
             }
@@ -254,27 +272,34 @@ class JGitProvider @Inject constructor(
     }
 
     /**
-     * Pushes to remote.
+     * Pushes to remote. Fails when the remote refuses the update (see [describeRejectedUpdates]).
      */
     suspend fun push(remoteName: String = "origin"): Result<Unit> = withContext(Dispatchers.IO) {
         if (!isReady()) return@withContext Result.failure(Exception("Repository not initialized"))
 
         gitMutex.withLock {
-            cleanStaleLocks()
+            cleanStaleLocksIfNeeded()
             try {
                 val provider = getCredentialsProvider() ?: return@withContext Result.failure(Exception("No API Token found"))
 
-                Git.open(rootDir).use { git ->
+                val results = Git.open(rootDir).use { git ->
                     git.push()
                         .setRemote(remoteName)
                         .setCredentialsProvider(provider)
+                        .setTimeout(NETWORK_TIMEOUT_SECONDS)
                         .setProgressMonitor(AndroidLogProgressMonitor())
                         .call()
+                }
+                val rejection = describeRejectedUpdates(results)
+                if (rejection != null) {
+                    Log.e("JGitProvider", "Push rejected: $rejection")
+                    return@withLock Result.failure(Exception("Push rejected: $rejection"))
                 }
                 Log.i("JGitProvider", "Push Successful")
                 Result.success(Unit)
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
+                onGitFailure(e)
                 Log.e("JGitProvider", "Push Failed", e)
                 Result.failure(e)
             }
@@ -289,7 +314,7 @@ class JGitProvider @Inject constructor(
         if (!isReady()) return@withContext SyncResult.Error(Exception("Repository not initialized"))
 
         gitMutex.withLock {
-            cleanStaleLocks()
+            cleanStaleLocksIfNeeded()
             try {
                 ensureCriticalDirectories() // Defensive check before pulling
 
@@ -300,6 +325,7 @@ class JGitProvider @Inject constructor(
                     .setRemote(remoteName)
                     .setRebase(true) // STRICT REBASE — no merge commits
                     .setCredentialsProvider(provider)
+                    .setTimeout(NETWORK_TIMEOUT_SECONDS)
                     .setProgressMonitor(AndroidLogProgressMonitor())
                     .call()
 
@@ -373,6 +399,7 @@ class JGitProvider @Inject constructor(
                      Log.w("JGitProvider", "Pull skipped: Ref not advertised (Empty repo?)")
                      return@withContext SyncResult.Success
                  } else {
+                     onGitFailure(e)
                      Log.e("JGitProvider", "Pull Failed", e)
                      return@withContext SyncResult.Error(e)
                  }
@@ -391,7 +418,7 @@ class JGitProvider @Inject constructor(
         // concurrent pull()/push() reading remote.<name>.url can race a half-written config
         // or collide on .git/config.lock.
         gitMutex.withLock {
-            cleanStaleLocks()
+            cleanStaleLocksIfNeeded()
             try {
                 Git.open(rootDir).use { git ->
                     val config = git.repository.config
@@ -401,11 +428,12 @@ class JGitProvider @Inject constructor(
                 Result.success(Unit)
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
+                onGitFailure(e)
                 Result.failure(e)
             }
         }
     }
-    
+
     // Kept for signature compatibility, but setupRepository handles this now
     suspend fun cloneRepo(url: String): Result<Unit> = setupRepository(url)
 
@@ -421,23 +449,25 @@ class JGitProvider @Inject constructor(
         if (!isReady()) return@withContext Result.failure(Exception("Repository not initialized"))
 
         gitMutex.withLock {
-            cleanStaleLocks()
+            cleanStaleLocksIfNeeded()
             try {
                 val provider = getCredentialsProvider() ?: return@withLock Result.failure(Exception("No API Token found"))
 
-                Git.open(rootDir).use { git ->
+                val results = Git.open(rootDir).use { git ->
                     // Step A: Add All
                     git.add().addFilepattern(".").call()
                     git.add().addFilepattern(".").setUpdate(true).call()
 
                     // Step B: Commit
-                    val status = git.status().call()
-                    if (status.hasUncommittedChanges()) {
+                    try {
                         git.commit()
                             .setMessage(message)
                             .setAuthor("PixelBrain User", "user@pixelbrain.local")
+                            .setAllowEmpty(false)
                             .call()
                         Log.i("GitSync", "Emergency Commit Created")
+                    } catch (e: EmptyCommitException) {
+                        Log.d("GitSync", "Nothing to commit before the force push")
                     }
 
                     // Step C: Force Push
@@ -445,13 +475,20 @@ class JGitProvider @Inject constructor(
                         .setRemote("origin")
                         .setCredentialsProvider(provider)
                         .setForce(true) // FORCE PUSH
+                        .setTimeout(NETWORK_TIMEOUT_SECONDS)
                         .setProgressMonitor(AndroidLogProgressMonitor())
                         .call()
+                }
+                val rejection = describeRejectedUpdates(results)
+                if (rejection != null) {
+                    Log.e("GitSync", "Force push rejected: $rejection")
+                    return@withLock Result.failure(Exception("Force push rejected: $rejection"))
                 }
                 Log.w("GitSync", "EMERGENCY FORCE PUSH COMPLETED")
                 Result.success(Unit)
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
+                onGitFailure(e)
                 Log.e("GitSync", "Force Push Failed", e)
                 Result.failure(e)
             }
@@ -459,16 +496,34 @@ class JGitProvider @Inject constructor(
     }
 
     /**
-     * Resolves a [UsernamePasswordCredentialsProvider] using the stored token and owner.
-     * If owner is not explicitly stored, attempts to extract it from the remote URL.
-     * Falling back to "token" as username if all else fails (compatible with some PATs).
+     * JGit does NOT throw when the remote refuses a ref update (non-fast-forward, protected branch,
+     * hook rejection…) — it reports it per ref in the [PushResult]s. Treating a completed call as
+     * success reported sync as healthy while every push was actually being refused.
+     *
+     * @return a human-readable description of the refused updates, or null when all went through.
      */
-    private fun getCredentialsProvider(remoteUrl: String? = null): UsernamePasswordCredentialsProvider? {
+    private fun describeRejectedUpdates(results: Iterable<PushResult>): String? {
+        val rejected = results.flatMap { it.remoteUpdates }.filter { update ->
+            update.status != RemoteRefUpdate.Status.OK && update.status != RemoteRefUpdate.Status.UP_TO_DATE
+        }
+        if (rejected.isEmpty()) return null
+        return rejected.joinToString { update ->
+            buildString {
+                append(update.remoteName).append(": ").append(update.status)
+                update.message?.let { append(" (").append(it).append(')') }
+            }
+        }
+    }
+
+    /**
+     * Resolves a [UsernamePasswordCredentialsProvider] using the stored token.
+     * "token" is the robust HTTPS username for a GitHub PAT/OAuth token (also for org-owned
+     * repositories); GitLab expects "oauth2".
+     */
+    private fun getCredentialsProvider(): UsernamePasswordCredentialsProvider? {
         val token = secretManager.getToken() ?: return null
         val providerType = secretManager.getProvider()
 
-        // Using "token" as the username is the standard, most robust way to authenticate via HTTPS with a PAT
-        // on GitHub, and "oauth2" for GitLab, especially when the repository is owned by an organization or a different user.
         val finalUsername = if (providerType.equals("gitlab", ignoreCase = true)) {
             "oauth2"
         } else {
@@ -499,5 +554,15 @@ class JGitProvider @Inject constructor(
             }
             override fun close() { flush() }
         }
+    }
+
+    private companion object {
+        /**
+         * Socket inactivity timeout for clone/pull/push. JGit defaults to 0 = none, and Android's
+         * HttpURLConnection is also unbounded, so one stalled connection (network handover, Wi-Fi
+         * dropping on resume) used to hang the operation forever while holding the git locks —
+         * blocking every later save and leaving the sync indicator spinning.
+         */
+        const val NETWORK_TIMEOUT_SECONDS = 30
     }
 }

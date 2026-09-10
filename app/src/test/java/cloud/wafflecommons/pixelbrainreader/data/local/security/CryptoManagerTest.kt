@@ -1,90 +1,72 @@
 package cloud.wafflecommons.pixelbrainreader.data.local.security
 
 import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotEquals
-import org.junit.Assert.fail
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.security.SecureRandom
 import javax.crypto.Cipher
 import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.PBEKeySpec
 import javax.crypto.spec.SecretKeySpec
 
-/**
- * JVM unit tests for [CryptoManager]. The AES/GCM + PBKDF2 primitives are plain
- * JCE (available off-device), and the only Android dependency — KeyProperties's
- * algorithm/mode/padding strings — are compile-time constants inlined by the
- * compiler, so this runs without an instrumented device.
- *
- * The critical case is [decrypt opens data written with the legacy 10k iteration
- * count]: it guards the V7 PBKDF2 work-factor upgrade against silently bricking
- * private notes that older builds wrote with 10_000 iterations.
- */
+/** The private vault's encryption: correctness, legacy compatibility and the key-cache contract. */
 class CryptoManagerTest {
 
-    private val crypto = CryptoManager()
+    private val password = "correct horse battery staple".toCharArray()
 
     @Test
-    fun `encrypt then decrypt round-trips plaintext`() = runBlocking {
-        val plaintext = "Confidential journal entry — café, 2026. 🔒 multi-byte ✓"
-        val password = "correct horse battery staple".toCharArray()
+    fun `encrypted notes decrypt with the same password`() = runBlocking {
+        val crypto = CryptoManager()
 
-        val blob = crypto.encrypt(plaintext, password.copyOf())
-        val recovered = crypto.decrypt(blob, password.copyOf())
+        val encrypted = crypto.encrypt("Cher journal, aujourd'hui…", password)
 
-        assertEquals(plaintext, recovered)
+        assertEquals("Cher journal, aujourd'hui…", crypto.decrypt(encrypted, password))
     }
 
     @Test
-    fun `decrypt opens data written with the legacy 10k iteration count`() = runBlocking {
-        // Reproduce the OLD on-disk format byte-for-byte: [salt(16)][iv(12)][ct],
-        // key derived with the pre-upgrade 10_000 iterations. decrypt() must
-        // transparently fall back and recover it without any format marker.
-        val plaintext = "legacy note from an older build"
-        val password = "vault-pass".toCharArray()
-        val legacyBlob = legacyEncrypt(plaintext, password, iterations = 10_000)
+    fun `a wrong password never decrypts`() = runBlocking {
+        val crypto = CryptoManager()
+        val encrypted = crypto.encrypt("secret", password)
 
-        val recovered = crypto.decrypt(legacyBlob, password.copyOf())
-
-        assertEquals(plaintext, recovered)
+        assertTrue(runCatching { crypto.decrypt(encrypted, "wrong password".toCharArray()) }.isFailure)
     }
 
     @Test
-    fun `each encryption uses a fresh salt and IV`() = runBlocking {
-        val password = "pw".toCharArray()
-        val a = crypto.encrypt("same text", password.copyOf())
-        val b = crypto.encrypt("same text", password.copyOf())
-
-        // Different salt+IV => different ciphertext for identical input.
-        assertNotEquals(a.toList(), b.toList())
-    }
-
-    @Test
-    fun `wrong password fails to decrypt`() {
-        val blob = runBlocking { crypto.encrypt("secret", "right".toCharArray()) }
-
-        try {
-            runBlocking { crypto.decrypt(blob, "wrong".toCharArray()) }
-            fail("Expected decryption with the wrong password to throw (GCM auth must fail)")
-        } catch (expected: Exception) {
-            // expected — both the current and legacy keys fail GCM authentication
-        }
-    }
-
-    /**
-     * Mirrors [CryptoManager]'s legacy output format so we can prove
-     * backward-compatibility without exposing internals from the production class.
-     */
-    private fun legacyEncrypt(plaintext: String, password: CharArray, iterations: Int): ByteArray {
-        val salt = ByteArray(16).also { SecureRandom().nextBytes(it) }
-        val iv = ByteArray(12).also { SecureRandom().nextBytes(it) }
+    fun `notes written with the legacy work factor still open`() = runBlocking {
+        val salt = ByteArray(16) { it.toByte() }
+        val iv = ByteArray(12) { (it + 1).toByte() }
         val keyBytes = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
-            .generateSecret(PBEKeySpec(password, salt, iterations, 256)).encoded
+            .generateSecret(PBEKeySpec(password, salt, 10_000, 256)).encoded
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(keyBytes, "AES"), GCMParameterSpec(128, iv))
-        val ciphertext = cipher.doFinal(plaintext.toByteArray(Charsets.UTF_8))
-        return salt + iv + ciphertext
+        val legacyFile = salt + iv + cipher.doFinal("ancienne note".toByteArray())
+
+        assertEquals("ancienne note", CryptoManager().decrypt(legacyFile, password))
+    }
+
+    @Test
+    fun `one password shares its salt across files while every file keeps its own IV`() = runBlocking {
+        val crypto = CryptoManager()
+
+        val first = crypto.encrypt("a", password)
+        val second = crypto.encrypt("b", password)
+        val otherPassword = crypto.encrypt("c", "another password".toCharArray())
+
+        assertArrayEquals(first.copyOfRange(0, 16), second.copyOfRange(0, 16))
+        assertFalse(first.copyOfRange(16, 28).contentEquals(second.copyOfRange(16, 28)))
+        assertFalse(first.copyOfRange(0, 16).contentEquals(otherPassword.copyOfRange(0, 16)))
+    }
+
+    @Test
+    fun `files still decrypt after the key cache is cleared`() = runBlocking {
+        val crypto = CryptoManager()
+        val encrypted = crypto.encrypt("kept", password)
+
+        crypto.clearKeyCache()
+
+        assertEquals("kept", crypto.decrypt(encrypted, password))
     }
 }

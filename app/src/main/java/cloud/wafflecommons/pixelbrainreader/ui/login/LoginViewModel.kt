@@ -3,20 +3,25 @@ package cloud.wafflecommons.pixelbrainreader.ui.login
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import cloud.wafflecommons.pixelbrainreader.data.auth.GitHubDeviceAuthRepository
 import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
 import cloud.wafflecommons.pixelbrainreader.data.repository.FileRepository
+import cloud.wafflecommons.pixelbrainreader.data.sync.SyncOrchestrator
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 @HiltViewModel
 class LoginViewModel @Inject constructor(
     private val secretManager: SecretManager,
     private val repository: FileRepository,
-    private val gitHubDeviceAuth: cloud.wafflecommons.pixelbrainreader.data.auth.GitHubDeviceAuthRepository
+    private val gitHubDeviceAuth: GitHubDeviceAuthRepository,
+    private val syncOrchestrator: SyncOrchestrator
 ) : ViewModel() {
 
     private val _token = MutableStateFlow("")
@@ -145,25 +150,32 @@ class LoginViewModel @Inject constructor(
         viewModelScope.launch {
             _isLoading.value = true
             _errorMessage.value = null
-            
-            // 1. Secure Storage (Vault)
-            secretManager.saveToken(_token.value.replace("\n", "").replace("\r", "").trim())
-            secretManager.saveProvider(provider)
-            secretManager.saveRepoInfo(owner, repo)
-            
+
+            // 1. Secure Storage (Vault) — Keystore-backed writes, kept off the main thread.
+            val cleanToken = _token.value.replace("\n", "").replace("\r", "").trim()
+            withContext(Dispatchers.IO) {
+                secretManager.saveToken(cleanToken)
+                secretManager.saveProvider(provider)
+                secretManager.saveRepoInfo(owner, repo)
+            }
+
             // 2. Verification & Priming
             // We force a Full Mirror Sync to verify credentials and populate DB
             val result = repository.syncRepository(owner, repo)
-            
+
             if (result.isSuccess) {
-               _loginSuccess.value = true
-               Log.d("StartLogin", "Vault sealed and Database primed.")
+                // The clone only indexes files: rebuild the mood / habit / chore tables and the
+                // gamification profile from the vault too — they used to stay empty until the
+                // next app restart.
+                syncOrchestrator.reconcileVaultIntoRoom()
+                _loginSuccess.value = true
+                Log.d("StartLogin", "Vault sealed and Database primed.")
             } else {
                 val error = result.exceptionOrNull()
                 Log.e("StartLogin", "Login failed: ${error?.message}")
-                
+
                 val userFriendlyMessage = when {
-                    error?.message?.contains("not authorized", ignoreCase = true) == true -> 
+                    error?.message?.contains("not authorized", ignoreCase = true) == true ->
                         "Authentication failed. Please check your Token and its permissions (repo scope)."
                     error?.message?.contains("not found", ignoreCase = true) == true ->
                         "Repository not found. Please check the URL."

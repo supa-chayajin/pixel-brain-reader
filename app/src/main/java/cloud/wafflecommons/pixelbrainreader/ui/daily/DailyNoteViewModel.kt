@@ -1,59 +1,88 @@
 package cloud.wafflecommons.pixelbrainreader.ui.daily
 
 import android.util.Log
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import cloud.wafflecommons.pixelbrainreader.data.health.DailyHealthMetrics
+import cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyDashboardEntity
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyTaskEntity
-import cloud.wafflecommons.pixelbrainreader.data.local.entity.TimelineEntryEntity
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.GratitudeEntity
+import cloud.wafflecommons.pixelbrainreader.data.local.entity.MoodEntity
+import cloud.wafflecommons.pixelbrainreader.data.local.entity.ScratchNoteEntity
+import cloud.wafflecommons.pixelbrainreader.data.local.entity.TimelineEntryEntity
 import cloud.wafflecommons.pixelbrainreader.data.repository.DailyDashboardRepository
-import cloud.wafflecommons.pixelbrainreader.data.repository.DailyBriefingRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.DailyMoodData
+import cloud.wafflecommons.pixelbrainreader.data.repository.DailyNoteRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.FileRepository
+import cloud.wafflecommons.pixelbrainreader.data.repository.HealthMetricsRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.MoodRepository
+import cloud.wafflecommons.pixelbrainreader.data.repository.ScratchRepository
+import cloud.wafflecommons.pixelbrainreader.data.repository.TaskRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.WeatherData
 import cloud.wafflecommons.pixelbrainreader.data.repository.WeatherRepository
-import cloud.wafflecommons.pixelbrainreader.data.repository.NewsRepository
-import cloud.wafflecommons.pixelbrainreader.data.repository.ScratchRepository
-import cloud.wafflecommons.pixelbrainreader.data.usecase.SyncHealthDataUseCase
-import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
-import cloud.wafflecommons.pixelbrainreader.data.utils.FrontmatterManager
+import cloud.wafflecommons.pixelbrainreader.data.sync.SyncOrchestrator
+import cloud.wafflecommons.pixelbrainreader.data.sync.SyncState
+import cloud.wafflecommons.pixelbrainreader.data.system.AppClock
+import cloud.wafflecommons.pixelbrainreader.data.utils.MarkdownCommandParser
+import cloud.wafflecommons.pixelbrainreader.di.ApplicationScope
+import cloud.wafflecommons.pixelbrainreader.ui.components.SaveState
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.*
-
-import java.io.File
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 
+const val DEFAULT_MANTRA = "Stay safe my friend, and don't you dare go hollow!"
+
+/** Placeholder while the first weather reading loads (the card spins on "--°C"). */
+val WEATHER_LOADING = WeatherData(emoji = "⌛", temperature = "--°C", location = "Loading...", description = "Loading", code = -1)
+
+/** Shown when no reading could be fetched and none is cached (code -2 → the card's "unavailable" state). */
+val WEATHER_UNAVAILABLE = WeatherData(
+    emoji = "⚠️",
+    temperature = "—",
+    location = "Location or network unavailable",
+    description = "Unavailable",
+    code = -2
+)
+
 data class DailyNoteState(
     val date: LocalDate = LocalDate.now(),
     val moodData: DailyMoodData? = null,
-    val healthMetrics: cloud.wafflecommons.pixelbrainreader.data.health.DailyHealthMetrics? = null,
-    
-    // Core Dashboard Content (Room)
-    val mantra: String = "Stay safe my friend, and don't you dare go hollow!",
-    val ideasContent: String = "",
-    val notesContent: String = "",
-    
-    val noteIntro: String = "", // Kept for compatibility
-    val noteOutro: String = "", // Kept for compatibility
-    val metadata: Map<String, String> = emptyMap(),
-    val weatherData: WeatherData? = null,
-    
-    // Room-Backed Live Data
+    val healthMetrics: DailyHealthMetrics? = null,
+    val mantra: String = DEFAULT_MANTRA,
     val timelineEvents: List<TimelineEntryEntity> = emptyList(),
     val dailyTasks: List<DailyTaskEntity> = emptyList(),
-    
-    val wellnessStats: List<Pair<String, String>> = emptyList(),
-    val weather: cloud.wafflecommons.pixelbrainreader.data.repository.WeatherData? = null,
-    val briefing: cloud.wafflecommons.pixelbrainreader.data.model.BriefingData? = null,
+    val weather: WeatherData = WEATHER_LOADING,
     val isLoading: Boolean = true,
-    val briefingState: MorningBriefingUiState = MorningBriefingUiState(),
     val topDailyTags: List<String> = emptyList(),
-    val scratchNotes: List<cloud.wafflecommons.pixelbrainreader.data.local.entity.ScratchNoteEntity> = emptyList(),
+    val scratchNotes: List<ScratchNoteEntity> = emptyList(),
     val userMessage: String? = null,
     val moodTrend: List<DailyMoodPoint> = emptyList()
 )
@@ -65,305 +94,236 @@ data class DailyMoodPoint(
     val avgBpm: Int = 0
 )
 
-data class MorningBriefingUiState(
-    val weather: WeatherData? = null,
-    val moodTrend: List<DailyMoodPoint> = emptyList(),
-    val topTags: List<String> = emptyList(),
-    val quote: String = "",
-    val quoteAuthor: String = "",
-    val oracleInsight: String? = null,
-    val isExpanded: Boolean = true,
-    val isLoading: Boolean = true
-)
-
 @HiltViewModel
-@OptIn(FlowPreview::class, kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+@OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
 class DailyNoteViewModel @Inject constructor(
     private val moodRepository: MoodRepository,
-    private val newsRepository: NewsRepository,
     private val fileRepository: FileRepository,
     private val weatherRepository: WeatherRepository,
-    private val secretManager: SecretManager,
     private val dashboardRepository: DailyDashboardRepository,
-    @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context,
     private val scratchRepository: ScratchRepository,
-    private val userPrefs: cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository,
-    private val jGitProvider: cloud.wafflecommons.pixelbrainreader.data.remote.JGitProvider,
-    private val gamificationRepository: cloud.wafflecommons.pixelbrainreader.data.gamification.GamificationRepository,
-    private val syncHealthDataUseCase: SyncHealthDataUseCase,
-    private val dailyNoteRepository: cloud.wafflecommons.pixelbrainreader.data.repository.DailyNoteRepository,
-    private val taskRepository: cloud.wafflecommons.pixelbrainreader.data.repository.TaskRepository,
-    private val syncOrchestrator: cloud.wafflecommons.pixelbrainreader.data.sync.SyncOrchestrator,
-    private val googleCalendarRepository: cloud.wafflecommons.pixelbrainreader.data.repository.GoogleCalendarRepository,
-    private val healthMetricsRepository: cloud.wafflecommons.pixelbrainreader.data.repository.HealthMetricsRepository
+    private val dailyNoteRepository: DailyNoteRepository,
+    private val taskRepository: TaskRepository,
+    private val syncOrchestrator: SyncOrchestrator,
+    private val healthMetricsRepository: HealthMetricsRepository,
+    appClock: AppClock,
+    @param:ApplicationScope private val appScope: CoroutineScope
 ) : ViewModel() {
 
+    /** A not-yet-persisted Second Brain edit, bound to the day it was typed on. */
+    private data class PendingEdit(val date: LocalDate, val content: String)
+
+    /** One weather (re)load. [id] makes every request distinct; [force] bypasses the reading cache. */
+    private data class WeatherRequest(val force: Boolean, val id: Long)
+
     /**
-     * Tracks `/event` command lines already dispatched, keyed by date, to keep
-     * the debouncer's auto-scan idempotent: re-saving a note that still
-     * contains a previously-processed command must not create a duplicate.
-     * Entries for inactive dates are dropped when [loadDailyNote] swaps date.
+     * Tracks `/event` command lines already dispatched, keyed by date, to keep the debouncer's
+     * auto-scan idempotent: re-saving a note that still contains a previously-processed command
+     * must not create a duplicate. Days left behind keep their entry, so a save of the previous day
+     * that lands after midnight doesn't dispatch its commands again. Only touched on the main thread.
      */
     private val processedEventCommands = mutableMapOf<LocalDate, MutableSet<String>>()
 
-    // [NEW] Reactive Date Selection
-    private val _selectedDate = MutableStateFlow(LocalDate.now())
+    // The board always shows the real current day: the Daily screen has no date picker and this
+    // ViewModel lives as long as the activity (days, on a device that rarely kills the app).
+    private val _selectedDate = MutableStateFlow(appClock.today.value)
     val selectedDate: StateFlow<LocalDate> = _selectedDate.asStateFlow()
 
     private val _userMessage = MutableStateFlow<String?>(null)
     private val _isLoading = MutableStateFlow(false)
-    private val _weatherRefreshTrigger = MutableStateFlow(0)
+    private val _weatherRequests = MutableStateFlow(WeatherRequest(force = false, id = 0))
 
-    fun refreshWeather() {
-        _weatherRefreshTrigger.value++
-    }
+    /** Last forced weather request already served — a re-subscription must not force the network again. */
+    private var servedForcedWeatherRequest = -1L
 
-    // Global Sync State for PullToRefresh
-    val isSyncing: StateFlow<cloud.wafflecommons.pixelbrainreader.data.sync.SyncState> = syncOrchestrator.syncState
+    private val _saveState = MutableStateFlow(SaveState.IDLE)
+    val saveState: StateFlow<SaveState> = _saveState.asStateFlow()
+    private var savedBadgeJob: Job? = null
 
     /**
-     * Triggers a full Git→Health→Git sync cycle.
-     * Called by PullToRefresh on DailyNoteScreen.
+     * Second Brain text, held as Compose snapshot state and updated synchronously on every
+     * keystroke. It used to round-trip through a 14-way `combine` StateFlow, whose asynchronous
+     * echo could lag a keystroke behind and make the text field drop characters or jump the caret.
      */
-    fun triggerSync() {
-        viewModelScope.launch(Dispatchers.IO) {
-            syncOrchestrator.executeFullSyncCycle()
-            // Reload the current day's data after sync
-            loadDailyNote(_selectedDate.value)
-        }
-    }
+    var ideasText by mutableStateOf("")
+        private set
+    var notesText by mutableStateOf("")
+        private set
+
+    // Unsaved edits. Non-null only until persisted: while set, they shield the text field from
+    // stored values; once saved they are cleared, so later changes from elsewhere show up again.
+    private val _ideasEdits = MutableStateFlow<PendingEdit?>(null)
+    private val _notesEdits = MutableStateFlow<PendingEdit?>(null)
+
+    // Global Sync State for PullToRefresh
+    val isSyncing: StateFlow<SyncState> = syncOrchestrator.syncState
 
     // RFC-009: Gratitude Express Flow
     val gratitudes: StateFlow<List<GratitudeEntity>> = _selectedDate.flatMapLatest { date ->
         dailyNoteRepository.getGratitudesStream(date)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    val gamificationState = gamificationRepository.gamificationState
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    private val _currentDayMood: Flow<DailyMoodData?> = _selectedDate
+        .flatMapLatest { date -> moodRepository.getDailyMood(date) }
 
-    private val _currentDayMood: StateFlow<DailyMoodData?> = _selectedDate
-        .flatMapLatest { date ->
-           moodRepository.getDailyMood(date)
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    // Health metrics are one-shot vault reads: re-read whenever they are rewritten (foreground
+    // refresh, sync) instead of on every sync-state tick.
+    private val _healthMetrics: Flow<DailyHealthMetrics?> =
+        combine(_selectedDate, healthMetricsRepository.changes) { date, _ -> date }
+            .flatMapLatest { date -> healthMetricsRepository.getMetricsFlow(date) }
 
-    private val _healthMetrics = combine(_selectedDate, syncOrchestrator.syncState) { date, _ -> date }
-        .flatMapLatest { date ->
-            healthMetricsRepository.getMetricsFlow(date)
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
-
-    private val _moodTrend = combine(_selectedDate, syncOrchestrator.syncState) { date, _ -> date }
-        .flatMapLatest { date ->
-            combine(
-                moodRepository.getMoodFlow(),
-                healthMetricsRepository.getMetricsHistoryFlow(date, 7)
-            ) { moods, healthMetricsList ->
-                val recentMoods = mutableListOf<DailyMoodPoint>()
-                (6 downTo 0).forEach { offset ->
-                    val d = date.minusDays(offset.toLong())
-                    val dayMoods = moods.filter { it.date == d.toString() }
-                    
-                    val dhm = healthMetricsList.find { it.date == d.toString() }
-                    val avgBpm = dhm?.averageHeartRate ?: 0
-                    
-                    if (dayMoods.isNotEmpty()) {
-                        val avg = dayMoods.map { it.score }.average()
-                        val emoji = when {
-                            avg < 1.8 -> "😫"
-                            avg.isNaN() -> "😐"
-                            avg < 2.6 -> "😞"
-                            avg < 3.4 -> "😐"
-                            avg < 4.2 -> "🙂"
-                            else -> "🤩"
-                        }
-                        recentMoods.add(DailyMoodPoint(d, avg.toFloat(), emoji, avgBpm))
-                    } else {
-                        recentMoods.add(DailyMoodPoint(d, 0f, "∅", avgBpm))
-                    }
-                }
-                recentMoods
+    private val _moodTrend: Flow<List<DailyMoodPoint>> =
+        combine(_selectedDate, healthMetricsRepository.changes) { date, _ -> date }
+            .flatMapLatest { date ->
+                combine(
+                    moodRepository.getMoodsBetween(date.minusDays(6), date),
+                    healthMetricsRepository.getMetricsHistoryFlow(date, 7)
+                ) { moods, metrics -> buildMoodTrend(date, moods, metrics) }
             }
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // Sentinel emitted when weather can't be resolved (location denied, no fix,
-    // or the fetch failed). temperature is intentionally NOT "--°C" so the card
-    // renders an "unavailable" state instead of spinning forever; code = -2 flags it.
-    private val weatherUnavailable = cloud.wafflecommons.pixelbrainreader.data.repository.WeatherData(
-        emoji = "⚠️",
-        temperature = "—",
-        location = "Location or network unavailable",
-        description = "Unavailable",
-        code = -2
+    private val _weather: StateFlow<WeatherData> =
+        combine(_selectedDate, _weatherRequests) { date, request -> date to request }
+            .flatMapLatest { (date, request) ->
+                val force = request.force && request.id != servedForcedWeatherRequest
+                if (force) servedForcedWeatherRequest = request.id
+                weatherUpdates(date, force)
+            }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), WEATHER_LOADING)
+
+    private data class Board(
+        val dashboard: DailyDashboardEntity?,
+        val timeline: List<TimelineEntryEntity>,
+        val tasks: List<DailyTaskEntity>,
+        val scraps: List<ScratchNoteEntity>
     )
 
-    // Weather Flow (Reactive).
-    // The previous version caught Exception (which includes CancellationException)
-    // and tried emit(null). When flatMapLatest cancelled mid-fetch, the catch
-    // swallowed the CE, then emit(null) re-threw CE because the coroutine was
-    // already dead — so the StateFlow never received a value and the UI stuck
-    // on the Loading placeholder. Now we split CE vs real failure and let
-    // cancellation propagate cleanly.
-    private val _weather = combine(_selectedDate, _weatherRefreshTrigger) { date, trigger ->
-        Log.d("WeatherFlow", "Combine: date=$date trigger=$trigger")
-        date
-    }
-        .flatMapLatest { date ->
-            flow {
-                Log.d("WeatherFlow", "Fetching weather for $date")
-                val result: cloud.wafflecommons.pixelbrainreader.data.repository.WeatherData? = try {
-                    if (date == LocalDate.now()) {
-                        weatherRepository.getCurrentWeatherAndLocation()
-                    } else {
-                        weatherRepository.getHistoricalWeather(date)
-                    }
-                } catch (e: kotlinx.coroutines.CancellationException) {
-                    // flatMapLatest replaced us; let the framework see it.
-                    Log.d("WeatherFlow", "Fetch cancelled for $date")
-                    throw e
-                } catch (e: Exception) {
-                    Log.e("WeatherFlow", "Fetch failed for $date", e)
-                    null
-                }
-                Log.d("WeatherFlow", "Emitting $result for $date")
-                // Emit the unavailable sentinel instead of null so the UI leaves the
-                // loading spinner and shows an actionable state.
-                emit(result ?: weatherUnavailable)
-            }
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), cloud.wafflecommons.pixelbrainreader.data.repository.WeatherData(
-            emoji = "⌛",
-            temperature = "--°C",
-            location = "Loading...",
-            description = "Loading",
-            code = -1
-        ))
+    private data class Vitals(
+        val mood: DailyMoodData?,
+        val health: DailyHealthMetrics?,
+        val trend: List<DailyMoodPoint>,
+        val weather: WeatherData
+    )
 
-    // Debounce for Text Inputs
-    private val _ideasUpdates = MutableStateFlow<String?>(null)
-    private val _notesUpdates = MutableStateFlow<String?>(null)
-    
-    private val _saveState = MutableStateFlow(cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.IDLE)
-    val saveState: StateFlow<cloud.wafflecommons.pixelbrainreader.ui.components.SaveState> = _saveState.asStateFlow()
-
-    // --- The Unified Reactive State ---
-    val uiState: StateFlow<DailyNoteState> = combine(
-        _selectedDate,
+    private val _board: Flow<Board> = combine(
         _selectedDate.flatMapLatest { dashboardRepository.getDashboard(it) },
         _selectedDate.flatMapLatest { dashboardRepository.getLiveTimeline(it) },
         _selectedDate.flatMapLatest { dashboardRepository.getLiveTasks(it) },
-        scratchRepository.getActiveScraps(),
-        _currentDayMood,
-        _healthMetrics,
-        _moodTrend,
-        _weather,
-        _isLoading,
-        _userMessage,
-        userPrefs.isBriefingExpanded.map { it ?: true },
-        _ideasUpdates,
-        _notesUpdates
-    ) { args ->
-        val date = args[0] as LocalDate
-        val dashboard = args[1] as? cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyDashboardEntity
-        @Suppress("UNCHECKED_CAST") val timeline = args[2] as? List<TimelineEntryEntity> ?: emptyList()
-        @Suppress("UNCHECKED_CAST") val tasks = args[3] as? List<DailyTaskEntity> ?: emptyList()
-        @Suppress("UNCHECKED_CAST") val scraps = args[4] as? List<cloud.wafflecommons.pixelbrainreader.data.local.entity.ScratchNoteEntity> ?: emptyList()
-        val moodData = args[5] as? DailyMoodData
-        val healthMetrics = args[6] as? cloud.wafflecommons.pixelbrainreader.data.health.DailyHealthMetrics
-        @Suppress("UNCHECKED_CAST") val moodTrendData = args[7] as? List<DailyMoodPoint> ?: emptyList()
-        val weatherData = args[8] as? WeatherData
-        val isLoading = args[9] as Boolean
-        val userMsg = args[10] as? String
-        val isExpanded = args[11] as Boolean
+        scratchRepository.getActiveScraps()
+    ) { dashboard, timeline, tasks, scraps -> Board(dashboard, timeline, tasks, scraps) }
 
-        // Shield ideas and notes during active typing. _ideasUpdates/_notesUpdates
-        // are combine SOURCES (not bare .value reads) so every keystroke re-emits
-        // uiState immediately, instead of the field appearing frozen until the
-        // 1500 ms debounce persists to Room and the dashboard flow re-emits.
-        val currentIdeasUpdates = args[12] as? String
-        val currentNotesUpdates = args[13] as? String
-        
-        val shieldedIdeas = if (currentIdeasUpdates != null && currentIdeasUpdates != dashboard?.ideasContent) {
-            currentIdeasUpdates
-        } else {
-            dashboard?.ideasContent ?: ""
-        }
-
-        val shieldedNotes = if (currentNotesUpdates != null && currentNotesUpdates != dashboard?.notesContent) {
-            currentNotesUpdates
-        } else {
-            dashboard?.notesContent ?: ""
-        }
-
-        val dailyTags = moodData?.entries?.flatMap { it.activities ?: emptyList() }
-            ?.groupingBy { it }
-            ?.eachCount()?.entries?.sortedByDescending { it.value }?.take(5)?.map { it.key } 
-            ?: emptyList()
-
-        DailyNoteState(
-            date = date,
-            moodData = moodData,
-            moodTrend = moodTrendData,
-            healthMetrics = healthMetrics,
-            mantra = dashboard?.dailyMantra ?: "Stay safe my friend, and don't you dare go hollow!",
-            ideasContent = shieldedIdeas,
-            notesContent = shieldedNotes,
-            timelineEvents = timeline,
-            dailyTasks = tasks,
-            scratchNotes = scraps,
-            weather = weatherData ?: cloud.wafflecommons.pixelbrainreader.data.repository.WeatherData("⌛", "--°C", "Loading...", "Loading", -1),
-            weatherData = weatherData,
-            isLoading = isLoading,
-            topDailyTags = dailyTags,
-            userMessage = userMsg,
-            briefingState = MorningBriefingUiState(
-                weather = weatherData,
-                moodTrend = moodTrendData,
-                isExpanded = isExpanded,
-                isLoading = false,
-                quote = "Stay safe my friend, and don't you dare go hollow!"
-            )
-        )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DailyNoteState())
-
-    init {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                syncHealthDataUseCase(LocalDate.now())
-            } catch (e: Exception) {
-                Log.e("DailyNoteVM", "Silent Health Sync Failed", e)
-            }
-        }
-        refreshWeather()
-        
-        // Initial Trigger
-        loadDailyNote(LocalDate.now())
-        setupDebouncers()
+    private val _vitals: Flow<Vitals> = combine(_currentDayMood, _healthMetrics, _moodTrend, _weather) { mood, health, trend, weather ->
+        Vitals(mood, health, trend, weather)
     }
 
-    fun loadDailyNote(date: LocalDate) {
+    // --- The Unified Reactive State ---
+    val uiState: StateFlow<DailyNoteState> = combine(
+        _selectedDate, _board, _vitals, _isLoading, _userMessage
+    ) { date, board, vitals, isLoading, userMessage ->
+        DailyNoteState(
+            date = date,
+            moodData = vitals.mood,
+            healthMetrics = vitals.health,
+            moodTrend = vitals.trend,
+            mantra = board.dashboard?.dailyMantra?.takeIf { it.isNotBlank() } ?: DEFAULT_MANTRA,
+            timelineEvents = board.timeline,
+            dailyTasks = board.tasks,
+            scratchNotes = board.scraps,
+            weather = vitals.weather,
+            isLoading = isLoading,
+            topDailyTags = topTags(vitals.mood),
+            userMessage = userMessage
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DailyNoteState(date = appClock.today.value))
+
+    init {
+        loadDailyNote(_selectedDate.value)
+        setupSecondBrain()
+        // Follow the real day (midnight, clock/timezone changes, app returning after midnight).
+        appClock.today
+            .onEach { today -> if (today != _selectedDate.value) loadDailyNote(today) }
+            .launchIn(viewModelScope)
+        // Re-check the weather whenever the app returns to the foreground (served from the reading
+        // cache while recent). Health numbers are refreshed app-wide by ForegroundRefresher.
+        appClock.foregroundEvents
+            .onEach { refreshWeather() }
+            .launchIn(viewModelScope)
+    }
+
+    /**
+     * Re-requests the weather. A plain refresh reuses a recent cached reading (quick app switches
+     * cost nothing); [force] always hits the network (pull-to-refresh, permission just granted).
+     */
+    fun refreshWeather(force: Boolean = false) {
+        _weatherRequests.update { WeatherRequest(force = force, id = it.id + 1) }
+    }
+
+    /**
+     * Pull-to-refresh: a full Git→Health→Git sync cycle. User-initiated, so it bypasses the cooldown
+     * and runs in the application scope (it survives leaving the screen).
+     */
+    fun triggerSync() {
+        syncOrchestrator.requestSync(force = true)
+        refreshWeather(force = true)
+    }
+
+    private fun loadDailyNote(date: LocalDate) {
         if (date != _selectedDate.value) {
-            // Forget commands processed for the date we're leaving.
-            processedEventCommands.remove(_selectedDate.value)
+            // Save the day being left right away: an edit typed on the new day within the typing
+            // debounce would otherwise replace its pending edit before it was written.
+            _ideasEdits.value?.let { edit -> viewModelScope.launch { persistSecondBrain(edit, "IDEAS", _ideasEdits) } }
+            _notesEdits.value?.let { edit -> viewModelScope.launch { persistSecondBrain(edit, "NOTES", _notesEdits) } }
+            ideasText = ""
+            notesText = ""
         }
         _selectedDate.value = date
         viewModelScope.launch {
             _isLoading.value = true
-            // Ensure Buffer is Ready (Ingest if needed)
-            if (!dashboardRepository.hasBuffer(date)) {
-                ingestFromFile(date)
+            try {
+                // Ensure Buffer is Ready (Ingest if needed)
+                if (!dashboardRepository.hasBuffer(date)) {
+                    ingestFromFile(date)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to load the board of $date", e)
+            } finally {
+                _isLoading.value = false
             }
-            _isLoading.value = false
         }
     }
-    
+
     private suspend fun ingestFromFile(date: LocalDate) {
         val path = "10_Journal/${date.format(DateTimeFormatter.ISO_DATE)}.md"
         val content = fileRepository.readFile(path)
         dashboardRepository.ingest(date, content ?: "")
     }
 
+    private fun weatherUpdates(date: LocalDate, force: Boolean): Flow<WeatherData> = flow {
+        // 1. The last good reading, immediately — no spinner on resume or cold start.
+        val cached = weatherRepository.getCachedWeather(date)
+        if (cached != null) emit(cached)
+        // 2. Refresh, retrying: right after the app resumes the network often isn't ready yet.
+        repeat(WEATHER_MAX_ATTEMPTS) { attempt ->
+            val fresh = try {
+                weatherRepository.getWeather(date, forceRefresh = force && attempt == 0)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "Weather fetch failed for $date", e)
+                null
+            }
+            if (fresh != null) {
+                emit(fresh)
+                return@flow
+            }
+            if (attempt == 0 && cached == null) emit(WEATHER_UNAVAILABLE)
+            if (attempt < WEATHER_MAX_ATTEMPTS - 1) delay(WEATHER_RETRY_DELAY_MS * (attempt + 1))
+        }
+    }
+
     // --- Interactive Actions ---
-    
+
     fun addTimelineEntry(content: String, time: LocalTime) {
         viewModelScope.launch { dashboardRepository.addTimelineEntry(_selectedDate.value, content, time) }
     }
@@ -394,90 +354,145 @@ class DailyNoteViewModel @Inject constructor(
         viewModelScope.launch { scratchRepository.saveScrap(content, color) }
     }
 
-    fun deleteScrap(scrap: cloud.wafflecommons.pixelbrainreader.data.local.entity.ScratchNoteEntity) {
+    fun deleteScrap(scrap: ScratchNoteEntity) {
         viewModelScope.launch { scratchRepository.deleteScrap(scrap) }
     }
 
-    fun promoteScrapToIdeas(scrap: cloud.wafflecommons.pixelbrainreader.data.local.entity.ScratchNoteEntity) {
+    fun promoteScrapToIdeas(scrap: ScratchNoteEntity) {
+        val date = _selectedDate.value
+        val newIdeas = if (ideasText.isBlank()) scrap.content else "$ideasText\n\n${scrap.content}"
+        ideasText = newIdeas
+        val edit = PendingEdit(date, newIdeas)
+        _ideasEdits.value = edit
         viewModelScope.launch {
-            val currentIdeas = (uiState.value.ideasContent)
-            val newIdeas = if (currentIdeas.isBlank()) scrap.content else "$currentIdeas\n\n${scrap.content}"
-            dashboardRepository.updateSecondBrain(_selectedDate.value, "IDEAS", newIdeas)
-            scratchRepository.updateScrap(scrap.copy(isPromoted = true))
-            _userMessage.value = "Scrap promoted to Second Brain"
+            if (persistSecondBrain(edit, "IDEAS", _ideasEdits)) {
+                scratchRepository.updateScrap(scrap.copy(isPromoted = true))
+                _userMessage.value = "Scrap promoted to Second Brain"
+            }
         }
     }
 
     fun onIdeasChanged(content: String) {
-        _saveState.value = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.UNSAVED
-        _ideasUpdates.value = content
+        ideasText = content
+        _saveState.value = SaveState.UNSAVED
+        _ideasEdits.value = PendingEdit(_selectedDate.value, content)
     }
 
     fun onNotesChanged(content: String) {
-        _saveState.value = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.UNSAVED
-        _notesUpdates.value = content
+        notesText = content
+        _saveState.value = SaveState.UNSAVED
+        _notesEdits.value = PendingEdit(_selectedDate.value, content)
     }
-    
-    @OptIn(FlowPreview::class)
-    private fun setupDebouncers() {
-        _ideasUpdates.debounce(1500L).filterNotNull().distinctUntilChanged().onEach { content ->
-            _saveState.value = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.SAVING
-            try {
-                dashboardRepository.updateSecondBrain(_selectedDate.value, "IDEAS", content)
-                scanContentForEventCommands(content, _selectedDate.value)
-                _saveState.value = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.SAVED
-                delay(2500L)
-                if (_saveState.value == cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.SAVED) {
-                    _saveState.value = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.IDLE
-                }
-            } catch (e: Exception) {
-                _saveState.value = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.ERROR
-            }
-        }.launchIn(viewModelScope)
 
-        _notesUpdates.debounce(1500L).filterNotNull().distinctUntilChanged().onEach { content ->
-            _saveState.value = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.SAVING
-            try {
-                dashboardRepository.updateSecondBrain(_selectedDate.value, "NOTES", content)
-                scanContentForEventCommands(content, _selectedDate.value)
-                _saveState.value = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.SAVED
-                delay(2500L)
-                if (_saveState.value == cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.SAVED) {
-                    _saveState.value = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.IDLE
-                }
-            } catch (e: Exception) {
-                _saveState.value = cloud.wafflecommons.pixelbrainreader.ui.components.SaveState.ERROR
+    private fun setupSecondBrain() {
+        // Adopt the stored text for the day (first load, promoted scrap, sync ingest) — but never
+        // overwrite text the user typed that hasn't been persisted yet.
+        _selectedDate
+            .flatMapLatest { date -> dashboardRepository.getDashboard(date).map { date to it } }
+            .onEach { (date, dashboard) ->
+                val storedIdeas = dashboard?.ideasContent.orEmpty()
+                val storedNotes = dashboard?.notesContent.orEmpty()
+                val pendingIdeas = _ideasEdits.value?.takeIf { it.date == date }?.content
+                val pendingNotes = _notesEdits.value?.takeIf { it.date == date }?.content
+                if (pendingIdeas == null || pendingIdeas == storedIdeas) ideasText = storedIdeas
+                if (pendingNotes == null || pendingNotes == storedNotes) notesText = storedNotes
             }
-        }.launchIn(viewModelScope)
+            .launchIn(viewModelScope)
+
+        // Debounced persistence. Each edit carries its own date, so an edit typed just before
+        // midnight is saved to THAT day, never to the day that is on screen when the debounce fires.
+        // (debounce before filterNotNull: an edit saved and cleared in the meantime is skipped.)
+        _ideasEdits.debounce(TYPING_DEBOUNCE_MS).filterNotNull()
+            .onEach { edit -> persistSecondBrain(edit, "IDEAS", _ideasEdits) }
+            .launchIn(viewModelScope)
+        _notesEdits.debounce(TYPING_DEBOUNCE_MS).filterNotNull()
+            .onEach { edit -> persistSecondBrain(edit, "NOTES", _notesEdits) }
+            .launchIn(viewModelScope)
+    }
+
+    /** Saves [edit]; returns false (and shows the error state) when it could not be written. */
+    private suspend fun persistSecondBrain(
+        edit: PendingEdit,
+        type: String,
+        pending: MutableStateFlow<PendingEdit?>
+    ): Boolean {
+        _saveState.value = SaveState.SAVING
+        try {
+            dashboardRepository.updateSecondBrain(edit.date, type, edit.content)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to save $type for ${edit.date}", e)
+            _saveState.value = SaveState.ERROR
+            return false
+        }
+        // Saved: stop shielding this text (unless the user kept typing meanwhile).
+        pending.compareAndSet(edit, null)
+        scanContentForEventCommands(edit.content, edit.date)
+
+        if (_ideasEdits.value != null || _notesEdits.value != null) {
+            _saveState.value = SaveState.UNSAVED
+            return true
+        }
+        _saveState.value = SaveState.SAVED
+        savedBadgeJob?.cancel()
+        savedBadgeJob = viewModelScope.launch {
+            delay(SAVED_BADGE_MS)
+            if (_saveState.value == SaveState.SAVED) _saveState.value = SaveState.IDLE
+        }
+        return true
     }
 
     fun clearUserMessage() { _userMessage.value = null }
 
+    /**
+     * viewModelScope is already cancelled here, and with it the typing debounce: an edit made right
+     * before leaving the app was lost. What is still pending is saved from the application scope.
+     */
+    override fun onCleared() {
+        _ideasEdits.value?.let { saveInBackground(it, "IDEAS") }
+        _notesEdits.value?.let { saveInBackground(it, "NOTES") }
+    }
+
+    private fun saveInBackground(edit: PendingEdit, type: String) {
+        appScope.launch {
+            try {
+                dashboardRepository.updateSecondBrain(edit.date, type, edit.content)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "Final save of $type for ${edit.date} failed", e)
+            }
+        }
+    }
+
     // --- /event command surface ----------------------------------------------
 
     /**
-     * Parses a `/event ...` command line and inserts the entry into today's
-     * timeline. Local-only — Google Calendar sync is now import-only.
+     * Parses a `/event ...` command line and inserts the entry into the timeline.
+     * Local-only — Google Calendar sync is import-only.
      */
     fun createEventFromCommand(line: String, date: LocalDate = _selectedDate.value) {
-        val parsed = cloud.wafflecommons.pixelbrainreader.data.utils.MarkdownCommandParser
-            .parseEvent(line, today = date)
+        val parsed = MarkdownCommandParser.parseEvent(line, today = date)
             ?: run {
                 _userMessage.value = "Couldn't parse /event command"
                 return
             }
-        viewModelScope.launch(Dispatchers.IO) {
-            dashboardRepository.addTimelineEntry(
-                date = parsed.startsAt.toLocalDate(),
-                content = parsed.title,
-                time = parsed.startsAt.toLocalTime()
-            )
+        val eventDate = parsed.startsAt.toLocalDate()
+        val eventTime = parsed.startsAt.toLocalTime()
+        viewModelScope.launch {
+            // The command line stays in the note, so it is scanned again after a restart: an event
+            // that is already on the timeline is not added a second time.
+            val alreadyThere = dashboardRepository.getLiveTimeline(eventDate).first()
+                .any { it.time == eventTime && it.content == parsed.title }
+            if (alreadyThere) return@launch
+            dashboardRepository.addTimelineEntry(date = eventDate, content = parsed.title, time = eventTime)
             _userMessage.value = "📅 Event added: ${parsed.title}"
         }
     }
 
     fun deleteTimelineEvent(entry: TimelineEntryEntity) {
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch {
             dashboardRepository.deleteTimelineEntry(entry.id)
             _userMessage.value = "Event removed"
         }
@@ -498,22 +513,67 @@ class DailyNoteViewModel @Inject constructor(
             }
         }
     }
-    
+
     fun compileDay() {
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch {
             try {
                 dashboardRepository.burnToDisk(_selectedDate.value)
                 _userMessage.value = "Day exported and closed successfully"
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
+                Log.e(TAG, "Day export failed", e)
                 _userMessage.value = "Error during export"
             }
         }
     }
-    
-    fun toggleBriefing() {
-        viewModelScope.launch {
-            userPrefs.setBriefingExpanded(!(uiState.value.briefingState.isExpanded))
+
+    private fun topTags(mood: DailyMoodData?): List<String> =
+        mood?.entries.orEmpty()
+            .flatMap { it.activities }
+            .groupingBy { it }
+            .eachCount()
+            .entries
+            .sortedByDescending { it.value }
+            .take(5)
+            .map { it.key }
+
+    companion object {
+        private const val TAG = "DailyNoteVM"
+        private const val TYPING_DEBOUNCE_MS = 1_500L
+        private const val SAVED_BADGE_MS = 2_500L
+        private const val WEATHER_MAX_ATTEMPTS = 3
+        private const val WEATHER_RETRY_DELAY_MS = 15_000L
+
+        /** Seven daily points ending at [endDate]: average mood score/emoji and average heart rate. */
+        internal fun buildMoodTrend(
+            endDate: LocalDate,
+            moods: List<MoodEntity>,
+            metrics: List<DailyHealthMetrics>
+        ): List<DailyMoodPoint> {
+            val moodsByDate = moods.groupBy { it.date }
+            val bpmByDate = metrics.associate { it.date to it.averageHeartRate }
+            return (6 downTo 0).map { offset ->
+                val day = endDate.minusDays(offset.toLong())
+                val key = day.toString()
+                val dayMoods = moodsByDate[key].orEmpty()
+                val bpm = bpmByDate[key] ?: 0
+                if (dayMoods.isEmpty()) {
+                    DailyMoodPoint(day, 0f, "∅", bpm)
+                } else {
+                    val avg = dayMoods.map { it.score }.average()
+                    DailyMoodPoint(day, avg.toFloat(), moodEmojiFor(avg), bpm)
+                }
+            }
+        }
+
+        private fun moodEmojiFor(avg: Double): String = when {
+            avg < 1.8 -> "😫"
+            avg.isNaN() -> "😐"
+            avg < 2.6 -> "😞"
+            avg < 3.4 -> "😐"
+            avg < 4.2 -> "🙂"
+            else -> "🤩"
         }
     }
 }
-

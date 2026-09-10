@@ -3,169 +3,265 @@ package cloud.wafflecommons.pixelbrainreader.data.repository
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.location.Address
 import android.location.Geocoder
+import android.location.Location
 import android.util.Log
 import androidx.core.content.ContextCompat
+import androidx.core.content.edit
+import cloud.wafflecommons.pixelbrainreader.data.remote.OpenMeteoResponse
 import cloud.wafflecommons.pixelbrainreader.data.remote.OpenMeteoService
-import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.AutoAwesome
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.resume
+import kotlin.math.roundToInt
 
 data class WeatherData(
     val emoji: String,
     val temperature: String,
     val location: String?,
     val description: String,
-    val code: Int = 0
+    val code: Int = 0,
+    /** Epoch millis of the successful fetch behind this reading (0 for placeholders). */
+    val fetchedAt: Long = 0L
 )
 
+/** Last successful reading for today, persisted so a cold start shows it instantly (no spinner). */
+@Serializable
+private data class CachedWeather(
+    val date: String,
+    val emoji: String,
+    val temperature: String,
+    val location: String? = null,
+    val description: String,
+    val code: Int,
+    val fetchedAt: Long
+) {
+    fun toWeatherData() = WeatherData(emoji, temperature, location, description, code, fetchedAt)
+
+    companion object {
+        fun of(date: LocalDate, data: WeatherData) =
+            CachedWeather(date.toString(), data.emoji, data.temperature, data.location, data.description, data.code, data.fetchedAt)
+    }
+}
+
+/**
+ * Location + Open-Meteo weather.
+ *
+ * Every external wait is bounded — the cached-location lookup, the active fix, the reverse
+ * geocoder and the HTTP call — and the city name can never block the forecast. Previously the
+ * geocoder callback's `onError` was not implemented (a no-op default), so any geocoding error
+ * (typically a network blip right after the app resumed) suspended the weather fetch FOREVER and
+ * the card stopped refreshing.
+ */
 @Singleton
 class WeatherRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val service: OpenMeteoService
 ) {
 
-    private val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
+    private val fusedLocationClient by lazy { LocationServices.getFusedLocationProviderClient(context) }
+    private val prefs by lazy { context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE) }
+    private val json = Json { ignoreUnknownKeys = true }
 
-    suspend fun getCurrentWeatherAndLocation(): WeatherData? {
-        val location = getLastKnownLocation()
-        if (location == null) {
-            Log.w("WeatherRepository", "Weather skipped: getLastKnownLocation returned null " +
-                    "(no permission, no cached fix, or active fetch timed out)")
-            return null
+    /** Serializes fetches so simultaneous callers share one network round-trip. */
+    private val fetchMutex = Mutex()
+
+    @Volatile
+    private var memoryCache: CachedWeather? = null
+    private val cityCache = ConcurrentHashMap<String, String>()
+
+    /**
+     * Weather for [date]. For today, a reading younger than [CACHE_TTL_MS] is served from the
+     * cache unless [forceRefresh]. Returns null when nothing could be fetched — callers can still
+     * show [getCachedWeather].
+     */
+    suspend fun getWeather(date: LocalDate, forceRefresh: Boolean = false): WeatherData? =
+        if (date == LocalDate.now()) {
+            getCurrentWeatherAndLocation(maxAgeMs = if (forceRefresh) 0L else CACHE_TTL_MS)
+        } else {
+            getHistoricalWeather(date)
         }
-        Log.d("WeatherRepository", "Got location: ${location.latitude},${location.longitude}")
-        val city = getCityName(location.latitude, location.longitude)
-        Log.d("WeatherRepository", "Resolved city: $city")
+
+    /** Last successful reading for [date], whatever its age (memory, then disk), or null. */
+    suspend fun getCachedWeather(date: LocalDate): WeatherData? = withContext(Dispatchers.IO) {
+        loadCache()?.takeIf { it.date == date.toString() }?.toWeatherData()
+    }
+
+    suspend fun getCurrentWeatherAndLocation(maxAgeMs: Long = CACHE_TTL_MS): WeatherData? = fetchMutex.withLock {
+        val today = LocalDate.now()
+        val cached = withContext(Dispatchers.IO) { loadCache() }?.takeIf { it.date == today.toString() }
+        if (cached != null && System.currentTimeMillis() - cached.fetchedAt < maxAgeMs) {
+            return@withLock cached.toWeatherData()
+        }
+        val fresh = fetchCurrentWeather() ?: return@withLock null
+        withContext(Dispatchers.IO) { saveCache(CachedWeather.of(today, fresh)) }
+        fresh
+    }
+
+    suspend fun getHistoricalWeather(date: LocalDate, lat: Double? = null, long: Double? = null): WeatherData? {
+        val location = if (lat == null || long == null) getLastKnownLocation() else null
+        val latitude = lat ?: location?.latitude ?: return null
+        val longitude = long ?: location?.longitude ?: return null
+        val dateStr = date.format(DateTimeFormatter.ISO_DATE)
 
         return try {
-            val response = service.getForecast(location.latitude, location.longitude)
-            val wmoCode = response.daily.weathercode.firstOrNull() ?: 0
-            val maxTemp = response.daily.temperature_2m_max.firstOrNull() ?: 0.0
-            Log.d("WeatherRepository", "OpenMeteo OK: code=$wmoCode, max=$maxTemp")
-            WeatherData(
-                emoji = mapWmoToEmoji(wmoCode),
-                temperature = "${maxTemp.toInt()}°C",
-                location = city,
-                description = "Forecast",
-                code = wmoCode
-            )
+            coroutineScope {
+                val city = async { resolveCity(latitude, longitude) }
+                val daysAgo = ChronoUnit.DAYS.between(date, LocalDate.now())
+                val response = if (daysAgo in -FORECAST_HORIZON_DAYS..RECENT_PAST_DAYS) {
+                    service.getRecentDay(latitude, longitude, startDate = dateStr, endDate = dateStr)
+                } else {
+                    service.getHistoricalWeather(latitude, longitude, startDate = dateStr, endDate = dateStr)
+                }
+                toWeatherData(response, "Archive") { city.await() }
+            }
         } catch (e: CancellationException) {
-            // flatMapLatest cancelled us; let the framework see it.
             throw e
         } catch (e: Exception) {
-            Log.e("WeatherRepository", "Failed to fetch weather", e)
+            Log.e(TAG, "Failed to fetch historical weather", e)
             null
         }
     }
 
-    suspend fun getHistoricalWeather(date: LocalDate, lat: Double? = null, long: Double? = null): WeatherData? {
-        // Fallback to current location if historical location not provided (approximation)
-        // In a real app, we might check if we stored location for that date in DB.
-        val latitude = lat ?: getLastKnownLocation()?.latitude ?: return null
-        val longitude = long ?: getLastKnownLocation()?.longitude ?: return null
-        
-        val city = getCityName(latitude, longitude)
-        val dateStr = date.format(DateTimeFormatter.ISO_DATE)
-
+    private suspend fun fetchCurrentWeather(): WeatherData? {
+        val location = getLastKnownLocation()
+        if (location == null) {
+            Log.w(TAG, "Weather skipped: no location (no permission, no cached fix, or the active fix timed out)")
+            return null
+        }
         return try {
-             val response = service.getHistoricalWeather(
-                 latitude, longitude, 
-                 startDate = dateStr, 
-                 endDate = dateStr
-             )
-            val wmoCode = response.daily.weathercode.firstOrNull() ?: 0
-            val maxTemp = response.daily.temperature_2m_max.firstOrNull() ?: 0.0
-
-             WeatherData(
-                emoji = mapWmoToEmoji(wmoCode),
-                temperature = "${maxTemp.toInt()}°C",
-                location = city,
-                description = "Archive",
-                code = wmoCode
-            )
+            coroutineScope {
+                // The city name is resolved in parallel and is optional: it can never hold up the forecast.
+                val city = async { resolveCity(location.latitude, location.longitude) }
+                val response = service.getForecast(location.latitude, location.longitude)
+                toWeatherData(response, "Forecast") { city.await() }
+            }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-             Log.e("WeatherRepository", "Failed to fetch historical weather", e)
-             null
+            Log.e(TAG, "Failed to fetch weather", e)
+            null
         }
     }
 
-    private suspend fun getLastKnownLocation(): android.location.Location? {
+    private suspend fun toWeatherData(
+        response: OpenMeteoResponse,
+        description: String,
+        city: suspend () -> String?
+    ): WeatherData? {
+        val daily = response.daily ?: return null
+        val maxTemp = daily.temperature_2m_max?.firstOrNull() ?: return null
+        val wmoCode = daily.weatherCodeAt(0) ?: 0
+        return WeatherData(
+            emoji = mapWmoToEmoji(wmoCode),
+            temperature = "${maxTemp.roundToInt()}°C",
+            location = city(),
+            description = description,
+            code = wmoCode,
+            fetchedAt = System.currentTimeMillis()
+        )
+    }
+
+    private suspend fun getLastKnownLocation(): Location? {
         val granted = ContextCompat.checkSelfPermission(
             context, Manifest.permission.ACCESS_COARSE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
         if (!granted) {
-            Log.w("WeatherRepository", "ACCESS_COARSE_LOCATION not granted; weather disabled until permission is granted")
+            Log.w(TAG, "ACCESS_COARSE_LOCATION not granted; weather disabled until permission is granted")
             return null
         }
 
-        // Step 1: try the cheap cached fix.
-        val cached: android.location.Location? = suspendCancellableCoroutine { cont ->
-            fusedLocationClient.lastLocation
-                .addOnSuccessListener { cont.resume(it) }
-                .addOnFailureListener { cont.resume(null) }
-                .addOnCanceledListener { cont.resume(null) }
-        }
-        if (cached != null) return cached
-
-        // Step 2: no cached fix (fresh install, location was off, etc.). Force a one-shot
-        // active request with the cheap BALANCED priority. Many devices return null from
-        // lastLocation until something has actively asked for a fix at least once.
-        // 10s timeout so an offline GPS doesn't keep the weather flow stuck forever —
-        // the caller will see null and emit, instead of waiting indefinitely.
-        Log.i("WeatherRepository", "lastLocation was null; requesting active fix (10s timeout)")
+        // Stops the active request if it outlives its timeout (await() alone doesn't cancel the Task).
+        val cancellation = CancellationTokenSource()
         return try {
-            withTimeoutOrNull(10_000L) {
-                suspendCancellableCoroutine<android.location.Location?> { cont ->
+            // Step 1: the cheap cached fix — bounded, a Play-services Task can take arbitrarily long.
+            withTimeoutOrNull(LAST_LOCATION_TIMEOUT_MS) { fusedLocationClient.lastLocation.await() }
+                // Step 2: no cached fix (fresh install, location was off…): one active BALANCED request.
+                ?: withTimeoutOrNull(ACTIVE_FIX_TIMEOUT_MS) {
                     fusedLocationClient
-                        .getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, null)
-                        .addOnSuccessListener { cont.resume(it) }
-                        .addOnFailureListener {
-                            Log.w("WeatherRepository", "Active location request failed", it)
-                            cont.resume(null)
-                        }
-                        .addOnCanceledListener { cont.resume(null) }
-                }
-            }.also {
-                if (it == null) Log.w("WeatherRepository", "Active location fix timed out or returned null")
-            }
+                        .getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, cancellation.token)
+                        .await()
+                }.also { if (it == null) Log.w(TAG, "Active location fix timed out or returned null") }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: SecurityException) {
-            // Permission revoked between our check and the call (rare).
-            Log.e("WeatherRepository", "Permission revoked mid-request", e)
+            Log.w(TAG, "Location permission revoked mid-request", e)
+            null
+        } catch (e: Exception) {
+            Log.w(TAG, "Location lookup failed", e)
+            null
+        } finally {
+            cancellation.cancel()
+        }
+    }
+
+    /** Reverse-geocodes to a city name. Bounded, cached per ~1 km cell, and never throws. */
+    private suspend fun resolveCity(lat: Double, long: Double): String? {
+        val key = String.format(Locale.ROOT, "%.2f,%.2f", lat, long)
+        cityCache[key]?.let { return it }
+        if (!Geocoder.isPresent()) return null
+
+        val city = withTimeoutOrNull(GEOCODER_TIMEOUT_MS) {
+            suspendCancellableCoroutine { continuation ->
+                try {
+                    Geocoder(context, Locale.getDefault()).getFromLocation(lat, long, 1, object : Geocoder.GeocodeListener {
+                        override fun onGeocode(addresses: MutableList<Address>) {
+                            val first = addresses.firstOrNull()
+                            if (continuation.isActive) continuation.resume(first?.locality ?: first?.subAdminArea)
+                        }
+
+                        // The default implementation is a no-op: without this override the
+                        // coroutine never resumed on a geocoding error.
+                        override fun onError(errorMessage: String?) {
+                            Log.w(TAG, "Geocoder error: $errorMessage")
+                            if (continuation.isActive) continuation.resume(null)
+                        }
+                    })
+                } catch (e: Exception) {
+                    Log.w(TAG, "Geocoder failed", e)
+                    if (continuation.isActive) continuation.resume(null)
+                }
+            }
+        }
+        if (city != null) cityCache[key] = city
+        return city
+    }
+
+    private fun loadCache(): CachedWeather? {
+        memoryCache?.let { return it }
+        val raw = prefs.getString(KEY_TODAY, null) ?: return null
+        return try {
+            json.decodeFromString<CachedWeather>(raw).also { memoryCache = it }
+        } catch (e: Exception) {
             null
         }
     }
 
-    private suspend fun getCityName(lat: Double, long: Double): String? = withContext(Dispatchers.IO) {
-        try {
-            val geocoder = Geocoder(context, Locale.getDefault())
-            // Async Geocoder API
-            suspendCancellableCoroutine<String?> { cont ->
-                geocoder.getFromLocation(lat, long, 1) { addresses ->
-                     val city = addresses.firstOrNull()?.locality ?: addresses.firstOrNull()?.subAdminArea ?: "Unknown"
-                     cont.resume(city)
-                }
-            }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Log.e("WeatherRepository", "Geocoder failed", e)
-            null
-        }
+    private fun saveCache(entry: CachedWeather) {
+        memoryCache = entry
+        prefs.edit { putString(KEY_TODAY, json.encodeToString(CachedWeather.serializer(), entry)) }
     }
 
     private fun mapWmoToEmoji(code: Int): String {
@@ -180,22 +276,18 @@ class WeatherRepository @Inject constructor(
         }
     }
 
-    fun mapWmoToIcon(code: Int): androidx.compose.ui.graphics.vector.ImageVector {
-        val icons = androidx.compose.material.icons.Icons.Rounded
-        return icons.AutoAwesome
-    }
+    private companion object {
+        const val TAG = "WeatherRepository"
+        const val PREFS_NAME = "weather_cache"
+        const val KEY_TODAY = "today"
 
+        /** The card shows the day's forecast (max temperature + daily code): 30 min is plenty fresh. */
+        const val CACHE_TTL_MS = 30 * 60_000L
+        const val LAST_LOCATION_TIMEOUT_MS = 5_000L
+        const val ACTIVE_FIX_TIMEOUT_MS = 10_000L
+        const val GEOCODER_TIMEOUT_MS = 5_000L
 
-
-
-
-    fun getParentingAdvice(weather: WeatherData): String {
-        return when {
-            weather.emoji.contains("🌧️") || weather.emoji.contains("⛈️") -> "Museum / Library"
-            weather.emoji.contains("🌫️") -> "Hi-vis vest!"
-            weather.temperature.replace("°C", "").toIntOrNull()?.let { it < 10 } == true -> "Hat required"
-            weather.temperature.replace("°C", "").toIntOrNull()?.let { it > 25 } == true -> "Sunscreen & Water"
-            else -> "Park / Walk"
-        }
+        const val RECENT_PAST_DAYS = 90L
+        const val FORECAST_HORIZON_DAYS = 15L
     }
 }

@@ -2,76 +2,90 @@ package cloud.wafflecommons.pixelbrainreader.domain.gamification
 
 import android.util.Log
 import cloud.wafflecommons.pixelbrainreader.data.health.DailyHealthMetrics
-import cloud.wafflecommons.pixelbrainreader.data.repository.FileRepository
+import cloud.wafflecommons.pixelbrainreader.data.model.HabitConfig
+import cloud.wafflecommons.pixelbrainreader.data.model.HabitLogEntry
+import cloud.wafflecommons.pixelbrainreader.data.model.HabitStatus
 import cloud.wafflecommons.pixelbrainreader.data.repository.HabitRepository
+import cloud.wafflecommons.pixelbrainreader.data.repository.HealthMetricsRepository
 import cloud.wafflecommons.pixelbrainreader.domain.lifeos.HabitScheduler
-import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import javax.inject.Inject
 
+/**
+ * Derives the Health-Connect-driven habits of a day from that day's vault health metrics.
+ *
+ * Idempotent and cheap to repeat — it runs on every app foreground and every sync: values are
+ * ABSOLUTE daily totals, and habits whose value and status are unchanged are skipped. It used to
+ * rewrite every automatic habit on each run, each with its own Room write, JSON rewrite, widget
+ * rebuild and git push; the changed ones are now written as one batch.
+ */
 class AutomateHabitsUseCase @Inject constructor(
     private val habitRepository: HabitRepository,
-    private val fileRepository: FileRepository
+    private val healthMetricsRepository: HealthMetricsRepository
 ) {
     suspend operator fun invoke(date: LocalDate) = withContext(Dispatchers.IO) {
-        // Vault-rooted read. Post-JGit refactor, health metrics live at
-        // `filesDir/vault/10_Journal/...`, not the pre-refactor `filesDir/10_Journal/...`.
-        val json = fileRepository.readFile("10_Journal/data/health/metrics/$date.json")
-        if (json.isNullOrBlank()) {
-            Log.d("AutomateHabitsUseCase", "No health metrics found for $date")
+        val metrics = healthMetricsRepository.getMetrics(date)
+        if (metrics == null) {
+            Log.d(TAG, "No health metrics found for $date")
             return@withContext
         }
 
-        val metrics = try {
-            Gson().fromJson(json, DailyHealthMetrics::class.java)
-        } catch (e: Exception) {
-            Log.e("AutomateHabitsUseCase", "Failed to parser health metrics", e)
-            null
-        } ?: return@withContext
+        val automatic = habitRepository.getHabitConfigs()
+            .filter { !it.archived && !it.autoSource.isNullOrBlank() }
+        if (automatic.isEmpty()) return@withContext
 
-        val allHabits = habitRepository.getHabitConfigs()
-
-        // Only auto-fill habits actually scheduled for `date` (weekly/bi-weekly/interval),
-        // via the shared HabitScheduler. Last-completed is only needed for INTERVAL mode.
-        val candidates = allHabits.filter { !it.archived && !it.autoSource.isNullOrBlank() }
-        val activeHabitsForDay = mutableListOf<cloud.wafflecommons.pixelbrainreader.data.model.HabitConfig>()
-        for (habit in candidates) {
+        val dateKey = date.toString()
+        val currentLogs = habitRepository.getLogsForYear(date.year)
+        val updates = automatic.mapNotNull { habit ->
+            // Only habits actually scheduled for `date` (weekly / bi-weekly / interval), via the
+            // shared HabitScheduler. Last-completed is only needed for INTERVAL mode.
             val lastCompleted = if (habit.scheduleMode.equals("INTERVAL", ignoreCase = true)) {
                 habitRepository.getLastCompletedDate(habit.id)
-            } else null
-            if (HabitScheduler.isScheduledOn(habit, date, lastCompleted)) {
-                activeHabitsForDay.add(habit)
+            } else {
+                null
             }
-        }
+            if (!HabitScheduler.isScheduledOn(habit, date, lastCompleted)) return@mapNotNull null
 
-        activeHabitsForDay.forEach { habit ->
-            val extractedValue: Double = when (habit.autoSource) {
-                // IMPORTANT: Health Connect metrics returns the ABSOLUTE daily total.
-                // We MUST set this value, NOT add to it, to ensure Idempotency during repeated syncs.
-                "health_connect_steps" -> metrics.steps.toDouble()
-                "health_connect_sleep" -> metrics.sleepDurationMinutes / 60.0
-                "health_connect_hydration" -> metrics.waterConsumedMl
-                "health_connect_mindfulness" -> metrics.mindfulnessMinutes.toDouble()
-                "health_connect_meditation" -> metrics.mindfulnessMinutes.toDouble()
-                "health_connect_active_minutes" -> metrics.activeMinutes.toDouble()
-                "health_connect_exercise" -> metrics.activeMinutes.toDouble()
-                "health_connect_distance" -> metrics.distanceKm
-                "health_connect_weight" -> metrics.weight
-                
-                // [FIX Phase 5] "Prise de Masse" Nutrition Mapping
-                "health_connect_nutrition" -> metrics.caloriesConsumed
-                
-                else -> 0.0
+            val value = valueFor(habit, metrics)
+            if (value <= 0.0) return@mapNotNull null
+            val status = if (habitRepository.calculateCompletion(value, habit.targetValue, habit.type)) {
+                HabitStatus.COMPLETED
+            } else {
+                HabitStatus.PARTIAL
             }
+            val current = currentLogs[habit.id]?.firstOrNull { it.date == dateKey }
+            if (current != null && current.value == value && current.status == status) return@mapNotNull null
 
-            if (extractedValue > 0) {
-                // The underlying habitRepository.updateHabitValue strictly creates a NEW HabitLogEntry and replaces it by Date.
-                // This guarantees `progress = extractedValue` and perfectly fixes the accumulation duplicate bug.
-                Log.d("AutomateHabitsUseCase", "Automating habit ${habit.id} with absolute value $extractedValue, target: ${habit.targetValue}")
-                habitRepository.updateHabitValue(date, habit.id, extractedValue)
-            }
+            HabitLogEntry(habitId = habit.id, date = dateKey, value = value, status = status)
         }
+        if (updates.isEmpty()) return@withContext
+
+        Log.d(TAG, "Automating ${updates.size} habit(s) for $date")
+        habitRepository.logHabits(date, updates)
+    }
+
+    /**
+     * IMPORTANT: Health Connect metrics are ABSOLUTE daily totals. The value is SET, never added,
+     * so repeated runs stay idempotent.
+     */
+    private fun valueFor(habit: HabitConfig, metrics: DailyHealthMetrics): Double = when (habit.autoSource) {
+        "health_connect_steps" -> metrics.steps.toDouble()
+        "health_connect_sleep" -> metrics.sleepDurationMinutes / 60.0
+        "health_connect_hydration" -> metrics.waterConsumedMl
+        "health_connect_mindfulness" -> metrics.mindfulnessMinutes.toDouble()
+        "health_connect_meditation" -> metrics.mindfulnessMinutes.toDouble()
+        "health_connect_active_minutes" -> metrics.activeMinutes.toDouble()
+        "health_connect_exercise" -> metrics.activeMinutes.toDouble()
+        "health_connect_distance" -> metrics.distanceKm
+        "health_connect_weight" -> metrics.weight
+        // "Prise de Masse" nutrition mapping
+        "health_connect_nutrition" -> metrics.caloriesConsumed
+        else -> 0.0
+    }
+
+    private companion object {
+        const val TAG = "AutomateHabitsUseCase"
     }
 }

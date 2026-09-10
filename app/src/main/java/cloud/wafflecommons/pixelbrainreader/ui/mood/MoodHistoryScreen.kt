@@ -4,17 +4,15 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.ChevronLeft
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material3.*
 import androidx.compose.material3.TopAppBarDefaults // Added
 import androidx.compose.material3.ExperimentalMaterial3Api // Added
-import androidx.compose.ui.input.nestedscroll.nestedScroll // Added
 import androidx.compose.runtime.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
@@ -37,7 +35,6 @@ fun MoodHistoryScreen(
     viewModel: MoodViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    var showSheet by remember { mutableStateOf(false) }
     val context = androidx.compose.ui.platform.LocalContext.current
 
     LaunchedEffect(viewModel.uiEvent) {
@@ -88,7 +85,9 @@ fun MoodHistoryScreen(
                         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = NavBarClearance),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        items(entries.orEmpty(), key = { it.time }) { entry ->
+                        // Keyed by position as well: two check-ins in the same minute share an
+                        // "HH:mm" time, and a duplicate LazyColumn key crashes the screen.
+                        itemsIndexed(entries.orEmpty(), key = { index, entry -> "${entry.time}#$index" }) { _, entry ->
                             Box(Modifier.animateItem()) {
                                 MoodTimelineItem(entry)
                             }
@@ -97,10 +96,6 @@ fun MoodHistoryScreen(
                 }
             }
         }
-    }
-
-    if (showSheet) {
-        MoodCheckInSheet(onDismiss = { showSheet = false }, viewModel = viewModel)
     }
 }
 
@@ -136,7 +131,7 @@ fun DateSelector(
             enabled = !isToday
         ) {
             Icon(
-                Icons.Outlined.ChevronRight, 
+                Icons.Outlined.ChevronRight,
                 contentDescription = "Next Day",
                 tint = if (isToday) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f) else MaterialTheme.colorScheme.onSurface
             )
@@ -216,7 +211,7 @@ fun MoodTimelineItem(entry: MoodEntry) {
                     Text(text = entry.label, fontSize = 20.sp)
                     Text(text = "Score: ${entry.score}", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
                 }
-                
+
                 if (entry.activities.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(8.dp))
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

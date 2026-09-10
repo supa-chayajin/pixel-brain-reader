@@ -2,24 +2,25 @@ package cloud.wafflecommons.pixelbrainreader.data.notifications
 
 import android.content.Context
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.PeriodicWorkRequest
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import androidx.work.workDataOf
 import cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
 import cloud.wafflecommons.pixelbrainreader.data.workers.ChoresHabitsReminderWorker
+import cloud.wafflecommons.pixelbrainreader.data.workers.DailySchedule
+import cloud.wafflecommons.pixelbrainreader.data.workers.DailyWorkScheduler
 import cloud.wafflecommons.pixelbrainreader.data.workers.VaultReminderWorker
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.first
-import java.time.Duration
-import java.time.LocalDateTime
 import java.time.LocalTime
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Translates the reminder preferences into WorkManager periodic work. Idempotent —
- * safe to call on app start and after every settings change. Uses the same
- * fixed-time-of-day pattern as PixelBrainApplication.scheduleDailyBurnWork.
+ * Translates the reminder preferences into daily WorkManager periodic work, pinned to the chosen
+ * wall-clock time (see [DailyWorkScheduler] for why the next run is pinned explicitly).
  */
 @Singleton
 class ReminderScheduler @Inject constructor(
@@ -28,67 +29,76 @@ class ReminderScheduler @Inject constructor(
 ) {
 
     /**
-     * Sync WorkManager periodic reminders with the saved preferences.
+     * Sync WorkManager reminders with the saved preferences.
      *
-     * @param force `false` — the app-start "ensure scheduled" call — preserves any
-     *   already-scheduled run via [ExistingPeriodicWorkPolicy.KEEP]. This is CRITICAL:
-     *   WorkManager starts the app process to run a due reminder, so a cancel-then-reschedule
-     *   here (the old behavior) killed that very run at the moment it came due — the reminder
-     *   never fired. `true` — a real preference change from settings — applies the new time
-     *   via UPDATE (and clears stale chore windows).
+     * @param force `false` — the app-start "ensure scheduled" call — KEEPs an already-scheduled
+     *   run (WorkManager starts the app process to run a due reminder, so replacing it here killed
+     *   that very run), only re-pinning a run that has drifted and is safely in the future.
+     *   `true` — a real preference change from Settings — applies the new time immediately.
      */
     suspend fun reschedule(force: Boolean = false) {
         NotificationHelper.ensureChannels(context)
         val wm = WorkManager.getInstance(context)
-        val policy = if (force) ExistingPeriodicWorkPolicy.UPDATE else ExistingPeriodicWorkPolicy.KEEP
 
         // Vault reminder — single daily work.
         if (userPrefs.vaultReminderEnabled.first()) {
-            wm.enqueueUniquePeriodicWork(
-                VAULT_WORK,
-                policy,
-                PeriodicWorkRequestBuilder<VaultReminderWorker>(24, TimeUnit.HOURS)
-                    .setInitialDelay(initialDelayMillis(userPrefs.vaultReminderTime.first()), TimeUnit.MILLISECONDS)
-                    .build()
-            )
+            val time = DailySchedule.parseTime(userPrefs.vaultReminderTime.first())
+            if (force) {
+                wm.enqueueUniquePeriodicWork(VAULT_WORK, ExistingPeriodicWorkPolicy.UPDATE, vaultRequest(time))
+            } else {
+                DailyWorkScheduler.ensureScheduled(wm, VAULT_WORK, time) { vaultRequest(time) }
+            }
         } else {
             wm.cancelUniqueWork(VAULT_WORK)
         }
 
         // Chores/habits — one daily work per configured window.
         if (userPrefs.choresReminderEnabled.first()) {
-            // Only on a genuine change do we clear the tagged group, so a removed
-            // window's stale periodic work stops. On app start we KEEP (see above).
+            // Only on a genuine change do we clear the tagged group, so a removed window's stale
+            // periodic work stops. On app start we keep what is scheduled.
             if (force) wm.cancelAllWorkByTag(CHORES_TAG)
             userPrefs.choresReminderWindows.first().forEach { hhmm ->
-                wm.enqueueUniquePeriodicWork(
-                    CHORES_WORK_PREFIX + hhmm.replace(":", ""),
-                    policy,
-                    PeriodicWorkRequestBuilder<ChoresHabitsReminderWorker>(24, TimeUnit.HOURS)
-                        .setInitialDelay(initialDelayMillis(hhmm), TimeUnit.MILLISECONDS)
-                        .addTag(CHORES_TAG)
-                        .build()
-                )
+                val time = DailySchedule.parseTime(hhmm)
+                val name = choresWorkName(hhmm)
+                if (force) {
+                    wm.enqueueUniquePeriodicWork(name, ExistingPeriodicWorkPolicy.UPDATE, choresRequest(hhmm, time))
+                } else {
+                    DailyWorkScheduler.ensureScheduled(wm, name, time) { choresRequest(hhmm, time) }
+                }
             }
         } else {
             wm.cancelAllWorkByTag(CHORES_TAG)
         }
     }
 
-    /** Millis from now to the next occurrence of HH:mm (today, or tomorrow if passed). */
-    private fun initialDelayMillis(hhmm: String): Long {
-        val now = LocalDateTime.now()
-        var target = LocalDateTime.of(now.toLocalDate(), parseTime(hhmm))
-        if (!target.isAfter(now)) target = target.plusDays(1)
-        return Duration.between(now, target).toMillis()
+    /** Called by [VaultReminderWorker] after it ran: pins its next run back to the chosen time. */
+    suspend fun repinVaultReminder() {
+        if (!userPrefs.vaultReminderEnabled.first()) return
+        val time = DailySchedule.parseTime(userPrefs.vaultReminderTime.first())
+        DailyWorkScheduler.repin(WorkManager.getInstance(context), VAULT_WORK) { vaultRequest(time) }
     }
 
-    private fun parseTime(hhmm: String): LocalTime = try {
-        val (h, m) = hhmm.split(":")
-        LocalTime.of(h.trim().toInt(), m.trim().toInt())
-    } catch (e: Exception) {
-        LocalTime.of(20, 0)
+    /** Called by [ChoresHabitsReminderWorker] after it ran; ignores windows removed meanwhile. */
+    suspend fun repinChoresReminder(hhmm: String) {
+        if (!userPrefs.choresReminderEnabled.first()) return
+        if (hhmm !in userPrefs.choresReminderWindows.first()) return
+        val time = DailySchedule.parseTime(hhmm)
+        DailyWorkScheduler.repin(WorkManager.getInstance(context), choresWorkName(hhmm)) { choresRequest(hhmm, time) }
     }
+
+    private fun vaultRequest(time: LocalTime): PeriodicWorkRequest =
+        PeriodicWorkRequestBuilder<VaultReminderWorker>(24, TimeUnit.HOURS)
+            .setNextScheduleTimeOverride(DailySchedule.nextOccurrenceMillis(time))
+            .build()
+
+    private fun choresRequest(hhmm: String, time: LocalTime): PeriodicWorkRequest =
+        PeriodicWorkRequestBuilder<ChoresHabitsReminderWorker>(24, TimeUnit.HOURS)
+            .setNextScheduleTimeOverride(DailySchedule.nextOccurrenceMillis(time))
+            .setInputData(workDataOf(ChoresHabitsReminderWorker.KEY_WINDOW to hhmm))
+            .addTag(CHORES_TAG)
+            .build()
+
+    private fun choresWorkName(hhmm: String) = CHORES_WORK_PREFIX + hhmm.replace(":", "")
 
     private companion object {
         const val VAULT_WORK = "VaultReminder"
