@@ -9,6 +9,115 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _No unreleased changes._
 
+## [10.1.0] — 2026-09-10
+
+The **dogfooding release**: two months of daily use reported lags, a weather card that
+stopped refreshing after returning to the app, and screens that never refreshed on their
+own. A full-app review fixed the root causes — and the data-safety bugs it found on the
+way. Sync stays manual; everything else now refreshes by itself.
+
+### Fixed
+
+- **The weather card refreshes again after a resume.** The reverse geocoder's error
+  callback was never implemented, so any geocoding error — typical right after a
+  resume, before the network is back — suspended the weather fetch forever. Every
+  external wait (cached location, active fix, geocoder, HTTP) is now bounded and the
+  city name can no longer hold up the forecast. The last reading shows instantly from a
+  30-minute cache, a failed refresh retries three times, the card re-checks each time
+  the app returns to the foreground, and pull-to-refresh forces a network fetch. Past
+  days use Open-Meteo's real archive host (the old path did not exist).
+- **Screens follow the real day.** Daily, Habits, Stats, Mood and the file browser's
+  "today's note" captured the date once, so they went stale after midnight in a
+  long-lived process. A new `AppClock` follows midnight, clock/time-zone changes and
+  every return to the app.
+- **Steps, sleep and automatic habits refresh on their own.** They used to update only
+  when a screen was created or on a manual sync; today's Health Connect metrics and the
+  health-driven habits are now refreshed each time the app comes to the foreground (at
+  most every 5 minutes), and the Daily and Stats screens re-read them when they change.
+- **Widgets no longer show zeros or stale numbers.** Health Connect only answers a
+  foreground app, so a background snapshot rebuild published zeros; it now uses the
+  metrics saved by the last foreground refresh. The periodic system widget update
+  rebuilds the snapshot, and task edits and Google imports refresh the widgets too.
+- **Unreadable vault JSON is never overwritten.** A mood day, a year of habit logs or
+  the gamification profile that failed to parse was rewritten from defaults; the file is
+  now moved aside (`<name>.corrupt-<time>`) before anything is written.
+- **Private journal: wrong passwords are refused, saves are atomic.** Any password was
+  accepted on unlock, so a typo encrypted new notes with the wrong key and replaced the
+  stored password; unlock now verifies it against existing notes. A crash mid-save
+  could truncate a note; encrypted writes are now staged and atomically renamed, and a
+  title containing `/` can no longer write outside the private folder.
+- **Nothing typed right before leaving is lost.** Closing the note editor, the Daily
+  Second Brain or the private journal within the typing pause dropped the last edits;
+  they are now saved when the screen goes away.
+- **Vault writes can no longer mix.** Concurrent saves of one note shared a `<name>.tmp`
+  file, so one could publish the other's half-written bytes, and temp files lived inside
+  the vault where a commit could pick them up. Each write now uses its own temp file,
+  staged outside the vault.
+- **Pulling while editing no longer reverts the pulled version.** The editor kept its
+  pre-pull copy and the next keystroke saved it over the remote change; with nothing
+  unsaved it now adopts the pulled file.
+- **Renaming or moving the open note keeps it on its new path** — the next save used to
+  recreate it at the old one.
+- **Sync is sturdier.** Pull-to-refresh runs in the application scope (leaving the screen
+  mid-sync could cancel it between commit and push); a forced sync waits for a busy git
+  lock instead of silently doing nothing; the indicator can no longer stay stuck on
+  "Syncing"; git network operations time out after 30 seconds instead of hanging; a push
+  the remote rejects is reported as a failure; a stuck Google authorization can no
+  longer hang the cycle; and a failed Google fetch no longer empties today's events and
+  tasks.
+- **Reminders and the nightly burn stay on time.** WorkManager's `UPDATE` kept the old
+  schedule, so a changed reminder time was ignored after the first run and daily jobs
+  drifted later every day; runs are now pinned to their wall-clock time and re-pinned
+  after each run. The nightly burn no longer retries forever on a deterministic failure.
+- **Web imports validate every redirect.** Only the first URL was checked, so a public
+  page could redirect the fetch into the local network; every hop is re-validated and
+  must resolve to public addresses (IPv6 literals and every numeric IPv4 spelling
+  included), and links shared from other apps go through the same guard. The vault path
+  jail also rejects sibling folders that merely share the vault's name prefix.
+- **Smaller fixes.** Two mood check-ins in the same minute crashed Mood history. Editing
+  a chore un-archived it and reset its order. Headings typed inside Ideas/Notes were
+  dropped (or switched sections) on ingest, and `/event` lines re-created their timeline
+  events after a restart. Updating a habit's value granted its XP again on every update,
+  fast double taps rewarded twice, and level-ups left the XP bar over-full. Health Connect
+  asked for only three of the permissions it needs. A chore never marked done counted as
+  clean. A second chat message started a parallel answer. Share intents and deep links
+  were replayed after an activity recreation. After the first login the mood, habit and
+  chore screens stayed empty until a restart. Pull-to-refresh on an open note did
+  nothing. The Second Brain save indicator never showed, and the Daily mantra ignored the
+  saved one. An AI failure could be written into an imported article as its summary.
+  "Export all to vault" failed silently when the remote was ahead. On-device search could
+  crash when indexing and a chat search ran at once.
+
+### Changed
+
+- **Local changes are pushed in the background, batched.** Editor saves, habit toggles,
+  mood entries, chores, tags, private notes and imports write locally and queue a single
+  commit + push 15 seconds after the last change, instead of a network round-trip per
+  change. Nothing is pulled automatically.
+- **Mood tags edited on another device appear after a sync** instead of after a restart.
+- **Faster everywhere.** Git operations no longer walk the whole `.git` folder first and
+  saves no longer stage the working tree; XP grants and config exports no longer
+  re-index the entire vault, and vault scans run one at a time in a single transaction;
+  habit statistics are computed off the main thread from indexed logs; reconciles write
+  only what changed; the note editor no longer recomposes the whole screen per keystroke,
+  and Markdown rendering and editor highlighting are built once; private-journal keys
+  are derived once per session instead of on every autosave; on-device search caches
+  parsed vectors; average heart rate is aggregated by Health Connect; Keystore and TLS
+  setup moved off the main thread at cold start; a preference write no longer wakes every
+  settings observer.
+
+### Added
+
+- Regression tests for the Daily board's refresh contract (day rollover, unsaved typing,
+  weather cache/retry/resume, `/event` duplicates), habit statistics, task-completion
+  detection, the private-vault key cache, wall-clock work scheduling, sync lock and
+  cancellation handling, git push/commit behaviour, import URL classification, daily-note
+  headings and concurrent atomic writes.
+
+### Removed
+
+- Dead `MorningBriefingSection` composable.
+
 ## [10.0.0] — 2026-07-22
 
 The **final-release milestone**: first release-signed, R8-minified build shipped to the
