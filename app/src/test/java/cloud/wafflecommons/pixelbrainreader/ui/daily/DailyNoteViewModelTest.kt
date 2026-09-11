@@ -81,6 +81,7 @@ class DailyNoteViewModelTest {
         weatherRepository = mockk()
         coEvery { weatherRepository.getCachedWeather(any()) } returns null
         coEvery { weatherRepository.getWeather(any(), any()) } returns SUNNY
+        every { weatherRepository.readingsFor(any()) } returns flowOf(null)
 
         syncOrchestrator = mockk(relaxed = true)
         every { syncOrchestrator.syncState } returns MutableStateFlow(SyncState.Idle)
@@ -89,6 +90,23 @@ class DailyNoteViewModelTest {
     @After
     fun tearDown() {
         Dispatchers.resetMain()
+    }
+
+    @Test
+    fun `a reading saved by another caller replaces the unavailable state`() = runTest(testDispatcher) {
+        val saved = MutableStateFlow<WeatherData?>(null)
+        every { weatherRepository.readingsFor(day1) } returns saved
+        coEvery { weatherRepository.getWeather(any(), any()) } returns null
+        val viewModel = createViewModel()
+        backgroundScope.launch { viewModel.uiState.collect {} }
+
+        runCurrent()
+        assertEquals(WEATHER_UNAVAILABLE, viewModel.uiState.value.weather)
+
+        // e.g. the board's burn fetched a reading while the card's own refresh had failed
+        saved.value = SUNNY
+        runCurrent()
+        assertEquals(SUNNY, viewModel.uiState.value.weather)
     }
 
     @Test
