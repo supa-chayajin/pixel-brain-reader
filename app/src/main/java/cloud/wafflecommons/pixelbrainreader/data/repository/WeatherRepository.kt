@@ -19,6 +19,10 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -92,6 +96,9 @@ class WeatherRepository @Inject constructor(
     private var memoryCache: CachedWeather? = null
     private val cityCache = ConcurrentHashMap<String, String>()
 
+    /** The last saved reading, whoever fetched it (the Daily card, the board burn, the briefing). */
+    private val latestReading = MutableStateFlow<CachedWeather?>(null)
+
     /**
      * Weather for [date]. For today, a reading younger than [CACHE_TTL_MS] is served from the
      * cache unless [forceRefresh]. Returns null when nothing could be fetched — callers can still
@@ -108,6 +115,16 @@ class WeatherRepository @Inject constructor(
     suspend fun getCachedWeather(date: LocalDate): WeatherData? = withContext(Dispatchers.IO) {
         loadCache()?.takeIf { it.date == date.toString() }?.toWeatherData()
     }
+
+    /**
+     * The saved reading for [date], updated whenever any caller saves a new one. The Daily card
+     * observes it, so a reading fetched elsewhere is never hidden behind a failed or pending refresh
+     * of its own. Starts emitting a reading once the cache has been read ([getCachedWeather]).
+     */
+    fun readingsFor(date: LocalDate): Flow<WeatherData?> =
+        latestReading
+            .map { entry -> entry?.takeIf { it.date == date.toString() }?.toWeatherData() }
+            .distinctUntilChanged()
 
     suspend fun getCurrentWeatherAndLocation(maxAgeMs: Long = CACHE_TTL_MS): WeatherData? = fetchMutex.withLock {
         val today = LocalDate.now()
@@ -171,8 +188,13 @@ class WeatherRepository @Inject constructor(
         description: String,
         city: suspend () -> String?
     ): WeatherData? {
-        val daily = response.daily ?: return null
-        val maxTemp = daily.temperature_2m_max?.firstOrNull() ?: return null
+        val daily = response.daily
+        val maxTemp = daily?.temperature_2m_max?.firstOrNull()
+        if (daily == null || maxTemp == null) {
+            // Never fail silently: an empty reading is otherwise indistinguishable from "no network".
+            Log.w(TAG, "$description response had no usable daily data (daily present: ${daily != null})")
+            return null
+        }
         val wmoCode = daily.weatherCodeAt(0) ?: 0
         return WeatherData(
             emoji = mapWmoToEmoji(wmoCode),
@@ -253,7 +275,10 @@ class WeatherRepository @Inject constructor(
         memoryCache?.let { return it }
         val raw = prefs.getString(KEY_TODAY, null) ?: return null
         return try {
-            json.decodeFromString<CachedWeather>(raw).also { memoryCache = it }
+            json.decodeFromString<CachedWeather>(raw).also {
+                memoryCache = it
+                latestReading.value = it
+            }
         } catch (e: Exception) {
             null
         }
@@ -261,6 +286,7 @@ class WeatherRepository @Inject constructor(
 
     private fun saveCache(entry: CachedWeather) {
         memoryCache = entry
+        latestReading.value = entry
         prefs.edit { putString(KEY_TODAY, json.encodeToString(CachedWeather.serializer(), entry)) }
     }
 

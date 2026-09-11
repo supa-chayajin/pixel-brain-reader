@@ -24,8 +24,11 @@ way. Sync stays manual; everything else now refreshes by itself.
   external wait (cached location, active fix, geocoder, HTTP) is now bounded and the
   city name can no longer hold up the forecast. The last reading shows instantly from a
   30-minute cache, a failed refresh retries three times, the card re-checks each time
-  the app returns to the foreground, and pull-to-refresh forces a network fetch. Past
-  days use Open-Meteo's real archive host (the old path did not exist).
+  the app returns to the foreground, and pull-to-refresh forces a network fetch. A reading
+  fetched elsewhere in the app (the day's board, the briefing) now shows on the card at once
+  instead of staying hidden behind "Weather unavailable", and an empty forecast response is
+  logged instead of failing silently. Past days use Open-Meteo's real archive host (the old
+  path did not exist).
 - **Screens follow the real day.** Daily, Habits, Stats, Mood and the file browser's
   "today's note" captured the date once, so they went stale after midnight in a
   long-lived process. A new `AppClock` follows midnight, clock/time-zone changes and

@@ -186,9 +186,23 @@ class DailyNoteViewModel @Inject constructor(
             .flatMapLatest { (date, request) ->
                 val force = request.force && request.id != servedForcedWeatherRequest
                 if (force) servedForcedWeatherRequest = request.id
-                weatherUpdates(date, force)
+                // The refresh drives the loading/unavailable states, but a reading saved meanwhile — by
+                // this refresh or by another caller (the board burn, the briefing) — shows as soon as it
+                // exists. On the emulator a reading saved by another caller stayed hidden behind
+                // "Weather unavailable".
+                combine(weatherUpdates(date, force), weatherRepository.readingsFor(date)) { status, saved ->
+                    newestWeather(status, saved)
+                }
             }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), WEATHER_LOADING)
+
+    /** A saved reading beats a placeholder (loading/unavailable, code < 0) and an older reading. */
+    private fun newestWeather(status: WeatherData, saved: WeatherData?): WeatherData = when {
+        saved == null -> status
+        status.code < 0 -> saved
+        saved.fetchedAt > status.fetchedAt -> saved
+        else -> status
+    }
 
     private data class Board(
         val dashboard: DailyDashboardEntity?,
@@ -302,7 +316,9 @@ class DailyNoteViewModel @Inject constructor(
     private fun weatherUpdates(date: LocalDate, force: Boolean): Flow<WeatherData> = flow {
         // 1. The last good reading, immediately — no spinner on resume or cold start.
         val cached = weatherRepository.getCachedWeather(date)
-        if (cached != null) emit(cached)
+        // Something to show right away — which also lets a reading saved elsewhere replace it while
+        // this refresh is still running.
+        emit(cached ?: WEATHER_LOADING)
         // 2. Refresh, retrying: right after the app resumes the network often isn't ready yet.
         repeat(WEATHER_MAX_ATTEMPTS) { attempt ->
             val fresh = try {
