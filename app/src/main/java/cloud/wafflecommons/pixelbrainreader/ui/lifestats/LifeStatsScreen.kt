@@ -101,7 +101,6 @@ fun LifeStatsScreen(
                 ) {
                     item { RpgHeroCard(uiState) }
                     item { TodayVitalsCard(uiState) }
-                    item { ChronoBiometricCard(uiState.chronoBiometricReport) }
                     item { MoodVsHeartRateChartCard(uiState.moodHistory) }
                     item { MoodSummaryCard(uiState) }
                     item { CompletionRingsCard(uiState, globalCompletion) }
@@ -132,79 +131,6 @@ private fun DashboardCard(title: String, trailing: String? = null, content: @Com
             }
             Spacer(modifier = Modifier.height(16.dp))
             content()
-        }
-    }
-}
-
-@Composable
-private fun ChronoBiometricCard(report: cloud.wafflecommons.pixelbrainreader.data.model.ChronoBiometricReport?) {
-    DashboardCard(title = "Corrélations Biométrie & Focus", trailing = report?.let { "${it.analyzedDays}j analysés" }) {
-        if (report == null || report.insights.isEmpty()) {
-            Text(
-                text = "Enregistre ton sommeil et tes tâches via Health Connect pour révéler tes corrélations chrono-biométriques.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        } else {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                report.insights.forEach { insight ->
-                    Surface(
-                        color = MaterialTheme.colorScheme.surfaceContainerLow,
-                        shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            val icon = when (insight.iconType) {
-                                "sleep" -> Icons.Default.Bedtime
-                                "steps" -> Icons.Default.Speed
-                                else -> Icons.Default.Favorite
-                            }
-                            val iconColor = when (insight.iconType) {
-                                "sleep" -> MaterialTheme.colorScheme.tertiary
-                                "steps" -> MaterialTheme.colorScheme.primary
-                                else -> MaterialTheme.colorScheme.error
-                            }
-                            Icon(
-                                imageVector = icon,
-                                contentDescription = null,
-                                tint = iconColor,
-                                modifier = Modifier.size(24.dp)
-                            )
-                            Spacer(Modifier.width(12.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = insight.title,
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                    text = insight.description,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            if (insight.scoreDelta > 0 && insight.iconType != "heart") {
-                                Surface(
-                                    color = MaterialTheme.colorScheme.primaryContainer,
-                                    shape = androidx.compose.foundation.shape.CircleShape
-                                ) {
-                                    Text(
-                                        text = "+${insight.scoreDelta}%",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
         }
     }
 }

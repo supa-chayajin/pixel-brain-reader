@@ -79,9 +79,6 @@ data class LifeStatsUiState(
     val xpToNextLevel: Int = 100,
     val characterClass: String = "Peasant",
 
-    val recentHealthMetrics: List<DailyHealthMetrics> = emptyList(),
-    val chronoBiometricReport: cloud.wafflecommons.pixelbrainreader.data.model.ChronoBiometricReport? = null,
-
     val isLoading: Boolean = true
 )
 
@@ -132,22 +129,18 @@ class LifeStatsViewModel @Inject constructor(
         .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), LifeStatsUiState(isLoading = true))
 
-    // Reactive tasks over the last 7 days
-    private val recentTasks: Flow<List<cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyTaskEntity>> = appClock.today
+    // Task completion over the last 7 days — reactive now; it used to be a one-shot snapshot.
+    private val taskCompletionRate: Flow<Float> = appClock.today
         .flatMapLatest { today -> taskRepository.getTasksInRangeFlow(today.minusDays(6), today) }
+        .map { tasks -> if (tasks.isEmpty()) 0f else tasks.count { it.isDone }.toFloat() / tasks.size }
 
     val finalUiState: StateFlow<LifeStatsUiState> = combine(
         uiState,
-        recentTasks,
+        taskCompletionRate,
         gamificationRepository.gamificationState,
         gamificationPreferences.stepTargetFlow,
         gamificationPreferences.sleepMinMinutesFlow
-    ) { state, tasks, gami, stepGoal, sleepGoal ->
-        val taskRatio = if (tasks.isEmpty()) 0f else tasks.count { it.isDone }.toFloat() / tasks.size
-        val chronoReport = cloud.wafflecommons.pixelbrainreader.domain.lifeos.ChronoBiometricCalculator.calculate(
-            metrics = state.recentHealthMetrics,
-            tasks = tasks
-        )
+    ) { state, taskRatio, gami, stepGoal, sleepGoal ->
         state.copy(
             taskCompletionRate = taskRatio,
             level = gami.profile.level,
@@ -156,8 +149,7 @@ class LifeStatsViewModel @Inject constructor(
             characterClass = gami.profile.characterClass.name.lowercase()
                 .replaceFirstChar { it.uppercase() },
             stepGoal = stepGoal,
-            sleepGoalMinutes = sleepGoal,
-            chronoBiometricReport = chronoReport
+            sleepGoalMinutes = sleepGoal
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), LifeStatsUiState(isLoading = true))
 
@@ -256,7 +248,6 @@ class LifeStatsViewModel @Inject constructor(
             cleanChoresCount = choreModels.count { it.statusColor == StatusColor.GREEN },
             warningChoresCount = choreModels.count { it.statusColor == StatusColor.YELLOW },
             totalChoresCount = choreModels.size,
-            recentHealthMetrics = inputs.health,
             isLoading = false
         )
     }
