@@ -14,7 +14,7 @@ import javax.inject.Singleton
  */
 @Singleton
 class AssetRepository @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
     private val jGitProvider: JGitProvider,
     private val vaultDiscoveryRepository: VaultDiscoveryRepository
 ) {

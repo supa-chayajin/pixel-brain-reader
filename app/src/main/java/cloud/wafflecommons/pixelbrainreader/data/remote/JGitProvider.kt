@@ -43,7 +43,7 @@ data class GitCommitDto(
  */
 @Singleton
 class JGitProvider @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
     private val secretManager: SecretManager,
     private val conflictResolver: ConflictResolver
 ) {

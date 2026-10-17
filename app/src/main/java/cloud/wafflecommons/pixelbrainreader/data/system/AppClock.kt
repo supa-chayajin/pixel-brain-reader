@@ -35,7 +35,7 @@ import javax.inject.Singleton
  */
 @Singleton
 class AppClock @Inject constructor(
-    @ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context
 ) {
     private val _today = MutableStateFlow(LocalDate.now())
     val today: StateFlow<LocalDate> = _today.asStateFlow()

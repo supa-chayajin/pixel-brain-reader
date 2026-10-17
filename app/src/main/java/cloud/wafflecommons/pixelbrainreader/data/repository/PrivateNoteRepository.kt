@@ -19,7 +19,7 @@ import javax.inject.Singleton
 
 @Singleton
 class PrivateNoteRepository @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
     private val cryptoManager: CryptoManager,
     private val pushScheduler: VaultPushScheduler
 ) {

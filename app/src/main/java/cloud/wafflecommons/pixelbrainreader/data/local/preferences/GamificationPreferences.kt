@@ -20,7 +20,7 @@ private val Context.gamificationDataStore: DataStore<Preferences> by preferences
 
 @Singleton
 class GamificationPreferences @Inject constructor(
-    @ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context
 ) {
     private val gson = Gson()
 

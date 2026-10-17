@@ -26,7 +26,7 @@ enum class AppThemeConfig { FOLLOW_SYSTEM, LIGHT, DARK }
 
 @Singleton
 class UserPreferencesRepository @Inject constructor(
-    @ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context
 ) {
     /** Every setting is read through here: an unreadable preferences file yields the defaults instead of crashing collectors. */
     private val storedPreferences: Flow<Preferences> = context.dataStore.data
