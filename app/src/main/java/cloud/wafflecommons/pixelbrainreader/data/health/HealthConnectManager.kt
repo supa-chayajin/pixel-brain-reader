@@ -3,6 +3,7 @@ package cloud.wafflecommons.pixelbrainreader.data.health
 import android.content.Context
 import android.util.Log
 import androidx.health.connect.client.HealthConnectClient
+import androidx.health.connect.client.feature.ExperimentalMindfulnessSessionApi
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.SleepSessionRecord
@@ -12,6 +13,7 @@ import androidx.health.connect.client.records.NutritionRecord
 import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.TotalCaloriesBurnedRecord
 import androidx.health.connect.client.records.DistanceRecord
+import androidx.health.connect.client.records.MindfulnessSessionRecord
 import androidx.health.connect.client.request.AggregateRequest
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
@@ -168,6 +170,20 @@ class HealthConnectManager @Inject constructor(
         // 4. Read Mindfulness / Exercise
         var mindfulnessMinutes = 0L
         var activeMinutes = 0L
+
+        if (granted.contains(HealthPermission.getReadPermission(MindfulnessSessionRecord::class))) {
+            try {
+                val minRequest = ReadRecordsRequest(MindfulnessSessionRecord::class, timeRangeFilter)
+                val minResponse = healthConnectClient.readRecords(minRequest)
+                mindfulnessMinutes += minResponse.records.sumOf {
+                    Duration.between(it.startTime, it.endTime).toMinutes()
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e("HealthConnectManager", "Failed to read mindfulness session", e)
+            }
+        }
         
         if (granted.contains(HealthPermission.getReadPermission(ExerciseSessionRecord::class))) {
             try {
@@ -238,6 +254,7 @@ class HealthConnectManager @Inject constructor(
         )
     }
 
+    @OptIn(ExperimentalMindfulnessSessionApi::class)
     private val permissions = setOf(
         HealthPermission.getReadPermission(StepsRecord::class),
         HealthPermission.getReadPermission(SleepSessionRecord::class),
@@ -248,6 +265,7 @@ class HealthConnectManager @Inject constructor(
         HealthPermission.getReadPermission(DistanceRecord::class),
         HealthPermission.getReadPermission(ExerciseSessionRecord::class),
         HealthPermission.getReadPermission(androidx.health.connect.client.records.ActiveCaloriesBurnedRecord::class),
+        HealthPermission.getReadPermission(MindfulnessSessionRecord::class),
         HealthPermission.getReadPermission(androidx.health.connect.client.records.WeightRecord::class)
     )
 
