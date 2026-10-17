@@ -21,7 +21,7 @@ class SyncHealthDataUseCase @Inject constructor(
     private val fileRepository: FileRepository,
     private val healthMetricsRepository: HealthMetricsRepository,
     private val widgetUpdateManager: cloud.wafflecommons.pixelbrainreader.widget.ui.WidgetUpdateManager,
-    @ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context
 ) {
 
     private val json = Json {

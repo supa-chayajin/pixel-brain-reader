@@ -17,7 +17,7 @@ import javax.inject.Singleton
 
 @Singleton
 class WidgetUpdateManager @Inject constructor(
-    @dagger.hilt.android.qualifiers.ApplicationContext private val context: Context
+    @param:dagger.hilt.android.qualifiers.ApplicationContext private val context: Context
 ) {
     // One structured, process-lived scope instead of a fresh unmanaged CoroutineScope per
     // call — a SupervisorJob isolates failures and there is a single owner for the work.

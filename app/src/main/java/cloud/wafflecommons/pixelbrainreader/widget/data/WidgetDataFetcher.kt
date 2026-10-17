@@ -48,7 +48,7 @@ class WidgetDataFetcher @Inject constructor(
             val snapshot = readSnapshot(context)
                 ?: return@withContext CompanionWidgetState(heroClass = "Loading…", isLoading = true)
 
-            val resolvedResId = resolveAvatarResource(context, snapshot.heroClass, snapshot.avatarResName)
+            val resolvedResId = resolveAvatarResource(snapshot.heroClass)
             val avatarBitmap = context.drawableToBitmap(resolvedResId, 96)
                 ?: context.drawableToBitmap(cloud.wafflecommons.pixelbrainreader.R.drawable.hero_novice, 96)
 
@@ -94,17 +94,9 @@ class WidgetDataFetcher @Inject constructor(
         }
     }
 
-    private fun resolveAvatarResource(
-        context: Context,
-        heroClass: CharacterClass,
-        avatarResName: String?
-    ): Int {
-        if (!avatarResName.isNullOrBlank()) {
-            val customId = runCatching {
-                context.resources.getIdentifier(avatarResName, "drawable", context.packageName)
-            }.getOrDefault(0)
-            if (customId != 0) return customId
-        }
+    // An explicit map, not getIdentifier(profile.avatarResName): those "tiny_hero_*" names have no
+    // drawable, and a name lookup hides resources from R8's shrinker (lint: DiscouragedApi).
+    private fun resolveAvatarResource(heroClass: CharacterClass): Int {
         return when (heroClass) {
             CharacterClass.WARRIOR -> cloud.wafflecommons.pixelbrainreader.R.drawable.hero_warrior
             CharacterClass.MAGE -> cloud.wafflecommons.pixelbrainreader.R.drawable.hero_sage
