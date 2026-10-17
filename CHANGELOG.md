@@ -9,6 +9,82 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _No unreleased changes._
 
+## [10.2.0] — 2026-10-17
+
+The **vault insights** release. It ships the feature batch built with Antigravity (Gemini) —
+note history, Memory Echoes, a vault link check, voice notes and a Boardroom chat mode —
+after a full review and a hardening pass: the batch also carried data-loss bugs and
+regressions, all fixed before this release (see
+`documentation/plans/2026-10-17-antigravity-review-and-roadmap.md`).
+
+### Added
+
+- **Note history (Time Machine).** The history icon on a note lists its git commits and
+  shows a real line diff (git's histogram algorithm, unchanged lines folded) against the
+  current text. Restore asks for confirmation, can be undone from the snackbar, and is
+  refused for a version git can't read (such as the commit that deleted the note) instead
+  of emptying the note. Encrypted notes have no history view.
+- **Memory Echoes on the Daily screen.** Notes untouched for at least two weeks —
+  measured in git history, since clones and pulls rewrite file times — rotate daily among
+  the 30 most forgotten. "Mark as reviewed" rests a note for two weeks; reviews are kept
+  in the vault (`10_Journal/system/memory_echoes.json`), so they sync.
+- **Vault link check** (Settings → *Check links & orphan notes*): dead wiki-links and
+  orphan notes, with the share of healthy notes. Embeds, attachments and fenced code are
+  not counted as dead links.
+- **Voice notes** from the Daily screen's action menu: to-dos go to the day's tasks, the
+  rest becomes an `00_Inbox/` note (with the transcript), linked from one timeline line.
+  Structuring uses Gemini Nano when it is ready and an offline heuristic otherwise.
+- **Boardroom** chat mode: three short expert takes on a technical question —
+  architecture, security, delivery — and a decision, grounded in your notes.
+- **Move to another folder** from the rename dialog; **Delete** for timeline entries,
+  tasks and private notes; *RPG & Gamification Rules* reachable from Settings;
+  Johnny-Decimal badges on sub-category folders.
+- **Health bonuses are granted.** Step goal (+50 VIG), sleep goal (+25 MND) and a high
+  mood × activity synergy (+30 MND), each at most once per day — the bonus code existed but
+  read a path that doesn't exist, so it never paid out.
+- `![[image]]` embeds render, resolved like Obsidian (by path, then by name anywhere in
+  the vault) from the file index, in notes and chat.
+
+### Changed
+
+- **Dictation is transcribed on the device** — private journal, Daily voice note and chat
+  mic — with a Listening dialog showing the live transcript. If the device can't recognize
+  French offline yet, the language pack is requested; Chat and Daily may then use the system
+  recognizer with a "may use the network" notice, the private journal never does.
+- **Cortex retrieval is contextual.** Each indexed chunk carries its note's title, folder
+  and heading (the index is rebuilt once after updating), the notes handed to Gemini Nano
+  are budgeted to fit its input window, and the answer only cites what the model saw.
+  Cortex stays grounded — it says when your notes don't cover a question — and Spark has
+  its own creative persona.
+- **Commit messages name what changed** ("projects: update plan", "journal(2026-10-17):
+  update daily note"), read from the staged diff; encrypted notes are never named.
+- **Smoother note rendering.** Markdown is parsed off the main thread, and image embeds
+  are resolved in memory instead of on the disk.
+- The 470 MB embedding model is memory-mapped from the APK instead of copied to the cache.
+
+### Fixed
+
+- **Templates load again.** Template lookups read a database table nothing ever filled;
+  they now read the vault file.
+- **No more lost lines in the daily note.** Timeline entries, tasks, scraps and gratitude
+  are burned as one line each, and the parser only reads that line: a multi-line entry
+  (the Add/Edit moment dialogs allowed one) lost everything after its first line on the
+  next re-parse. Line breaks are now folded into " · ", and the dialogs are single-line.
+- **The daily mantra survives a cold-start rebuild** instead of resetting.
+- **Google Calendar**: the day window is right on DST days and events show in the device's
+  time zone. **Google Tasks**: a task completed in the app stays completed across syncs.
+- The sleep-goal slider no longer overwrote the step goal; large XP grants level up more
+  than once; a widget task toggle grants XP; the habit widget logs the habit's target value.
+- Archived habits are kept in the vault export; archived chores no longer trigger reminders.
+- Imported articles: YAML-safe frontmatter and non-ASCII titles kept in file names.
+- An invalid date in an `/event` command no longer crashes; callouts scale with the screen
+  density; two moods logged in the same minute no longer duplicate.
+
+### Removed
+
+- The unused ML Kit proofreading/rewriting/summarization, MediaPipe and AICore SDK
+  dependencies.
+
 ## [10.1.0] — 2026-09-10
 
 The **dogfooding release**: two months of daily use reported lags, a weather card that
