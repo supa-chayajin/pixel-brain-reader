@@ -235,9 +235,9 @@ Definition of done for every item:
 
 ### Phase 0 — Stabilize (≈ ½ day)
 
-- [ ] **0.1 (S)** Remove the `vfork` flag (I16). Discard or commit the `.idea` noise (S7).
-- [ ] **0.2 (S)** Replace the raw NUL in `PrivateJournalViewModel.kt:153` with `'\u0000'`. Check that `git diff` shows the file as text (I14).
-- [ ] **0.3 (S)** Add a **"Settled decisions — never reverse without asking"** section to CLAUDE.md:
+- [x] **0.1 (S)** Remove the `vfork` flag (I16). Discard or commit the `.idea` noise (S7).
+- [x] **0.2 (S)** Replace the raw NUL in `PrivateJournalViewModel.kt:153` with `'\u0000'`. Check that `git diff` shows the file as text (I14).
+- [x] **0.3 (S)** Add a **"Settled decisions — never reverse without asking"** section to CLAUDE.md:
   - Nano auto-download and prewarm (no `warmup()`)
   - RAG floor 0.35, recalibrated only with the golden set
   - Today's journal and `99_System` are not embedded
@@ -249,8 +249,8 @@ Definition of done for every item:
   - No dependency downgrades or removals without approval
   - Version, CHANGELOG and CLAUDE.md updated with every feature batch
 
-  Optionally mirror it in `documentation/explanation/decisions.md`.
-- [ ] **0.4 (S)** Rewrite the stale `LocalAiManager` class KDoc (B4 root cause).
+  `CLAUDE.md` is gitignored (local to this machine, read by every agent here), so the versioned copy with the reasoning is `documentation/explanation/settled-decisions.md`.
+- [x] **0.4 (S)** Rewrite the stale `LocalAiManager` class KDoc (B4 root cause).
 
 ### Phase 1 — v10.2.0 "Antigravity, hardened" (≈ 3–4 focused days)
 
