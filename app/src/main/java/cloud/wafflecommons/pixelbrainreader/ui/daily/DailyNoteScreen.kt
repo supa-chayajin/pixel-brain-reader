@@ -21,6 +21,7 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.ui.Alignment
@@ -54,10 +55,6 @@ import cloud.wafflecommons.pixelbrainreader.ui.components.PremiumWeatherCard
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import android.app.Activity
-import android.content.ActivityNotFoundException
-import android.content.Intent
-import android.speech.RecognizerIntent
 import androidx.compose.material.icons.rounded.Checklist
 import androidx.compose.material.icons.rounded.Event
 import androidx.compose.material.icons.rounded.Mic
@@ -92,18 +89,16 @@ fun DailyNoteScreen(
     var showQuickCaptureSheet by remember { mutableStateOf(false) }
     var fabExpanded by remember { mutableStateOf(false) }
 
-    val speechLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            val spokenText = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
-            if (!spokenText.isNullOrBlank()) {
-                viewModel.compileAndSaveVoiceNote(spokenText)
-            }
-        }
-    }
-
     val snackbarHostState = remember { SnackbarHostState() }
+    val dictationScope = rememberCoroutineScope()
+
+    // Voice capture, transcribed on the device (fr-FR).
+    val dictation = cloud.wafflecommons.pixelbrainreader.ui.utils.rememberOnDeviceDictation(
+        allowNetworkFallback = true,
+        onResult = { spokenText -> viewModel.compileAndSaveVoiceNote(spokenText) },
+        onMessage = { message -> dictationScope.launch { snackbarHostState.showSnackbar(message) } }
+    )
+    cloud.wafflecommons.pixelbrainreader.ui.utils.DictationListeningDialog(dictation)
 
     LaunchedEffect(state.userMessage) {
         state.userMessage?.let {
@@ -195,20 +190,9 @@ fun DailyNoteScreen(
         },
         floatingActionButton = {
             val fabItems = listOf(
-                FabActionItem(icon = Icons.Rounded.Mic, label = "Voice Compiler") {
+                FabActionItem(icon = Icons.Rounded.Mic, label = "Voice note") {
                     fabExpanded = false
-                    try {
-                        val french = java.util.Locale.FRANCE.toLanguageTag()
-                        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                            putExtra(RecognizerIntent.EXTRA_LANGUAGE, french)
-                            putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, french)
-                            putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, french)
-                        }
-                        speechLauncher.launch(intent)
-                    } catch (e: ActivityNotFoundException) {
-                        // Speech recognition not available
-                    }
+                    dictation.start()
                 },
                 FabActionItem(icon = Icons.Rounded.Mood, label = "Mood Check-in") {
                     fabExpanded = false

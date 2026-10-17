@@ -1,15 +1,11 @@
 package cloud.wafflecommons.pixelbrainreader.ui.privatevault
 
-import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
-import android.speech.RecognizerIntent
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.biometric.BiometricPrompt
 import androidx.compose.animation.AnimatedVisibility
@@ -541,44 +537,26 @@ fun PrivateEditor(
         onContentChange(newValue.text)
     }
 
-    // Speech-to-text: the system dialog captures audio; we splice the transcript at the caret.
-    val speechLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            val spoken = result.data
-                ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
-                ?.firstOrNull()
-            if (!spoken.isNullOrBlank()) {
-                val cur = editorValue
-                val start = cur.selection.min
-                val end = cur.selection.max
-                val before = cur.text.substring(0, start)
-                val after = cur.text.substring(end)
-                val needsSpace = before.isNotEmpty() && !before.last().isWhitespace()
-                val insert = (if (needsSpace) " " else "") + spoken
-                val newText = before + insert + after
-                applyChange(TextFieldValue(newText, TextRange(start + insert.length)))
-            }
-        }
-    }
+    // Speech-to-text, ON THE DEVICE ONLY: this is the encrypted journal, so its audio never goes to
+    // a network recognizer (no fallback). The transcript is spliced at the caret.
+    val currentEditorValue by rememberUpdatedState(editorValue)
+    val dictation = cloud.wafflecommons.pixelbrainreader.ui.utils.rememberOnDeviceDictation(
+        allowNetworkFallback = false,
+        onResult = { spoken ->
+            val cur = currentEditorValue
+            val start = cur.selection.min
+            val end = cur.selection.max
+            val before = cur.text.substring(0, start)
+            val after = cur.text.substring(end)
+            val needsSpace = before.isNotEmpty() && !before.last().isWhitespace()
+            val insert = (if (needsSpace) " " else "") + spoken
+            applyChange(TextFieldValue(before + insert + after, TextRange(start + insert.length)))
+        },
+        onMessage = { message -> Toast.makeText(context, message, Toast.LENGTH_LONG).show() }
+    )
+    cloud.wafflecommons.pixelbrainreader.ui.utils.DictationListeningDialog(dictation)
 
-    fun startDictation() {
-        // Pin dictation to French — the private journal is a French-first surface.
-        val french = java.util.Locale.FRANCE.toLanguageTag() // "fr-FR"
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, french)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, french)
-            putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, french)
-            putExtra(RecognizerIntent.EXTRA_PROMPT, "Dictate your note…")
-        }
-        try {
-            speechLauncher.launch(intent)
-        } catch (e: android.content.ActivityNotFoundException) {
-            Toast.makeText(context, "Speech recognition unavailable on this device", Toast.LENGTH_SHORT).show()
-        }
-    }
+    fun startDictation() = dictation.start()
 
     fun beautifySelection() {
         if (!hasSelection || isBeautifying) return
