@@ -233,23 +233,6 @@ class UserPreferencesRepository @Inject constructor(
         context.dataStore.edit { it[KEY_SOUND_EFFECTS] = enabled }
     }
 
-    // --- Memory Echoes (Spaced-repetition reviewed notes) ---
-    private val KEY_REVIEWED_ECHOES = stringPreferencesKey("reviewed_memory_echoes")
-
-    val reviewedEchoes: Flow<String> = setting { it[KEY_REVIEWED_ECHOES] ?: "" }
-
-    suspend fun recordEchoReviewed(path: String) {
-        val now = System.currentTimeMillis()
-        context.dataStore.edit { prefs ->
-            val current = prefs[KEY_REVIEWED_ECHOES] ?: ""
-            val updated = (current.split(",")
-                .filter { it.isNotBlank() && !it.startsWith("$path:") } + "$path:$now")
-                .takeLast(100)
-                .joinToString(",")
-            prefs[KEY_REVIEWED_ECHOES] = updated
-        }
-    }
-
     companion object {
         /** Canonical order + membership of the reorderable regular nav destinations. */
         val DEFAULT_NAVBAR_ORDER = listOf("home", "habits", "home_os", "chat", "mood", "stats")
