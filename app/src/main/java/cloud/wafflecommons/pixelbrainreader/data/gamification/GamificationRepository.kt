@@ -6,7 +6,11 @@ import cloud.wafflecommons.pixelbrainreader.data.repository.FileRepository
 import cloud.wafflecommons.pixelbrainreader.widget.ui.WidgetUpdateManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
@@ -28,6 +32,15 @@ class GamificationRepository @Inject constructor(
 ) {
     private val _gamificationState = MutableStateFlow(GamificationState())
     val gamificationState: Flow<GamificationState> = _gamificationState.asStateFlow()
+
+    // Level-ups as a domain event, so XP granted anywhere (habits, widgets, health) can be celebrated
+    // by whichever UI is showing — without the domain layer depending on UI classes.
+    private val _levelUps = MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    val levelUps: SharedFlow<Unit> = _levelUps.asSharedFlow()
+
+    fun notifyLevelUp() {
+        _levelUps.tryEmit(Unit)
+    }
 
     private val systemDir = "10_Journal/system"
     private val profileFile = "$systemDir/gamification_profile.json"

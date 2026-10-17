@@ -117,7 +117,7 @@ Unless a path starts with `app/` or `gradle`, it is relative to `app/src/main/ja
 **I3 — Health-synergy XP: the first condition wins**
 - `domain/gamification/ApplyHealthSynergyUseCase.kt:47/82` uses a single `lastHealthSynergyAppliedDate` to gate all three rewards.
 - It now runs from `AutomateHabitsUseCase.kt:36` on every foreground refresh. The morning sleep bonus marks the day as applied, so the step-goal bonus (+50) and the synergy bonus (+30) can never fire that day.
-- It also double-counts the same steps with an automatic steps habit.
+- *(Correction during Phase 1: I first claimed it also double-counted with automatic habits. It doesn't: automatic habits never grant XP; only manual toggles do.)*
 - Before this commit, the use case read a path that does not exist (`filesDir/10_Journal/...`; the vault is `filesDir/vault`), so it never granted anything. Gemini revived dead code.
 
 **I4 — "Chrono-biometric" insights invent numbers**
@@ -297,7 +297,6 @@ Order: data safety → main thread → AI → health → gamification → UI →
   - Check with `dependencyInsight`.
 - [ ] **1.7 (M) Gamification (I3, I8)**
   - Per-reward idempotency per date, e.g. a set `{steps, sleep, synergy}` for each date.
-  - Resolve the double count (D4).
   - `GamificationRepository` exposes a `levelUps` `SharedFlow`; the UI turns it into confetti, so the domain no longer imports the UI.
   - *Tests:* sleep bonus in the morning, then the steps bonus later the same day. Each reward is granted at most once.
 - [ ] **1.8 (S) English UI sweep (I1, S1)**
@@ -512,7 +511,7 @@ Defaults applied on 2026-10-17 ("add everything to the plan and proceed"): every
 | D1 | Fix forward on `866e0d5`, or revert it? | **Fix forward.** The small fixes are worth keeping, and nothing is pushed yet |
 | D2 | Today's journal in RAG? | **Keep it excluded**, as documented. Revisit with the golden set |
 | D3 | Boardroom? | **Generalize into prompt presets** (2.7) |
-| D4 | Steps or sleep XP from both the auto-habit and the synergy? | **One source only:** the habit for raw goals, synergy only for combos |
+| D4 | Steps or sleep XP from both the auto-habit and the synergy? | **Moot:** automatic habits never grant XP, so the synergy bonus is the only source |
 | D5 | Google scopes? | **Read-only now**, two-way later (3.5) |
 | D6 | Version for Phase 1? | **10.2.0** (1020), released once Phase 1 is done |
 
