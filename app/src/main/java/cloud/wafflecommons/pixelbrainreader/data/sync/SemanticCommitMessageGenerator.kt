@@ -1,6 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.data.sync
 
-import cloud.wafflecommons.pixelbrainreader.ui.components.parseJohnnyDecimal
+import cloud.wafflecommons.pixelbrainreader.data.utils.parseJohnnyDecimal
 
 object SemanticCommitMessageGenerator {
 
