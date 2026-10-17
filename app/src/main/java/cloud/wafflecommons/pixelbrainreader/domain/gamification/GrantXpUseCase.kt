@@ -13,8 +13,7 @@ enum class XpActionType {
 
 class GrantXpUseCase @Inject constructor(
     private val gamificationRepository: GamificationRepository,
-    private val habitRepository: HabitRepository,
-    private val uiEffectManager: cloud.wafflecommons.pixelbrainreader.ui.utils.UiEffectManager
+    private val habitRepository: HabitRepository
 ) {
 
     // Correct Implementation Structure
@@ -120,13 +119,8 @@ class GrantXpUseCase @Inject constructor(
                 history = (state.history + historyEntry).takeLast(50) // Keep last 50
             )
         }
-        if (leveledUp) {
-            uiEffectManager.tryTriggerEffect(
-                cloud.wafflecommons.pixelbrainreader.ui.utils.GlobalEffect.Confetti(
-                    cloud.wafflecommons.pixelbrainreader.ui.utils.ConfettiType.LEVEL_UP
-                )
-            )
-        }
+        // A domain event, not a UI call: the UI layer turns it into confetti when it is showing.
+        if (leveledUp) gamificationRepository.notifyLevelUp()
     }
 
     suspend fun executeCustom(
@@ -187,13 +181,8 @@ class GrantXpUseCase @Inject constructor(
                 history = (state.history + historyEntry).takeLast(50)
             )
         }
-        if (leveledUp) {
-            uiEffectManager.tryTriggerEffect(
-                cloud.wafflecommons.pixelbrainreader.ui.utils.GlobalEffect.Confetti(
-                    cloud.wafflecommons.pixelbrainreader.ui.utils.ConfettiType.LEVEL_UP
-                )
-            )
-        }
+        // A domain event, not a UI call: the UI layer turns it into confetti when it is showing.
+        if (leveledUp) gamificationRepository.notifyLevelUp()
     }
 
     

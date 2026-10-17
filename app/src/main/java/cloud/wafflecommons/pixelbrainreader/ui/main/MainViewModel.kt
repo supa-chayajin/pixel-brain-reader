@@ -29,6 +29,8 @@ import cloud.wafflecommons.pixelbrainreader.data.utils.TaskCompletionDetector
 import cloud.wafflecommons.pixelbrainreader.data.utils.TemplateEngine
 import cloud.wafflecommons.pixelbrainreader.di.ApplicationScope
 import cloud.wafflecommons.pixelbrainreader.ui.components.SaveState
+import cloud.wafflecommons.pixelbrainreader.ui.utils.ConfettiType
+import cloud.wafflecommons.pixelbrainreader.ui.utils.GlobalEffect
 import cloud.wafflecommons.pixelbrainreader.ui.utils.UiEffectManager
 import cloud.wafflecommons.pixelbrainreader.ui.utils.UiEvent
 import cloud.wafflecommons.pixelbrainreader.widget.manager.WidgetSnapshotManager
@@ -140,6 +142,14 @@ class MainViewModel @Inject constructor(
 
     // Global Effects (One-shot)
     val globalEffects = uiEffectManager.effects
+
+    init {
+        // XP can be granted anywhere (habits, widgets, health bonuses); the domain only reports the
+        // level-up, the UI decides to celebrate it.
+        gamificationRepository.levelUps
+            .onEach { uiEffectManager.tryTriggerEffect(GlobalEffect.Confetti(ConfettiType.LEVEL_UP)) }
+            .launchIn(viewModelScope)
+    }
 
     // Global Sync State (observable by UI)
     val globalSyncState = syncOrchestrator.syncState
