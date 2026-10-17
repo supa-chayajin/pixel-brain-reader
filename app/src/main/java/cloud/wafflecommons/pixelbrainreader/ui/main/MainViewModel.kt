@@ -16,7 +16,9 @@ import cloud.wafflecommons.pixelbrainreader.data.repository.DailyNoteRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.FileRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.TemplateRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
+import cloud.wafflecommons.pixelbrainreader.data.repository.VaultDiscoveryRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.VaultExportRepository
+import cloud.wafflecommons.pixelbrainreader.data.utils.VaultFileIndex
 import cloud.wafflecommons.pixelbrainreader.data.sync.SyncOrchestrator
 import cloud.wafflecommons.pixelbrainreader.data.sync.SyncState
 import cloud.wafflecommons.pixelbrainreader.data.sync.VaultPushScheduler
@@ -80,7 +82,8 @@ class MainViewModel @Inject constructor(
     private val pushScheduler: VaultPushScheduler,
     soundEffectManager: SoundEffectManager,
     appClock: AppClock,
-    @param:ApplicationScope private val appScope: CoroutineScope
+    @param:ApplicationScope private val appScope: CoroutineScope,
+    vaultDiscoveryRepository: VaultDiscoveryRepository
 ) : ViewModel() {
 
     private val _currentPath = MutableStateFlow("")
@@ -126,6 +129,10 @@ class MainViewModel @Inject constructor(
 
     /** The real current day (follows midnight), for "is this today's note?" checks. */
     val today: StateFlow<LocalDate> = appClock.today
+
+    /** Where `![[image.png]]` embeds point, resolved in memory from the Room file index. */
+    val attachmentIndex: StateFlow<VaultFileIndex> = vaultDiscoveryRepository.observeAttachmentIndex()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), VaultFileIndex.EMPTY)
 
     // Expose Theme Preference
     val themeConfig: StateFlow<AppThemeConfig> = userPrefs.themeConfig
