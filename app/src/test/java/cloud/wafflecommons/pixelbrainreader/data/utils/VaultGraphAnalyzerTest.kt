@@ -70,8 +70,34 @@ class VaultGraphAnalyzerTest {
         // Closd has incoming link from Waffle, and outgoing link, so not orphan.
         // Waffle has outgoing link, so not orphan.
         assertTrue(report.orphanNotes.isEmpty())
-        // Score: 100 - (1 dead link * 3) = 97
-        assertEquals(97, report.healthScore)
+        // Score = healthy notes: Waffle has a dead link, the other two are fine → 2/3.
+        assertEquals(67, report.healthScore)
+    }
+
+    @Test
+    fun analyze_embedsAttachmentsAndCodeAreNotDeadLinks() = runBlocking {
+        val files = listOf(
+            FileEntity("20_Projects/Plan.md", "Plan.md", "file", null),
+            FileEntity("20_Projects/Other.md", "Other.md", "file", null),
+            FileEntity("assets/diagram.png", "diagram.png", "file", null),
+            FileEntity("20_Projects/spec.pdf", "spec.pdf", "file", null)
+        )
+        coEvery { fileDao.getAllFiles() } returns flowOf(files)
+        coEvery { fileContentDao.getContent("20_Projects/Plan.md") } returns """
+            # Plan
+            ![[diagram.png]] and ![[missing-image.png]] are embeds, not links.
+            The spec is [[spec.pdf]]; see [[Other]].
+            ```
+            [[Inside a code block]]
+            ```
+        """.trimIndent()
+        coEvery { fileContentDao.getContent("20_Projects/Other.md") } returns "# Other\nBack to [[Plan]]."
+
+        val report = analyzer.analyze()
+
+        assertTrue(report.deadLinks.isEmpty())
+        assertEquals(3, report.totalWikiLinksFound) // spec.pdf, Other, Plan
+        assertEquals(100, report.healthScore)
     }
 
     @Test

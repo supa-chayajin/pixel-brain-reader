@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.math.roundToInt
 
 data class DeadLink(
     val sourcePath: String,
@@ -19,50 +20,43 @@ data class VaultGraphReport(
     val totalWikiLinksFound: Int,
     val deadLinks: List<DeadLink>,
     val orphanNotes: List<String>,
+    /** Share of notes with neither a dead link nor orphan status, 0–100. */
     val healthScore: Int
 )
 
 /**
- * Knowledge Graph Entropy & Dead-Link Visualizer.
- * Analyzes Obsidian [[WikiLinks]] across the second-brain vault to detect:
- * 1. Broken / Dead Links (pointing to non-existent notes).
- * 2. Orphan Notes (notes with 0 incoming and 0 outgoing links).
- * 3. Overall Vault Graph Health Score (0-100%).
+ * Wiki-link health of the vault: dead links (a `[[target]]` that matches no file) and orphan notes
+ * (no link in or out; daily journal notes excluded).
+ *
+ * Embeds (`![[image.png]]`) are attachments, not links, and links may point at any vault file
+ * (`[[spec.pdf]]`), so neither counts as dead. Links inside fenced code are ignored. The score is
+ * the share of healthy notes — it used to subtract 3 points per dead link, so any vault with
+ * images scored 0%.
  */
 @Singleton
 class VaultGraphAnalyzer @Inject constructor(
     private val fileDao: FileDao,
     private val fileContentDao: FileContentDao
 ) {
-    // Matches [[TargetNote]], [[TargetNote|Alias]], [[TargetNote#Section]], [[TargetNote#Section|Alias]]
+    // [[Target]], [[Target|Alias]], [[Target#Section]], [[Target#Section|Alias]]
     private val wikiLinkRegex = Regex("""\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|[^\]]+)?\]\]""")
 
     suspend fun analyze(): VaultGraphReport = withContext(Dispatchers.IO) {
-        val allFiles = fileDao.getAllFiles().firstOrNull() ?: emptyList()
-        val markdownFiles = allFiles.filter {
-            it.type == "file" &&
-            it.path.endsWith(".md") &&
-            !it.path.endsWith(".enc") &&
-            !it.path.startsWith(".")
+        val files = (fileDao.getAllFiles().firstOrNull() ?: emptyList())
+            .filter { it.type == "file" && it.path.split('/').none { segment -> segment.startsWith(".") } }
+        val notes = files.filter { it.path.endsWith(".md") }
+        if (notes.isEmpty()) {
+            return@withContext VaultGraphReport(0, 0, emptyList(), emptyList(), healthScore = 100)
         }
 
-        if (markdownFiles.isEmpty()) {
-            return@withContext VaultGraphReport(
-                totalNotesAnalyzed = 0,
-                totalWikiLinksFound = 0,
-                deadLinks = emptyList(),
-                orphanNotes = emptyList(),
-                healthScore = 100
-            )
-        }
-
-        // Canonical note lookups (case-insensitive title and path)
-        val availableNames = mutableSetOf<String>()
-        val availablePaths = mutableSetOf<String>()
-        for (f in markdownFiles) {
-            val title = f.name.removeSuffix(".md").lowercase()
-            availableNames.add(title)
-            availablePaths.add(f.path.removeSuffix(".md").lowercase())
+        // Anything in the vault can be a link target: by path or by bare name, ".md" optional.
+        val knownPaths = HashSet<String>()
+        val knownNames = HashSet<String>()
+        for (f in files) {
+            knownPaths += f.path.lowercase()
+            knownPaths += f.path.removeSuffix(".md").lowercase()
+            knownNames += f.name.lowercase()
+            knownNames += f.name.removeSuffix(".md").lowercase()
         }
 
         val incomingLinks = mutableMapOf<String, Int>()
@@ -70,56 +64,47 @@ class VaultGraphAnalyzer @Inject constructor(
         val deadLinks = mutableListOf<DeadLink>()
         var totalLinks = 0
 
-        for (file in markdownFiles) {
-            val content = fileContentDao.getContent(file.path) ?: continue
-            val lines = content.lines()
-            var fileLinkCount = 0
-
-            for (line in lines) {
-                val matches = wikiLinkRegex.findAll(line)
-                for (match in matches) {
+        for (note in notes) {
+            val content = fileContentDao.getContent(note.path) ?: continue
+            var inFence = false
+            for (line in content.lines()) {
+                val trimmed = line.trimStart()
+                if (trimmed.startsWith("```") || trimmed.startsWith("~~~")) {
+                    inFence = !inFence
+                    continue
+                }
+                if (inFence) continue
+                for (match in wikiLinkRegex.findAll(line)) {
+                    if (match.range.first > 0 && line[match.range.first - 1] == '!') continue // embed
                     val rawTarget = match.groupValues[1].trim()
                     if (rawTarget.isBlank()) continue
 
-                    fileLinkCount++
                     totalLinks++
-
-                    val normalizedTarget = rawTarget.substringAfterLast("/").removeSuffix(".md").lowercase()
-                    val targetPath = rawTarget.removeSuffix(".md").lowercase()
-
-                    val targetExists = availableNames.contains(normalizedTarget) || availablePaths.contains(targetPath)
-                    if (targetExists) {
-                        incomingLinks[normalizedTarget] = (incomingLinks[normalizedTarget] ?: 0) + 1
+                    outgoingLinks[note.path] = (outgoingLinks[note.path] ?: 0) + 1
+                    val target = rawTarget.lowercase()
+                    val targetName = target.substringAfterLast('/')
+                    if (target in knownPaths || targetName in knownNames) {
+                        val key = targetName.removeSuffix(".md")
+                        incomingLinks[key] = (incomingLinks[key] ?: 0) + 1
                     } else {
-                        deadLinks.add(
-                            DeadLink(
-                                sourcePath = file.path,
-                                targetName = rawTarget,
-                                lineSnippet = line.trim().take(80)
-                            )
-                        )
+                        deadLinks += DeadLink(sourcePath = note.path, targetName = rawTarget, lineSnippet = line.trim().take(80))
                     }
                 }
             }
-            outgoingLinks[file.path] = fileLinkCount
         }
 
-        // Orphan notes: notes with 0 incoming and 0 outgoing links (excluding daily journal)
-        val orphanNotes = markdownFiles.filter { file ->
-            if (file.path.startsWith("10_Journal")) return@filter false
-            val title = file.name.removeSuffix(".md").lowercase()
-            val incoming = incomingLinks[title] ?: 0
-            val outgoing = outgoingLinks[file.path] ?: 0
+        val orphanNotes = notes.filter { note ->
+            if (note.path.startsWith("10_Journal")) return@filter false
+            val incoming = incomingLinks[note.name.removeSuffix(".md").lowercase()] ?: 0
+            val outgoing = outgoingLinks[note.path] ?: 0
             incoming == 0 && outgoing == 0
         }.map { it.path }
 
-        // Health score calculation
-        val deadPenalty = deadLinks.size * 3
-        val orphanPenalty = orphanNotes.size * 2
-        val score = (100 - (deadPenalty + orphanPenalty)).coerceIn(0, 100)
+        val unhealthy = (deadLinks.map { it.sourcePath } + orphanNotes).toSet()
+        val score = (100.0 * (notes.size - unhealthy.size) / notes.size).roundToInt().coerceIn(0, 100)
 
         VaultGraphReport(
-            totalNotesAnalyzed = markdownFiles.size,
+            totalNotesAnalyzed = notes.size,
             totalWikiLinksFound = totalLinks,
             deadLinks = deadLinks,
             orphanNotes = orphanNotes,
