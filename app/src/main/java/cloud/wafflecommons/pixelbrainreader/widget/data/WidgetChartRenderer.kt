@@ -153,13 +153,6 @@ class WidgetChartRenderer @Inject constructor() {
                         if (epoch in startTime..endTime) {
                             val normX = (epoch - startTime) / range.toFloat()
                             val x = normX * width
-                            // Draw at top
-                            canvas.drawText(mood.label, x, 16f * density, textPaint) // Label is emoji? "label" in MoodEntry is text.
-                            // MoodEntry definition: val label: String (e.g. "Happy"), val score: Int.
-                            // The emoji is in summary? 
-                            // Wait, MoodEntry doesn't have emoji field directly in my view of `MoodRepository.kt`.
-                            // It calculates `mainEmoji` for summary only.
-                            // I should probably use a helper to get emoji from score.
                             val emoji = getEmojiForScore(mood.score)
                             canvas.drawText(emoji, x, 16f * density, textPaint)
                         }

@@ -125,7 +125,9 @@ class PrivateJournalActivity : FragmentActivity() {
                     // Retrieve Password securely
                     val storedPwd = secretManager.getVaultPassword()
                     if (!storedPwd.isNullOrEmpty()) {
-                        viewModel.unlock(storedPwd.toCharArray())
+                        val pwdChars = storedPwd.toCharArray()
+                        viewModel.unlock(pwdChars)
+                        java.util.Arrays.fill(pwdChars, ' ')
                     } else {
                         // Biometric Success, but no password stored.
                         // Force manual unlock to set the password.
@@ -312,7 +314,8 @@ fun PrivateVaultScreen(
                  onClose = { viewModel.closeNote() },
                  onForceSave = { viewModel.forceSaveImmediate() },
                  onOpenAssist = { viewModel.openAssist() },
-                 onBeautify = { viewModel.beautifyMarkdown(it) }
+                 onBeautify = { viewModel.beautifyMarkdown(it) },
+                 onDelete = { viewModel.deleteCurrentNote() }
              )
 
              val assist by viewModel.assistState.collectAsStateWithLifecycle()
@@ -475,8 +478,34 @@ fun PrivateEditor(
     onClose: () -> Unit,
     onForceSave: () -> Unit,
     onOpenAssist: () -> Unit = {},
-    onBeautify: suspend (String) -> String? = { null }
+    onBeautify: suspend (String) -> String? = { null },
+    onDelete: () -> Unit = {}
 ) {
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Delete Private Note?") },
+            text = { Text("Are you sure you want to permanently delete \"$title\"? This cannot be undone.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDeleteDialog = false
+                        onDelete()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -610,6 +639,15 @@ fun PrivateEditor(
                     }
                     CortexIconButton(onClick = onOpenAssist) {
                         Icon(Icons.Default.AutoAwesome, contentDescription = "Writing assistant")
+                    }
+                    if (file != null) {
+                        CortexIconButton(onClick = { showDeleteDialog = true }) {
+                            Icon(
+                                Icons.Default.Delete,
+                                contentDescription = "Delete note",
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
                     }
                     cloud.wafflecommons.pixelbrainreader.ui.components.SaveStatusIndicator(
                         state = saveState,

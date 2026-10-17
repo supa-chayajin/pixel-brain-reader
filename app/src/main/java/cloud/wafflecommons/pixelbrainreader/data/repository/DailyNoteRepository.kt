@@ -18,11 +18,12 @@ import android.content.Context
 
 @Singleton
 class DailyNoteRepository @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
     private val fileRepository: FileRepository,
     private val fileDao: FileDao,
     private val fileContentDao: FileContentDao,
     private val gratitudeDao: cloud.wafflecommons.pixelbrainreader.data.local.dao.GratitudeDao,
+    private val dailyDashboardDao: cloud.wafflecommons.pixelbrainreader.data.local.dao.DailyDashboardDao,
     private val grantXpUseCase: cloud.wafflecommons.pixelbrainreader.data.usecase.GrantXpUseCase,
     private val safeFileProvider: cloud.wafflecommons.pixelbrainreader.data.utils.SafeFileProvider
 ) {
@@ -137,7 +138,7 @@ links: []
 
             // 2. Get Template Content
             var templateContent = try {
-                fileContentDao.getContent(TEMPLATE_PATH)
+                fileRepository.readFile(TEMPLATE_PATH) ?: fileContentDao.getContent(TEMPLATE_PATH)
             } catch (e: Exception) { null }
 
             if (templateContent.isNullOrBlank()) {
@@ -266,6 +267,9 @@ links: []
      * Adds a gratitude entry and rewards the user.
      */
     suspend fun addGratitude(date: LocalDate, text: String) = withContext(Dispatchers.IO) {
+        dailyDashboardDao.insertDashboard(
+            cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyDashboardEntity(date = date)
+        )
         val entity = cloud.wafflecommons.pixelbrainreader.data.local.entity.GratitudeEntity(
             date = date.format(DateTimeFormatter.ISO_DATE),
             content = text

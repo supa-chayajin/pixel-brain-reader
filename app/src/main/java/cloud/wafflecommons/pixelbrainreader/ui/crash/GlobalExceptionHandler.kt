@@ -19,9 +19,13 @@ class GlobalExceptionHandler(
             // Log the exception (optional, depends on policy, but good for local debugging if logcat is active)
             // Log.e("GlobalExceptionHandler", "Uncaught exception", throwable)
 
-            val stringWriter = StringWriter()
-            throwable.printStackTrace(PrintWriter(stringWriter))
-            val stackTrace = stringWriter.toString()
+            val stackTrace = if (cloud.wafflecommons.pixelbrainreader.BuildConfig.DEBUG) {
+                val stringWriter = StringWriter()
+                throwable.printStackTrace(PrintWriter(stringWriter))
+                stringWriter.toString()
+            } else {
+                "Stack trace omitted in release build."
+            }
 
             // Crash-loop guard: if the app has crashed repeatedly in quick succession, the
             // fault reproduces at startup and re-showing CrashActivity (with its Restart

@@ -38,13 +38,14 @@ data class ChatMessage(
     val sources: List<String> = emptyList()
 )
 
-/** Two persisted chat surfaces. ORACLE = RAG over the vault, SCRIBE = open chat. */
-enum class ChatMode { SCRIBE, ORACLE }
+/** Three persisted chat surfaces. ORACLE = RAG over the vault, SCRIBE = open chat, BOARDROOM = architecture debate. */
+enum class ChatMode { SCRIBE, ORACLE, BOARDROOM }
 
 /** Map UI enum to the storage strings agreed at the data layer boundary. */
 private fun ChatMode.storage(): String = when (this) {
     ChatMode.ORACLE -> "RAG"
     ChatMode.SCRIBE -> "CREATIVE"
+    ChatMode.BOARDROOM -> "BOARDROOM"
 }
 
 private fun ChatMessageEntity.toUi(): ChatMessage = ChatMessage(
@@ -72,13 +73,48 @@ private const val STREAM_TIMEOUT_MS = 120_000L
  * replies make the user wait on a spinner. Keeping answers terse makes generation prompt.
  */
 private const val PIXEL_BRAIN_PERSONA = """
-Tu es l'assistant IA de l'application Cortex. Tu dois TOUJOURS répondre en français, quelle que soit la langue de la question ou des notes.
+Tu es l'assistant IA de l'application Cortex (PixelBrainReader). Tu dois TOUJOURS répondre en français, quelle que soit la langue de la question ou des notes.
 
-RÔLE : un assistant analytique, pragmatique et bienveillant. Valide brièvement, puis ramène les choses à la logique et aux faits. Coupe court à la rumination.
+RÔLE : un assistant analytique, structuré, pragmatique et bienveillant. Tu aides l'utilisateur à exploiter son deuxième cerveau, ses notes d'architecture et son organisation quotidienne.
 
-CONCISION (OBLIGATOIRE) : réponds TRÈS brièvement et directement — 2 à 4 phrases maximum. Va droit au but. Pas de titres ni de longues listes, sauf demande explicite. Un emoji occasionnel est acceptable.
+STYLE ET FORMAT :
+- Réponds de manière claire, structurée et complète, sans troncature artificielle.
+- Organise tes réponses avec des puces Markdown ou des sous-titres courts quand cela apporte de la lisibilité.
+- Référence explicitement les notes pertinentes avec des liens Markdown [[Titre de la note]].
 
-RÉFÉRENCES : utilise les INFORMATIONS DE RÉFÉRENCE quand elles sont pertinentes pour répondre à propos des notes. Si la question relève d'une simple conversation, réponds naturellement, sans signaler que l'information est absente des notes.
+RÉFÉRENCES :
+- Fonde prioritairement tes réponses sur les INFORMATIONS DE RÉFÉRENCE ci-dessous issues du coffre Obsidian.
+- Si l'information n'est pas dans les notes de référence, réponds avec tes connaissances générales en précisant avec franchise ce qui manque dans les notes.
+"""
+
+private const val BOARDROOM_PERSONA = """
+Tu es le Conseil d'Architecture Virtuel (Cortex Boardroom) de Leslie Petrimaux (Lead Architect & DevSecOps).
+Tu organises un débat d'experts de très haut niveau entre trois personnalités complémentaires et intransigeantes, avant de fournir une synthèse collégiale tranchée :
+
+1. 🏛️ Alexandre (Architecte DDD & Clean Architecture) :
+   - Obsédé par le Domain-Driven Design, les Bounded Contexts, le langage omniprésent et la pureté des entités de domaine.
+   - Traque l'anémie de domaine, le couplage temporel ou technique, et les fuites d'abstraction.
+
+2. 🛡️ Bastien (Lead DevSecOps & Fiabilité Système) :
+   - Obsédé par le principe du moindre privilège, la sécurité fail-closed, la gestion des secrets, l'auditabilité et les pipelines CI/CD reproductibles.
+   - Analyse les modes de défaillance, la scalabilité, les conteneurs et les risques opérationnels en production.
+
+3. ⚡ Camille (Tech Lead Pragmatique & Delivery) :
+   - Obsédée par le pragmatisme, le ratio effort/valeur, l'évitement de l'over-engineering (YAGNI / KISS) et la vitesse de livraison.
+   - Pousse pour des compromis viables et met en garde contre les usines à gaz théoriques.
+
+DIRECTIVES DE FORMAT :
+- Fonde le débat prioritairement sur les INFORMATIONS DE RÉFÉRENCE ci-dessous (notes du coffre Obsidian, projets, architecture).
+- Structure TOUJOURS la réponse en 4 sections claires avec des séparateurs Markdown :
+  ### 🏛️ Alexandre (DDD & Architecture)
+  (Analyse du modèle, frontières contextuelles, patterns)
+  ### 🛡️ Bastien (DevSecOps & Sécurité)
+  (Risques d'exploitation, CI/CD, résilience, secrets)
+  ### ⚡ Camille (Pragmatisme & Delivery)
+  (Mise en œuvre concrète, arbitrage charge/valeur, quick wins)
+  ### 🎯 Synthèse & Décision d'Architecture
+  (Recommandation collégiale tranchée avec prochaines étapes concrètes et références aux notes [[NomDeLaNote]])
+- Réponds TOUJOURS en français technique impeccable.
 """
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -131,9 +167,16 @@ class ChatViewModel @Inject constructor(
     /** The in-flight generation launched by [sendMessage], so [resetChat] can cancel it. */
     private var generationJob: Job? = null
 
+    fun setMode(mode: ChatMode) {
+        _currentMode.value = mode
+    }
+
     fun toggleMode() {
-        _currentMode.value =
-            if (_currentMode.value == ChatMode.SCRIBE) ChatMode.ORACLE else ChatMode.SCRIBE
+        _currentMode.value = when (_currentMode.value) {
+            ChatMode.ORACLE -> ChatMode.BOARDROOM
+            ChatMode.BOARDROOM -> ChatMode.SCRIBE
+            ChatMode.SCRIBE -> ChatMode.ORACLE
+        }
     }
 
     // --- Send pipeline -------------------------------------------------------
@@ -141,7 +184,7 @@ class ChatViewModel @Inject constructor(
     /**
      * 1. Persist user turn to Room (atomic — never lost on crash mid-call).
      * 2. Derive the *prior* sliding-window history.
-     * 3. In ORACLE mode, run one vector search for grounding context + citations.
+     * 3. In ORACLE and BOARDROOM modes, run one vector search for grounding context + citations.
      * 4. Generate on-device via Gemini Nano.
      * 5. On success: persist the model turn. On failure: persist an inline error turn
      *    (there is no cloud fallback — the app is 100% on-device).
@@ -172,32 +215,37 @@ class ChatViewModel @Inject constructor(
             // 3. RAG context (single search call, reuse for both grounding + citations).
             var sources = emptyList<String>()
             var ragContext: String? = null
-            if (mode == ChatMode.ORACLE) {
-                loadingStage = "🔎 Searching your Second Brain…"
+            if (mode == ChatMode.ORACLE || mode == ChatMode.BOARDROOM) {
+                loadingStage = if (mode == ChatMode.BOARDROOM) "🏛️ Summoning the Architecture Boardroom…" else "🔎 Searching your Second Brain…"
                 val hits = vectorSearchEngine.search(query, limit = RAG_TOP_K)
                 ragContext = hits.takeIf { it.isNotEmpty() }
-                    ?.joinToString(separator = "\n---\n") { it.content }
+                    ?.joinToString(separator = "\n---\n") { hit ->
+                        val noteName = hit.fileId.substringAfterLast("/").removeSuffix(".md").removeSuffix(".enc")
+                        "### Note : [[$noteName]] (${hit.fileId})\n${hit.content.trim()}"
+                    }
                 sources = hits.map { it.fileId }.distinct()
                 Log.d(
                     "RAG_DEBUG",
-                    "ChatViewModel.sendMessage(ORACLE): hits=${hits.size} " +
+                    "ChatViewModel.sendMessage($mode): hits=${hits.size} " +
                         "sources=$sources contextLen=${ragContext?.length ?: 0}"
                 )
             } else {
                 Log.d("RAG_DEBUG", "ChatViewModel.sendMessage(SCRIBE): RAG search skipped")
             }
 
-            // 4. On-device Nano STREAMING call. Tokens are appended to a transient overlay
-            // bubble as they arrive; the completed answer is then persisted to Room. Single
-            // persona covers both modes — the mode only decides whether we ran RAG above.
-            loadingStage = "🔒 Asking Gemini Nano (on-device)…"
+            // 4. On-device Nano STREAMING call.
+            loadingStage = if (mode == ChatMode.BOARDROOM) "🏛️ Boardroom debating (on-device)…" else "🔒 Asking Gemini Nano (on-device)…"
             _streamingMessage.value =
                 ChatMessage(content = "", isUser = false, isStreaming = true, sources = sources)
             val sb = StringBuilder()
+            val persona = when (mode) {
+                ChatMode.BOARDROOM -> BOARDROOM_PERSONA
+                ChatMode.ORACLE, ChatMode.SCRIBE -> PIXEL_BRAIN_PERSONA
+            }
             try {
                 withTimeout(STREAM_TIMEOUT_MS) {
                     localAiManager.generateAugmentedResponseStream(
-                        systemPrompt = PIXEL_BRAIN_PERSONA,
+                        systemPrompt = persona,
                         ragContext = ragContext,
                         chatHistory = priorHistory,
                         currentQuery = query

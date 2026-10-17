@@ -73,10 +73,11 @@ object FrontmatterManager {
     fun upsertProperties(currentYaml: MutableMap<String, Any>, updates: Map<String, Any>) {
         updates.forEach { (key, newValue) ->
             if (newValue is List<*>) {
-                val existing = currentYaml[key] as? MutableList<Any>
+                val existing = (currentYaml[key] as? List<*>)?.filterNotNull()?.toMutableList()
                 if (existing != null) {
                     val toAdd = newValue.filterNotNull().filter { it !in existing }
                     existing.addAll(toAdd)
+                    currentYaml[key] = existing
                 } else {
                     currentYaml[key] = newValue.filterNotNull().toMutableList()
                 }
@@ -162,9 +163,13 @@ object FrontmatterManager {
     private fun bodyFrom(lines: List<String>, lineIndex: Int): String =
         if (lineIndex >= lines.size) "" else lines.subList(lineIndex, lines.size).joinToString("\n")
 
-    private fun looksLikeYaml(block: String): Boolean =
-        block.lineSequence().any { line ->
-            val t = line.trimStart()
-            t.isNotEmpty() && !t.startsWith('#') && t.contains(':')
-        }
+    private val YAML_KEY_LINE = Regex("^[A-Za-z0-9_-]+\\s*:.*")
+
+    private fun looksLikeYaml(block: String): Boolean {
+        val firstNonComment = block.lineSequence()
+            .map { it.trimStart() }
+            .firstOrNull { it.isNotEmpty() && !it.startsWith('#') }
+            ?: return false
+        return YAML_KEY_LINE.matches(firstNonComment)
+    }
 }

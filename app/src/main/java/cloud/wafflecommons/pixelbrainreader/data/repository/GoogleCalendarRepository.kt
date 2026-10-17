@@ -90,9 +90,10 @@ class GoogleCalendarRepository @Inject constructor(
                 // not the UTC `Z` form. Unambiguous spec for "local today".
                 val startInstant = today.atStartOfDay(zone).toInstant()
                 val endInstant = today.plusDays(1).atStartOfDay(zone).toInstant()
-                val offsetMinutes = zone.rules.getOffset(startInstant).totalSeconds / 60
-                val timeMin = DateTime(startInstant.toEpochMilli(), offsetMinutes)
-                val timeMax = DateTime(endInstant.toEpochMilli(), offsetMinutes)
+                val startOffsetMinutes = zone.rules.getOffset(startInstant).totalSeconds / 60
+                val endOffsetMinutes = zone.rules.getOffset(endInstant).totalSeconds / 60
+                val timeMin = DateTime(startInstant.toEpochMilli(), startOffsetMinutes)
+                val timeMax = DateTime(endInstant.toEpochMilli(), endOffsetMinutes)
                 Log.i(TAG, "syncTodayEvents window: $timeMin .. $timeMax (zone=$zone)")
 
                 // 1. Fetch EVERYTHING first. Today's Google rows used to be purged before the
@@ -124,15 +125,22 @@ class GoogleCalendarRepository @Inject constructor(
                     // dashboard row first (IGNORE on conflict).
                     dailyDashboardDao.insertDashboard(DailyDashboardEntity(date = today))
 
+                    // Snapshot existing Room IDs BEFORE purging today's Google rows so existing
+                    // primary keys stay stable across syncs.
+                    val existingIds = fetched.mapNotNull { (evt, _) ->
+                        val eventId = evt.id ?: return@mapNotNull null
+                        dailyDashboardDao.getTimelineEntryByGoogleEventId(eventId)?.id?.let { eventId to it }
+                    }.toMap()
+
                     // The fetched batch is the truth (handles user deletions / moves on Google's
                     // side). Locally-created entries (googleEventId IS NULL) are preserved.
                     dailyDashboardDao.purgeGoogleTimelineForDate(today)
 
                     fetched.forEach { (evt, calendarName) ->
-                        val existing = dailyDashboardDao.getTimelineEntryByGoogleEventId(evt.id)
+                        val preservedId = evt.id?.let { existingIds[it] }
                         dailyDashboardDao.insertTimelineEntry(
                             TimelineEntryEntity(
-                                id = existing?.id ?: java.util.UUID.randomUUID().toString(),
+                                id = preservedId ?: java.util.UUID.randomUUID().toString(),
                                 date = today,
                                 time = extractStartTime(evt),
                                 content = "[$calendarName] ${evt.summary ?: "No title"}",
@@ -157,10 +165,13 @@ class GoogleCalendarRepository @Inject constructor(
     private fun extractStartTime(evt: Event): LocalTime {
         val raw = evt.start?.dateTime?.toString() ?: return LocalTime.MIDNIGHT
         return try {
-            // Truncate to minutes: the timeline only ever renders/burns HH:mm, so storing
-            // sub-minute precision serves no purpose and would break the orphan-heal twin-match
-            // in collapseOrphanTimelineForDate (a re-parsed orphan is always minute-precise).
-            OffsetDateTime.parse(raw).toLocalTime().truncatedTo(ChronoUnit.MINUTES)
+            // Convert event instant into the device's local timezone and truncate to minutes:
+            // the timeline only ever renders/burns HH:mm, and collapseOrphanTimelineForDate
+            // matches minute-precise times.
+            OffsetDateTime.parse(raw)
+                .atZoneSameInstant(ZoneId.systemDefault())
+                .toLocalTime()
+                .truncatedTo(ChronoUnit.MINUTES)
         } catch (e: Exception) {
             LocalTime.MIDNIGHT
         }

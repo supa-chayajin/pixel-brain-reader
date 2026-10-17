@@ -51,7 +51,15 @@ object MarkdownCommandParser {
             when {
                 date == null && lower in TODAY_KEYWORDS -> { date = today; titleStart = i + 1 }
                 date == null && lower in TOMORROW_KEYWORDS -> { date = today.plusDays(1); titleStart = i + 1 }
-                date == null && ISO_DATE.matches(token) -> { date = LocalDate.parse(token); titleStart = i + 1 }
+                date == null && ISO_DATE.matches(token) -> {
+                    val parsed = runCatching { LocalDate.parse(token) }.getOrNull()
+                    if (parsed != null) {
+                        date = parsed
+                        titleStart = i + 1
+                    } else {
+                        break
+                    }
+                }
                 time == null && looksLikeTime(token) -> { time = parseTime(token); titleStart = i + 1 }
                 else -> break
             }

@@ -66,8 +66,15 @@ class OracleGenerator @Inject constructor(
                 if (!it.startsWith("Thinking")) result = it 
             }
             
-            if (result.isBlank()) FALLBACK_INSIGHT else result.replace("\"", "").trim()
+            val cleaned = result.replace("\"", "").trim()
+            if (cleaned.isBlank() || cleaned.startsWith("Cortex (local) indisponible", ignoreCase = true)) {
+                FALLBACK_INSIGHT
+            } else {
+                cleaned
+            }
             
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e("OracleGenerator", "Failed to generate insight", e)
             FALLBACK_INSIGHT

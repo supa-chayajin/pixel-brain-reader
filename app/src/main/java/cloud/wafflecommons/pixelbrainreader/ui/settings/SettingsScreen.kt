@@ -24,6 +24,8 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material.icons.rounded.Hub
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.material3.*
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.*
@@ -79,11 +81,30 @@ fun SettingsScreen(
     onNavigateToReminders: () -> Unit = {},
     onNavigateToNavBarReorder: () -> Unit = {},
     onNavigateToMoodTags: () -> Unit = {},
+    onNavigateToGamificationSettings: () -> Unit = {},
+    onOpenNote: (String) -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val moodEmojiMapping by viewModel.moodEmojiMapping.collectAsStateWithLifecycle()
     val nanoState by viewModel.nanoState.collectAsStateWithLifecycle()
+    val vaultGraphReport by viewModel.vaultGraphReport.collectAsStateWithLifecycle()
+    val isAnalyzingGraph by viewModel.isAnalyzingGraph.collectAsStateWithLifecycle()
+    var showGraphDialog by rememberSaveable { mutableStateOf(false) }
+
+    if (showGraphDialog) {
+        cloud.wafflecommons.pixelbrainreader.ui.components.VaultGraphDialog(
+            report = vaultGraphReport,
+            isLoading = isAnalyzingGraph,
+            onRefresh = { viewModel.analyzeVaultGraph() },
+            onOpenNote = { notePath ->
+                showGraphDialog = false
+                onOpenNote(notePath)
+            },
+            onDismiss = { showGraphDialog = false }
+        )
+    }
+
     val scrollState = rememberScrollState()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
@@ -270,7 +291,7 @@ fun SettingsScreen(
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = if (isLinked) "Synced (Read-Only)" else "Connect your Google account",
+                                text = if (isLinked) "Synced (Calendar & Tasks)" else "Connect your Google account",
                                 style = MaterialTheme.typography.bodyMedium
                             )
                         }
@@ -403,6 +424,27 @@ fun SettingsScreen(
                     }
                     else -> Unit
                 }
+
+                Spacer(Modifier.height(12.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                Spacer(Modifier.height(12.dp))
+
+                FilledTonalButton(
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        showGraphDialog = true
+                        viewModel.analyzeVaultGraph()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Hub,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("Santé du Graphe & Liens Morts")
+                }
             }
             }
 
@@ -450,6 +492,16 @@ fun SettingsScreen(
                     leadingContent = { Icon(Icons.Rounded.Mood, contentDescription = null) }
                 ) {
                     Text("Manage Mood Tags")
+                }
+
+                ListItem(
+                    modifier = Modifier.clickable {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onNavigateToGamificationSettings()
+                    },
+                    leadingContent = { Icon(Icons.Filled.Tune, contentDescription = null) }
+                ) {
+                    Text("RPG & Gamification Rules")
                 }
 
                 Spacer(Modifier.height(8.dp))

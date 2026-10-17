@@ -17,4 +17,10 @@ interface FileContentDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun saveContent(entity: FileContentEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveContents(entities: List<FileContentEntity>)
+
+    @Query("DELETE FROM file_contents WHERE path IN (:paths)")
+    suspend fun deleteContents(paths: List<String>)
 }

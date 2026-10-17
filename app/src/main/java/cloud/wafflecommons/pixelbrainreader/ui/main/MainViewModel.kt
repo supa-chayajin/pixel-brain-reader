@@ -9,6 +9,7 @@ import cloud.wafflecommons.pixelbrainreader.data.ai.GeminiRagManager
 import cloud.wafflecommons.pixelbrainreader.data.gamification.GamificationRepository
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.FileEntity
 import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
+import cloud.wafflecommons.pixelbrainreader.data.remote.GitCommitDto
 import cloud.wafflecommons.pixelbrainreader.data.remote.model.GithubFileDto
 import cloud.wafflecommons.pixelbrainreader.data.repository.AppThemeConfig
 import cloud.wafflecommons.pixelbrainreader.data.repository.DailyNoteRepository
@@ -417,6 +418,11 @@ class MainViewModel @Inject constructor(
      * selectedFileName effect opens the detail pane.
      */
     fun openVaultFile(path: String) {
+        if (path.startsWith("[[") || (!path.contains("/") && !path.endsWith(".md", ignoreCase = true))) {
+            onWikiLinkClick(path)
+            _navigationTrigger.value = "home"
+            return
+        }
         val dto = GithubFileDto(
             name = path.substringAfterLast('/'),
             path = path,
@@ -505,6 +511,25 @@ class MainViewModel @Inject constructor(
         if (hasUnsavedChanges) {
             saveFile()
         }
+    }
+
+    fun restoreRevision(historicalContent: String) {
+        val path = _selectedFilePath.value ?: return
+        onContentChanged(historicalContent)
+        saveFile()
+        viewModelScope.launch {
+            _uiEvent.emit(UiEvent.ShowToast("Version restaurée avec succès"))
+        }
+    }
+
+    suspend fun getFileCommitHistory(path: String = _selectedFilePath.value ?: ""): List<GitCommitDto> {
+        if (path.isEmpty()) return emptyList()
+        return repository.getFileCommitHistory(path)
+    }
+
+    suspend fun getFileContentAtCommit(path: String = _selectedFilePath.value ?: "", commitId: String): String? {
+        if (path.isEmpty()) return null
+        return repository.getFileContentAtCommit(path, commitId)
     }
 
     /** Local write + batched background push; a no-op when [content] is already on disk. */

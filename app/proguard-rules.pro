@@ -173,6 +173,7 @@
 # stored data across builds.
 -keep class cloud.wafflecommons.pixelbrainreader.data.health.DailyHealthMetrics { *; }
 -keep class cloud.wafflecommons.pixelbrainreader.data.gamification.Attribute { *; }
+-keep class cloud.wafflecommons.pixelbrainreader.widget.data.** { *; }
 
 # -----------------------------------------------------------------------------
 # Security (EncryptedSharedPreferences / CryptoManager)

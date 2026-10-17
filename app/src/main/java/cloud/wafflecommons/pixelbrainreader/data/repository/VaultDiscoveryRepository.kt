@@ -25,7 +25,7 @@ import javax.inject.Singleton
  */
 @Singleton
 class VaultDiscoveryRepository @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
     private val fileDao: FileDao,
     private val database: AppDatabase,
     private val gson: Gson // For JSON serialization of simplified metadata
@@ -103,7 +103,8 @@ class VaultDiscoveryRepository @Inject constructor(
         // 2. Walk FS
         val fsPaths = mutableSetOf<String>()
         val changedFiles = mutableListOf<FileEntity>()
-        val newFiles = mutableListOf<FileEntity>()       // REPLACE-inserted (triggers FK CASCADE)
+        val newFiles = mutableListOf<FileEntity>()       // Upserted
+        val newContents = mutableListOf<cloud.wafflecommons.pixelbrainreader.data.local.entity.FileContentEntity>()
         val mtimeRefreshes = mutableListOf<Pair<String, Long>>() // UPDATE-only (no CASCADE)
 
         // Prune at descent time, NOT inside the loop. `walkTopDown().forEach`
@@ -123,8 +124,9 @@ class VaultDiscoveryRepository @Inject constructor(
 
             if (dbEntity == null) {
                 // NEW FILE — must compute fingerprint and insert.
-                val entity = createFileEntity(file, relativePath)
+                val (entity, contentEntity) = createFileEntityWithContent(file, relativePath)
                 newFiles.add(entity)
+                contentEntity?.let { newContents.add(it) }
                 changedFiles.add(entity)
                 return@forEach
             }
@@ -135,7 +137,7 @@ class VaultDiscoveryRepository @Inject constructor(
             }
 
             // mtime drifted (or sha was null from a legacy row): compare content fingerprints.
-            val newEntity = createFileEntity(file, relativePath)
+            val (newEntity, contentEntity) = createFileEntityWithContent(file, relativePath)
             if (newEntity.sha != null && newEntity.sha == dbEntity.sha) {
                 // Content identical — bump stored mtime via UPDATE so we hit the fast path next
                 // time. NOT a REPLACE, so the FK CASCADE on EmbeddingEntity does not fire and the
@@ -144,9 +146,10 @@ class VaultDiscoveryRepository @Inject constructor(
                 return@forEach
             }
 
-            // Content actually changed — REPLACE-insert (correctly cascade-deletes the stale
-            // embeddings; IndexingWorker re-embeds it on its next pass).
+            // Content actually changed — upsert row and delete stale embeddings so IndexingWorker
+            // re-embeds it on its next pass.
             newFiles.add(newEntity)
+            contentEntity?.let { newContents.add(it) }
             changedFiles.add(newEntity)
         }
 
@@ -155,10 +158,22 @@ class VaultDiscoveryRepository @Inject constructor(
         // 3. Apply all changes in ONE transaction = ONE invalidation, so every Flow observing
         // `files` (file browser, search) re-queries once instead of once per changed row.
         if (newFiles.isNotEmpty() || mtimeRefreshes.isNotEmpty() || toDelete.isNotEmpty()) {
+            val contentDao = runCatching { database.fileContentDao() }.getOrNull()
+            val embeddingDao = runCatching { database.embeddingDao() }.getOrNull()
             database.withTransaction {
-                if (newFiles.isNotEmpty()) fileDao.insertAll(newFiles)
+                if (newFiles.isNotEmpty()) {
+                    fileDao.insertAll(newFiles)
+                    if (newContents.isNotEmpty()) contentDao?.saveContents(newContents)
+                    // Clear stale embeddings for files whose content SHA changed.
+                    changedFiles.filter { it.path in dbPaths }.forEach { changed ->
+                        embeddingDao?.deleteByFileId(changed.path)
+                    }
+                }
                 mtimeRefreshes.forEach { (path, mtime) -> fileDao.updateMtime(path, mtime) }
-                toDelete.chunked(DELETE_CHUNK_SIZE).forEach { fileDao.deleteFiles(it) }
+                toDelete.chunked(DELETE_CHUNK_SIZE).forEach { chunk ->
+                    fileDao.deleteFiles(chunk)
+                    contentDao?.deleteContents(chunk)
+                }
             }
         }
         if (newFiles.isNotEmpty()) Log.i("VaultDiscovery", "Indexed ${newFiles.size} new/modified items.")
@@ -181,18 +196,27 @@ class VaultDiscoveryRepository @Inject constructor(
     suspend fun scanSingleFile(path: String) = withContext(Dispatchers.IO) {
         // Lightweight update for single file
         val file = File(rootDir, path)
+        val contentDao = runCatching { database.fileContentDao() }.getOrNull()
         if (file.exists()) {
-            val entity = createFileEntity(file, path)
-            fileDao.insertFile(entity) // Insert or Update
+            val (entity, contentEntity) = createFileEntityWithContent(file, path)
+            fileDao.insertFile(entity) // Upsert (does not cascade-delete embeddings)
+            if (contentEntity != null) {
+                contentDao?.saveContent(contentEntity)
+            }
         } else {
             fileDao.deleteFiles(listOf(path))
+            contentDao?.deleteContents(listOf(path))
         }
     }
 
-    private fun createFileEntity(file: File, path: String): FileEntity {
+    private fun createFileEntityWithContent(
+        file: File,
+        path: String
+    ): Pair<FileEntity, cloud.wafflecommons.pixelbrainreader.data.local.entity.FileContentEntity?> {
         var tags: String? = null
         var metaBlob: String? = null
         var contentSha: String? = null
+        var contentEntity: cloud.wafflecommons.pixelbrainreader.data.local.entity.FileContentEntity? = null
 
         if (file.isFile && file.extension.equals("md", ignoreCase = true)) {
             try {
@@ -209,22 +233,28 @@ class VaultDiscoveryRepository @Inject constructor(
                 }
 
                 contentSha = sha1Of(content.toByteArray(Charsets.UTF_8))
+                if (!path.startsWith("99_Private")) {
+                    contentEntity = cloud.wafflecommons.pixelbrainreader.data.local.entity.FileContentEntity(
+                        path = path,
+                        content = content,
+                        lastSyncedAt = file.lastModified()
+                    )
+                }
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 // Leave metadata empty; the reindex falls back to mtime comparison.
             }
         } else if (file.isFile) {
-            // Binary or encrypted file (e.g. .md.enc). Hash the raw bytes so
-            // delta-scan can detect real changes without inspecting plaintext.
+            // Binary or encrypted file (e.g. .md.enc). Stream in 8 KB chunks to avoid OOM on large files.
             try {
-                contentSha = sha1Of(file.readBytes())
+                contentSha = sha1OfFile(file)
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 // Leave SHA null; the reindex falls back to mtime comparison.
             }
         }
 
-        return FileEntity(
+        val entity = FileEntity(
             path = path,
             name = file.name,
             type = if (file.isDirectory) "dir" else "file",
@@ -235,6 +265,7 @@ class VaultDiscoveryRepository @Inject constructor(
             tags = tags,
             rawMetadata = metaBlob
         )
+        return entity to contentEntity
     }
 
     private companion object {
@@ -257,6 +288,23 @@ class VaultDiscoveryRepository @Inject constructor(
     /** Lower-case hex SHA-1 (same output as the old per-byte String.format, without its cost). */
     private fun sha1Of(bytes: ByteArray): String {
         val digest = java.security.MessageDigest.getInstance("SHA-1").digest(bytes)
+        return digestToHex(digest)
+    }
+
+    /** Streams [file] in 8 KB blocks so large binary attachments never allocate a full-file ByteArray. */
+    private fun sha1OfFile(file: File): String {
+        val md = java.security.MessageDigest.getInstance("SHA-1")
+        file.inputStream().use { input ->
+            val buf = ByteArray(8192)
+            var read: Int
+            while (input.read(buf).also { read = it } != -1) {
+                md.update(buf, 0, read)
+            }
+        }
+        return digestToHex(md.digest())
+    }
+
+    private fun digestToHex(digest: ByteArray): String {
         val out = CharArray(digest.size * 2)
         digest.forEachIndexed { i, b ->
             val v = b.toInt() and 0xFF

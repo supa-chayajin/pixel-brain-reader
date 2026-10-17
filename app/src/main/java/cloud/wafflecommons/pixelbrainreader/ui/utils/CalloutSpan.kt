@@ -16,14 +16,18 @@ class CalloutSpan(
     private val backgroundColor: Int,
     private val stripeColor: Int,
     private val icon: String,
-    private val title: String
+    private val title: String,
+    density: Float = 1f
 ) : LineBackgroundSpan, LeadingMarginSpan, LineHeightSpan {
 
-    private val stripeWidth = 12
-    private val padding = 40
-    // Updated metrics as per request
-    private val headerHeight = 70
-    private val bottomMargin = 40
+    private val scale = if (density > 0f) density / 2.625f else 1f
+    private val stripeWidth = (12 * scale).toInt().coerceAtLeast(4)
+    private val padding = (40 * scale).toInt().coerceAtLeast(16)
+    private val headerHeight = (70 * scale).toInt().coerceAtLeast(28)
+    private val bottomMargin = (40 * scale).toInt().coerceAtLeast(16)
+    private val headerTextSize = 40f * scale
+    private val headerBaselineInset = 20f * scale
+    private val headerTextOffsetX = 24f * scale
 
     // StaticLayout reuses ONE FontMetricsInt across all lines of a paragraph, so a mutation
     // made on the first line persists onto every subsequent line. We snapshot the pristine
@@ -72,6 +76,7 @@ class CalloutSpan(
     ) {
         val originalStyle = p.style
         val originalColor = p.color
+        val originalTextSize = p.textSize
 
         // Draw Stripe ALWAYS (not just if first)
         p.style = Paint.Style.FILL
@@ -83,42 +88,18 @@ class CalloutSpan(
         c.drawRect(left, top.toFloat(), right, bottom.toFloat(), p)
 
         // Draw the header ONLY on the true first line of the whole callout span.
-        // `first` is true for the first line of EVERY paragraph the span covers, so relying
-        // on it repeated the icon+title at the top of each paragraph (covering the body).
-        // chooseHeight() reserves the header's top space only when start == spanStart, so we
-        // key the header draw off the exact same condition to keep them in lock-step.
         val spanStart = (text as? Spanned)?.getSpanStart(this) ?: -1
         if (start == spanStart) {
             // Draw Icon and Title ONLY on first line, shifted up into the reserved space
             p.isFakeBoldText = true
-            p.textSize = 40f 
-            
-            // Calculate position: standard baseline minus the extra ascent we added?
-            // "top" passed to drawLeadingMargin includes the space adjustment from chooseHeight?
-            // Actually, 'top' IS the top of the line box.
-            // We reserved 'headerHeight' ABOVE the text content.
-            // So we want to draw the header inside that reserved top area.
-            
-            // Text baseline is 'baseline'. 
-            // The content starts roughly at 'baseline + ascent' (standard).
-            // We pushed 'ascent' up by 70. So 'top' is ~70px higher than normal.
-            
-            // Let's aim to center the header text vertically within the 'headerHeight' space?
-            // Or just anchor it near the top.
-            // top + headerHeight is roughly where the content starts.
-            // We want to draw at Y = top + some_offset.
-            
-            // Using a heuristic based on previous value: top + headerHeight - 12f
-            // If top is -100, and headerHeight is 70, then headerY is -42.
-            // This places it above the content.
-            
-            val headerY = top + headerHeight - 20f // Tweaked for 70px height
-            
-            c.drawText("${icon}  ${title.uppercase()}", x + stripeWidth + 24f, headerY, p)
+            p.textSize = headerTextSize
+            val headerY = top + headerHeight - headerBaselineInset
+            c.drawText("${icon}  ${title.uppercase()}", x + stripeWidth + headerTextOffsetX, headerY, p)
         }
 
         p.style = originalStyle
         p.color = originalColor
+        p.textSize = originalTextSize
         p.isFakeBoldText = false
     }
 

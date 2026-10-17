@@ -97,7 +97,6 @@ fun GamificationSettingsScreen(
                             onValueChange = { 
                                 val newVal = it.toInt()
                                 if (newVal != sleepMinMinutes && newVal % 30 == 0) view.performHapticTick()
-                                viewModel.updateStepTarget(newVal) 
                                 viewModel.updateSleepMinMinutes(newVal) 
                             },
                             valueRange = 180f..600f, // 3h to 10h

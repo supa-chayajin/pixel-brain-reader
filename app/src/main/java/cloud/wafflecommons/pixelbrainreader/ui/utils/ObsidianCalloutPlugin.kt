@@ -8,7 +8,9 @@ import org.commonmark.node.Paragraph
 import org.commonmark.node.Text
 import java.util.regex.Pattern
 
-class ObsidianCalloutPlugin : AbstractMarkwonPlugin() {
+class ObsidianCalloutPlugin(
+    private val density: Float = 1f
+) : AbstractMarkwonPlugin() {
 
     private val CALLOUT_HEADER_PATTERN = Pattern.compile("^\\[!([a-zA-Z0-9_-]+)\\](.*?)$")
 
@@ -38,7 +40,7 @@ class ObsidianCalloutPlugin : AbstractMarkwonPlugin() {
                         
                         val start = visitor.length()
                         visitor.visitChildren(blockQuote)
-                        visitor.setSpans(start, CalloutSpan(bg, color, icon, title))
+                        visitor.setSpans(start, CalloutSpan(bg, color, icon, title, density))
                         return@on
                     }
                 }

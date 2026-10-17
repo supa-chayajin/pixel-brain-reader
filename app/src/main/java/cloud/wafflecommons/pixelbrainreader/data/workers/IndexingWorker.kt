@@ -74,6 +74,8 @@ class IndexingWorker @AssistedInject constructor(
                 val changes = vaultDiscoveryRepository.reindexAll(lastTime)
                 embeddingDao.deleteOrphans()
                 changes
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e("IndexingWorker", "Vault scan failed", e)
                 emptyList()
@@ -89,22 +91,27 @@ class IndexingWorker @AssistedInject constructor(
             // delta scan keeps skipping them. The DAO query already exists
             // for exactly this case; it just wasn't wired here.
             val unembedded = try {
-                fileDao.getFilesWithoutEmbeddings()
+                fileDao.getFilesNeedingEmbeddings()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
-                Log.w("RAG_DEBUG", "getFilesWithoutEmbeddings failed: ${e.message}")
+                Log.w("RAG_DEBUG", "getFilesNeedingEmbeddings failed: ${e.message}")
                 emptyList()
             }
             val unionFiles = (deltaFiles + unembedded).distinctBy { it.path }
+            val candidates = filterEmbeddingCandidates(unionFiles)
             Log.i(
                 "RAG_DEBUG",
                 "IndexingWorker: delta=${deltaFiles.size} unembedded-backfill=${unembedded.size} " +
-                    "union=${unionFiles.size}"
+                    "union=${unionFiles.size} candidates=${candidates.size}"
             )
 
             // Nothing to embed → return WITHOUT loading the ~470MB model, so the
-            // now-automatic startup enqueue is a cheap no-op once the index is warm.
-            if (unionFiles.isEmpty()) {
-                Log.d("IndexingWorker", "No file changes and no unembedded backlog — nothing to embed.")
+            // now-automatic startup enqueue is a cheap no-op once the index is warm
+            // (including when the only unembedded files are today's active journal,
+            // 99_System/*, or locked 99_Private/* notes).
+            if (candidates.isEmpty()) {
+                Log.d("IndexingWorker", "No embeddable candidates — skipping model initialization.")
                 userPrefs.setLastIndexTime(startTime)
                 return@withContext Result.success()
             }
@@ -114,13 +121,15 @@ class IndexingWorker @AssistedInject constructor(
             // but inserts zero embeddings, which looks like "indexing is broken".
             val probe = try {
                 vectorSearchEngine.embed("vector engine readiness probe")
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e("RAG_DEBUG", "IndexingWorker ABORT: vector engine init failed: ${e.message}", e)
                 return@withContext Result.failure()
             }
             Log.i("RAG_DEBUG", "IndexingWorker: embedder OK (dim=${probe.size})")
 
-            processEmbeddings(unionFiles)
+            processEmbeddings(candidates)
 
             userPrefs.setLastIndexTime(startTime)
 
@@ -130,28 +139,31 @@ class IndexingWorker @AssistedInject constructor(
                 "IndexingWorker done: embeddings_in_db ${embeddingsBefore} -> ${embeddingsAfter}"
             )
             Result.success()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e("IndexingWorker", "Fatal Indexing Error", e)
             if (runAttemptCount < 3) Result.retry() else Result.failure()
         }
     }
 
-    private suspend fun processEmbeddings(files: List<cloud.wafflecommons.pixelbrainreader.data.local.entity.FileEntity>) {
-        val vaultRoot = java.io.File(applicationContext.filesDir, "vault")
+    private fun filterEmbeddingCandidates(
+        files: List<cloud.wafflecommons.pixelbrainreader.data.local.entity.FileEntity>
+    ): List<cloud.wafflecommons.pixelbrainreader.data.local.entity.FileEntity> {
         val todayStr = java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ISO_DATE)
         val todayPath = "10_Journal/$todayStr.md"
+        val hasVaultPassword = !secretManager.getVaultPassword().isNullOrBlank()
 
-        val candidates = files.filter {
-            it.type == "file" &&
-            (it.path.endsWith(".md", ignoreCase = true) ||
-                it.path.endsWith(".md.enc", ignoreCase = true)) &&
-            it.path != todayPath &&                  // SHIELD: skip today's active journal
-            !it.path.contains("99_System")           // SHIELD: system isolation
+        val candidates = files.filter { entity ->
+            val isPrivate = entity.path.startsWith("99_Private/") ||
+                entity.path.endsWith(".md.enc", ignoreCase = true)
+            entity.type == "file" &&
+                (entity.path.endsWith(".md", ignoreCase = true) ||
+                    entity.path.endsWith(".md.enc", ignoreCase = true)) &&
+                !entity.path.contains("99_System") &&        // SHIELD: system isolation
+                (!isPrivate || hasVaultPassword)             // Skip locked private files before loading model
         }
-        Log.i("RAG_DEBUG", "processEmbeddings: ${files.size} changed file(s) -> ${candidates.size} embedding candidate(s) after filter")
 
-        // Visibility for the "269 in, 0 out" failure mode: print a breakdown of
-        // what was rejected so we don't have to grep blind ever again.
         if (candidates.isEmpty() && files.isNotEmpty()) {
             val byType = files.groupingBy { it.type }.eachCount()
             val mdCount = files.count { it.path.endsWith(".md", ignoreCase = true) }
@@ -161,11 +173,18 @@ class IndexingWorker @AssistedInject constructor(
             val firstFive = files.take(5).map { "${it.type}:${it.path}" }
             Log.d(
                 "RAG_DEBUG",
-                "processEmbeddings: 0 candidates from ${files.size} changed items.  " +
+                "filterEmbeddingCandidates: 0 candidates from ${files.size} items.  " +
                     "byType=$byType  .md=$mdCount  .md.enc=$mdEncCount  todaySkipped=$droppedToday  " +
                     "systemSkipped=$droppedSystem.  First 5: $firstFive"
             )
         }
+
+        return candidates
+    }
+
+    private suspend fun processEmbeddings(candidates: List<cloud.wafflecommons.pixelbrainreader.data.local.entity.FileEntity>) {
+        val vaultRoot = java.io.File(applicationContext.filesDir, "vault")
+        Log.i("RAG_DEBUG", "processEmbeddings: ${candidates.size} embedding candidate(s)")
 
         // Cache the vault password ONCE per worker run. Returns null when the
         // user has never unlocked the vault on this install; in that case all
@@ -203,6 +222,8 @@ class IndexingWorker @AssistedInject constructor(
                     val pwd = vaultPassword!!.toCharArray()
                     try {
                         cryptoManager.decrypt(file.readBytes(), pwd)
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         Log.d("RAG_DEBUG", "  decrypt failed for ${entity.path}: ${e.message}")
                         skippedFiles++
@@ -220,7 +241,7 @@ class IndexingWorker @AssistedInject constructor(
                     return@forEach
                 }
 
-                val chunks = chunkText(plaintext)
+                val chunks = chunkText(plaintext, entity.path)
                 Log.d("RAG_DEBUG", "  ${entity.path}: ${chunks.size} chunk(s) from ${plaintext.length} chars (private=$isPrivate)")
                 totalChunks += chunks.size
 
@@ -250,6 +271,8 @@ class IndexingWorker @AssistedInject constructor(
                             vector = vector.toList(),
                             isPrivate = isPrivate
                         )
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         Log.d("RAG_DEBUG", "  embed/encrypt failed for a chunk of ${entity.path}: ${e.message}")
                         null
@@ -268,6 +291,8 @@ class IndexingWorker @AssistedInject constructor(
                 totalInserted += embeddingEntities.size
                 if (isPrivate) privateProcessed++
                 Log.d("RAG_DEBUG", "  ${entity.path}: inserted ${embeddingEntities.size} embedding(s) (private=$isPrivate)")
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.d("RAG_DEBUG", "Failed to embed ${entity.path}", e)
             }
@@ -288,42 +313,79 @@ class IndexingWorker @AssistedInject constructor(
      * ~[targetSize]-char chunks that stay within the token window and don't cut
      * mid-thought. A single oversized unit is hard-split as a fallback.
      */
-    private fun chunkText(text: String, targetSize: Int = 400): List<String> {
+    private fun chunkText(
+        text: String,
+        filePath: String,
+        targetSize: Int = 400
+    ): List<String> {
         val trimmed = text.trim()
         if (trimmed.isEmpty()) return emptyList()
-        if (trimmed.length <= targetSize) return listOf(trimmed)
 
-        val units = trimmed
-            .split(Regex("(?<=[.!?。！？])\\s+|\\n+"))
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
+        val noteTitle = filePath.substringAfterLast("/").removeSuffix(".md").removeSuffix(".enc")
+        val folder = filePath.substringBeforeLast("/", "").ifEmpty { "Vault" }
+        val baseHeader = "[Note: $noteTitle ($folder)]\n"
+
+        // Track Markdown headings
+        val lines = trimmed.lines()
+        val sections = mutableListOf<Pair<String, String>>()
+        var currentHeading = "Général"
+        val currentSection = StringBuilder()
+
+        for (line in lines) {
+            val trimmedLine = line.trim()
+            if (trimmedLine.startsWith("#")) {
+                if (currentSection.isNotBlank()) {
+                    sections.add(currentHeading to currentSection.toString().trim())
+                    currentSection.setLength(0)
+                }
+                currentHeading = trimmedLine.replace(Regex("^#+\\s*"), "").take(60)
+            } else {
+                if (currentSection.isNotEmpty()) currentSection.append('\n')
+                currentSection.append(line)
+            }
+        }
+        if (currentSection.isNotBlank()) {
+            sections.add(currentHeading to currentSection.toString().trim())
+        }
 
         val chunks = mutableListOf<String>()
-        val current = StringBuilder()
-        for (unit in units) {
-            // Hard-split any single unit that alone exceeds the target.
-            if (unit.length > targetSize) {
-                if (current.isNotEmpty()) {
-                    chunks.add(current.toString().trim())
+        val maxBodySize = (targetSize - baseHeader.length - 50).coerceAtLeast(150)
+
+        for ((heading, content) in sections) {
+            val headingPrefix = "[Note: $noteTitle ($folder) > $heading]\n"
+            val units = content
+                .split(Regex("(?<=[.!?。！？])\\s+|\\n+"))
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+
+            val current = StringBuilder()
+            for (unit in units) {
+                if (unit.length > maxBodySize) {
+                    if (current.isNotEmpty()) {
+                        chunks.add(headingPrefix + current.toString().trim())
+                        current.setLength(0)
+                    }
+                    var s = 0
+                    while (s < unit.length) {
+                        val e = (s + maxBodySize).coerceAtMost(unit.length)
+                        chunks.add(headingPrefix + unit.substring(s, e))
+                        s = e
+                    }
+                    continue
+                }
+                if (current.isNotEmpty() && current.length + unit.length + 1 > maxBodySize) {
+                    chunks.add(headingPrefix + current.toString().trim())
                     current.setLength(0)
                 }
-                var s = 0
-                while (s < unit.length) {
-                    val e = (s + targetSize).coerceAtMost(unit.length)
-                    chunks.add(unit.substring(s, e))
-                    s = e
-                }
-                continue
+                if (current.isNotEmpty()) current.append(' ')
+                current.append(unit)
             }
-            if (current.isNotEmpty() && current.length + unit.length + 1 > targetSize) {
-                chunks.add(current.toString().trim())
-                current.setLength(0)
+            if (current.isNotBlank()) {
+                chunks.add(headingPrefix + current.toString().trim())
             }
-            if (current.isNotEmpty()) current.append(' ')
-            current.append(unit)
         }
-        if (current.isNotBlank()) chunks.add(current.toString().trim())
-        return chunks
+
+        return if (chunks.isNotEmpty()) chunks else listOf(baseHeader + trimmed.take(targetSize))
     }
 
     companion object {

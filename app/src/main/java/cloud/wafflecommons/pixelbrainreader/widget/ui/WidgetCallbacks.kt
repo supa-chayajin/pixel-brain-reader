@@ -86,10 +86,12 @@ class HabitToggleCallback : ActionCallback {
         val today = LocalDate.now()
         // Defensive: automatic (Health-Connect) habits are read-only. The widget row no longer
         // sends a toggle for them, but a stale/replayed intent must not slip past this guard.
-        val isAutomatic = runCatching {
-            ep.habitRepository().getHabitConfigs().find { it.id == habitId }?.autoSource?.isNotBlank() == true
-        }.getOrDefault(false)
+        val config = runCatching {
+            ep.habitRepository().getHabitConfigs().find { it.id == habitId }
+        }.getOrNull()
+        val isAutomatic = config?.autoSource?.isNotBlank() == true
         if (isAutomatic) return
+        val completedValue = (config?.targetValue ?: 1.0).coerceAtLeast(1.0)
         runWidgetAction(context, refreshLive = { HabitsWidget().updateAll(context) }) {
             // Read the live state so a stale baked parameter (or a double tap) can't double-grant XP.
             val alreadyCompleted = ep.habitRepository().getLogsForYear(today.year)[habitId].orEmpty()
@@ -99,7 +101,7 @@ class HabitToggleCallback : ActionCallback {
                 HabitLogEntry(
                     habitId = habitId,
                     date = today.toString(),
-                    value = if (targetDone) 1.0 else 0.0,
+                    value = if (targetDone) completedValue else 0.0,
                     status = if (targetDone) HabitStatus.COMPLETED else HabitStatus.SKIPPED
                 )
             )
@@ -110,14 +112,20 @@ class HabitToggleCallback : ActionCallback {
     }
 }
 
-/** Toggles a daily-dashboard task's done state. */
+/** Toggles a daily-dashboard task's done state and awards TASK_COMPLETED XP on first completion. */
 class TaskToggleCallback : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         val taskId = parameters[WidgetKeys.TASK_ID] ?: return
         val targetDone = parameters[WidgetKeys.TASK_TARGET_DONE] ?: true
         val ep = WidgetLiveData.entryPoint(context)
+        val today = LocalDate.now()
         runWidgetAction(context, refreshLive = { TodayWidget().updateAll(context) }) {
+            val alreadyDone = ep.dailyDashboardRepository().getLiveTasks(today).firstOrNull().orEmpty()
+                .find { it.id == taskId }?.isDone == true
             ep.dailyDashboardRepository().toggleTask(taskId, targetDone)
+            if (targetDone && !alreadyDone) {
+                runCatching { ep.grantXpUseCase().execute(taskId, XpActionType.TASK_DONE) }
+            }
         }
     }
 }

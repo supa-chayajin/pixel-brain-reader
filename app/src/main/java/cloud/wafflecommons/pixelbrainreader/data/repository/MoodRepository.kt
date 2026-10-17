@@ -181,7 +181,7 @@ class MoodRepository @Inject constructor(
                 val currentData = readDayForUpdate(path, date)
 
                 val newDto = MoodEntryDto(entry.time, entry.score, entry.label, entry.activities, entry.note)
-                val updatedEntries = currentData.entries + newDto
+                val updatedEntries = currentData.entries.filterNot { it.time == newDto.time } + newDto
                 val avg = updatedEntries.map { it.score }.average()
                 val updatedData = currentData.copy(
                     entries = updatedEntries,
@@ -227,8 +227,10 @@ class MoodRepository @Inject constructor(
     // --- Mappers ---
 
     private fun toEntity(dateKey: String, entry: MoodEntryDto): MoodEntity {
-        val timeStr = if (entry.time.length == 5) entry.time else "12:00" // Simple Validation
-        val timestamp = LocalDateTime.parse("${dateKey}T$timeStr")
+        val parsedDate = runCatching { LocalDate.parse(dateKey) }.getOrElse { LocalDate.now() }
+        val parsedTime = runCatching { java.time.LocalTime.parse(entry.time) }.getOrElse { java.time.LocalTime.NOON }
+        val timeStr = parsedTime.format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
+        val timestamp = LocalDateTime.of(parsedDate, parsedTime)
             .atZone(ZoneId.systemDefault())
             .toEpochSecond() * 1000
         return MoodEntity(

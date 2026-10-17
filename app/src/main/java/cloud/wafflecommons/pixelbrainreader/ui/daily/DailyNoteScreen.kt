@@ -54,8 +54,13 @@ import cloud.wafflecommons.pixelbrainreader.ui.components.PremiumWeatherCard
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import android.app.Activity
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.speech.RecognizerIntent
 import androidx.compose.material.icons.rounded.Checklist
 import androidx.compose.material.icons.rounded.Event
+import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Mood
 import androidx.compose.material.icons.rounded.TextFields
 import androidx.compose.material.icons.sharp.AddCircle
@@ -69,11 +74,13 @@ import androidx.compose.material.icons.sharp.Mood
 fun DailyNoteScreen(
     onCheckInClicked: () -> Unit,
     onNavigateToSettings: () -> Unit,
+    onOpenNote: (String) -> Unit = {},
     viewModel: DailyNoteViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val saveState by viewModel.saveState.collectAsStateWithLifecycle()
     val gratitudes by viewModel.gratitudes.collectAsStateWithLifecycle() // RFC-009
+    val memoryEchoes by viewModel.memoryEchoes.collectAsStateWithLifecycle()
     val syncState by viewModel.isSyncing.collectAsStateWithLifecycle()
     val isRefreshing = syncState is SyncState.Syncing
 
@@ -84,6 +91,17 @@ fun DailyNoteScreen(
     var editTaskEntry by remember { mutableStateOf<DailyTaskEntity?>(null) }
     var showQuickCaptureSheet by remember { mutableStateOf(false) }
     var fabExpanded by remember { mutableStateOf(false) }
+
+    val speechLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val spokenText = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
+            if (!spokenText.isNullOrBlank()) {
+                viewModel.compileAndSaveVoiceNote(spokenText)
+            }
+        }
+    }
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -177,6 +195,21 @@ fun DailyNoteScreen(
         },
         floatingActionButton = {
             val fabItems = listOf(
+                FabActionItem(icon = Icons.Rounded.Mic, label = "Voice Compiler") {
+                    fabExpanded = false
+                    try {
+                        val french = java.util.Locale.FRANCE.toLanguageTag()
+                        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                            putExtra(RecognizerIntent.EXTRA_LANGUAGE, french)
+                            putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, french)
+                            putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, french)
+                        }
+                        speechLauncher.launch(intent)
+                    } catch (e: ActivityNotFoundException) {
+                        // Speech recognition not available
+                    }
+                },
                 FabActionItem(icon = Icons.Rounded.Mood, label = "Mood Check-in") {
                     fabExpanded = false
                     onCheckInClicked()
@@ -276,6 +309,20 @@ fun DailyNoteScreen(
                                 onAddGratitude = viewModel::addGratitude,
                                 modifier = Modifier.padding(bottom = 16.dp)
                             )
+                        }
+                    }
+
+                    // 4b. Memory Echoes (Spaced-repetition & architecture retention)
+                    if (memoryEchoes.isNotEmpty()) {
+                        item {
+                            cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 6) {
+                                cloud.wafflecommons.pixelbrainreader.ui.components.MemoryEchoSection(
+                                    echoes = memoryEchoes,
+                                    onOpenNote = onOpenNote,
+                                    onMarkReviewed = viewModel::markEchoReviewed,
+                                    modifier = Modifier.padding(bottom = 16.dp)
+                                )
+                            }
                         }
                     }
 
@@ -431,6 +478,10 @@ fun DailyNoteScreen(
             initialContent = entryToEdit.content,
             initialTime = entryToEdit.time,
             onDismiss = { editTimelineEntry = null },
+            onDelete = {
+                viewModel.deleteTimelineEvent(entryToEdit)
+                editTimelineEntry = null
+            },
             onConfirm = { newContent, newTime ->
                 viewModel.updateTimelineEntry(entryToEdit.copy(content = newContent, time = newTime))
                 editTimelineEntry = null
@@ -448,6 +499,10 @@ fun DailyNoteScreen(
             initialLabel = taskToEdit.label,
             initialTime = scheduledTime,
             onDismiss = { editTaskEntry = null },
+            onDelete = {
+                viewModel.deleteTask(taskToEdit)
+                editTaskEntry = null
+            },
             onConfirm = { newLabel, newTime ->
                 val newTimeStr = newTime?.format(DateTimeFormatter.ofPattern("HH:mm"))
                 viewModel.updateTask(taskToEdit.copy(label = newLabel, scheduledTime = newTimeStr))
@@ -1055,7 +1110,8 @@ private fun ScratchItem(
 private fun EditTimelineDialog(
     initialContent: String, 
     initialTime: LocalTime,
-    onDismiss: () -> Unit, 
+    onDismiss: () -> Unit,
+    onDelete: () -> Unit = {},
     onConfirm: (String, LocalTime) -> Unit
 ) {
     var content by remember { mutableStateOf(initialContent) }
@@ -1090,7 +1146,15 @@ private fun EditTimelineDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(
+                    onClick = onDelete,
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Delete")
+                }
+                TextButton(onClick = onDismiss) { Text("Cancel") }
+            }
         }
     )
 }
@@ -1100,7 +1164,8 @@ private fun EditTimelineDialog(
 private fun EditTaskDialog(
     initialLabel: String, 
     initialTime: LocalTime?, 
-    onDismiss: () -> Unit, 
+    onDismiss: () -> Unit,
+    onDelete: () -> Unit = {},
     onConfirm: (String, LocalTime?) -> Unit
 ) {
     var label by remember { mutableStateOf(initialLabel) }
@@ -1157,7 +1222,15 @@ private fun EditTaskDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(
+                    onClick = onDelete,
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Delete")
+                }
+                TextButton(onClick = onDismiss) { Text("Cancel") }
+            }
         }
     )
 }

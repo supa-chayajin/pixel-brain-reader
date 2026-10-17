@@ -33,10 +33,8 @@ class TemplateRepository @Inject constructor(
     }
 
     suspend fun getTemplateContent(path: String): String? {
-        // Check if path is within templates folder for safety?
-        // For now, trust the caller (VM) passes a valid path
         return try {
-            fileContentDao.getContent(path)
+            fileRepository.readFile(path) ?: fileContentDao.getContent(path)
         } catch (e: Exception) {
             null
         }

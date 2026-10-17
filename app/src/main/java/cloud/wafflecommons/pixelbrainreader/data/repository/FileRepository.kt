@@ -3,6 +3,7 @@ package cloud.wafflecommons.pixelbrainreader.data.repository
 import android.content.Context
 import android.util.Log
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.FileEntity
+import cloud.wafflecommons.pixelbrainreader.data.remote.GitCommitDto
 import cloud.wafflecommons.pixelbrainreader.data.remote.JGitProvider
 import cloud.wafflecommons.pixelbrainreader.data.remote.SyncResult
 import cloud.wafflecommons.pixelbrainreader.data.sync.GitSyncCoordinator
@@ -32,7 +33,7 @@ class FileRepository @Inject constructor(
     private val vaultDiscoveryRepository: VaultDiscoveryRepository,
     private val jGitProvider: JGitProvider, // Still needed for Direct Sync ops
     private val gitSyncCoordinator: GitSyncCoordinator,
-    @ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context
 ) {
 
     private val vaultRoot: File
@@ -73,7 +74,11 @@ class FileRepository @Inject constructor(
         try {
           // 1. Setup/Clone
            _syncStatus.value = "Connecting to repository…"
-           val remoteUrl = if (owner != null && repo != null) "https://github.com/$owner/$repo.git" else null
+           val provider = runCatching {
+               cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager(context).getProvider()
+           }.getOrDefault("github")
+           val host = if (provider.equals("gitlab", ignoreCase = true)) "gitlab.com" else "github.com"
+           val remoteUrl = if (owner != null && repo != null) "https://$host/$owner/$repo.git" else null
            jGitProvider.setupRepository(remoteUrl, branch).onFailure { error ->
                Log.e("FileRepository", "Setup repository failed during sync", error)
                return@withLock Result.failure(error)
@@ -181,4 +186,10 @@ class FileRepository @Inject constructor(
         val backup = File(source.parentFile, "${source.name}.corrupt-${System.currentTimeMillis()}")
         return backup.takeIf { source.renameTo(it) }
     }
+
+    suspend fun getFileCommitHistory(relativePath: String, limit: Int = 15): List<GitCommitDto> =
+        jGitProvider.getFileCommitHistory(relativePath, limit)
+
+    suspend fun getFileContentAtCommit(relativePath: String, commitId: String): String? =
+        jGitProvider.getFileContentAtCommit(relativePath, commitId)
 }

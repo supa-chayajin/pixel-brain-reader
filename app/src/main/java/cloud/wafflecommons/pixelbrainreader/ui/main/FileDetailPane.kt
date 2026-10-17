@@ -29,11 +29,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.rounded.History
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -104,8 +106,38 @@ fun FileDetailPane(
     onWikiLinkClick: (String) -> Unit,
     onCreateNew: () -> Unit = {},
     onSave: () -> Unit = {},
-    moodViewModel: MoodViewModel = hiltViewModel()
+    moodViewModel: MoodViewModel = hiltViewModel(),
+    onFetchHistory: (suspend () -> List<cloud.wafflecommons.pixelbrainreader.data.remote.GitCommitDto>)? = null,
+    onFetchRevisionContent: (suspend (String) -> String?)? = null,
+    onRestoreRevision: ((String) -> Unit)? = null
 ) {
+    var showTimeMachine by rememberSaveable { mutableStateOf(false) }
+    var commitHistory by remember { mutableStateOf<List<cloud.wafflecommons.pixelbrainreader.data.remote.GitCommitDto>>(emptyList()) }
+    var isLoadingHistory by remember { mutableStateOf(false) }
+
+    LaunchedEffect(showTimeMachine) {
+        if (showTimeMachine && onFetchHistory != null) {
+            isLoadingHistory = true
+            commitHistory = onFetchHistory()
+            isLoadingHistory = false
+        }
+    }
+
+    if (showTimeMachine && onFetchRevisionContent != null && onRestoreRevision != null && fileName != null) {
+        cloud.wafflecommons.pixelbrainreader.ui.components.NoteTimeMachineSheet(
+            filePath = fileName,
+            currentContent = content ?: "",
+            commits = commitHistory,
+            isLoading = isLoadingHistory,
+            onFetchRevisionContent = onFetchRevisionContent,
+            onRestoreContent = { restored ->
+                onRestoreRevision(restored)
+                showTimeMachine = false
+            },
+            onDismiss = { showTimeMachine = false }
+        )
+    }
+
     val lifecycleOwner = LocalLifecycleOwner.current
     // The DisposableEffect below runs ONCE (its key, lifecycleOwner, is stable), so the
     // observer closes over whatever `hasUnsavedChanges`/`onSave` were at first composition —
@@ -165,9 +197,21 @@ fun FileDetailPane(
                             )
                         }
                         Spacer(Modifier.weight(1f))
+                        if (onFetchHistory != null) {
+                            IconButton(
+                                onClick = { showTimeMachine = true },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.History,
+                                    contentDescription = "Time-Machine Git",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
                         cloud.wafflecommons.pixelbrainreader.ui.components.SaveStatusIndicator(
                             state = saveState,
-                            modifier = Modifier.padding(end = 8.dp)
+                            modifier = Modifier.padding(start = 4.dp, end = 8.dp)
                         )
                     }
                 }
@@ -495,6 +539,8 @@ fun rememberMarkwon(onWikiLinkClick: (String) -> Unit): Markwon {
     return remember(context, colorScheme) {
         val textColor = colorScheme.onSurface.toArgb()
         val defaultLinkResolver = io.noties.markwon.LinkResolverDef()
+        val vaultRootDir = java.io.File(context.filesDir, "vault")
+        val density = context.resources.displayMetrics.density
         Markwon.builder(context)
             .usePlugin(StrikethroughPlugin.create())
             .usePlugin(TablePlugin.create(context))
@@ -508,9 +554,11 @@ fun rememberMarkwon(onWikiLinkClick: (String) -> Unit): Markwon {
                     cloud.wafflecommons.pixelbrainreader.ui.utils.CodeTheme.create(colorScheme)
                 )
             )
-            .usePlugin(ObsidianImagePlugin())
-            .usePlugin(ObsidianCalloutPlugin())
-            .usePlugin(ImagesPlugin.create())
+            .usePlugin(ObsidianImagePlugin(vaultRootDir))
+            .usePlugin(ObsidianCalloutPlugin(density))
+            .usePlugin(ImagesPlugin.create { plugin ->
+                plugin.addSchemeHandler(io.noties.markwon.image.file.FileSchemeHandler.createWithAssets(context))
+            })
             // Route every link click: internal wikilinks / relative note paths open
             // in-app; http(s)/mailto/tel fall through to the default resolver, which
             // fires ACTION_VIEW and opens the URL in the browser (Chrome).
@@ -538,8 +586,12 @@ fun rememberMarkwon(onWikiLinkClick: (String) -> Unit): Markwon {
                         renderProps: io.noties.markwon.RenderProps,
                         tag: io.noties.markwon.html.HtmlTag
                     ): Any? {
-                        // Placeholder for now, images will be handled later
-                        return null
+                        val path = tag.attributes()["path"]?.substringBefore("|")?.trim() ?: return null
+                        val file = java.io.File(vaultRootDir, path)
+                        val uri = if (file.exists()) file.toURI().toString() else "file://${vaultRootDir.absolutePath}/$path"
+                        io.noties.markwon.image.ImageProps.DESTINATION.set(renderProps, uri)
+                        return configuration.spansFactory().get(org.commonmark.node.Image::class.java)
+                            ?.getSpans(configuration, renderProps)
                     }
                 })
             })

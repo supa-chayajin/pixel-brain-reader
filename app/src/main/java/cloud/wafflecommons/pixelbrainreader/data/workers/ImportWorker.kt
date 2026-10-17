@@ -60,8 +60,8 @@ class ImportWorker @AssistedInject constructor(
             // 5. Assemble a nice note
             val finalContent = buildNote(meta, summary, markdownBody)
 
-            // 6. Save to Inbox (path-safe filename, timestamped on collision)
-            val sanitizedTitle = meta.title.replace(Regex("[^a-zA-Z0-9 \\-]"), "").trim().take(50)
+            // 6. Save to Inbox (path-safe Unicode filename, timestamped on collision)
+            val sanitizedTitle = meta.title.replace(Regex("[^\\p{L}\\p{N} \\-_]"), "").trim().take(50)
                 .ifBlank { "Article" }
             val fileName = "00_Inbox/$sanitizedTitle.md"
             val finalPath = if (fileRepository.fileExists(fileName)) {
@@ -176,23 +176,26 @@ class ImportWorker @AssistedInject constructor(
             .replace(Regex("[ \\t]+\\n"), "\n")
             .trim()
 
+    private fun sanitizeYamlScalar(raw: String): String =
+        raw.replace("\r", " ").replace("\n", " ").replace("\"", "'").trim()
+
     private fun buildNote(meta: ArticleMeta, summary: String?, body: String): String {
         val today = java.time.LocalDate.now()
-        val yamlTitle = meta.title.replace("\"", "'")
+        val yamlTitle = sanitizeYamlScalar(meta.title)
         val sb = StringBuilder()
 
         // Frontmatter
         sb.append("---\n")
         sb.append("title: \"$yamlTitle\"\n")
-        sb.append("source: \"${meta.url}\"\n")
-        meta.author?.let { sb.append("author: \"${it.replace("\"", "'")}\"\n") }
-        meta.published?.let { sb.append("published: \"$it\"\n") }
+        sb.append("source: \"${sanitizeYamlScalar(meta.url)}\"\n")
+        meta.author?.let { sb.append("author: \"${sanitizeYamlScalar(it)}\"\n") }
+        meta.published?.let { sb.append("published: \"${sanitizeYamlScalar(it)}\"\n") }
         sb.append("captured: $today\n")
         sb.append("tags: [clipping, web]\n")
         sb.append("---\n\n")
 
         // Title
-        sb.append("# ${meta.title}\n\n")
+        sb.append("# ${meta.title.replace("\r", " ").replace("\n", " ").trim()}\n\n")
 
         // Source callout (renders via the app's ObsidianCalloutPlugin)
         val sourceLabel = meta.siteName ?: java.net.URI(meta.url).host ?: meta.url

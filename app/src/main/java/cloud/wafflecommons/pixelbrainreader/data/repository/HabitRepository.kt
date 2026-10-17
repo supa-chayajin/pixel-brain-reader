@@ -189,7 +189,6 @@ class HabitRepository @Inject constructor(
             fileRepository.createLocalFolder(habitsDir)
 
             val dtos = habitDao.getAllConfigs()
-                .filter { !it.archived }
                 .map { entity ->
                     HabitConfigDto(
                         id = entity.id,

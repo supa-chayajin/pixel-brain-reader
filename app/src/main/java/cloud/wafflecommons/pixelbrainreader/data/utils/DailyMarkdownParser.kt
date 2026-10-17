@@ -21,7 +21,8 @@ object DailyMarkdownParser {
         val ideas: String,
         val notes: String,
         val scraps: List<String>,
-        val gratitude: List<String>
+        val gratitude: List<String>,
+        val mantra: String = ""
     )
 
     private enum class Section { HEADER, TIMELINE, JOURNAL, IDEAS, NOTES, SCRAPS, GRATITUDE }
@@ -62,6 +63,7 @@ object DailyMarkdownParser {
         val notes = StringBuilder()
         val scraps = mutableListOf<String>()
         val gratitude = mutableListOf<String>()
+        var mantra = ""
 
         var section = Section.HEADER
 
@@ -97,7 +99,7 @@ object DailyMarkdownParser {
                 }
                 Section.JOURNAL -> {
                     if (trimmed.startsWith("- [")) {
-                        val isDone = trimmed.startsWith("- [x]")
+                        val isDone = trimmed.startsWith("- [x]", ignoreCase = true)
                         val afterCheckbox = trimmed.substringAfter("] ").trim()
                         // Pull the googleTaskId back out of its invisible marker (and strip it
                         // from the visible label) so the row stays Google-reclaimable.
@@ -145,7 +147,16 @@ object DailyMarkdownParser {
                         if (g.isNotBlank()) gratitude.add(g)
                     }
                 }
-                Section.HEADER -> Unit
+                Section.HEADER -> {
+                    if (mantra.isBlank() &&
+                        trimmed.length > 2 &&
+                        trimmed.startsWith("*") &&
+                        trimmed.endsWith("*") &&
+                        !trimmed.startsWith("**")
+                    ) {
+                        mantra = trimmed.substring(1, trimmed.length - 1).trim()
+                    }
+                }
             }
         }
 
@@ -155,7 +166,8 @@ object DailyMarkdownParser {
             ideas = ideas.toString().trim(),
             notes = notes.toString().trim(),
             scraps = scraps,
-            gratitude = gratitude
+            gratitude = gratitude,
+            mantra = mantra
         )
     }
 

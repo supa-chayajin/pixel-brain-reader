@@ -134,17 +134,29 @@ class GoogleTaskRepository @Inject constructor(
                 // 2. Replace today's Google rows in ONE transaction: a single Room invalidation and
                 // never a half-imported list.
                 database.withTransaction {
+                    runCatching {
+                        database.dailyDashboardDao().insertDashboard(
+                            cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyDashboardEntity(date = today)
+                        )
+                    }
+                    // Snapshot existing Room rows BEFORE purging today's Google rows so existing
+                    // primary keys and in-app completion toggles stay stable across syncs.
+                    val existingByGoogleId = fetched.mapNotNull { gt ->
+                        val gId = gt.id ?: return@mapNotNull null
+                        taskDao.getTaskByGoogleTaskId(gId)?.let { gId to it }
+                    }.toMap()
+
                     // The fetched batch is the truth (handles user deletions / completion flips on
                     // Google's side). Locally-created tasks are preserved.
                     taskDao.purgeGoogleTasksForDate(today.toString())
                     fetched.forEach { gt ->
-                        val existing = taskDao.getTaskByGoogleTaskId(gt.id)
+                        val existing = gt.id?.let { existingByGoogleId[it] }
                         taskDao.insertTask(
                             DailyTaskEntity(
                                 id = existing?.id ?: java.util.UUID.randomUUID().toString(),
                                 scheduledDate = today.toString(),
                                 label = gt.title ?: "Untitled Task",
-                                isDone = gt.status == "completed",
+                                isDone = (gt.status == "completed") || (existing?.isDone == true),
                                 googleTaskId = gt.id,
                                 source = "GoogleTasks"
                             )

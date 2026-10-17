@@ -234,10 +234,8 @@ dependencies {
     implementation(libs.okhttp.logging)
 
     // Utils
-    implementation(libs.coil.compose)
     implementation(libs.androidx.security.crypto)
     implementation(libs.androidx.biometric)
-    implementation(libs.androidx.health.connect.client)
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.health.connect)
 
@@ -264,21 +262,14 @@ dependencies {
     implementation(libs.flexmark.html2md.converter)
     implementation(libs.markwon.html)
 
-    // AI Core & MediaPipe (V4.0: Neural Vault)
+    // AI Core & On-Device RAG (V4.0: Neural Vault)
     implementation(libs.kotlinx.coroutines.play.services)
-    // Gemini Nano on-device (AICore) — privacy-first local inference, no silent cloud fallback
-    implementation(libs.google.ai.edge.aicore)
-    implementation(libs.mediapipe.tasks.text)
     // Phase-3 local embedder: raw TFLite + HuggingFace tokenizer.
-    // Replaces MediaPipe TextEmbedder for the multilingual MiniLM model.
     implementation(libs.tensorflow.lite)
     implementation(libs.djl.huggingface.tokenizers)
     implementation(libs.djl.android.tokenizer.native)
     implementation(libs.kotlinx.coroutines.guava)
     implementation(libs.mlkit.genai.prompt)
-    implementation(libs.mlkit.genai.proofreading)
-    implementation(libs.mlkit.genai.rewriting)
-    implementation(libs.mlkit.genai.summarization)
 
     // Home Screen Widget (Jetpack Glance)
     implementation(libs.androidx.glance.appwidget)

@@ -21,7 +21,27 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.window.core.layout.WindowWidthSizeClass
+
+data class JohnnyDecimalCategory(
+    val code: String,
+    val label: String,
+    val isPrivate: Boolean = false
+)
+
+fun parseJohnnyDecimal(name: String): JohnnyDecimalCategory? {
+    val prefix = name.takeWhile { it.isDigit() }
+    val num = prefix.toIntOrNull() ?: return null
+    return when (num) {
+        in 0..9 -> JohnnyDecimalCategory(prefix, "Meta")
+        in 10..19 -> JohnnyDecimalCategory(prefix, "Journal")
+        in 20..29 -> JohnnyDecimalCategory(prefix, "Projects")
+        in 30..39 -> JohnnyDecimalCategory(prefix, "Areas")
+        in 40..49 -> JohnnyDecimalCategory(prefix, "Resources")
+        in 50..89 -> JohnnyDecimalCategory(prefix, "Archives")
+        in 90..99 -> JohnnyDecimalCategory(prefix, "Private", isPrivate = true)
+        else -> null
+    }
+}
 
 @Composable
 fun BreadcrumbBar(
@@ -81,19 +101,30 @@ fun BreadcrumbBar(
              Icon(Icons.AutoMirrored.Filled.ArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             // Show only last part
              val lastPart = pathParts.last()
+            val jdCategory = parseJohnnyDecimal(lastPart)
 
             FilledTonalButton(
                 onClick = { onPathClick(currentPath) },
                 colors = ButtonDefaults.filledTonalButtonColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    containerColor = if (jdCategory?.isPrivate == true) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)
+                                     else MaterialTheme.colorScheme.surfaceContainerHighest,
                     contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                ),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
             ) {
+                if (jdCategory != null) {
+                    Text(
+                        text = "[${jdCategory.label}]",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (jdCategory.isPrivate) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                        modifier = Modifier.padding(end = 4.dp)
+                    )
+                }
                 Text(
                     text = lastPart,
                     style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(horizontal = 4.dp)
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
         } else {
@@ -102,23 +133,31 @@ fun BreadcrumbBar(
                     Icon(Icons.AutoMirrored.Filled.ArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 
-                // Reconstruct path for click
-                // This is a naive reconstruction, assuming unique names in path or sequential.
-                // A better way would be accumulating path.
                 val clickPath = pathParts.take(index + 1).joinToString("/")
+                val jdCategory = parseJohnnyDecimal(part)
 
                 FilledTonalButton(
                     onClick = { onPathClick(clickPath) },
                     colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        containerColor = if (jdCategory?.isPrivate == true) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)
+                                         else MaterialTheme.colorScheme.surfaceContainerHighest,
                         contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    ),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                 ) {
+                    if (jdCategory != null) {
+                        Text(
+                            text = "[${jdCategory.label}]",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (jdCategory.isPrivate) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                            modifier = Modifier.padding(end = 4.dp)
+                        )
+                    }
                     Text(
                         text = part,
                         style = if (index == pathParts.lastIndex) MaterialTheme.typography.titleSmall else MaterialTheme.typography.bodyMedium,
-                        color = if (index == pathParts.lastIndex) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 4.dp)
+                        color = if (index == pathParts.lastIndex) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }

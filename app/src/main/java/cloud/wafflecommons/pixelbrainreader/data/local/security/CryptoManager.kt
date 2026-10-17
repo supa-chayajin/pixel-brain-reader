@@ -175,7 +175,11 @@ class CryptoManager @Inject constructor() {
         val spec = PBEKeySpec(password, salt, iterations, KEY_SIZE_BITS)
         val factory = SecretKeyFactory.getInstance(PBKDF2_ALGORITHM)
         val secretKeyBytes = factory.generateSecret(spec).encoded
-        spec.clearPassword()
-        return SecretKeySpec(secretKeyBytes, ALGORITHM)
+        return try {
+            SecretKeySpec(secretKeyBytes, ALGORITHM)
+        } finally {
+            secretKeyBytes.fill(0)
+            spec.clearPassword()
+        }
     }
 }

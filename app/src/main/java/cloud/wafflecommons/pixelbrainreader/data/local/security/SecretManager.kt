@@ -13,8 +13,16 @@ import javax.inject.Singleton
 
 @Singleton
 class SecretManager @Inject constructor(
-    @ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context
 ) {
+    @Volatile
+    private var privateVaultUnlocked: Boolean = false
+
+    fun setPrivateVaultSessionUnlocked(unlocked: Boolean) {
+        privateVaultUnlocked = unlocked
+    }
+
+    fun isPrivateVaultSessionUnlocked(): Boolean = privateVaultUnlocked
 
     companion object {
         private const val VAULT_FILENAME = "secure_vault"
@@ -149,6 +157,7 @@ class SecretManager @Inject constructor(
     }
 
     fun clear() {
+        privateVaultUnlocked = false
         encryptedPrefs.edit { clear() }
     }
 
