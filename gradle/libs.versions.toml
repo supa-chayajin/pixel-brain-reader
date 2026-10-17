@@ -28,7 +28,9 @@ coroutinesPlayServices = "1.7.3"
 mlkitGenai = "1.0.0-alpha1"
 vico = "1.13.0"
 remoteCreationCore = "1.0.0-alpha03"
-healthConnect = "1.1.0-alpha07"
+# Stable connect-client. A second, older "1.1.0-alpha07" entry used to sit next to it; deleting
+# the stable one (866e0d5) silently downgraded the SDK and dropped mindfulness to make it build.
+healthConnect = "1.1.0"
 window = "1.2.0"
 hiltNavigationCompose = "1.2.0"
 workManager = "2.9.0"
