@@ -403,11 +403,11 @@ Order: data safety → main thread → AI → health → gamification → UI →
 
 ### Phase 4 — Guardrails (start alongside Phase 1)
 
-- [ ] **4.1 (M) GitHub Actions CI**
+- [x] **4.1 (M) GitHub Actions CI**
   - Runs `testDebugUnitTest`, `lintDebug` and `assembleDebug` on every push.
   - LFS is not needed (tests never load the model).
-  - `google-services.json` comes from a repo secret.
-- [ ] **4.2 (S)** `lint { warningsAsErrors = true }` to lock 0/0.
+  - `google-services.json` is committed, so no secret is needed. Installs the API 37 platform if the runner lacks it.
+- [x] **4.2 (S)** `lint { warningsAsErrors = true }` to lock 0/0.
 - [ ] **4.3 (S)** Gradle dependency locking (`dependencyLocking { lockAllConfigurations() }`), so any upgrade or downgrade shows up as a lockfile diff.
 - [ ] **4.4 (S)** Guard tests: UI language (1.8), prompt directive (1.5), and version/CHANGELOG consistency (`versionName` must appear in CHANGELOG).
 - [ ] **4.5 (L)** Split the hotspots behind tests: `MainScreen.kt` (1,274 lines), `DailyNoteScreen.kt` (1,239) and `MainViewModel.kt` (1,124).

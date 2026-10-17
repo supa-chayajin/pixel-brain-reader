@@ -151,6 +151,12 @@ android {
         }
     }
 
+    lint {
+        // The baseline is 0 errors / 0 warnings, with deliberate ignores documented in lint.xml.
+        // A new warning now fails the build instead of quietly growing the count.
+        warningsAsErrors = true
+    }
+
     // AI Models (TFLite) must not be compressed. We mmap them from disk
     // after staging to cacheDir; the AAPT compression heuristic must not
     // touch them. The tokenizer JSON is just a config blob — compressible.
