@@ -37,7 +37,7 @@ import cloud.wafflecommons.pixelbrainreader.ui.theme.NavBarClearance
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import cloud.wafflecommons.pixelbrainreader.data.remote.model.GithubFileDto
-import cloud.wafflecommons.pixelbrainreader.ui.components.parseJohnnyDecimal
+import cloud.wafflecommons.pixelbrainreader.data.utils.parseJohnnyDecimal
 
 private enum class FileListState { Loading, Error, Empty, Content }
 
@@ -365,7 +365,7 @@ fun FileItemCard(file: GithubFileDto, onClick: () -> Unit) {
             )
             Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
-                val jdCategory = remember(file.name) { parseJohnnyDecimal(file.name) }
+                val jdCategory = remember(file.name) { parseJohnnyDecimal(file.name)?.takeIf { it.isWorthABadge } }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (jdCategory != null) {
                         Surface(

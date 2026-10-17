@@ -21,27 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-
-data class JohnnyDecimalCategory(
-    val code: String,
-    val label: String,
-    val isPrivate: Boolean = false
-)
-
-fun parseJohnnyDecimal(name: String): JohnnyDecimalCategory? {
-    val prefix = name.takeWhile { it.isDigit() }
-    val num = prefix.toIntOrNull() ?: return null
-    return when (num) {
-        in 0..9 -> JohnnyDecimalCategory(prefix, "Meta")
-        in 10..19 -> JohnnyDecimalCategory(prefix, "Journal")
-        in 20..29 -> JohnnyDecimalCategory(prefix, "Projects")
-        in 30..39 -> JohnnyDecimalCategory(prefix, "Areas")
-        in 40..49 -> JohnnyDecimalCategory(prefix, "Resources")
-        in 50..89 -> JohnnyDecimalCategory(prefix, "Archives")
-        in 90..99 -> JohnnyDecimalCategory(prefix, "Private", isPrivate = true)
-        else -> null
-    }
-}
+import cloud.wafflecommons.pixelbrainreader.data.utils.parseJohnnyDecimal
 
 @Composable
 fun BreadcrumbBar(
@@ -101,7 +81,7 @@ fun BreadcrumbBar(
              Icon(Icons.AutoMirrored.Filled.ArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             // Show only last part
              val lastPart = pathParts.last()
-            val jdCategory = parseJohnnyDecimal(lastPart)
+            val jdCategory = parseJohnnyDecimal(lastPart)?.takeIf { it.isWorthABadge }
 
             FilledTonalButton(
                 onClick = { onPathClick(currentPath) },
@@ -134,7 +114,7 @@ fun BreadcrumbBar(
                 }
                 
                 val clickPath = pathParts.take(index + 1).joinToString("/")
-                val jdCategory = parseJohnnyDecimal(part)
+                val jdCategory = parseJohnnyDecimal(part)?.takeIf { it.isWorthABadge }
 
                 FilledTonalButton(
                     onClick = { onPathClick(clickPath) },

@@ -58,13 +58,13 @@ fun VaultGraphDialog(
                         )
                         Spacer(Modifier.width(10.dp))
                         Text(
-                            text = "Diagnostic du Graphe",
+                            text = "Vault links",
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold
                         )
                     }
                     IconButton(onClick = onRefresh, enabled = !isLoading) {
-                        Icon(Icons.Rounded.Refresh, contentDescription = "Actualiser")
+                        Icon(Icons.Rounded.Refresh, contentDescription = "Refresh")
                     }
                 }
 
@@ -80,7 +80,7 @@ fun VaultGraphDialog(
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             CircularProgressIndicator()
                             Spacer(Modifier.height(12.dp))
-                            Text("Analyse sémantique du coffre...", style = MaterialTheme.typography.bodyMedium)
+                            Text("Checking your notes' links…", style = MaterialTheme.typography.bodyMedium)
                         }
                     }
                 } else {
@@ -106,14 +106,14 @@ fun VaultGraphDialog(
                         ) {
                             Column {
                                 Text(
-                                    text = "Santé du Graphe : ${report.healthScore}%",
+                                    text = "Link health: ${report.healthScore}%",
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = scoreColor
                                 )
                                 Spacer(Modifier.height(4.dp))
                                 Text(
-                                    text = "${report.totalNotesAnalyzed} notes · ${report.totalWikiLinksFound} liens wikilinks",
+                                    text = "${report.totalNotesAnalyzed} notes · ${report.totalWikiLinksFound} wiki-links",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -131,7 +131,7 @@ fun VaultGraphDialog(
 
                     // Tab selector (Dead links vs Orphans)
                     var selectedTab by remember { mutableIntStateOf(0) }
-                    TabRow(
+                    PrimaryTabRow(
                         selectedTabIndex = selectedTab,
                         containerColor = Color.Transparent,
                         divider = {}
@@ -139,12 +139,12 @@ fun VaultGraphDialog(
                         Tab(
                             selected = selectedTab == 0,
                             onClick = { selectedTab = 0 },
-                            text = { Text("Liens Morts (${report.deadLinks.size})") }
+                            text = { Text("Dead links (${report.deadLinks.size})") }
                         )
                         Tab(
                             selected = selectedTab == 1,
                             onClick = { selectedTab = 1 },
-                            text = { Text("Orphelines (${report.orphanNotes.size})") }
+                            text = { Text("Orphans (${report.orphanNotes.size})") }
                         )
                     }
 
@@ -153,7 +153,7 @@ fun VaultGraphDialog(
                     Box(modifier = Modifier.weight(1f)) {
                         if (selectedTab == 0) {
                             if (report.deadLinks.isEmpty()) {
-                                EmptyStateMessage("Aucun lien mort trouvé dans le coffre !")
+                                EmptyStateMessage("No dead links in your vault.")
                             } else {
                                 LazyColumn(
                                     verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -169,7 +169,7 @@ fun VaultGraphDialog(
                             }
                         } else {
                             if (report.orphanNotes.isEmpty()) {
-                                EmptyStateMessage("Aucune note orpheline isolée !")
+                                EmptyStateMessage("No orphan notes.")
                             } else {
                                 LazyColumn(
                                     verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -194,7 +194,7 @@ fun VaultGraphDialog(
                     horizontalArrangement = Arrangement.End
                 ) {
                     TextButton(onClick = onDismiss) {
-                        Text("Fermer")
+                        Text("Close")
                     }
                 }
             }
@@ -225,14 +225,14 @@ private fun DeadLinkItem(deadLink: DeadLink, onOpen: () -> Unit) {
                     color = MaterialTheme.colorScheme.error
                 )
                 Text(
-                    text = "Lien manquant",
+                    text = "Missing note",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.error
                 )
             }
             Spacer(Modifier.height(4.dp))
             Text(
-                text = "Source : ${deadLink.sourcePath}",
+                text = "In ${deadLink.sourcePath}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
@@ -284,7 +284,7 @@ private fun OrphanNoteItem(path: String, onOpen: () -> Unit) {
                 )
             }
             Text(
-                text = "0 lien",
+                text = "No links",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.tertiary
             )

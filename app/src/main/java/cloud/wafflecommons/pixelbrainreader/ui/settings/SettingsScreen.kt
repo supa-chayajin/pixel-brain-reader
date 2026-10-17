@@ -443,7 +443,7 @@ fun SettingsScreen(
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(Modifier.width(8.dp))
-                    Text("Santé du Graphe & Liens Morts")
+                    Text("Check links & orphan notes")
                 }
             }
             }

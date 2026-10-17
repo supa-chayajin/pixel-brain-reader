@@ -52,9 +52,9 @@ class MemoryEchoRepository @Inject constructor(
             val badge = extractCategoryBadge(entity.path)
             val title = entity.name.removeSuffix(".md")
             val urgency = when {
-                days >= 60 -> "Perle oubliée (${days}j)"
-                days >= 30 -> "Rappel d'architecture (${days}j)"
-                else -> "À rafraîchir (${days}j)"
+                days >= 60 -> "Forgotten for ${days} days"
+                days >= 30 -> "Untouched for ${days} days"
+                else -> "Last edited ${days} days ago"
             }
 
             MemoryEcho(

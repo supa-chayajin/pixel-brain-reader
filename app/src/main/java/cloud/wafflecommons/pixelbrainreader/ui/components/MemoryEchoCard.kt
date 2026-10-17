@@ -49,7 +49,7 @@ fun MemoryEchoSection(
             )
             Spacer(Modifier.width(8.dp))
             Text(
-                text = "Mémoire Active · Échos du Coffre",
+                text = "From your vault",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface
@@ -133,7 +133,7 @@ fun MemoryEchoCard(
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.Check,
-                        contentDescription = "Marquer comme revu",
+                        contentDescription = "Mark as reviewed",
                         modifier = Modifier.size(16.dp)
                     )
                 }
@@ -169,7 +169,7 @@ fun MemoryEchoCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Consulter la note",
+                    text = "Open note",
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.primary
