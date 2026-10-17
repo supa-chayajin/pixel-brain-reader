@@ -11,6 +11,19 @@ import java.time.format.DateTimeFormatter
  */
 object MarkdownBurner {
 
+    /**
+     * Every timeline entry, task, scrap and gratitude is burned as ONE list line, and
+     * [DailyMarkdownParser] reads back only that line: text after a newline would be dropped on
+     * the next re-parse (cold-start rehydrate, past-day view) and erased by the burn after it.
+     * Line breaks are therefore folded into " · " — idempotent, so burn → parse → burn is stable.
+     * Writers normalize with this too, so Room holds exactly what the file holds.
+     */
+    fun singleLine(text: String): String =
+        text.lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .joinToString(" · ")
+
     fun burn(
         dashboard: DailyDashboardEntity,
         timeline: List<TimelineEntryEntity>,
@@ -58,7 +71,7 @@ object MarkdownBurner {
                 val timeStr = entry.time.format(DateTimeFormatter.ofPattern("HH:mm"))
                 // Preserve googleEventId across the round-trip so re-parsed Calendar rows
                 // stay reclaimable by purgeGoogleTimelineForDate (fixes the triple-dup bug).
-                val content = DailyMarkers.appendCalendarMarker(entry.content, entry.googleEventId)
+                val content = DailyMarkers.appendCalendarMarker(singleLine(entry.content), entry.googleEventId)
                 sb.append("- $timeStr $content\n")
             }
         }
@@ -79,7 +92,7 @@ object MarkdownBurner {
                 val priorityMark = if (task.priority > 1) "‼️ " else ""
                 // Preserve googleTaskId across the round-trip so re-parsed Google tasks stay
                 // reclaimable by purgeGoogleTasksForDate (fixes the triple-dup bug).
-                val label = DailyMarkers.appendTaskMarker(task.label, task.googleTaskId)
+                val label = DailyMarkers.appendTaskMarker(singleLine(task.label), task.googleTaskId)
 
                 sb.append("- $checkbox $priorityMark$timePrefix$label\n")
             }
@@ -105,7 +118,7 @@ object MarkdownBurner {
         if (scratchNotes.isNotEmpty()) {
             sb.append("\n## 💡 Scraps (Unprocessed)\n\n")
             scratchNotes.forEach { scrap ->
-                sb.append("- ${scrap.content}\n")
+                sb.append("- ${singleLine(scrap.content)}\n")
             }
         }
 
@@ -113,7 +126,7 @@ object MarkdownBurner {
         if (gratitudes.isNotEmpty()) {
             sb.append("\n## 🌟 Gratitude\n\n")
             gratitudes.forEach { entry ->
-                sb.append("- [x] ${entry.content}\n")
+                sb.append("- [x] ${singleLine(entry.content)}\n")
             }
         }
 

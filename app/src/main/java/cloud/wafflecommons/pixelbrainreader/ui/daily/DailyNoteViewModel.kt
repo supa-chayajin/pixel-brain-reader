@@ -108,6 +108,7 @@ class DailyNoteViewModel @Inject constructor(
     private val healthMetricsRepository: HealthMetricsRepository,
     private val memoryEchoRepository: cloud.wafflecommons.pixelbrainreader.data.repository.MemoryEchoRepository,
     private val voiceCompiler: cloud.wafflecommons.pixelbrainreader.data.ai.VoiceCompiler,
+    private val captureRepository: cloud.wafflecommons.pixelbrainreader.data.repository.CaptureRepository,
     appClock: AppClock,
     @param:ApplicationScope private val appScope: CoroutineScope
 ) : ViewModel() {
@@ -405,25 +406,37 @@ class DailyNoteViewModel @Inject constructor(
         viewModelScope.launch { scratchRepository.saveScrap(content, color) }
     }
 
+    /**
+     * Voice capture: the to-dos go to the day's tasks, the rest becomes an `00_Inbox/` note, and
+     * the timeline gets ONE line linking to it — a multi-line body in the timeline used to be cut
+     * off at its first line the next time the daily note was parsed.
+     */
     fun compileAndSaveVoiceNote(transcript: String) {
         if (transcript.isBlank()) return
+        val date = _selectedDate.value
         viewModelScope.launch {
             try {
                 val compiled = voiceCompiler.compile(transcript)
                 for (task in compiled.detectedTasks) {
-                    taskRepository.addTask(task, _selectedDate.value, null)
+                    taskRepository.addTask(task, date, null)
                 }
                 if (compiled.structuredMarkdown.isNotBlank()) {
+                    val capturedAt = java.time.LocalDateTime.now()
+                    val notePath = captureRepository.saveVoiceNote(capturedAt, compiled)
+                    val noteTitle = notePath.substringAfterLast('/').removeSuffix(".md")
                     dashboardRepository.addTimelineEntry(
-                        date = _selectedDate.value,
-                        content = compiled.structuredMarkdown,
-                        time = LocalTime.now()
+                        date = date,
+                        content = "🎙️ ${cloud.wafflecommons.pixelbrainreader.data.ai.VoiceCompiler.summaryLine(compiled)} → [[$noteTitle]]",
+                        time = capturedAt.toLocalTime()
                     )
                 }
-                _userMessage.value = "Note vocale compilée (${compiled.detectedTasks.size} tâches)"
+                val tasks = compiled.detectedTasks.size
+                _userMessage.value = "Voice note saved · $tasks task${if (tasks == 1) "" else "s"} added"
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                if (e is CancellationException) throw e
-                Log.e("DailyNoteViewModel", "Failed to compile voice note", e)
+                Log.e("DailyNoteViewModel", "Failed to save the voice note", e)
+                _userMessage.value = "Couldn't save the voice note"
             }
         }
     }
