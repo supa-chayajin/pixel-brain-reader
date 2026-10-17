@@ -42,9 +42,11 @@ retrieval.
 
 ## 4. 100% on-device AI
 
-No cloud LLM fallback, ever — generation, embeddings, and speech-to-text run on the
-device. *Why:* it is the product's promise; the vault holds a private journal and
-health data.
+No cloud LLM fallback, ever — generation and embeddings run on the device, and so does
+speech-to-text (`OnDeviceDictation`: Android's on-device recognizer, fr-FR). If the device
+can't recognize French offline yet, Chat and Daily may fall back to the system recognizer
+with a visible "may use the network" notice; the private journal never falls back.
+*Why:* it is the product's promise; the vault holds a private journal and health data.
 
 ## 5. English UI, French AI, French dictation
 

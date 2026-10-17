@@ -1,12 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.ui.ai
 
-import android.app.Activity
-import android.content.ActivityNotFoundException
-import android.content.Intent
-import android.speech.RecognizerIntent
 import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
@@ -424,18 +418,17 @@ fun StealthInputBar(
     var lastClickTime by remember { mutableLongStateOf(0L) }
     val isEnabled = textState.text.isNotBlank() && !isLoading
 
-    val speechLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            val spokenText: String? =
-                result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
-            if (!spokenText.isNullOrBlank()) {
-                val newText = if (textState.text.isBlank()) spokenText else "${textState.text} $spokenText"
-                onTextChange(TextFieldValue(newText, TextRange(newText.length)))
-            }
-        }
-    }
+    // Dictation into the input, transcribed on the device (fr-FR).
+    val currentText by rememberUpdatedState(textState.text)
+    val dictation = cloud.wafflecommons.pixelbrainreader.ui.utils.rememberOnDeviceDictation(
+        allowNetworkFallback = true,
+        onResult = { spokenText ->
+            val newText = if (currentText.isBlank()) spokenText else "$currentText $spokenText"
+            onTextChange(TextFieldValue(newText, TextRange(newText.length)))
+        },
+        onMessage = { message -> android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_LONG).show() }
+    )
+    cloud.wafflecommons.pixelbrainreader.ui.utils.DictationListeningDialog(dictation)
 
     Box(
         modifier = Modifier
@@ -478,16 +471,7 @@ fun StealthInputBar(
                 IconButton(
                     onClick = {
                         if (textState.text.isBlank()) {
-                             try {
-                                val french = java.util.Locale.FRANCE.toLanguageTag() // "fr-FR"
-                                val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, french)
-                                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, french)
-                                    putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, french)
-                                }
-                                speechLauncher.launch(intent)
-                            } catch (e: ActivityNotFoundException) { }
+                            dictation.start()
                         } else {
                             onSend()
                         }
