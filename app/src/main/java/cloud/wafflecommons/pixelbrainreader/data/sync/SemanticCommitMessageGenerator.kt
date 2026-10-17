@@ -32,6 +32,8 @@ object SemanticCommitMessageGenerator {
         // If only 1 file modified
         if (cleanPaths.size == 1) {
             val path = cleanPaths.first()
+            // An encrypted note's title is private: never echo it into the (pushed) history.
+            if (path.startsWith("99_Private/") || path.endsWith(".enc")) return "private: update an encrypted note"
             val fileName = path.substringAfterLast("/")
             val baseName = fileName.removeSuffix(".md")
             val topFolder = path.substringBefore("/")

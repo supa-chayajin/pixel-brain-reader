@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
 import cloud.wafflecommons.pixelbrainreader.data.sync.ConflictResolver
+import cloud.wafflecommons.pixelbrainreader.data.sync.SemanticCommitMessageGenerator
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -290,11 +291,11 @@ class JGitProvider @Inject constructor(
                         return@use
                     }
 
-                    // 3. Commit with semantic message if message is generic.
-                    val finalMessage = if (cloud.wafflecommons.pixelbrainreader.data.sync.SemanticCommitMessageGenerator.isGenericMessage(message)) {
-                        val status = git.status().call()
-                        val dirtyPaths = (status.uncommittedChanges + status.changed + status.added + status.modified)
-                        cloud.wafflecommons.pixelbrainreader.data.sync.SemanticCommitMessageGenerator.generate(dirtyPaths, message)
+                    // 3. Commit. A generic message ("Auto-save…") is replaced by one naming what
+                    // changed, read from the index vs HEAD — never from `git status`, which would
+                    // walk the whole working tree a third time on every background commit.
+                    val finalMessage = if (hasHead && SemanticCommitMessageGenerator.isGenericMessage(message)) {
+                        SemanticCommitMessageGenerator.generate(stagedPaths(repo), message)
                     } else {
                         message
                     }
@@ -657,6 +658,21 @@ class JGitProvider @Inject constructor(
                 if (e is CancellationException) throw e
                 Log.e("JGitProvider", "Failed to retrieve content for $relativePath at $commitId", e)
                 null
+            }
+        }
+    }
+
+    /** Paths that differ between HEAD and the index (what the next commit will record). */
+    private fun stagedPaths(repo: org.eclipse.jgit.lib.Repository): List<String> {
+        val headTree = repo.resolve("HEAD^{tree}") ?: return emptyList()
+        repo.newObjectReader().use { reader ->
+            val committed = org.eclipse.jgit.treewalk.CanonicalTreeParser().apply { reset(reader, headTree) }
+            val staged = org.eclipse.jgit.dircache.DirCacheIterator(repo.readDirCache())
+            org.eclipse.jgit.diff.DiffFormatter(org.eclipse.jgit.util.io.DisabledOutputStream.INSTANCE).use { diff ->
+                diff.setRepository(repo)
+                return diff.scan(committed, staged).map {
+                    if (it.changeType == org.eclipse.jgit.diff.DiffEntry.ChangeType.DELETE) it.oldPath else it.newPath
+                }
             }
         }
     }

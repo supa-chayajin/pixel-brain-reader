@@ -33,6 +33,7 @@ class FileRepository @Inject constructor(
     private val vaultDiscoveryRepository: VaultDiscoveryRepository,
     private val jGitProvider: JGitProvider, // Still needed for Direct Sync ops
     private val gitSyncCoordinator: GitSyncCoordinator,
+    private val secretManager: cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager,
     @param:ApplicationContext private val context: Context
 ) {
 
@@ -74,9 +75,9 @@ class FileRepository @Inject constructor(
         try {
           // 1. Setup/Clone
            _syncStatus.value = "Connecting to repository…"
-           val provider = runCatching {
-               cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager(context).getProvider()
-           }.getOrDefault("github")
+           // The injected singleton: constructing a SecretManager here opened a second
+           // EncryptedSharedPreferences (and its Keystore key) on every sync.
+           val provider = runCatching { secretManager.getProvider() }.getOrDefault("github")
            val host = if (provider.equals("gitlab", ignoreCase = true)) "gitlab.com" else "github.com"
            val remoteUrl = if (owner != null && repo != null) "https://$host/$owner/$repo.git" else null
            jGitProvider.setupRepository(remoteUrl, branch).onFailure { error ->
