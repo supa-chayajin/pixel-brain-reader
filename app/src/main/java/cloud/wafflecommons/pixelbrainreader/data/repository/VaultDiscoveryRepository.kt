@@ -7,11 +7,15 @@ import cloud.wafflecommons.pixelbrainreader.data.local.AppDatabase
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.FileDao
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.FileEntity
 import cloud.wafflecommons.pixelbrainreader.data.utils.FrontmatterManager
+import cloud.wafflecommons.pixelbrainreader.data.utils.VaultFileIndex
 import com.google.gson.Gson
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -49,6 +53,23 @@ class VaultDiscoveryRepository @Inject constructor(
     fun searchFiles(query: String): Flow<List<FileEntity>> {
         return fileDao.searchFiles(query)
     }
+
+    /**
+     * Attachment index for `![[embeds]]`, built off the main thread from the file table. It is
+     * re-emitted only when the SET of attachment paths changes — every note save touches the
+     * `files` table, and rebuilding (and re-parsing every open note) on each save would be waste.
+     */
+    fun observeAttachmentIndex(): Flow<VaultFileIndex> = fileDao.getAllFiles()
+        .map { files ->
+            files.asSequence()
+                .filter { it.type == "file" && VaultFileIndex.isAttachment(it.path) }
+                .map { it.path }
+                .sorted()
+                .toList()
+        }
+        .distinctUntilChanged()
+        .map { VaultFileIndex(it) }
+        .flowOn(Dispatchers.Default)
 
     /** Every directory path in the vault, for wikilink folder resolution. */
     suspend fun getAllFolderPaths(): List<String> = withContext(Dispatchers.IO) {

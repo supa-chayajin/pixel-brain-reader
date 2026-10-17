@@ -140,18 +140,25 @@ class MainActivity : FragmentActivity() {
             PixelBrainReaderTheme(darkTheme = useDarkTheme) {
                 when (loginState) {
                     null -> SplashScreen()
-                    true -> MainScreen(
-                        viewModel = viewModel,
-                        onLogout = {
-                            // Clearing the Keystore-backed prefs is disk + crypto work: keep it off
-                            // the main thread, and only show the login screen once it is done.
-                            lifecycleScope.launch {
-                                withContext(Dispatchers.IO) { secretManager.clear() }
-                                loginState = false
-                            }
-                        },
-                        onExitApp = { finishAffinity() }
-                    )
+                    true -> {
+                        val attachments by viewModel.attachmentIndex.collectAsStateWithLifecycle()
+                        androidx.compose.runtime.CompositionLocalProvider(
+                            cloud.wafflecommons.pixelbrainreader.ui.utils.LocalVaultAttachments provides attachments
+                        ) {
+                            MainScreen(
+                                viewModel = viewModel,
+                                onLogout = {
+                                    // Clearing the Keystore-backed prefs is disk + crypto work: keep it off
+                                    // the main thread, and only show the login screen once it is done.
+                                    lifecycleScope.launch {
+                                        withContext(Dispatchers.IO) { secretManager.clear() }
+                                        loginState = false
+                                    }
+                                },
+                                onExitApp = { finishAffinity() }
+                            )
+                        }
+                    }
                     false -> LoginScreen(onLoginSuccess = { loginState = true })
                 }
 

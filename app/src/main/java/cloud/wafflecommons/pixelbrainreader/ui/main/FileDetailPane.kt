@@ -45,6 +45,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -55,6 +56,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
@@ -74,6 +76,9 @@ import cloud.wafflecommons.pixelbrainreader.ui.mood.MoodViewModel
 import cloud.wafflecommons.pixelbrainreader.ui.utils.ObsidianCalloutPlugin
 import cloud.wafflecommons.pixelbrainreader.ui.utils.ObsidianHelper
 import cloud.wafflecommons.pixelbrainreader.ui.utils.ObsidianImagePlugin
+import cloud.wafflecommons.pixelbrainreader.ui.utils.LocalVaultAttachments
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import io.noties.markwon.AbstractMarkwonPlugin
 import io.noties.markwon.Markwon
 import io.noties.markwon.ext.strikethrough.StrikethroughPlugin
@@ -535,12 +540,16 @@ private fun decodeSafely(value: String): String =
 fun rememberMarkwon(onWikiLinkClick: (String) -> Unit): Markwon {
     val context = LocalContext.current
     val colorScheme = MaterialTheme.colorScheme
+    val density = LocalDensity.current.density
     val currentOnWikiLinkClick by rememberUpdatedState(onWikiLinkClick)
-    return remember(context, colorScheme) {
+    // Read at parse time (off the main thread, see MarkwonContent), so a new index doesn't rebuild Markwon.
+    val attachments by rememberUpdatedState(LocalVaultAttachments.current)
+    return remember(context, colorScheme, density) {
         val textColor = colorScheme.onSurface.toArgb()
         val defaultLinkResolver = io.noties.markwon.LinkResolverDef()
         val vaultRootDir = java.io.File(context.filesDir, "vault")
-        val density = context.resources.displayMetrics.density
+        // Pure string → URI: no file access (Uri.fromFile doesn't stat, unlike File.toURI()).
+        val vaultUri: (String) -> String = { path -> android.net.Uri.fromFile(java.io.File(vaultRootDir, path)).toString() }
         Markwon.builder(context)
             .usePlugin(StrikethroughPlugin.create())
             .usePlugin(TablePlugin.create(context))
@@ -554,7 +563,7 @@ fun rememberMarkwon(onWikiLinkClick: (String) -> Unit): Markwon {
                     cloud.wafflecommons.pixelbrainreader.ui.utils.CodeTheme.create(colorScheme)
                 )
             )
-            .usePlugin(ObsidianImagePlugin(vaultRootDir))
+            .usePlugin(ObsidianImagePlugin { target -> attachments.resolve(target)?.let(vaultUri) })
             .usePlugin(ObsidianCalloutPlugin(density))
             .usePlugin(ImagesPlugin.create { plugin ->
                 plugin.addSchemeHandler(io.noties.markwon.image.file.FileSchemeHandler.createWithAssets(context))
@@ -586,10 +595,9 @@ fun rememberMarkwon(onWikiLinkClick: (String) -> Unit): Markwon {
                         renderProps: io.noties.markwon.RenderProps,
                         tag: io.noties.markwon.html.HtmlTag
                     ): Any? {
+                        // An embed the attachment index doesn't know (yet): try it as a vault path.
                         val path = tag.attributes()["path"]?.substringBefore("|")?.trim() ?: return null
-                        val file = java.io.File(vaultRootDir, path)
-                        val uri = if (file.exists()) file.toURI().toString() else "file://${vaultRootDir.absolutePath}/$path"
-                        io.noties.markwon.image.ImageProps.DESTINATION.set(renderProps, uri)
+                        io.noties.markwon.image.ImageProps.DESTINATION.set(renderProps, vaultUri(path))
                         return configuration.spansFactory().get(org.commonmark.node.Image::class.java)
                             ?.getSpans(configuration, renderProps)
                     }
@@ -603,8 +611,13 @@ fun rememberMarkwon(onWikiLinkClick: (String) -> Unit): Markwon {
 fun MarkwonContent(content: String, onWikiLinkClick: (String) -> Unit) {
     val markwon = rememberMarkwon(onWikiLinkClick)
     val textColor = MaterialTheme.colorScheme.onSurface.toArgb()
-    // Parse + render only when the text (or theme) changes, not on every recomposition.
-    val rendered = remember(markwon, content) { markwon.toMarkdown(convertWikiLinks(content)) }
+    val attachments = LocalVaultAttachments.current
+    // Parse + render only when the text, theme or attachment index changes — and OFF the main
+    // thread: a long note (or a streaming chat answer) used to be parsed during composition.
+    // produceState keeps the previous rendering until the new one is ready, so nothing flickers.
+    val rendered by produceState<android.text.Spanned?>(initialValue = null, markwon, content, attachments) {
+        value = withContext(Dispatchers.Default) { markwon.toMarkdown(convertWikiLinks(content)) }
+    }
 
     AndroidView(
         factory = { context ->
@@ -617,9 +630,10 @@ fun MarkwonContent(content: String, onWikiLinkClick: (String) -> Unit) {
         },
         update = { tv ->
             tv.setTextColor(textColor)
-            if (tv.tag !== rendered) {
-                markwon.setParsedMarkdown(tv, rendered)
-                tv.tag = rendered
+            val spanned = rendered
+            if (spanned != null && tv.tag !== spanned) {
+                markwon.setParsedMarkdown(tv, spanned)
+                tv.tag = spanned
             }
         }
     )

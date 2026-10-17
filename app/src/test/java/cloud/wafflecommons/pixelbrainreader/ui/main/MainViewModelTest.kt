@@ -60,6 +60,7 @@ class MainViewModelTest {
     private val pushScheduler: VaultPushScheduler = mockk(relaxed = true)
     private val soundEffectManager: SoundEffectManager = mockk(relaxed = true)
     private val appClock: AppClock = mockk(relaxed = true)
+    private val vaultDiscoveryRepository: cloud.wafflecommons.pixelbrainreader.data.repository.VaultDiscoveryRepository = mockk(relaxed = true)
 
     private lateinit var viewModel: MainViewModel
     private val testDispatcher = kotlinx.coroutines.test.UnconfinedTestDispatcher()
@@ -74,6 +75,8 @@ class MainViewModelTest {
         every { fileRepository.getFileContentFlow(any()) } returns flowOf("")
         every { userPrefs.listPaneWidth } returns flowOf(360f)
         every { userPrefs.soundEffectsEnabled } returns flowOf(true)
+        every { vaultDiscoveryRepository.observeAttachmentIndex() } returns
+            flowOf(cloud.wafflecommons.pixelbrainreader.data.utils.VaultFileIndex.EMPTY)
 
         viewModel = MainViewModel(
             repository = fileRepository,
@@ -90,7 +93,8 @@ class MainViewModelTest {
             pushScheduler = pushScheduler,
             soundEffectManager = soundEffectManager,
             appClock = appClock,
-            appScope = CoroutineScope(testDispatcher)
+            appScope = CoroutineScope(testDispatcher),
+            vaultDiscoveryRepository = vaultDiscoveryRepository
         )
     }
 
