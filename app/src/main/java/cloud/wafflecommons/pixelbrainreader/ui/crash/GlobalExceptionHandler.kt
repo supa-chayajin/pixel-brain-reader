@@ -19,13 +19,12 @@ class GlobalExceptionHandler(
             // Log the exception (optional, depends on policy, but good for local debugging if logcat is active)
             // Log.e("GlobalExceptionHandler", "Uncaught exception", throwable)
 
-            val stackTrace = if (cloud.wafflecommons.pixelbrainreader.BuildConfig.DEBUG) {
-                val stringWriter = StringWriter()
-                throwable.printStackTrace(PrintWriter(stringWriter))
-                stringWriter.toString()
-            } else {
-                "Stack trace omitted in release build."
-            }
+            // Kept in release builds too: the device daily-drives release builds, the trace only
+            // ever shows on this screen, and it is the one clue a crash leaves. Capped so the
+            // Intent extra can't exceed the Binder transaction limit (deep recursion traces).
+            val stackTrace = StringWriter().also { throwable.printStackTrace(PrintWriter(it)) }
+                .toString()
+                .take(MAX_TRACE_CHARS)
 
             // Crash-loop guard: if the app has crashed repeatedly in quick succession, the
             // fault reproduces at startup and re-showing CrashActivity (with its Restart
@@ -76,6 +75,7 @@ class GlobalExceptionHandler(
     }
 
     companion object {
+        private const val MAX_TRACE_CHARS = 64_000
         private const val CRASH_PREFS = "crash_guard"
         private const val KEY_LAST_CRASH_AT = "last_crash_at"
         private const val KEY_RECENT_COUNT = "recent_count"
