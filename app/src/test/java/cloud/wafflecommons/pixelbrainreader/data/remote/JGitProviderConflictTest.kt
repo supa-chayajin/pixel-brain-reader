@@ -8,12 +8,9 @@ import io.mockk.mockk
 import java.io.File
 import kotlinx.coroutines.runBlocking
 import org.eclipse.jgit.api.Git
-import org.eclipse.jgit.lib.Config
 import org.eclipse.jgit.lib.ObjectId
 import org.eclipse.jgit.lib.RepositoryState
-import org.eclipse.jgit.storage.file.FileBasedConfig
 import org.eclipse.jgit.transport.RefSpec
-import org.eclipse.jgit.util.FS
 import org.eclipse.jgit.util.SystemReader
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -367,31 +364,5 @@ class JGitProviderConflictTest {
         const val LOCAL = "version locale precieuse\n"
         const val REMOTE = "version distante concurrente\n"
         const val REMOTE_Y = "version distante de Y\n"
-    }
-
-    /**
-     * SystemReader that delegates to the real one but serves EMPTY user/system/jgit
-     * configs from a temp dir, so tests never read the developer machine's gitconfig.
-     */
-    private class IsolatedSystemReader(
-        private val delegate: SystemReader,
-        private val configDir: File
-    ) : SystemReader() {
-        override fun getHostname(): String = delegate.hostname
-        override fun getenv(variable: String): String? = delegate.getenv(variable)
-        override fun getProperty(key: String): String? = delegate.getProperty(key)
-        override fun getCurrentTime(): Long = delegate.currentTime
-
-        @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
-        override fun getTimezone(whenTime: Long): Int = delegate.getTimezone(whenTime)
-
-        override fun openUserConfig(parent: Config?, fs: FS): FileBasedConfig =
-            FileBasedConfig(parent, File(configDir, "user.gitconfig"), fs)
-
-        override fun openSystemConfig(parent: Config?, fs: FS): FileBasedConfig =
-            FileBasedConfig(parent, File(configDir, "system.gitconfig"), fs)
-
-        override fun openJGitConfig(parent: Config?, fs: FS): FileBasedConfig =
-            FileBasedConfig(parent, File(configDir, "jgit.gitconfig"), fs)
     }
 }

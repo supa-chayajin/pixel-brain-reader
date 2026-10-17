@@ -18,19 +18,28 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cloud.wafflecommons.pixelbrainreader.data.remote.GitCommitDto
+import cloud.wafflecommons.pixelbrainreader.data.utils.LineDiff
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-enum class DiffLineType { ADDED, REMOVED, UNCHANGED }
+/** What the sheet knows about the version picked in the history list. */
+private sealed interface RevisionState {
+    data object Loading : RevisionState
 
-data class DiffLine(
-    val type: DiffLineType,
-    val text: String
-)
+    /** The note did not exist in that commit (e.g. the commit deleted it), or git could not read it. */
+    data object Unreadable : RevisionState
+
+    data class Loaded(val content: String, val rows: List<LineDiff.Row>) : RevisionState
+}
+
+private val COMMIT_DATE: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -43,20 +52,52 @@ fun NoteTimeMachineSheet(
     onRestoreContent: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val sheetState = rememberBottomSheetState(
+        initialValue = SheetValue.Hidden,
+        enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded)
+    )
     var selectedCommit by remember { mutableStateOf<GitCommitDto?>(null) }
-    var historicalContent by remember { mutableStateOf<String?>(null) }
-    var isLoadingContent by remember { mutableStateOf(false) }
+    var revision by remember { mutableStateOf<RevisionState>(RevisionState.Loading) }
+    var confirmRestore by remember { mutableStateOf(false) }
 
     LaunchedEffect(selectedCommit) {
-        val commit = selectedCommit
-        if (commit != null) {
-            isLoadingContent = true
-            historicalContent = onFetchRevisionContent(commit.commitId)
-            isLoadingContent = false
+        val commit = selectedCommit ?: return@LaunchedEffect
+        revision = RevisionState.Loading
+        val content = onFetchRevisionContent(commit.commitId)
+        revision = if (content == null) {
+            // Never treat "unreadable" as an empty note: restoring it would erase the note.
+            RevisionState.Unreadable
         } else {
-            historicalContent = null
+            val rows = withContext(Dispatchers.Default) {
+                LineDiff.fold(LineDiff.compute(old = content, new = currentContent))
+            }
+            RevisionState.Loaded(content, rows)
         }
+    }
+
+    val loaded = revision as? RevisionState.Loaded
+    if (confirmRestore && loaded != null) {
+        AlertDialog(
+            onDismissRequest = { confirmRestore = false },
+            title = { Text("Restore this version?") },
+            text = {
+                Text(
+                    "The current text of the note is replaced by the version from " +
+                        "${selectedCommit?.let { COMMIT_DATE.format(Instant.ofEpochMilli(it.timestamp).atZone(ZoneId.systemDefault())) }}. " +
+                        "You can undo it right after."
+                )
+            },
+            confirmButton = {
+                Button(onClick = {
+                    confirmRestore = false
+                    onRestoreContent(loaded.content)
+                    onDismiss()
+                }) { Text("Restore") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmRestore = false }) { Text("Cancel") }
+            }
+        )
     }
 
     ModalBottomSheet(
@@ -77,7 +118,7 @@ fun NoteTimeMachineSheet(
             ) {
                 if (selectedCommit != null) {
                     IconButton(onClick = { selectedCommit = null }) {
-                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Retour aux versions")
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back to versions")
                     }
                 } else {
                     Icon(
@@ -90,7 +131,7 @@ fun NoteTimeMachineSheet(
                 Spacer(Modifier.width(8.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = if (selectedCommit == null) "Time-Machine Git" else "Diff · ${selectedCommit?.shortId}",
+                        text = if (selectedCommit == null) "Version history" else "Changes since ${selectedCommit?.shortId}",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
@@ -109,15 +150,8 @@ fun NoteTimeMachineSheet(
                     CircularProgressIndicator()
                 }
             } else if (selectedCommit == null) {
-                // List of commits
                 if (commits.isEmpty()) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(
-                            text = "Aucun historique Git trouvé pour ce fichier.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                    CenteredMessage("No git history for this note yet.")
                 } else {
                     LazyColumn(
                         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -132,18 +166,14 @@ fun NoteTimeMachineSheet(
                     }
                 }
             } else {
-                // Diff View
-                if (isLoadingContent) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                when (val state = revision) {
+                    RevisionState.Loading -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator()
                     }
-                } else {
-                    val history = historicalContent ?: ""
-                    val diffLines = remember(currentContent, history) {
-                        computeSimpleDiff(history, currentContent)
-                    }
-
-                    Column(modifier = Modifier.fillMaxSize()) {
+                    RevisionState.Unreadable -> CenteredMessage(
+                        "This version can't be restored: the note doesn't exist in that commit."
+                    )
+                    is RevisionState.Loaded -> Column(modifier = Modifier.fillMaxSize()) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -152,16 +182,14 @@ fun NoteTimeMachineSheet(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Message : ${selectedCommit?.message}",
+                                text = selectedCommit?.message.orEmpty(),
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Medium,
                                 modifier = Modifier.weight(1f)
                             )
                             Button(
-                                onClick = {
-                                    onRestoreContent(history)
-                                    onDismiss()
-                                },
+                                onClick = { confirmRestore = true },
+                                enabled = state.rows.isNotEmpty(),
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                                     contentColor = MaterialTheme.colorScheme.onPrimaryContainer
@@ -169,56 +197,14 @@ fun NoteTimeMachineSheet(
                             ) {
                                 Icon(Icons.Rounded.Restore, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(Modifier.width(6.dp))
-                                Text("Restaurer")
+                                Text("Restore")
                             }
                         }
 
-                        Surface(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(1f),
-                            shape = RoundedCornerShape(12.dp),
-                            color = MaterialTheme.colorScheme.surfaceContainerLowest
-                        ) {
-                            LazyColumn(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(12.dp)
-                            ) {
-                                items(diffLines) { line ->
-                                    val (bgColor, textColor, prefix) = when (line.type) {
-                                        DiffLineType.ADDED -> Triple(
-                                            Color(0xFF1B5E20).copy(alpha = 0.2f),
-                                            Color(0xFF4CAF50),
-                                            "+ "
-                                        )
-                                        DiffLineType.REMOVED -> Triple(
-                                            Color(0xFFB71C1C).copy(alpha = 0.2f),
-                                            Color(0xFFE57373),
-                                            "- "
-                                        )
-                                        DiffLineType.UNCHANGED -> Triple(
-                                            Color.Transparent,
-                                            MaterialTheme.colorScheme.onSurface,
-                                            "  "
-                                        )
-                                    }
-
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .background(bgColor, RoundedCornerShape(4.dp))
-                                            .padding(vertical = 2.dp, horizontal = 4.dp)
-                                    ) {
-                                        Text(
-                                            text = prefix + line.text,
-                                            fontFamily = FontFamily.Monospace,
-                                            fontSize = 12.sp,
-                                            color = textColor
-                                        )
-                                    }
-                                }
-                            }
+                        if (state.rows.isEmpty()) {
+                            CenteredMessage("This version is identical to the current note.")
+                        } else {
+                            DiffList(rows = state.rows, modifier = Modifier.weight(1f))
                         }
                     }
                 }
@@ -228,11 +214,79 @@ fun NoteTimeMachineSheet(
 }
 
 @Composable
+private fun DiffList(rows: List<LineDiff.Row>, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLowest
+    ) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(12.dp)
+        ) {
+            items(rows) { row ->
+                when (row) {
+                    is LineDiff.Row.Gap -> Text(
+                        text = "⋯ ${row.count} unchanged line${if (row.count == 1) "" else "s"}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 4.dp, horizontal = 4.dp)
+                    )
+                    is LineDiff.Row.Line -> {
+                        val (bgColor, textColor, prefix) = when (row.kind) {
+                            LineDiff.Kind.ADDED -> Triple(
+                                Color(0xFF1B5E20).copy(alpha = 0.2f),
+                                Color(0xFF4CAF50),
+                                "+ "
+                            )
+                            LineDiff.Kind.REMOVED -> Triple(
+                                Color(0xFFB71C1C).copy(alpha = 0.2f),
+                                Color(0xFFE57373),
+                                "- "
+                            )
+                            LineDiff.Kind.UNCHANGED -> Triple(
+                                Color.Transparent,
+                                MaterialTheme.colorScheme.onSurface,
+                                "  "
+                            )
+                        }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(bgColor, RoundedCornerShape(4.dp))
+                                .padding(vertical = 2.dp, horizontal = 4.dp)
+                        ) {
+                            Text(
+                                text = prefix + row.text,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 12.sp,
+                                color = textColor
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CenteredMessage(message: String) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Text(
+            text = message,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+@Composable
 private fun CommitHistoryItem(commit: GitCommitDto, onClick: () -> Unit) {
     val dateStr = remember(commit.timestamp) {
-        val instant = Instant.ofEpochMilli(commit.timestamp)
-        val zone = ZoneId.systemDefault()
-        DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm").format(instant.atZone(zone))
+        COMMIT_DATE.format(Instant.ofEpochMilli(commit.timestamp).atZone(ZoneId.systemDefault()))
     }
 
     Surface(
@@ -272,37 +326,10 @@ private fun CommitHistoryItem(commit: GitCommitDto, onClick: () -> Unit) {
             )
             Spacer(Modifier.height(2.dp))
             Text(
-                text = "Par ${commit.author}",
+                text = "by ${commit.author}",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
-}
-
-private fun computeSimpleDiff(oldText: String, newText: String): List<DiffLine> {
-    val oldLines = oldText.lines()
-    val newLines = newText.lines()
-    val oldSet = oldLines.toSet()
-    val newSet = newLines.toSet()
-
-    val result = mutableListOf<DiffLine>()
-
-    // Removed lines (in old but not in new)
-    for (line in oldLines) {
-        if (line !in newSet) {
-            result.add(DiffLine(DiffLineType.REMOVED, line))
-        }
-    }
-
-    // Added lines (in new but not in old)
-    for (line in newLines) {
-        if (line !in oldSet) {
-            result.add(DiffLine(DiffLineType.ADDED, line))
-        } else {
-            result.add(DiffLine(DiffLineType.UNCHANGED, line))
-        }
-    }
-
-    return result
 }
