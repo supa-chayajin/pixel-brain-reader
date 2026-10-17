@@ -1,9 +1,21 @@
 package cloud.wafflecommons.pixelbrainreader.data.ai
 
 import android.content.Context
+import com.google.mlkit.genai.common.FeatureStatus
+import com.google.mlkit.genai.prompt.Generation
+import com.google.mlkit.genai.prompt.GenerativeModel
+import io.mockk.coEvery
+import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkObject
+import io.mockk.unmockkObject
+import io.mockk.verify
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -81,6 +93,33 @@ class LocalAiManagerTest {
             "Expected NanoException.Unavailable but got ${ex!!::class.simpleName}",
             ex is NanoException.Unavailable
         )
+    }
+
+    /**
+     * Settled decision #1 (CLAUDE.md): a DOWNLOADABLE model is fetched automatically — once per
+     * process — so the AI surfaces work without a Settings visit. A later probe must not loop.
+     */
+    @Test
+    fun `DOWNLOADABLE model auto-starts the download exactly once`() = runBlocking {
+        val model = mockk<GenerativeModel>(relaxed = true)
+        coEvery { model.checkStatus() } returns FeatureStatus.DOWNLOADABLE
+        every { model.download() } returns flow { throw IllegalStateException("offline") }
+        mockkObject(Generation)
+        try {
+            every { Generation.getClient() } returns model
+            val manager = LocalAiManager(context)
+
+            verify(timeout = 5_000, exactly = 1) { model.download() }
+            // Let the failed download settle (it leaves the Downloading state).
+            withTimeout(5_000) { manager.nanoState.first { it is NanoState.Error } }
+
+            manager.refreshAvailability()
+
+            assertEquals(NanoState.NotDownloaded, manager.nanoState.value)
+            verify(exactly = 1) { model.download() }
+        } finally {
+            unmockkObject(Generation)
+        }
     }
 
     @Test
