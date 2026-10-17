@@ -189,7 +189,7 @@ class ChatViewModelTest {
         every {
             localAiManager.generateAugmentedResponseStream(
                 systemPrompt = match { it.contains("Alexandre") && it.contains("Bastien") && it.contains("Camille") },
-                ragContext = match { it?.contains("Architecture.md") == true },
+                ragContext = match { it?.contains("Clean Architecture Core Rules") == true },
                 chatHistory = any(),
                 currentQuery = "arch query"
             )

@@ -126,18 +126,6 @@ abstract class FileDao {
     )
     abstract suspend fun getFilesNeedingEmbeddings(): List<FileEntity>
 
-    @Query(
-        """
-        SELECT files.* FROM files 
-        LEFT JOIN file_contents ON files.path = file_contents.path 
-        WHERE files.name LIKE '%' || :query || '%' 
-           OR files.path LIKE '%' || :query || '%' 
-           OR file_contents.content LIKE '%' || :query || '%'
-        LIMIT :limit
-        """
-    )
-    abstract suspend fun searchFilesDirect(query: String, limit: Int): List<FileEntity>
-
     /**
      * Refresh the stored mtime for a file whose content fingerprint matched
      * but whose on-disk mtime drifted (e.g. after a `git pull` that rewrote
