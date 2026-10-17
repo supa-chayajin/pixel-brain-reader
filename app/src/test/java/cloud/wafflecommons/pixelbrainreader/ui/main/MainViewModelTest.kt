@@ -130,6 +130,42 @@ class MainViewModelTest {
     }
 
     @Test
+    fun restoreRevision_WritesTheOldVersion_WithoutGrantingTaskXp_AndCanBeUndone() = runTest {
+        val path = "20_Projects/plan.md"
+        viewModel.loadFile(
+            cloud.wafflecommons.pixelbrainreader.data.remote.model.GithubFileDto(
+                name = "plan.md", path = path, type = "file",
+                downloadUrl = null, sha = null, lastModified = 0L
+            )
+        )
+        viewModel.onContentChanged("- [ ] ship it\n")
+        advanceUntilIdle()
+
+        // The old version had the task checked: restoring it is not the user completing a task.
+        viewModel.restoreRevision("- [x] ship it\n")
+        advanceUntilIdle()
+
+        coVerify(exactly = 0) { gamificationRepository.processTaskCompletion(any()) }
+        coVerify { fileRepository.saveFileLocally(path, "- [x] ship it\n") }
+        assertEquals("- [x] ship it\n", viewModel.unsavedContent)
+        assertEquals("Version restored", viewModel.restoreUndo.value)
+
+        viewModel.undoRestore()
+        advanceUntilIdle()
+
+        coVerify { fileRepository.saveFileLocally(path, "- [ ] ship it\n") }
+        assertEquals("- [ ] ship it\n", viewModel.unsavedContent)
+        assertEquals(null, viewModel.restoreUndo.value)
+    }
+
+    @Test
+    fun timeMachine_IsDisabledForEncryptedNotes() = runTest {
+        assertEquals(emptyList<Any>(), viewModel.getFileCommitHistory("99_Private/diary.md.enc"))
+        assertEquals(null, viewModel.getFileContentAtCommit("99_Private/diary.md.enc", "abc"))
+        coVerify(exactly = 0) { fileRepository.getFileCommitHistory(any(), any()) }
+    }
+
+    @Test
     fun openVaultFile_ResolvesWikiLink_AndTriggersHomeNavigation() = runTest {
         viewModel.openVaultFile("[[My Note]]")
 

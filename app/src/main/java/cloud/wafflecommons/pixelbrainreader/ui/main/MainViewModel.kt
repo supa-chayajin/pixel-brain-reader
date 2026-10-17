@@ -43,6 +43,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.firstOrNull
@@ -513,22 +514,69 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    /** The note's text right before the last Time Machine restore, so the restore can be undone. */
+    private data class RestoreBackup(val path: String, val content: String)
+    private var restoreBackup: RestoreBackup? = null
+
+    private val _restoreUndo = MutableStateFlow<String?>(null)
+    /** Non-null while the last restore can be undone: the snackbar message offering "Undo". */
+    val restoreUndo: StateFlow<String?> = _restoreUndo.asStateFlow()
+
+    /**
+     * Replaces the open note with a version from its git history. Unlike [onContentChanged] this is
+     * not a user edit: tasks that were already checked in the old version must not grant XP again.
+     */
     fun restoreRevision(historicalContent: String) {
         val path = _selectedFilePath.value ?: return
-        onContentChanged(historicalContent)
+        val current = unsavedContent ?: uiState.value.selectedFileContent ?: return
+        if (current == historicalContent) return
+        restoreBackup = RestoreBackup(path, current)
+        replaceEditorContent(historicalContent)
         saveFile()
-        viewModelScope.launch {
-            _uiEvent.emit(UiEvent.ShowToast("Version restaurée avec succès"))
+        _restoreUndo.value = "Version restored"
+    }
+
+    /** Puts back the text the last [restoreRevision] replaced. */
+    fun undoRestore() {
+        val backup = restoreBackup ?: return
+        restoreBackup = null
+        _restoreUndo.value = null
+        if (_selectedFilePath.value == backup.path) {
+            replaceEditorContent(backup.content)
+            saveFile()
+        } else {
+            viewModelScope.launch {
+                try {
+                    writeNote(backup.path, backup.content)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    _uiEvent.emit(UiEvent.ShowToast("Undo failed: ${e.message}"))
+                }
+            }
         }
     }
 
+    /** The undo snackbar went away without being used. */
+    fun restoreUndoShown() {
+        _restoreUndo.value = null
+        restoreBackup = null
+    }
+
+    private fun replaceEditorContent(newContent: String) {
+        unsavedContent = newContent
+        _saveState.value = SaveState.UNSAVED
+        _autoSaveTrigger.value = newContent
+    }
+
     suspend fun getFileCommitHistory(path: String = _selectedFilePath.value ?: ""): List<GitCommitDto> {
-        if (path.isEmpty()) return emptyList()
+        // Encrypted notes are ciphertext in git: their history can't be shown or restored here.
+        if (path.isEmpty() || path.endsWith(".enc")) return emptyList()
         return repository.getFileCommitHistory(path)
     }
 
     suspend fun getFileContentAtCommit(path: String = _selectedFilePath.value ?: "", commitId: String): String? {
-        if (path.isEmpty()) return null
+        if (path.isEmpty() || path.endsWith(".enc")) return null
         return repository.getFileContentAtCommit(path, commitId)
     }
 

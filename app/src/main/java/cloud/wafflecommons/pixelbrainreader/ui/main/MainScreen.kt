@@ -749,6 +749,23 @@ fun MainScreen(
                     }
                 }
 
+                // A Time Machine restore stays undoable while its snackbar is up.
+                val restoreUndo by viewModel.restoreUndo.collectAsStateWithLifecycle()
+                LaunchedEffect(restoreUndo) {
+                    restoreUndo?.let { message ->
+                        val result = snackbarHostState.showSnackbar(
+                            message = message,
+                            actionLabel = "Undo",
+                            duration = androidx.compose.material3.SnackbarDuration.Long
+                        )
+                        if (result == androidx.compose.material3.SnackbarResult.ActionPerformed) {
+                            viewModel.undoRestore()
+                        } else {
+                            viewModel.restoreUndoShown()
+                        }
+                    }
+                }
+
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
                     snackbarHost = {
@@ -1047,7 +1064,9 @@ fun MainScreen(
                                             onCreateNew = { viewModel.createNewFile() },
                                             moodViewModel = moodViewModel,
                                             onSave = { viewModel.saveFile() },
-                                            onFetchHistory = { viewModel.getFileCommitHistory() },
+                                            // Encrypted notes are ciphertext in git: no history view for them.
+                                            onFetchHistory = if (uiState.selectedFileName?.endsWith(".enc") == true) null
+                                                else ({ viewModel.getFileCommitHistory() }),
                                             onFetchRevisionContent = { commitId -> viewModel.getFileContentAtCommit(commitId = commitId) },
                                             onRestoreRevision = { restored -> viewModel.restoreRevision(restored) }
                                         )
