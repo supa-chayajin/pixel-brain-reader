@@ -496,6 +496,8 @@ The edge is a combination no other app has: on-device AI, a git-versioned Obsidi
 
 ### Showcase prerequisites (do before any public demo)
 
+> **ON HOLD (owner's decision, 2026-10-17):** no public version — store listing, showcase or announcement — until the owner says so explicitly (settled decision #13). Phases 5–6 proceed as product work for the owner's own use. Releases on the public GitHub repo continue as usual.
+
 - [ ] **7.1 (M) Demo mode**
   - A synthetic bilingual demo vault (git repo) plus fake health and mood generators behind a debug or `demo` flavor.
   - Never record the real vault: it holds private and health data.
