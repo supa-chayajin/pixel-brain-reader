@@ -45,10 +45,13 @@ class CrashActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        window.setFlags(
-            android.view.WindowManager.LayoutParams.FLAG_SECURE,
-            android.view.WindowManager.LayoutParams.FLAG_SECURE
-        )
+        // Release builds only, like MainActivity: debug builds keep screenshots for bug reports.
+        if (!cloud.wafflecommons.pixelbrainreader.BuildConfig.DEBUG) {
+            window.setFlags(
+                android.view.WindowManager.LayoutParams.FLAG_SECURE,
+                android.view.WindowManager.LayoutParams.FLAG_SECURE
+            )
+        }
 
         val stackTrace = intent.getStringExtra(EXTRA_STACK_TRACE) ?: "No details available."
 
