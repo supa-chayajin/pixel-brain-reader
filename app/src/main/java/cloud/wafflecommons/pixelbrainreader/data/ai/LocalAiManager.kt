@@ -39,14 +39,16 @@ import javax.inject.Singleton
  * Privacy-first manager for on-device Gemini Nano inference via the
  * **ML Kit GenAI Prompt** API (`com.google.mlkit:genai-prompt`).
  *
- * STRICT CONTRACT — DO NOT BREAK:
- *  1. [generateResponse] NEVER triggers a download. If the model is not [NanoState.Ready]
- *     the call fast-fails with [NanoException.Unavailable]. The Settings screen is the
- *     sole orchestrator of the download lifecycle (see [downloadModel]).
- *  2. This class NEVER falls back to cloud inference.
- *  3. All failures are surfaced as [Result.failure] with a typed [NanoException].
- *  4. The presentation layer is responsible for obtaining explicit user consent before
- *     escalating to any cloud provider.
+ * STRICT CONTRACT — DO NOT BREAK (settled decision #1 in CLAUDE.md):
+ *  1. The model is fetched automatically: the availability probe ([refreshAvailability], run at
+ *     startup) starts the download ONCE per process when ML Kit reports DOWNLOADABLE, and
+ *     pre-loads the model once it is AVAILABLE. Settings' [downloadModel] is only a manual retry.
+ *     This is the fix for "Gemini Nano not responding anywhere" — never make it Settings-only.
+ *  2. The generation calls ([generateResponse], [generateResponseStream]) never trigger a
+ *     download or a probe: when the model is not [NanoState.Ready] they fast-fail with
+ *     [NanoException.Unavailable].
+ *  3. This class NEVER falls back to cloud inference.
+ *  4. All failures are surfaced as [Result.failure] (or a thrown [NanoException] for streams).
  */
 @Singleton
 class LocalAiManager @Inject constructor(
@@ -66,12 +68,18 @@ class LocalAiManager @Inject constructor(
     @Volatile
     private var downloadJob: Job? = null
 
+    // Auto-download: kick the download at most once automatically per process when the model is
+    // downloadable (still retryable via Settings → downloadModel). Prevents any re-probe loop.
+    @Volatile
+    private var autoDownloadAttempted = false
+
     // Pre-load: pay the one-time model-load cost off the user's first real query, once per Ready.
     @Volatile
     private var prewarmed = false
 
     init {
-        // Probe availability on startup without auto-starting downloads.
+        // Probe availability on startup. When the model is downloadable this auto-starts the
+        // download, so the AI surfaces work without a manual Settings visit.
         ioScope.launch { refreshAvailability() }
     }
 
@@ -418,8 +426,8 @@ class LocalAiManager @Inject constructor(
      *   `generateContent()` calls behind it. Skipping warmup means the first
      *   inference pays a one-time model-load cost (a few seconds), but it
      *   actually completes — which is the correctness contract we need.
-     * - [FeatureStatus.DOWNLOADABLE] → [NanoState.NotDownloaded] and waits for
-     *   explicit user opt-in via [downloadModel].
+     * - [FeatureStatus.DOWNLOADABLE] → auto-starts the download the first time per process;
+     *   afterwards [NanoState.NotDownloaded] until [downloadModel] retries.
      * - [FeatureStatus.DOWNLOADING] → attach to the in-flight download flow so
      *   the UI can show progress (system-initiated, e.g. resumed from a prior
      *   session).
@@ -433,7 +441,16 @@ class LocalAiManager @Inject constructor(
             }
             FeatureStatus.DOWNLOADING -> startDownload()
             FeatureStatus.DOWNLOADABLE -> {
-                _nanoState.value = NanoState.NotDownloaded
+                // Start the download the first time we see the model is downloadable so the AI
+                // surfaces work without a manual Settings visit. Guarded so repeated probes can't
+                // loop; the Settings button (downloadModel) still retries.
+                if (!autoDownloadAttempted) {
+                    autoDownloadAttempted = true
+                    Log.i(tag, "ML Kit GenAI status=DOWNLOADABLE — auto-starting download")
+                    startDownload()
+                } else {
+                    _nanoState.value = NanoState.NotDownloaded
+                }
             }
             FeatureStatus.UNAVAILABLE ->
                 _nanoState.value = NanoState.Unavailable(
