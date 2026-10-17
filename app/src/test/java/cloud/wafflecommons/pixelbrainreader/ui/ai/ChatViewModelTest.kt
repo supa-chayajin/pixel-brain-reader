@@ -155,7 +155,7 @@ class ChatViewModelTest {
         advanceUntilIdle()
 
         // Switch to SCRIBE -> persisted under "CREATIVE"
-        viewModel.toggleMode()
+        viewModel.setMode(ChatMode.SCRIBE)
         viewModel.sendMessage("scribe q")
         advanceUntilIdle()
 
@@ -167,6 +167,46 @@ class ChatViewModelTest {
     }
 
     @Test
+    fun `toggleMode cycles through ORACLE, BOARDROOM, and SCRIBE`() {
+        assertEquals(ChatMode.ORACLE, viewModel.currentMode.value)
+        viewModel.toggleMode()
+        assertEquals(ChatMode.BOARDROOM, viewModel.currentMode.value)
+        viewModel.toggleMode()
+        assertEquals(ChatMode.SCRIBE, viewModel.currentMode.value)
+        viewModel.toggleMode()
+        assertEquals(ChatMode.ORACLE, viewModel.currentMode.value)
+    }
+
+    @Test
+    fun `BOARDROOM mode triggers vector search and stores in BOARDROOM bucket`() = runTest {
+        coEvery { vectorSearchEngine.search("arch query", any()) } returns listOf(
+            cloud.wafflecommons.pixelbrainreader.data.ai.SearchHit(
+                fileId = "20_Projects/21_Waffle_Framework/Architecture.md",
+                content = "Clean Architecture Core Rules",
+                isPrivate = false
+            )
+        )
+        every {
+            localAiManager.generateAugmentedResponseStream(
+                systemPrompt = match { it.contains("Alexandre") && it.contains("Bastien") && it.contains("Camille") },
+                ragContext = match { it?.contains("Architecture.md") == true },
+                chatHistory = any(),
+                currentQuery = "arch query"
+            )
+        } returns flowOf("### 🏛️ Alexandre\nDDD Analysis...")
+
+        viewModel.setMode(ChatMode.BOARDROOM)
+        viewModel.sendMessage("arch query")
+        advanceUntilIdle()
+
+        val persisted = fakeRepo.snapshot("BOARDROOM")
+        assertEquals(2, persisted.size)
+        assertEquals("arch query", persisted[0].content)
+        assertEquals("### 🏛️ Alexandre\nDDD Analysis...", persisted[1].content)
+        assertEquals(listOf("20_Projects/21_Waffle_Framework/Architecture.md"), persisted[1].sources)
+    }
+
+    @Test
     fun `resetChat clears only the active mode's history`() = runTest {
         every {
             localAiManager.generateAugmentedResponseStream(any(), any(), any(), any())
@@ -174,7 +214,7 @@ class ChatViewModelTest {
 
         viewModel.sendMessage("oracle q")
         advanceUntilIdle()
-        viewModel.toggleMode()
+        viewModel.setMode(ChatMode.SCRIBE)
         viewModel.sendMessage("scribe q")
         advanceUntilIdle()
 

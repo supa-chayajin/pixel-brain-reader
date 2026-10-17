@@ -29,6 +29,7 @@ import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.DeleteSweep
+import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Psychology
 import androidx.compose.material3.*
@@ -94,17 +95,22 @@ fun ChatPanel(
         }
     }
 
-    // Mode brand routed through MaterialTheme. ORACLE (RAG) = primary, SCRIBE
-    // (Creative) = tertiary — both adapt to Material You. We also animate the
-    // matched on-color so contrast against the accent is always guaranteed.
+    // Mode brand routed through MaterialTheme:
+    // ORACLE (RAG) = primary, BOARDROOM (Debate) = secondary, SCRIBE (Creative) = tertiary.
     val modeColor by animateColorAsState(
-        targetValue = if (currentMode == ChatMode.ORACLE) MaterialTheme.colorScheme.primary
-                      else MaterialTheme.colorScheme.tertiary,
+        targetValue = when (currentMode) {
+            ChatMode.ORACLE -> MaterialTheme.colorScheme.primary
+            ChatMode.BOARDROOM -> MaterialTheme.colorScheme.secondary
+            ChatMode.SCRIBE -> MaterialTheme.colorScheme.tertiary
+        },
         label = "modeColor"
     )
     val modeContentColor by animateColorAsState(
-        targetValue = if (currentMode == ChatMode.ORACLE) MaterialTheme.colorScheme.onPrimary
-                      else MaterialTheme.colorScheme.onTertiary,
+        targetValue = when (currentMode) {
+            ChatMode.ORACLE -> MaterialTheme.colorScheme.onPrimary
+            ChatMode.BOARDROOM -> MaterialTheme.colorScheme.onSecondary
+            ChatMode.SCRIBE -> MaterialTheme.colorScheme.onTertiary
+        },
         label = "modeContentColor"
     )
 
@@ -141,7 +147,7 @@ fun ChatPanel(
                 // --- MODE SWITCHER ---
                 BrainModeSwitch(
                     currentMode = currentMode,
-                    onModeChanged = { viewModel.toggleMode() },
+                    onModeChanged = { viewModel.setMode(it) },
                     activeColor = modeColor,
                     activeContentColor = modeContentColor
                 )
@@ -218,7 +224,11 @@ fun ChatPanel(
                         }
                     },
                     isLoading = viewModel.loadingStage != null,
-                    hint = if (currentMode == ChatMode.ORACLE) "Ask your Second Brain..." else "Spark a creative idea...",
+                    hint = when (currentMode) {
+                        ChatMode.ORACLE -> "Ask your Second Brain..."
+                        ChatMode.BOARDROOM -> "Debate an architectural dilemma..."
+                        ChatMode.SCRIBE -> "Spark a creative idea..."
+                    },
                     accentColor = modeColor,
                     accentContentColor = modeContentColor
                 )
@@ -233,16 +243,14 @@ fun ChatPanel(
 @Composable
 fun BrainModeSwitch(
     currentMode: ChatMode,
-    onModeChanged: () -> Unit,
+    onModeChanged: (ChatMode) -> Unit,
     activeColor: Color,
     activeContentColor: Color
 ) {
-    // Stock M3 Expressive connected toggle (Cortex = Psychology, Spark = AutoAwesome).
-    // Only the selected segment paints activeColor, and activeColor is always the
-    // current mode's accent, so each mode shows its own colour when active.
     val modes = listOf(
-        Triple(ChatMode.ORACLE, Icons.Rounded.Psychology, "Cortex (RAG)"),
-        Triple(ChatMode.SCRIBE, Icons.Rounded.AutoAwesome, "Spark (Creative)")
+        Triple(ChatMode.ORACLE, Icons.Rounded.Psychology, "Cortex"),
+        Triple(ChatMode.BOARDROOM, Icons.Rounded.Groups, "Boardroom"),
+        Triple(ChatMode.SCRIBE, Icons.Rounded.AutoAwesome, "Spark")
     )
     SingleChoiceSegmentedButtonRow(
         modifier = Modifier
@@ -252,7 +260,7 @@ fun BrainModeSwitch(
         modes.forEachIndexed { index, (mode, icon, label) ->
             SegmentedButton(
                 selected = currentMode == mode,
-                onClick = { if (currentMode != mode) onModeChanged() },
+                onClick = { if (currentMode != mode) onModeChanged(mode) },
                 shape = SegmentedButtonDefaults.itemShape(index = index, count = modes.size),
                 colors = SegmentedButtonDefaults.colors(
                     activeContainerColor = activeColor,
@@ -332,7 +340,10 @@ fun ChatBubble(
                             color = MaterialTheme.colorScheme.onSurface
                         )
                     } else {
-                        MarkwonContent(content = message.content, onWikiLinkClick = {})
+                        MarkwonContent(
+                            content = message.content,
+                            onWikiLinkClick = { target -> onSourceClick?.invoke(target) }
+                        )
                     }
                 }
 
@@ -602,18 +613,42 @@ fun EmptyStatePlaceholder(mode: ChatMode) {
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(horizontal = 32.dp)) {
+            val (icon, title, subtitle) = when (mode) {
+                ChatMode.ORACLE -> Triple(
+                    Icons.Rounded.Psychology,
+                    "Accessing Cortex...",
+                    "Ask questions grounded in your Second Brain notes"
+                )
+                ChatMode.BOARDROOM -> Triple(
+                    Icons.Rounded.Groups,
+                    "Architecture Boardroom",
+                    "Alexandre (DDD), Bastien (DevSecOps) & Camille (Tech Lead)"
+                )
+                ChatMode.SCRIBE -> Triple(
+                    Icons.Rounded.AutoAwesome,
+                    "Igniting Spark...",
+                    "Brainstorm freely with ungrounded on-device AI"
+                )
+            }
             Icon(
-                imageVector = if (mode == ChatMode.ORACLE) Icons.Rounded.Psychology else Icons.Rounded.AutoAwesome,
+                imageVector = icon,
                 contentDescription = null,
-                modifier = Modifier.size(80.dp),
+                modifier = Modifier.size(72.dp),
                 tint = MaterialTheme.colorScheme.surfaceContainerHighest
             )
             Spacer(modifier = Modifier.height(16.dp))
             Text(
-                if (mode == ChatMode.ORACLE) "Accessing Cortex..." else "Igniting Spark...",
+                text = title,
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
             )
         }
     }

@@ -28,10 +28,10 @@ abstract class FileDao {
     """)
     abstract fun searchFiles(query: String): Flow<List<FileEntity>>
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @androidx.room.Upsert
     abstract suspend fun insertAll(files: List<FileEntity>)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @androidx.room.Upsert
     abstract suspend fun insertFile(file: FileEntity)
 
     @Query("SELECT * FROM files WHERE path = :path")
@@ -108,6 +108,35 @@ abstract class FileDao {
             "AND path NOT IN (SELECT DISTINCT fileId FROM embeddings)"
     )
     abstract suspend fun getFilesWithoutEmbeddings(): List<FileEntity>
+
+    /**
+     * Finds files that either have no embeddings at all, OR have been modified
+     * since their embeddings were last generated.
+     */
+    @Query(
+        """
+        SELECT f.* FROM files f
+        WHERE f.type = 'file'
+          AND (f.path LIKE '%.md' OR f.path LIKE '%.md.enc')
+          AND (
+            f.path NOT IN (SELECT DISTINCT fileId FROM embeddings)
+            OR (f.localModifiedTimestamp IS NOT NULL AND f.localModifiedTimestamp > (SELECT COALESCE(MAX(e.lastUpdated), 0) FROM embeddings e WHERE e.fileId = f.path))
+          )
+        """
+    )
+    abstract suspend fun getFilesNeedingEmbeddings(): List<FileEntity>
+
+    @Query(
+        """
+        SELECT files.* FROM files 
+        LEFT JOIN file_contents ON files.path = file_contents.path 
+        WHERE files.name LIKE '%' || :query || '%' 
+           OR files.path LIKE '%' || :query || '%' 
+           OR file_contents.content LIKE '%' || :query || '%'
+        LIMIT :limit
+        """
+    )
+    abstract suspend fun searchFilesDirect(query: String, limit: Int): List<FileEntity>
 
     /**
      * Refresh the stored mtime for a file whose content fingerprint matched

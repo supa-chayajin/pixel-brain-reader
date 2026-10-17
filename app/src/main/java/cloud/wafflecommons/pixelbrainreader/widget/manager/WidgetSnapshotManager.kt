@@ -47,7 +47,7 @@ import javax.inject.Singleton
  */
 @Singleton
 class WidgetSnapshotManager @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
     private val healthConnectManager: HealthConnectManager,
     private val healthMetricsRepository: HealthMetricsRepository,
     private val gamificationRepository: GamificationRepository,

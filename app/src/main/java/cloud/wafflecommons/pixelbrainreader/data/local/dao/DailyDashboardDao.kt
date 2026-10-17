@@ -110,6 +110,9 @@ interface DailyDashboardDao {
     @Query("UPDATE daily_tasks SET isDone = :isDone WHERE id = :taskId")
     suspend fun updateTaskStatus(taskId: String, isDone: Boolean)
 
+    @Query("DELETE FROM daily_tasks WHERE id = :taskId")
+    suspend fun deleteTaskById(taskId: String)
+
     @Query("DELETE FROM daily_tasks WHERE scheduledDate = :date")
     suspend fun clearTasks(date: LocalDate)
 

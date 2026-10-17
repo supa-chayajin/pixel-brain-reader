@@ -45,6 +45,11 @@ class CrashActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        window.setFlags(
+            android.view.WindowManager.LayoutParams.FLAG_SECURE,
+            android.view.WindowManager.LayoutParams.FLAG_SECURE
+        )
+
         val stackTrace = intent.getStringExtra(EXTRA_STACK_TRACE) ?: "No details available."
 
         setContent {

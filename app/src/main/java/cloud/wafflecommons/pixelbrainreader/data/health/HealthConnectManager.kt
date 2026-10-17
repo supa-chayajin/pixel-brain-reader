@@ -3,7 +3,6 @@ package cloud.wafflecommons.pixelbrainreader.data.health
 import android.content.Context
 import android.util.Log
 import androidx.health.connect.client.HealthConnectClient
-import androidx.health.connect.client.feature.ExperimentalMindfulnessSessionApi
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.SleepSessionRecord
@@ -13,7 +12,6 @@ import androidx.health.connect.client.records.NutritionRecord
 import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.TotalCaloriesBurnedRecord
 import androidx.health.connect.client.records.DistanceRecord
-import androidx.health.connect.client.records.MindfulnessSessionRecord
 import androidx.health.connect.client.request.AggregateRequest
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
@@ -48,7 +46,7 @@ data class DailyHealthMetrics(
 
 @Singleton
 class HealthConnectManager @Inject constructor(
-    @ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context
 ) {
 
     val healthConnectClient by lazy { HealthConnectClient.getOrCreate(context) }
@@ -75,7 +73,13 @@ class HealthConnectManager @Inject constructor(
         val sleepEnd = date.atTime(18, 0).atZone(zoneId).toInstant()
         val sleepFilter = TimeRangeFilter.between(sleepStart, sleepEnd)
 
-        val granted = try { healthConnectClient.permissionController.getGrantedPermissions() } catch (e: Exception) { emptySet() }
+        val granted = try {
+            healthConnectClient.permissionController.getGrantedPermissions()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            emptySet()
+        }
 
         // 1. Professional Aggregation (Deduplicated by platform)
         val aggregateMetrics = mutableSetOf<androidx.health.connect.client.aggregate.AggregateMetric<*>>()
@@ -88,6 +92,8 @@ class HealthConnectManager @Inject constructor(
         val aggregateResponse = if (aggregateMetrics.isNotEmpty()) {
             try {
                 healthConnectClient.aggregate(AggregateRequest(metrics = aggregateMetrics, timeRangeFilter = timeRangeFilter))
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e("HealthConnectManager", "failed to aggregate metrics", e)
                 null
@@ -104,6 +110,8 @@ class HealthConnectManager @Inject constructor(
                 val nutritionRequest = ReadRecordsRequest(NutritionRecord::class, timeRangeFilter)
                 val nutritionResponse = healthConnectClient.readRecords(nutritionRequest)
                 caloriesConsumed = nutritionResponse.records.sumOf { it.energy?.inKilocalories ?: 0.0 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e("HealthConnectManager", "Failed to read nutrition", e)
                 caloriesConsumed = aggregateResponse?.get(NutritionRecord.ENERGY_TOTAL)?.inKilocalories ?: 0.0
@@ -116,6 +124,8 @@ class HealthConnectManager @Inject constructor(
                 val burnedRequest = ReadRecordsRequest(TotalCaloriesBurnedRecord::class, timeRangeFilter)
                 val burnedResponse = healthConnectClient.readRecords(burnedRequest)
                 caloriesBurned = burnedResponse.records.sumOf { it.energy.inKilocalories }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e("HealthConnectManager", "Failed to read calories burned", e)
             }
@@ -132,6 +142,8 @@ class HealthConnectManager @Inject constructor(
                 }.sumOf {
                     Duration.between(it.startTime, it.endTime).toMinutes()
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e("HealthConnectManager", "Failed to read sleep", e)
             }
@@ -146,6 +158,8 @@ class HealthConnectManager @Inject constructor(
                     AggregateRequest(metrics = setOf(HeartRateRecord.BPM_AVG), timeRangeFilter = timeRangeFilter)
                 )
                 averageHeartRate = heartRate[HeartRateRecord.BPM_AVG]?.toInt() ?: 0
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e("HealthConnectManager", "Failed to read heart rate", e)
             }
@@ -154,18 +168,6 @@ class HealthConnectManager @Inject constructor(
         // 4. Read Mindfulness / Exercise
         var mindfulnessMinutes = 0L
         var activeMinutes = 0L
-
-        if (granted.contains(HealthPermission.getReadPermission(androidx.health.connect.client.records.MindfulnessSessionRecord::class))) {
-            try {
-                val minRequest = ReadRecordsRequest(androidx.health.connect.client.records.MindfulnessSessionRecord::class, timeRangeFilter)
-                val minResponse = healthConnectClient.readRecords(minRequest)
-                mindfulnessMinutes += minResponse.records.sumOf {
-                    Duration.between(it.startTime, it.endTime).toMinutes()
-                }
-            } catch (e: Exception) {
-                Log.e("HealthConnectManager", "Failed to read mindfulness session", e)
-            }
-        }
         
         if (granted.contains(HealthPermission.getReadPermission(ExerciseSessionRecord::class))) {
             try {
@@ -185,6 +187,8 @@ class HealthConnectManager @Inject constructor(
                 }.sumOf {
                     Duration.between(it.startTime, it.endTime).toMinutes()
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e("HealthConnectManager", "Failed to read exercise mindfulness", e)
             }
@@ -197,6 +201,8 @@ class HealthConnectManager @Inject constructor(
                 activeMinutes += activeCaloriesResponse.records.sumOf {
                     Duration.between(it.startTime, it.endTime).toMinutes()
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e("HealthConnectManager", "Failed to read active calories burned", e)
             }
@@ -210,6 +216,8 @@ class HealthConnectManager @Inject constructor(
                 val weightRequest = ReadRecordsRequest(androidx.health.connect.client.records.WeightRecord::class, timeRangeFilter)
                 val weightResponse = healthConnectClient.readRecords(weightRequest)
                 weightKg = weightResponse.records.maxByOrNull { it.time }?.weight?.inKilograms ?: 0.0
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e("HealthConnectManager", "Failed to read weight", e)
             }
@@ -230,7 +238,6 @@ class HealthConnectManager @Inject constructor(
         )
     }
 
-    @OptIn(ExperimentalMindfulnessSessionApi::class)
     private val permissions = setOf(
         HealthPermission.getReadPermission(StepsRecord::class),
         HealthPermission.getReadPermission(SleepSessionRecord::class),
@@ -241,7 +248,6 @@ class HealthConnectManager @Inject constructor(
         HealthPermission.getReadPermission(DistanceRecord::class),
         HealthPermission.getReadPermission(ExerciseSessionRecord::class),
         HealthPermission.getReadPermission(androidx.health.connect.client.records.ActiveCaloriesBurnedRecord::class),
-        HealthPermission.getReadPermission(MindfulnessSessionRecord::class),
         HealthPermission.getReadPermission(androidx.health.connect.client.records.WeightRecord::class)
     )
 
@@ -254,6 +260,8 @@ class HealthConnectManager @Inject constructor(
             val granted = healthConnectClient.permissionController.getGrantedPermissions()
             val hasAll = granted.containsAll(permissions)
             hasAll
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             false
         }
@@ -273,6 +281,8 @@ class HealthConnectManager @Inject constructor(
                 )
             )
             response[StepsRecord.COUNT_TOTAL] ?: 0L
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             0L
         }
@@ -290,6 +300,8 @@ class HealthConnectManager @Inject constructor(
                 val sessionDuration = Duration.between(session.startTime, session.endTime)
                 acc.plus(sessionDuration)
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             Duration.ZERO
         }
@@ -304,6 +316,8 @@ class HealthConnectManager @Inject constructor(
                 )
             )
             response.records
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             emptyList()
         }
@@ -327,6 +341,8 @@ class HealthConnectManager @Inject constructor(
                 val steps = result.result[StepsRecord.COUNT_TOTAL] ?: 0L
                 date to steps
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             emptyMap()
         }
@@ -348,6 +364,8 @@ class HealthConnectManager @Inject constructor(
                 map[date] = current.plus(duration)
             }
             map
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             emptyMap()
         }
@@ -371,6 +389,8 @@ class HealthConnectManager @Inject constructor(
                     )
                 } else null
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             emptyList()
         }
@@ -398,6 +418,8 @@ class HealthConnectManager @Inject constructor(
                     )
                 } else null
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             emptyList()
         }

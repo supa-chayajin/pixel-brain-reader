@@ -137,11 +137,12 @@ class PixelBrainApplication : Application(), Configuration.Provider {
      */
     private fun runStartupReconcile() {
         appScope.launch {
-            safely("Startup file reindex") { vaultDiscoveryRepository.get().reindexAll(0L) }
             // Cold-start recovery: if a destructive Room migration wiped today's board but
             // the last burn is still on disk, rebuild today's dashboard/scraps/gratitude
             // from that markdown. No-op on a normal launch (guarded on an empty Room).
+            // Runs FIRST so no scan or UI initialization can insert a blank today row ahead of it.
             safely("Startup today-rehydrate") { dailyDashboardRepository.get().rehydrateTodayFromDiskIfEmpty() }
+            safely("Startup file reindex") { vaultDiscoveryRepository.get().reindexAll(0L) }
             syncOrchestrator.get().reconcileVaultIntoRoom()
         }
     }

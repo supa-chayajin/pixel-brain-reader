@@ -31,11 +31,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cloud.wafflecommons.pixelbrainreader.ui.theme.NavBarClearance
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import cloud.wafflecommons.pixelbrainreader.data.remote.model.GithubFileDto
+import cloud.wafflecommons.pixelbrainreader.ui.components.parseJohnnyDecimal
 
 private enum class FileListState { Loading, Error, Empty, Content }
 
@@ -58,7 +60,8 @@ fun FileListPane(
     onCreateFile: () -> Unit,
     onRenameFile: (String, GithubFileDto) -> Unit,
     onDeleteFile: (GithubFileDto) -> Unit,
-    onAnalyzeFolder: () -> Unit
+    onAnalyzeFolder: () -> Unit,
+    onMoveFile: (GithubFileDto) -> Unit = {}
 ) {
     val haptic = LocalHapticFeedback.current
     
@@ -70,15 +73,29 @@ fun FileListPane(
         var newName by remember { mutableStateOf(file.name.removeSuffix(".md")) }
         AlertDialog(
             onDismissRequest = { showRenameDialog = null },
-            title = { Text("Rename File") },
+            title = { Text("Rename or Move") },
             shape = MaterialTheme.shapes.extraLarge,
             text = {
-                OutlinedTextField(
-                    value = newName,
-                    onValueChange = { newName = it },
-                    singleLine = true,
-                    shape = MaterialTheme.shapes.medium
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = newName,
+                        onValueChange = { newName = it },
+                        singleLine = true,
+                        shape = MaterialTheme.shapes.medium,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    FilledTonalButton(
+                        onClick = {
+                            showRenameDialog = null
+                            onMoveFile(file)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Move to another folder…")
+                    }
+                }
             },
             confirmButton = {
                 TextButton(onClick = {
@@ -347,13 +364,34 @@ fun FileItemCard(file: GithubFileDto, onClick: () -> Unit) {
                 tint = if (file.type == "dir") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(modifier = Modifier.width(16.dp))
-            Column {
-                Text(
-                    text = file.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+            Column(modifier = Modifier.weight(1f)) {
+                val jdCategory = remember(file.name) { parseJohnnyDecimal(file.name) }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (jdCategory != null) {
+                        Surface(
+                            color = if (jdCategory.isPrivate) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)
+                                    else MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f),
+                            shape = CircleShape,
+                            modifier = Modifier.padding(end = 6.dp)
+                        ) {
+                            Text(
+                                text = jdCategory.label,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (jdCategory.isPrivate) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                    Text(
+                        text = file.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
                 if (file.lastModified != null) {
                     val dateFormatted = remember(file.lastModified) {
                         java.text.SimpleDateFormat("MMM dd, yyyy", java.util.Locale.getDefault())

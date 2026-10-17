@@ -28,6 +28,14 @@ sealed class SyncResult {
     data class Error(val exception: Exception) : SyncResult()
 }
 
+data class GitCommitDto(
+    val commitId: String,
+    val shortId: String,
+    val author: String,
+    val message: String,
+    val timestamp: Long
+)
+
 /**
  * Local-First Git Provider using Eclipse JGit.
  * Operates directly on the device filesystem.
@@ -59,7 +67,7 @@ class JGitProvider @Inject constructor(
     private val rootDir: File
         get() = File(context.filesDir, "vault")
 
-    /** Removes stale '.lock' files (top-level and under refs/) left over from a crash. Call under [gitMutex]. */
+    /** Removes stale '.lock' files (top-level, under refs/, and under logs/) left over from a crash. Call under [gitMutex]. */
     private fun cleanStaleLocksIfNeeded() {
         if (staleLocksChecked) return
         val gitDir = File(rootDir, ".git")
@@ -68,7 +76,13 @@ class JGitProvider @Inject constructor(
         try {
             val topLevel = gitDir.listFiles { f -> f.isFile && f.name.endsWith(".lock") }.orEmpty().asSequence()
             val refs = File(gitDir, "refs").walkBottomUp().filter { it.isFile && it.name.endsWith(".lock") }
-            (topLevel + refs).forEach { lockFile ->
+            val logsDir = File(gitDir, "logs")
+            val logs = if (logsDir.exists()) {
+                logsDir.walkBottomUp().filter { it.isFile && it.name.endsWith(".lock") }
+            } else {
+                emptySequence()
+            }
+            (topLevel + refs + logs).forEach { lockFile ->
                 if (lockFile.delete()) {
                     Log.d("JGitProvider", "Cleaned stale lock file: ${lockFile.name}")
                 }
@@ -76,6 +90,33 @@ class JGitProvider @Inject constructor(
             staleLocksChecked = true
         } catch (e: Exception) {
             Log.e("JGitProvider", "Failed to clean stale locks", e)
+        }
+    }
+
+    /**
+     * Recovers a repository left in an interrupted rebase or merge state (e.g., if the process died
+     * mid-rebase) so subsequent commits and pulls do not stay permanently wedged.
+     */
+    private fun recoverRepositoryStateIfNeeded(git: Git) {
+        val state = git.repository.repositoryState
+        if (state == org.eclipse.jgit.lib.RepositoryState.SAFE) return
+        if (state.isRebasing ||
+            state == org.eclipse.jgit.lib.RepositoryState.MERGING ||
+            state == org.eclipse.jgit.lib.RepositoryState.MERGING_RESOLVED
+        ) {
+            Log.w("JGitProvider", "Recovering repository from non-safe state: $state")
+            try {
+                git.rebase().setOperation(org.eclipse.jgit.api.RebaseCommand.Operation.ABORT).call()
+            } catch (e: Exception) {
+                Log.w("JGitProvider", "Rebase abort during state recovery failed; cleaning state dirs manually", e)
+            }
+            val gitDir = git.repository.directory
+            listOf("rebase-merge", "rebase-apply").forEach { dirName ->
+                val stateDir = File(gitDir, dirName)
+                if (stateDir.exists()) {
+                    stateDir.deleteRecursively()
+                }
+            }
         }
     }
 
@@ -112,7 +153,7 @@ class JGitProvider @Inject constructor(
 
                 if (!remoteUrl.isNullOrEmpty()) {
                     // CLONE STRATEGY
-                    Log.i("JGitProvider", "Starting fresh clone from $remoteUrl branch: $branch")
+                    Log.d("JGitProvider", "Starting fresh clone from $remoteUrl branch: $branch")
                     val provider = getCredentialsProvider() ?: throw Exception("Clone requires API Token")
 
                     // Ensure clean slate
@@ -226,6 +267,8 @@ class JGitProvider @Inject constructor(
             cleanStaleLocksIfNeeded()
             try {
                 Git.open(rootDir).use { git ->
+                    recoverRepositoryStateIfNeeded(git)
+
                     // 1. Fix Detached HEAD
                     val repo = git.repository
                     val branch = repo.branch
@@ -247,16 +290,22 @@ class JGitProvider @Inject constructor(
                         return@use
                     }
 
-                    // 3. Commit. setAllowEmpty(false) makes JGit throw EmptyCommitException when
-                    // the index matches HEAD — this replaces a separate `git status`, which was a
-                    // third full working-tree walk on every commit.
+                    // 3. Commit with semantic message if message is generic.
+                    val finalMessage = if (cloud.wafflecommons.pixelbrainreader.data.sync.SemanticCommitMessageGenerator.isGenericMessage(message)) {
+                        val status = git.status().call()
+                        val dirtyPaths = (status.uncommittedChanges + status.changed + status.added + status.modified)
+                        cloud.wafflecommons.pixelbrainreader.data.sync.SemanticCommitMessageGenerator.generate(dirtyPaths, message)
+                    } else {
+                        message
+                    }
+
                     try {
                         val revCommit = git.commit()
-                            .setMessage(message)
+                            .setMessage(finalMessage)
                             .setAuthor("PixelBrain User", "user@pixelbrain.local")
                             .setAllowEmpty(false)
                             .call()
-                        Log.i("JGitProvider", "Committed: $message (Hash: ${revCommit.name})")
+                        Log.d("JGitProvider", "Committed: $finalMessage (Hash: ${revCommit.name})")
                     } catch (e: EmptyCommitException) {
                         Log.d("JGitProvider", "No changes to commit after adding.")
                     }
@@ -321,6 +370,7 @@ class JGitProvider @Inject constructor(
             val provider = getCredentialsProvider() ?: return@withContext SyncResult.Error(Exception("No API Token found"))
 
             Git.open(rootDir).use { git ->
+                recoverRepositoryStateIfNeeded(git)
                 val pullResult = git.pull()
                     .setRemote(remoteName)
                     .setRebase(true) // STRICT REBASE — no merge commits
@@ -553,6 +603,61 @@ class JGitProvider @Inject constructor(
                 }
             }
             override fun close() { flush() }
+        }
+    }
+
+    /**
+     * Retrieve the commit history for a single file in the local vault.
+     */
+    suspend fun getFileCommitHistory(relativePath: String, limit: Int = 15): List<GitCommitDto> = withContext(Dispatchers.IO) {
+        gitMutex.withLock {
+            val gitDir = File(rootDir, ".git")
+            if (!gitDir.isDirectory) return@withContext emptyList()
+            try {
+                Git.open(rootDir).use { git ->
+                    val logs = git.log().addPath(relativePath).setMaxCount(limit).call()
+                    logs.map { commit ->
+                        GitCommitDto(
+                            commitId = commit.id.name,
+                            shortId = commit.id.abbreviate(7).name(),
+                            author = commit.authorIdent.name,
+                            message = commit.shortMessage,
+                            timestamp = commit.commitTime.toLong() * 1000L
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.e("JGitProvider", "Failed to get file commit history for $relativePath", e)
+                emptyList()
+            }
+        }
+    }
+
+    /**
+     * Retrieve the file content at a specific Git commit revision.
+     */
+    suspend fun getFileContentAtCommit(relativePath: String, commitId: String): String? = withContext(Dispatchers.IO) {
+        gitMutex.withLock {
+            val gitDir = File(rootDir, ".git")
+            if (!gitDir.isDirectory) return@withContext null
+            try {
+                Git.open(rootDir).use { git ->
+                    val repo = git.repository
+                    val objectId = org.eclipse.jgit.lib.ObjectId.fromString(commitId)
+                    val revCommit = repo.parseCommit(objectId)
+                    val tree = revCommit.tree
+                    org.eclipse.jgit.treewalk.TreeWalk.forPath(repo, relativePath, tree)?.use { treeWalk ->
+                        val blobId = treeWalk.getObjectId(0)
+                        val loader = repo.open(blobId)
+                        String(loader.bytes, Charsets.UTF_8)
+                    }
+                }
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.e("JGitProvider", "Failed to retrieve content for $relativePath at $commitId", e)
+                null
+            }
         }
     }
 

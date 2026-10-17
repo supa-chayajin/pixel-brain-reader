@@ -38,7 +38,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
     private val userPrefs: UserPreferencesRepository,
     private val secretManager: SecretManager,
     private val vectorSearchEngine: cloud.wafflecommons.pixelbrainreader.data.ai.VectorSearchEngine,
@@ -48,7 +48,8 @@ class SettingsViewModel @Inject constructor(
     private val choreRepository: cloud.wafflecommons.pixelbrainreader.data.repository.ChoreRepository,
     private val gamificationPrefs: GamificationPreferences,
     val googleAuthManager: GoogleAuthRepository,
-    private val localAiManager: LocalAiManager
+    private val localAiManager: LocalAiManager,
+    private val vaultGraphAnalyzer: cloud.wafflecommons.pixelbrainreader.data.utils.VaultGraphAnalyzer
 ) : ViewModel() {
 
     sealed class GoogleAuthEvent {
@@ -175,6 +176,26 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    private val _vaultGraphReport = MutableStateFlow<cloud.wafflecommons.pixelbrainreader.data.utils.VaultGraphReport?>(null)
+    val vaultGraphReport: StateFlow<cloud.wafflecommons.pixelbrainreader.data.utils.VaultGraphReport?> = _vaultGraphReport.asStateFlow()
+
+    private val _isAnalyzingGraph = MutableStateFlow(false)
+    val isAnalyzingGraph: StateFlow<Boolean> = _isAnalyzingGraph.asStateFlow()
+
+    fun analyzeVaultGraph() {
+        viewModelScope.launch {
+            _isAnalyzingGraph.value = true
+            try {
+                _vaultGraphReport.value = vaultGraphAnalyzer.analyze()
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.e("SettingsViewModel", "Failed to analyze vault graph", e)
+            } finally {
+                _isAnalyzingGraph.value = false
+            }
+        }
+    }
+
     val moodEmojiMapping: StateFlow<Map<Int, String>> = gamificationPrefs.moodEmojiMappingFlow
         .stateIn(
             scope = viewModelScope,
@@ -211,7 +232,6 @@ class SettingsViewModel @Inject constructor(
 
         userPrefs.isGoogleSyncEnabled.onEach { enabled ->
             _uiState.value = _uiState.value.copy(isGoogleSyncEnabled = enabled)
-            googleAuthManager.setAccountLinked(enabled) // Sync internal state for now
         }.launchIn(viewModelScope)
 
         userPrefs.soundEffectsEnabled.onEach { enabled ->

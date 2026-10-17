@@ -14,6 +14,11 @@ class BriefingGenerator @Inject constructor(
     
     private val FALLBACK_QUOTE = "La seule façon de faire du bon travail, c'est d'aimer ce que l'on fait."
 
+    private fun isUnavailableResponse(text: String): Boolean {
+        val trimmed = text.trim()
+        return trimmed.isBlank() || trimmed.startsWith("Cortex (local) indisponible", ignoreCase = true)
+    }
+
     suspend fun getDailyQuote(moodTrend: String): String {
         return try {
             val prompt = "Génère une citation quotidienne inspirante ou stoïcienne à partir d'une tendance d'humeur : $moodTrend. Format de sortie : « Citation » - Auteur. ${AiLanguage.DIRECTIVE}"
@@ -22,7 +27,9 @@ class BriefingGenerator @Inject constructor(
              var result = ""
              flow.collect { if (!it.startsWith("Thinking")) result = it }
             
-            if (result.isBlank()) FALLBACK_QUOTE else result
+            if (isUnavailableResponse(result)) FALLBACK_QUOTE else result
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             FALLBACK_QUOTE
         }
@@ -45,14 +52,16 @@ class BriefingGenerator @Inject constructor(
                  }
              }
             
-            if (result.isBlank()) {
+            if (isUnavailableResponse(result)) {
                 "Prépare-toi pour la journée."
             } else {
                 result.replace("\"", "").trim()
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
              Log.e(tag, "Weather AI Failed", e)
-             "Prépare-toi pour la journée. (IA indisponible)"
+             "Prépare-toi pour la journée."
         }
     }
 
@@ -84,14 +93,16 @@ class BriefingGenerator @Inject constructor(
                  }
             }
             
-            if (result.isBlank()) {
+            if (isUnavailableResponse(result)) {
                 "Prépare-toi pour une belle journée."
             } else {
                 result.replace("\"", "").trim()
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
              Log.e(tag, "Briefing Gen Failed", e)
-             "Get ready for a great day."
+             "Prépare-toi pour une belle journée."
         }
     }
 }

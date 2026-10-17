@@ -11,6 +11,8 @@ import com.google.mlkit.genai.common.FeatureStatus
 import com.google.mlkit.genai.common.GenAiException
 import com.google.mlkit.genai.prompt.GenerativeModel
 import com.google.mlkit.genai.prompt.Generation
+import com.google.mlkit.genai.prompt.GenerateContentRequest
+import com.google.mlkit.genai.prompt.TextPart
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.ChatMessageEntity
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
@@ -48,7 +50,7 @@ import javax.inject.Singleton
  */
 @Singleton
 class LocalAiManager @Inject constructor(
-    @ApplicationContext private val appContext: Context
+    @param:ApplicationContext private val appContext: Context
 ) {
     private val tag = "LocalAiManager"
 
@@ -64,18 +66,12 @@ class LocalAiManager @Inject constructor(
     @Volatile
     private var downloadJob: Job? = null
 
-    // Auto-download: kick the download at most once automatically per process when the model is
-    // downloadable (still retryable via Settings → downloadModel). Prevents any re-probe loop.
-    @Volatile
-    private var autoDownloadAttempted = false
-
     // Pre-load: pay the one-time model-load cost off the user's first real query, once per Ready.
     @Volatile
     private var prewarmed = false
 
     init {
-        // Probe availability on startup. When the model is downloadable this now auto-starts the
-        // download (user opted in), so the AI surfaces work without a manual Settings visit.
+        // Probe availability on startup without auto-starting downloads.
         ioScope.launch { refreshAvailability() }
     }
 
@@ -188,8 +184,11 @@ class LocalAiManager @Inject constructor(
         sessionMutex.withLock {
             try {
                 val start = System.currentTimeMillis()
+                val request = GenerateContentRequest.Builder(TextPart(prompt)).apply {
+                    maxOutputTokens = 2048
+                }.build()
                 val response = withTimeoutOrNull(INFERENCE_TIMEOUT_MS) {
-                    ensureModel().generateContent(prompt)
+                    ensureModel().generateContent(request)
                 }
                 val elapsed = System.currentTimeMillis() - start
                 if (response == null) {
@@ -295,11 +294,15 @@ class LocalAiManager @Inject constructor(
             var chunks = 0
             var chars = 0
             try {
-                ensureModel().generateContentStream(prompt).collect { response ->
+                val request = GenerateContentRequest.Builder(TextPart(prompt)).apply {
+                    maxOutputTokens = 2048
+                }.build()
+                ensureModel().generateContentStream(request).collect { response ->
                     val text = response.candidates.firstOrNull()?.text
+                    val finishReason = response.candidates.firstOrNull()?.finishReason
                     chunks++
-                    if (chunks <= 5 || chunks % 25 == 0) {
-                        Log.d(tag, "stream chunk #$chunks len=${text?.length ?: 0} at ${System.currentTimeMillis() - start}ms")
+                    if (chunks <= 5 || chunks % 25 == 0 || finishReason != null) {
+                        Log.d(tag, "stream chunk #$chunks len=${text?.length ?: 0} finishReason=$finishReason at ${System.currentTimeMillis() - start}ms")
                     }
                     if (!text.isNullOrEmpty()) {
                         chars += text.length
@@ -339,9 +342,10 @@ class LocalAiManager @Inject constructor(
         }
 
         append("[HISTORIQUE DE LA CONVERSATION]\n")
-        chatHistory.forEach { msg ->
+        chatHistory.takeLast(4).forEach { msg ->
             val label = if (msg.role == "USER") "Utilisateur" else "Assistant"
-            append(label).append(": ").append(msg.content.trim()).append('\n')
+            val content = if (msg.content.length > 600) msg.content.take(597) + "..." else msg.content
+            append(label).append(": ").append(content.trim()).append('\n')
         }
         append('\n')
         append("[QUESTION DE L'UTILISATEUR]\n")
@@ -429,16 +433,7 @@ class LocalAiManager @Inject constructor(
             }
             FeatureStatus.DOWNLOADING -> startDownload()
             FeatureStatus.DOWNLOADABLE -> {
-                // User opted into auto-download: start it the first time we see the model is
-                // downloadable so the AI surfaces work without a manual Settings visit. Guarded so
-                // repeated probes can't loop; the Settings button (downloadModel) still retries.
-                if (!autoDownloadAttempted) {
-                    autoDownloadAttempted = true
-                    Log.i(tag, "ML Kit GenAI status=DOWNLOADABLE — auto-starting download")
-                    startDownload()
-                } else {
-                    _nanoState.value = NanoState.NotDownloaded
-                }
+                _nanoState.value = NanoState.NotDownloaded
             }
             FeatureStatus.UNAVAILABLE ->
                 _nanoState.value = NanoState.Unavailable(

@@ -8,8 +8,7 @@ import java.time.temporal.ChronoUnit
 import javax.inject.Inject
 
 class CalculateChoreEntropyUseCase @Inject constructor() {
-    operator fun invoke(chores: List<ChoreEntity>): List<ChoreUiModel> {
-        val today = LocalDate.now()
+    operator fun invoke(chores: List<ChoreEntity>, today: LocalDate = LocalDate.now()): List<ChoreUiModel> {
         
         return chores.map { chore ->
             val frequency = chore.frequencyDays.takeIf { it > 0 } ?: 1

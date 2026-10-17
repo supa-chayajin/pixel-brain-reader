@@ -91,7 +91,8 @@ class DailyDashboardRepositoryRehydrateTest {
             briefingGenerator = mockk<BriefingGenerator>(relaxed = true),
             weatherRepository = mockk<WeatherRepository>(relaxed = true),
             gratitudeDao = gratitudeDao,
-            widgetUpdateManager = mockk(relaxed = true)
+            widgetUpdateManager = mockk(relaxed = true),
+            pushScheduler = mockk(relaxed = true)
         )
     }
 
@@ -176,11 +177,11 @@ class DailyDashboardRepositoryRehydrateTest {
 
         coVerify(exactly = 1) { h2.dashboardDao.ingestDailyData(any(), any(), any()) }
 
-        // Dashboard scalar sections survive; the mantra is a pinned loss (rebuilt as "").
+        // Dashboard scalar sections (including mantra) survive the round-trip.
         assertEquals(today, dashSlot.captured.date)
         assertEquals("Persist this idea", dashSlot.captured.ideasContent)
         assertEquals("Persist this note", dashSlot.captured.notesContent)
-        assertEquals("LOSSY PIN: rehydrate hardcodes dailyMantra to empty", "", dashSlot.captured.dailyMantra)
+        assertEquals("Focus.", dashSlot.captured.dailyMantra)
 
         // Timeline rows reconstructed 1:1 — including the Calendar identity key.
         val timeline = timelineSlot.captured

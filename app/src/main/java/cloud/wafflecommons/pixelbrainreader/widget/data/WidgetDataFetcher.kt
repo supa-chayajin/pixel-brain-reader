@@ -35,6 +35,8 @@ class WidgetDataFetcher @Inject constructor(
             val file = File(context.filesDir, snapshotFileName)
             if (!file.exists()) return@withContext null
             json.decodeFromString<WidgetDataSnapshot>(file.readText())
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e("WidgetDataFetcher", "readSnapshot failed", e)
             null
@@ -46,7 +48,7 @@ class WidgetDataFetcher @Inject constructor(
             val snapshot = readSnapshot(context)
                 ?: return@withContext CompanionWidgetState(heroClass = "Loading…", isLoading = true)
 
-            val resolvedResId = resolveAvatarResource(snapshot.heroClass)
+            val resolvedResId = resolveAvatarResource(context, snapshot.heroClass, snapshot.avatarResName)
             val avatarBitmap = context.drawableToBitmap(resolvedResId, 96)
                 ?: context.drawableToBitmap(cloud.wafflecommons.pixelbrainreader.R.drawable.hero_novice, 96)
 
@@ -84,19 +86,33 @@ class WidgetDataFetcher @Inject constructor(
                 mindfulnessMinutes = snapshot.mindfulnessMinutes,
                 avgHeartRate = snapshot.avgHeartRate
             )
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e("CompanionWidget", "Error fetching data", e)
             CompanionWidgetState(heroClass = "Error", isLoading = false)
         }
     }
 
-    private fun resolveAvatarResource(heroClass: CharacterClass): Int = when (heroClass) {
-        CharacterClass.WARRIOR -> cloud.wafflecommons.pixelbrainreader.R.drawable.hero_warrior
-        CharacterClass.MAGE -> cloud.wafflecommons.pixelbrainreader.R.drawable.hero_sage
-        CharacterClass.ROGUE -> cloud.wafflecommons.pixelbrainreader.R.drawable.hero_sentinel
-        CharacterClass.CLERIC -> cloud.wafflecommons.pixelbrainreader.R.drawable.hero_sage
-        CharacterClass.BARD -> cloud.wafflecommons.pixelbrainreader.R.drawable.hero_creator
-        CharacterClass.PEASANT -> cloud.wafflecommons.pixelbrainreader.R.drawable.hero_novice
+    private fun resolveAvatarResource(
+        context: Context,
+        heroClass: CharacterClass,
+        avatarResName: String?
+    ): Int {
+        if (!avatarResName.isNullOrBlank()) {
+            val customId = runCatching {
+                context.resources.getIdentifier(avatarResName, "drawable", context.packageName)
+            }.getOrDefault(0)
+            if (customId != 0) return customId
+        }
+        return when (heroClass) {
+            CharacterClass.WARRIOR -> cloud.wafflecommons.pixelbrainreader.R.drawable.hero_warrior
+            CharacterClass.MAGE -> cloud.wafflecommons.pixelbrainreader.R.drawable.hero_sage
+            CharacterClass.ROGUE -> cloud.wafflecommons.pixelbrainreader.R.drawable.hero_sentinel
+            CharacterClass.CLERIC -> cloud.wafflecommons.pixelbrainreader.R.drawable.hero_sage
+            CharacterClass.BARD -> cloud.wafflecommons.pixelbrainreader.R.drawable.hero_creator
+            CharacterClass.PEASANT -> cloud.wafflecommons.pixelbrainreader.R.drawable.hero_novice
+        }
     }
 
     private fun Context.drawableToBitmap(resId: Int, sizePx: Int): Bitmap? {

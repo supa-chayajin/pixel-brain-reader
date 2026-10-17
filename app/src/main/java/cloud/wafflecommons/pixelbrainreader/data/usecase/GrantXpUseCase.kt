@@ -23,7 +23,7 @@ class GrantXpUseCase @Inject constructor(
             // Same progression as the domain GrantXpUseCase: currentXp is the progress WITHIN the
             // level, so the threshold is subtracted on level-up. It used to be kept, leaving the XP
             // bar over-full and out of step with every other XP source.
-            if (xp >= xpTarget) {
+            while (xp >= xpTarget) {
                 xp -= xpTarget
                 level++
                 xpTarget = XpCalculator.getXpForNextLevel(level)

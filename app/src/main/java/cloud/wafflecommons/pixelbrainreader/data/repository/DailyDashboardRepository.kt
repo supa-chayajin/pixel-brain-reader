@@ -24,7 +24,8 @@ class DailyDashboardRepository @Inject constructor(
     private val briefingGenerator: BriefingGenerator,
     private val weatherRepository: WeatherRepository,
     private val gratitudeDao: cloud.wafflecommons.pixelbrainreader.data.local.dao.GratitudeDao,
-    private val widgetUpdateManager: cloud.wafflecommons.pixelbrainreader.widget.ui.WidgetUpdateManager
+    private val widgetUpdateManager: cloud.wafflecommons.pixelbrainreader.widget.ui.WidgetUpdateManager,
+    private val pushScheduler: cloud.wafflecommons.pixelbrainreader.data.sync.VaultPushScheduler
 ) {
 
     // --- Live Data Access (Separated Sections) ---
@@ -133,6 +134,11 @@ class DailyDashboardRepository @Inject constructor(
         runCatching { widgetUpdateManager.scheduleSnapshotUpdate() }
     }
 
+    suspend fun deleteTask(taskId: String) = withContext(Dispatchers.IO) {
+        dashboardDao.deleteTaskById(taskId)
+        runCatching { widgetUpdateManager.scheduleSnapshotUpdate() }
+    }
+
     suspend fun toggleTask(taskId: String, isDone: Boolean) = withContext(Dispatchers.IO) {
         dashboardDao.updateTaskStatus(taskId, isDone)
         // Keep the Today/Companion widgets in sync with the task's new done state.
@@ -159,7 +165,7 @@ class DailyDashboardRepository @Inject constructor(
         val parsed = cloud.wafflecommons.pixelbrainreader.data.utils.DailyMarkdownParser.parse(date, content)
         val dashboard = DailyDashboardEntity(
             date = date,
-            dailyMantra = "", // Extraction logic omitted for brevity
+            dailyMantra = parsed.mantra,
             ideasContent = parsed.ideas,
             notesContent = parsed.notes
         )
@@ -192,7 +198,7 @@ class DailyDashboardRepository @Inject constructor(
         val parsed = cloud.wafflecommons.pixelbrainreader.data.utils.DailyMarkdownParser.parse(today, content)
         val dashboard = DailyDashboardEntity(
             date = today,
-            dailyMantra = "",
+            dailyMantra = parsed.mantra,
             ideasContent = parsed.ideas,
             notesContent = parsed.notes
         )
@@ -225,14 +231,17 @@ class DailyDashboardRepository @Inject constructor(
         val currentFileContent = fileRepository.readFile(path) ?: ""
         val frontmatter = if (currentFileContent.isNotEmpty()) FrontmatterManager.extractFrontmatterRaw(currentFileContent) else ""
         
-        // RFC 007: Include active (unpromoted) scraps in the burn
-        val activeScraps = scratchDao.getActiveScrapsSync()
+        // RFC 007: Include active (unpromoted) scraps in today's burn only
+        val activeScraps = if (date == LocalDate.now()) scratchDao.getActiveScrapsSync() else emptyList()
         
         // RFC 009: Gratitude Express
         val gratitudes = gratitudeDao.getGratitudesForDateOneShot(date.format(DateTimeFormatter.ISO_DATE))
         
         val newContent = MarkdownBurner.burn(dashboard, timeline, tasks, activeScraps, gratitudes, frontmatter)
         fileRepository.saveFileLocally(path, newContent)
+        if (newContent != currentFileContent) {
+            pushScheduler.requestPush()
+        }
     }
 
     suspend fun performRetroactiveExport() = withContext(Dispatchers.IO) {

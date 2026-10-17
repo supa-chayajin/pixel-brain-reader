@@ -13,10 +13,10 @@ enum class XpActionType {
 
 class GrantXpUseCase @Inject constructor(
     private val gamificationRepository: GamificationRepository,
-    private val habitRepository: HabitRepository
+    private val habitRepository: HabitRepository,
+    private val uiEffectManager: cloud.wafflecommons.pixelbrainreader.ui.utils.UiEffectManager
 ) {
 
-    
     // Correct Implementation Structure
     suspend fun execute(
         sourceId: String,
@@ -62,6 +62,7 @@ class GrantXpUseCase @Inject constructor(
         if (xpBase <= 0) return
 
         // 2. Atomic Update
+        var leveledUp = false
         gamificationRepository.updateState { state ->
             // Update Attribute
             val newAttributes = state.attributes.toMutableMap()
@@ -76,17 +77,19 @@ class GrantXpUseCase @Inject constructor(
             var newLevel = currentProfile.level
             var newXpTarget = currentProfile.xpToNextLevel
             
-            // Level Up Check
-            if (newXp >= newXpTarget) {
+            // Level Up Check (loop handles multi-level XP grants)
+            while (newXp >= newXpTarget) {
                 newXp -= newXpTarget
                 newLevel++
                 newXpTarget = XpCalculator.getXpForNextLevel(newLevel)
+                leveledUp = true
             }
             
             // Update Class (Simple Logic: Highest Attribute)
             val bestAttr = newAttributes.maxByOrNull { it.value }?.key
             val newClass = when(bestAttr) {
                 Attribute.VIG -> CharacterClass.WARRIOR
+                Attribute.END -> CharacterClass.ROGUE
                 Attribute.MND -> CharacterClass.MAGE
                 Attribute.INT -> CharacterClass.MAGE 
                 Attribute.FTH -> CharacterClass.CLERIC
@@ -117,6 +120,13 @@ class GrantXpUseCase @Inject constructor(
                 history = (state.history + historyEntry).takeLast(50) // Keep last 50
             )
         }
+        if (leveledUp) {
+            uiEffectManager.tryTriggerEffect(
+                cloud.wafflecommons.pixelbrainreader.ui.utils.GlobalEffect.Confetti(
+                    cloud.wafflecommons.pixelbrainreader.ui.utils.ConfettiType.LEVEL_UP
+                )
+            )
+        }
     }
 
     suspend fun executeCustom(
@@ -124,8 +134,9 @@ class GrantXpUseCase @Inject constructor(
         xpBase: Double,
         sourceId: String
     ) {
-        if (xpBase < 0) return
+        if (xpBase <= 0.0) return
 
+        var leveledUp = false
         gamificationRepository.updateState { state ->
             val newAttributes = state.attributes.toMutableMap()
             val currentAttrVal = newAttributes[attribute] ?: 0
@@ -136,15 +147,17 @@ class GrantXpUseCase @Inject constructor(
             var newLevel = currentProfile.level
             var newXpTarget = currentProfile.xpToNextLevel
 
-            if (newXp >= newXpTarget) {
+            while (newXp >= newXpTarget) {
                 newXp -= newXpTarget
                 newLevel++
                 newXpTarget = XpCalculator.getXpForNextLevel(newLevel)
+                leveledUp = true
             }
 
             val bestAttr = newAttributes.maxByOrNull { it.value }?.key
             val newClass = when(bestAttr) {
                 Attribute.VIG -> CharacterClass.WARRIOR
+                Attribute.END -> CharacterClass.ROGUE
                 Attribute.MND -> CharacterClass.MAGE
                 Attribute.INT -> CharacterClass.MAGE 
                 Attribute.FTH -> CharacterClass.CLERIC
@@ -172,6 +185,13 @@ class GrantXpUseCase @Inject constructor(
                 profile = newProfile,
                 attributes = newAttributes,
                 history = (state.history + historyEntry).takeLast(50)
+            )
+        }
+        if (leveledUp) {
+            uiEffectManager.tryTriggerEffect(
+                cloud.wafflecommons.pixelbrainreader.ui.utils.GlobalEffect.Confetti(
+                    cloud.wafflecommons.pixelbrainreader.ui.utils.ConfettiType.LEVEL_UP
+                )
             )
         }
     }

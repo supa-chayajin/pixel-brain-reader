@@ -283,6 +283,8 @@ class DailyNoteViewModelTest {
             taskRepository = mockk(relaxed = true),
             syncOrchestrator = syncOrchestrator,
             healthMetricsRepository = healthMetricsRepository,
+            memoryEchoRepository = mockk(relaxed = true),
+            voiceCompiler = mockk(relaxed = true),
             appClock = appClock,
             appScope = kotlinx.coroutines.CoroutineScope(testDispatcher)
         )

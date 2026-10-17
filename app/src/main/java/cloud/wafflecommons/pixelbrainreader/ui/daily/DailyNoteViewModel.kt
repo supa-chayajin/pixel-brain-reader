@@ -106,6 +106,8 @@ class DailyNoteViewModel @Inject constructor(
     private val taskRepository: TaskRepository,
     private val syncOrchestrator: SyncOrchestrator,
     private val healthMetricsRepository: HealthMetricsRepository,
+    private val memoryEchoRepository: cloud.wafflecommons.pixelbrainreader.data.repository.MemoryEchoRepository,
+    private val voiceCompiler: cloud.wafflecommons.pixelbrainreader.data.ai.VoiceCompiler,
     appClock: AppClock,
     @param:ApplicationScope private val appScope: CoroutineScope
 ) : ViewModel() {
@@ -249,18 +251,43 @@ class DailyNoteViewModel @Inject constructor(
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DailyNoteState(date = appClock.today.value))
 
+    // Spaced repetition echoes of decaying architectural and project notes
+    private val _memoryEchoes = MutableStateFlow<List<cloud.wafflecommons.pixelbrainreader.data.model.MemoryEcho>>(emptyList())
+    val memoryEchoes: StateFlow<List<cloud.wafflecommons.pixelbrainreader.data.model.MemoryEcho>> = _memoryEchoes.asStateFlow()
+
     init {
         loadDailyNote(_selectedDate.value)
         setupSecondBrain()
+        refreshMemoryEchoes()
         // Follow the real day (midnight, clock/timezone changes, app returning after midnight).
         appClock.today
-            .onEach { today -> if (today != _selectedDate.value) loadDailyNote(today) }
+            .onEach { today ->
+                if (today != _selectedDate.value) {
+                    loadDailyNote(today)
+                    refreshMemoryEchoes()
+                }
+            }
             .launchIn(viewModelScope)
-        // Re-check the weather whenever the app returns to the foreground (served from the reading
-        // cache while recent). Health numbers are refreshed app-wide by ForegroundRefresher.
+        // Re-check the weather and memory echoes whenever the app returns to the foreground.
         appClock.foregroundEvents
-            .onEach { refreshWeather() }
+            .onEach {
+                refreshWeather()
+                refreshMemoryEchoes()
+            }
             .launchIn(viewModelScope)
+    }
+
+    fun refreshMemoryEchoes() {
+        viewModelScope.launch {
+            _memoryEchoes.value = memoryEchoRepository.getDailyEchoes(limit = 2)
+        }
+    }
+
+    fun markEchoReviewed(path: String) {
+        viewModelScope.launch {
+            memoryEchoRepository.markEchoReviewed(path)
+            _memoryEchoes.value = _memoryEchoes.value.filter { it.path != path }
+        }
     }
 
     /**
@@ -278,6 +305,7 @@ class DailyNoteViewModel @Inject constructor(
     fun triggerSync() {
         syncOrchestrator.requestSync(force = true)
         refreshWeather(force = true)
+        refreshMemoryEchoes()
     }
 
     private fun loadDailyNote(date: LocalDate) {
@@ -362,12 +390,42 @@ class DailyNoteViewModel @Inject constructor(
         viewModelScope.launch { taskRepository.toggleTask(taskId, isDone) }
     }
 
+    fun deleteTask(task: DailyTaskEntity) {
+        viewModelScope.launch {
+            dashboardRepository.deleteTask(task.id)
+            _userMessage.value = "Task removed"
+        }
+    }
+
     fun addGratitude(text: String) {
         viewModelScope.launch { dailyNoteRepository.addGratitude(_selectedDate.value, text) }
     }
 
     fun saveScrap(content: String, color: Int = 0xFF000000.toInt()) {
         viewModelScope.launch { scratchRepository.saveScrap(content, color) }
+    }
+
+    fun compileAndSaveVoiceNote(transcript: String) {
+        if (transcript.isBlank()) return
+        viewModelScope.launch {
+            try {
+                val compiled = voiceCompiler.compile(transcript)
+                for (task in compiled.detectedTasks) {
+                    taskRepository.addTask(task, _selectedDate.value, null)
+                }
+                if (compiled.structuredMarkdown.isNotBlank()) {
+                    dashboardRepository.addTimelineEntry(
+                        date = _selectedDate.value,
+                        content = compiled.structuredMarkdown,
+                        time = LocalTime.now()
+                    )
+                }
+                _userMessage.value = "Note vocale compilée (${compiled.detectedTasks.size} tâches)"
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.e("DailyNoteViewModel", "Failed to compile voice note", e)
+            }
+        }
     }
 
     fun deleteScrap(scrap: ScratchNoteEntity) {

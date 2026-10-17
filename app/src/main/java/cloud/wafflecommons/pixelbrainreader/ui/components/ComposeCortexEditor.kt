@@ -224,6 +224,36 @@ class MarkdownVisualTransformation(
                     match.range.last + 1
                 )
             }
+
+            // 6. WikiLinks ([[target]] or [[target|label]]) and Markdown links ([label](url))
+            WIKI_LINK.findAll(text).forEach { match ->
+                addStyle(
+                    SpanStyle(
+                        color = highlightColor,
+                        fontWeight = FontWeight.Medium
+                    ),
+                    match.range.first,
+                    match.range.last + 1
+                )
+            }
+            MD_LINK.findAll(text).forEach { match ->
+                val label = match.groups[1]
+                val url = match.groups[2]
+                if (label != null) {
+                    addStyle(
+                        SpanStyle(color = highlightColor, fontWeight = FontWeight.Medium),
+                        label.range.first,
+                        label.range.last + 1
+                    )
+                }
+                if (url != null) {
+                    addStyle(
+                        SpanStyle(color = defaultColor.copy(alpha = 0.5f)),
+                        url.range.first,
+                        url.range.last + 1
+                    )
+                }
+            }
         }
     }
 
@@ -233,5 +263,7 @@ class MarkdownVisualTransformation(
         val ITALIC = Regex("(?<!\\*)(\\*|_)(?!\\s)(.*?)(?<!\\s)\\1(?!\\*)")
         val BULLET = Regex("^\\s*([-*])\\s+(.*)", RegexOption.MULTILINE)
         val CODE = Regex("`([^`]+)`")
+        val WIKI_LINK = Regex("\\[\\[([^\\]]+)\\]\\]")
+        val MD_LINK = Regex("\\[([^\\]]+)\\]\\(([^)]+)\\)")
     }
 }

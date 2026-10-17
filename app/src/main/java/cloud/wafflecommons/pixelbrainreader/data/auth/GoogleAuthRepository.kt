@@ -56,7 +56,7 @@ private const val AUTHORIZE_TIMEOUT_MS = 20_000L
  */
 @Singleton
 class GoogleAuthRepository @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
     private val secretManager: SecretManager
 ) {
     private val webClientId: String get() = context.getString(R.string.google_client_id)
@@ -166,7 +166,7 @@ class GoogleAuthRepository @Inject constructor(
         val googleCred = GoogleIdTokenCredential.createFrom(cred.data)
         secretManager.saveGoogleEmail(googleCred.id)
         _isAccountLinked.value = true
-        Log.i(TAG, "Identity acquired for ${googleCred.id} (filtered=$filterAuthorized)")
+        Log.d(TAG, "Identity acquired (filtered=$filterAuthorized)")
         return Result.success(googleCred.id)
     }
 

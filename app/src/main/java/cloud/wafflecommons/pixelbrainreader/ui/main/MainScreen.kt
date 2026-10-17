@@ -923,6 +923,65 @@ fun MainScreen(
                                     // AnimatedPane transition is all that's needed — no inner
                                     // AnimatedVisibility (which would double the exit animation).
                                     AnimatedPane {
+                                        var fileToMove by remember { mutableStateOf<cloud.wafflecommons.pixelbrainreader.data.remote.model.GithubFileDto?>(null) }
+                                        if (fileToMove != null) {
+                                            val target = fileToMove!!
+                                            androidx.compose.material3.AlertDialog(
+                                                onDismissRequest = { fileToMove = null },
+                                                title = { Text("Move \"${target.name}\"") },
+                                                shape = MaterialTheme.shapes.extraLarge,
+                                                text = {
+                                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                        Text(
+                                                            text = "Destination: /${uiState.moveDialogCurrentPath}",
+                                                            style = MaterialTheme.typography.labelLarge,
+                                                            color = MaterialTheme.colorScheme.primary
+                                                        )
+                                                        if (uiState.moveDialogCurrentPath.isNotEmpty()) {
+                                                            androidx.compose.material3.TextButton(
+                                                                onClick = { viewModel.navigateUpMoveFolder() }
+                                                            ) {
+                                                                Text("⬅ Up one folder")
+                                                            }
+                                                        }
+                                                        if (uiState.availableMoveDestinations.isEmpty()) {
+                                                            Text(
+                                                                text = "No subfolders here.",
+                                                                style = MaterialTheme.typography.bodySmall,
+                                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                            )
+                                                        } else {
+                                                            Column(
+                                                                modifier = Modifier.height(200.dp),
+                                                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                                                            ) {
+                                                                uiState.availableMoveDestinations.forEach { folderPath ->
+                                                                    androidx.compose.material3.OutlinedButton(
+                                                                        onClick = { viewModel.navigateToMoveFolder(folderPath) },
+                                                                        modifier = Modifier.fillMaxWidth()
+                                                                    ) {
+                                                                        Text(folderPath.substringAfterLast("/"))
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                },
+                                                confirmButton = {
+                                                    androidx.compose.material3.Button(onClick = {
+                                                        viewModel.moveFile(target, uiState.moveDialogCurrentPath)
+                                                        fileToMove = null
+                                                    }) {
+                                                        Text("Move Here")
+                                                    }
+                                                },
+                                                dismissButton = {
+                                                    androidx.compose.material3.TextButton(onClick = { fileToMove = null }) {
+                                                        Text("Cancel")
+                                                    }
+                                                }
+                                            )
+                                        }
                                         Row(modifier = Modifier.fillMaxSize()) {
                                             Box(modifier = Modifier.weight(1f)) {
                                                 FileListPane(
@@ -948,7 +1007,11 @@ fun MainScreen(
                                                         // Delete the swiped file directly — do NOT open it first.
                                                         viewModel.requestDeleteFile(file)
                                                     },
-                                                    onAnalyzeFolder = { viewModel.analyzeCurrentFolder() }
+                                                    onAnalyzeFolder = { viewModel.analyzeCurrentFolder() },
+                                                    onMoveFile = { file ->
+                                                        fileToMove = file
+                                                        viewModel.prepareMove(file)
+                                                    }
                                                 )
                                             }
                                             
@@ -983,7 +1046,10 @@ fun MainScreen(
                                             onWikiLinkClick = { target -> viewModel.onWikiLinkClick(target) },
                                             onCreateNew = { viewModel.createNewFile() },
                                             moodViewModel = moodViewModel,
-                                            onSave = { viewModel.saveFile() }
+                                            onSave = { viewModel.saveFile() },
+                                            onFetchHistory = { viewModel.getFileCommitHistory() },
+                                            onFetchRevisionContent = { commitId -> viewModel.getFileContentAtCommit(commitId = commitId) },
+                                            onRestoreRevision = { restored -> viewModel.restoreRevision(restored) }
                                         )
                                     } else {
                                         cloud.wafflecommons.pixelbrainreader.ui.components.WelcomeScreen()
@@ -1051,7 +1117,18 @@ fun MainScreen(
                     onNavigateToHomeConfig = { navController.navigate(Screen.ROUTE_HOME_CONFIG) },
                     onNavigateToReminders = { navController.navigate("reminders") },
                     onNavigateToNavBarReorder = { navController.navigate("navbar_reorder") },
-                    onNavigateToMoodTags = { navController.navigate("mood_tags") }
+                    onNavigateToMoodTags = { navController.navigate("mood_tags") },
+                    onNavigateToGamificationSettings = { navController.navigate("gamification_settings") },
+                    onOpenNote = { path ->
+                        viewModel.openVaultFile(path)
+                        navController.popBackStack()
+                    }
+                )
+            }
+
+            composable("gamification_settings") {
+                cloud.wafflecommons.pixelbrainreader.ui.settings.GamificationSettingsScreen(
+                    onNavigateBack = { navController.popBackStack() }
                 )
             }
 
@@ -1122,7 +1199,8 @@ fun MainScreen(
                 // their own — no manual reload trigger needed.
                 cloud.wafflecommons.pixelbrainreader.ui.daily.DailyNoteScreen(
                     onCheckInClicked = { showMoodSheet = true },
-                    onNavigateToSettings = { navController.navigate(Screen.Settings) }
+                    onNavigateToSettings = { navController.navigate(Screen.Settings) },
+                    onOpenNote = { path -> viewModel.openVaultFile(path) }
                 )
             }
             

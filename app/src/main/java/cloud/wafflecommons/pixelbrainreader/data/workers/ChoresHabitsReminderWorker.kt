@@ -57,8 +57,8 @@ class ChoresHabitsReminderWorker @AssistedInject constructor(
     }
 
     private suspend fun postReminderIfDue() {
-        // Due chores: reuse the same entropy logic the Home OS dashboard shows.
-        val chores = choreRepository.getAllChoresStream().first()
+        // Due chores: reuse the same entropy logic the Home OS dashboard shows (excluding archived chores).
+        val chores = choreRepository.getAllChoresStream().first().filter { !it.archived }
         val dueChores = calculateChoreEntropy(chores)
             .filter { it.dirtinessPercentage >= 100f }
             .map { it.entity.name }

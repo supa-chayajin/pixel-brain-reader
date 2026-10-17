@@ -23,7 +23,8 @@ import javax.inject.Inject
  */
 class AutomateHabitsUseCase @Inject constructor(
     private val habitRepository: HabitRepository,
-    private val healthMetricsRepository: HealthMetricsRepository
+    private val healthMetricsRepository: HealthMetricsRepository,
+    private val applyHealthSynergyUseCase: ApplyHealthSynergyUseCase
 ) {
     suspend operator fun invoke(date: LocalDate) = withContext(Dispatchers.IO) {
         val metrics = healthMetricsRepository.getMetrics(date)
@@ -31,6 +32,9 @@ class AutomateHabitsUseCase @Inject constructor(
             Log.d(TAG, "No health metrics found for $date")
             return@withContext
         }
+
+        runCatching { applyHealthSynergyUseCase(date) }
+            .onFailure { if (it is kotlinx.coroutines.CancellationException) throw it; Log.w(TAG, "Health synergy evaluation failed (non-fatal)", it) }
 
         val automatic = habitRepository.getHabitConfigs()
             .filter { !it.archived && !it.autoSource.isNullOrBlank() }

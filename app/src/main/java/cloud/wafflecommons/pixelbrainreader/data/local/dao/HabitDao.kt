@@ -23,7 +23,7 @@ interface HabitDao {
     @Query("SELECT * FROM habit_logs WHERE date LIKE :year || '%'")
     suspend fun getLogsForYear(year: String): List<HabitLogEntity>
     
-    @Query("SELECT habitId, date, MAX(value) as value, status FROM habit_logs WHERE date LIKE :year || '%' GROUP BY habitId, date")
+    @Query("SELECT * FROM habit_logs WHERE date BETWEEN :year || '-01-01' AND :year || '-12-31'")
     fun getLogsForYearFlow(year: String): Flow<List<HabitLogEntity>>
 
     /** Inclusive ISO-date range ("yyyy-MM-dd" sorts lexicographically). */

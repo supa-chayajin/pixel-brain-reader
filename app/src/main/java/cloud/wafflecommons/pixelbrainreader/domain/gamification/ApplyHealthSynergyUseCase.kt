@@ -1,46 +1,24 @@
 package cloud.wafflecommons.pixelbrainreader.domain.gamification
 
-import android.content.Context
-import android.util.Log
 import cloud.wafflecommons.pixelbrainreader.data.local.preferences.GamificationPreferences
-import cloud.wafflecommons.pixelbrainreader.data.health.DailyHealthMetrics
-import com.google.gson.Gson
-import dagger.hilt.android.qualifiers.ApplicationContext
+import cloud.wafflecommons.pixelbrainreader.data.repository.HealthMetricsRepository
+import cloud.wafflecommons.pixelbrainreader.data.repository.MoodRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
-import java.io.File
-import java.io.FileNotFoundException
 import java.time.LocalDate
 import javax.inject.Inject
-
-import cloud.wafflecommons.pixelbrainreader.data.repository.MoodRepository
 
 class ApplyHealthSynergyUseCase @Inject constructor(
     private val gamificationPreferences: GamificationPreferences,
     private val grantXpUseCase: GrantXpUseCase,
     private val moodRepository: MoodRepository,
-    @ApplicationContext private val context: Context
+    private val healthMetricsRepository: HealthMetricsRepository
 ) {
     suspend operator fun invoke(date: LocalDate): Int = withContext(Dispatchers.IO) {
         val lastAppliedDate = gamificationPreferences.lastHealthSynergyAppliedDateFlow.first()
 
-        val file = File(context.filesDir, "10_Journal/data/health/metrics/$date.json")
-        if (!file.exists()) {
-            return@withContext 0
-        }
-
-        val json = try {
-            file.readText()
-        } catch (e: Exception) {
-            return@withContext 0
-        }
-
-        val metrics = try {
-            Gson().fromJson(json, DailyHealthMetrics::class.java)
-        } catch (e: Exception) {
-            null
-        } ?: return@withContext 0
+        val metrics = healthMetricsRepository.getMetrics(date) ?: return@withContext 0
 
         // Synergy Calculation
         val moods = moodRepository.getMoodFlow().first()
@@ -81,11 +59,11 @@ class ApplyHealthSynergyUseCase @Inject constructor(
                 applied = true
             }
     
-            if (metrics.sleepDurationMinutes < sleepMinMinutes) {
+            if (metrics.sleepDurationMinutes >= sleepMinMinutes && sleepMinMinutes > 0) {
                 grantXpUseCase.executeCustom(
                     attribute = cloud.wafflecommons.pixelbrainreader.data.gamification.Attribute.MND,
-                    xpBase = 0.0,
-                    sourceId = "Energy Malus (Lack of Sleep)"
+                    xpBase = 25.0,
+                    sourceId = "Health Synergy: Sleep Goal Reached"
                 )
                 applied = true
             }

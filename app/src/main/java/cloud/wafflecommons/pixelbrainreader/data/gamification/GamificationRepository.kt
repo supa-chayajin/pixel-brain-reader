@@ -23,7 +23,8 @@ import javax.inject.Singleton
 class GamificationRepository @Inject constructor(
     private val fileRepository: FileRepository,
     private val gamificationPreferences: GamificationPreferences,
-    private val widgetUpdateManager: WidgetUpdateManager
+    private val widgetUpdateManager: WidgetUpdateManager,
+    private val pushScheduler: cloud.wafflecommons.pixelbrainreader.data.sync.VaultPushScheduler
 ) {
     private val _gamificationState = MutableStateFlow(GamificationState())
     val gamificationState: Flow<GamificationState> = _gamificationState.asStateFlow()
@@ -136,6 +137,7 @@ class GamificationRepository @Inject constructor(
         try {
             fileRepository.createLocalFolder(systemDir)
             fileRepository.saveFileLocally(profileFile, jsonParser.encodeToString(state))
+            pushScheduler.requestPush()
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -160,7 +162,7 @@ class GamificationRepository @Inject constructor(
                 var newLevel = currentProfile.level
                 var newXpTarget = currentProfile.xpToNextLevel
 
-                if (newXp >= newXpTarget) {
+                while (newXp >= newXpTarget) {
                     newXp -= newXpTarget
                     newLevel++
                     newXpTarget = XpCalculator.getXpForNextLevel(newLevel)

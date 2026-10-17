@@ -15,6 +15,7 @@ import javax.inject.Singleton
 @Singleton
 class TaskRepository @Inject constructor(
     private val taskDao: TaskDao,
+    private val dailyDashboardDao: cloud.wafflecommons.pixelbrainreader.data.local.dao.DailyDashboardDao,
     private val widgetUpdateManager: WidgetUpdateManager
 ) {
 
@@ -24,6 +25,9 @@ class TaskRepository @Inject constructor(
         scheduledTime: LocalTime? = null,
         priority: Int = 1
     ) = withContext(Dispatchers.IO) {
+        dailyDashboardDao.insertDashboard(
+            cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyDashboardEntity(date = date)
+        )
         val task = DailyTaskEntity(
             scheduledDate = date.format(DateTimeFormatter.ISO_LOCAL_DATE),
             label = content,

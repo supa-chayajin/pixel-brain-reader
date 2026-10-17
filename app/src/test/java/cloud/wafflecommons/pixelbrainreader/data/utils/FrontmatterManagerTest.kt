@@ -15,27 +15,32 @@ class FrontmatterManagerTest {
             # Content
         """.trimIndent()
         
-        // This functionality depends on how ObsidianHelper parses it, 
-        // as FrontmatterManager might just be a utility for stripping? 
-        // Checking the requirements: extractFrontmatter_ParsesStandardTags.
-        // If FrontmatterManager has extract logic, we test it. 
-        // Based on previous context, ObsidianHelper handles parsing, strict request asked to test FrontmatterManager.
-        // I will assume FrontmatterManager has or should have extraction logic, OR I should likely use ObsidianHelper logic here if FrontmatterManager delegates.
-        // However, referencing the prompt: "Target: cloud.wafflecommons.pixelbrainreader.data.utils.FrontmatterManager"
-        // Let's implement based on what typical frontmatter managers do. 
-        // NOTE: If FrontmatterManager only has `stripFrontmatter`, I will add `extract` or `parse` if needed, 
-        // BUT the prompt says "Reflect current codebase state". 
-        // Previously I viewed FrontmatterManager and it had `stripFrontmatter`. 
-        // ObsidianHelper had `parse`.
-        // The prompt asks to test `extractFrontmatter_ParsesStandardTags` in `FrontmatterManagerTest`. 
-        // I will stick to testing `stripFrontmatter` which I know exists, and if `extract` doesn't exist I will skip or comment.
-        // WAIT, the prompt explicitly asked for `extractFrontmatter_ParsesStandardTags`. 
-        // I will assume the user IMPLIES I should test the logic where it lives, or maybe I should check if I need to add it to FrontmatterManager?
-        // "Target: cloud.wafflecommons.pixelbrainreader.data.utils.FrontmatterManager"
-        // I'll proceed with `strip` first which is safe. 
-        // If I write a test for a missing method it will fail.
-        // Let's check `FrontmatterManager.kt` again? No, strict forbidden to check `main/java` unless needed.
-        // I'll implement `strip` tests first.
+        val (metadata, body) = FrontmatterManager.extractFrontmatterAndBody(input)
+        assertEquals("Hello World", metadata["title"])
+        assertEquals(listOf("a", "b", "c"), metadata["tags"])
+        assertEquals("# Content", body.trim())
+    }
+
+    @Test
+    fun updateFrontmatter_PreservesMidFileHorizontalRule() {
+        val input = """
+            ---
+            title: Note
+            ---
+            # Section 1
+            
+            ---
+            
+            # Section 2
+        """.trimIndent()
+
+        val updated = FrontmatterManager.updateFrontmatter(input, mapOf("mood_score" to 5))
+        val (metadata, body) = FrontmatterManager.extractFrontmatterAndBody(updated)
+        assertEquals("Note", metadata["title"])
+        assertEquals(5, metadata["mood_score"])
+        org.junit.Assert.assertTrue(body.contains("# Section 1"))
+        org.junit.Assert.assertTrue(body.contains("---"))
+        org.junit.Assert.assertTrue(body.contains("# Section 2"))
     }
     
     @Test
