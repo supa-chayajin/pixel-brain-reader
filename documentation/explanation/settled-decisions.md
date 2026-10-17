@@ -93,3 +93,12 @@ No feature branches: the owner is the only developer and dogfoods from `main`.
 
 There is no manual light/dark selector: Android's force-dark overrides a per-app choice,
 which made the switch unreliable.
+
+## 13. No public version until the owner says so
+
+No Play Store listing, showcase or public announcement — and no preparation aimed at
+one — until the owner explicitly decides to go public. Publishing releases on the
+(public) GitHub repository is fine: it is how versions and their R8 mappings are archived.
+
+*Why:* the app is a personal, dogfooded tool for now; going public is a deliberate decision,
+not something to drift into.
