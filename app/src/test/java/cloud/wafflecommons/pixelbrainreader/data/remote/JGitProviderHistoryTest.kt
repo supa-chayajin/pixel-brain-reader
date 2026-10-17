@@ -78,6 +78,20 @@ class JGitProviderHistoryTest {
     }
 
     @Test
+    fun `a generic auto-save message is replaced by one naming the staged change`() = runBlocking {
+        seedRemote(NOTE, "v1\n")
+        assertTrue(provider.setupRepository(remoteUri, "main").isSuccess)
+
+        note().writeText("v2\n")
+        assertTrue(provider.commit("Auto-save: local changes").isSuccess)
+        // Nothing changed since: no new commit.
+        assertTrue(provider.commit("Auto-save: local changes").isSuccess)
+
+        val history = provider.getFileCommitHistory(NOTE)
+        assertEquals(listOf("projects: update plan", "seed"), history.map { it.message })
+    }
+
+    @Test
     fun `an unknown commit id reads as null instead of throwing`() = runBlocking {
         seedRemote(NOTE, "v1\n")
         assertTrue(provider.setupRepository(remoteUri, "main").isSuccess)

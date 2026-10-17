@@ -53,6 +53,13 @@ class SemanticCommitMessageGeneratorTest {
     }
 
     @Test
+    fun generate_encryptedNote_neverNamesIt() {
+        val message = SemanticCommitMessageGenerator.generate(listOf("99_Private/Therapy notes.md.enc"))
+        assertEquals("private: update an encrypted note", message)
+        assertFalse(message.contains("Therapy"))
+    }
+
+    @Test
     fun generate_emptyList_returnsFallback() {
         val message = SemanticCommitMessageGenerator.generate(emptyList(), "Fallback")
         assertEquals("Fallback", message)
