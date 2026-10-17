@@ -256,7 +256,7 @@ Definition of done for every item:
 
 Order: data safety → main thread → AI → health → gamification → UI → insights → perf/DI → crash screen → lint → release.
 
-- [ ] **1.1 (M) Time Machine safe restore (B1)**
+- [x] **1.1 (M) Time Machine safe restore (B1)**
   - Restore is disabled unless the revision content loaded and is non-null.
   - Add a confirm dialog.
   - Restore goes through a dedicated VM path with no `TaskCompletionDetector`.
@@ -264,19 +264,19 @@ Order: data safety → main thread → AI → health → gamification → UI →
   - Use a real diff: JGit `DiffAlgorithm` (HISTOGRAM) over `RawText`.
   - Hide history for `.md.enc`.
   - *Tests:* VM restore with null content does not write. A JGit temp-repo test covers history and content at a commit, including the deletion commit. A diff unit test covers moved and duplicated lines.
-- [ ] **1.2 (M) Voice capture keeps the daily-note format (B2)**
+- [x] **1.2 (M) Voice capture keeps the daily-note format (B2)**
   - A timeline entry is a single line (summary). The body goes to a linked `00_Inbox/` note, or to the Ideas section.
   - Use `LocalAiManager.generateResponse` (`Result`) instead of string matching.
   - Rethrow `CancellationException`, add `AiLanguage.DIRECTIVE`, and make the toast English.
   - *Tests:* extend `MarkdownBurnerRoundTripTest` with multi-line content, and test that the timeline always stays single-line.
-- [ ] **1.3 (M) Embeds without main-thread I/O (B3)**
+- [x] **1.3 (M) Embeds without main-thread I/O (B3)**
   - Resolve `![[name]]` from the `files` table: build a name→path map on IO. No `File` access inside the plugin.
   - Parse markdown off the main thread (`produceState` + `Dispatchers.Default`).
   - *Test:* the plugin resolves names through an injected map.
-- [ ] **1.4 (S) Restore Nano auto-download (B4)**
+- [x] **1.4 (S) Restore Nano auto-download (B4)**
   - Bring back the `autoDownloadAttempted` guard plus `startDownload()`.
   - *Test:* with a mocked `DOWNLOADABLE` status, `download()` is called exactly once.
-- [ ] **1.5 (M) Fix RAG scoring and prompts (B5, I11, I12, I13)**
+- [x] **1.5 (M) Fix RAG scoring and prompts (B5, I11, I12, I13)**
   - Restore 0.35 and remove the path boost; the chunk header already carries the title.
   - Remove the lexical fallback (empty means "not in your notes") until 2.1 lands.
   - Add a prompt budget: context ≤ ~2,500 chars and history ≤ ~1,200, or use `countTokens`.
@@ -291,19 +291,19 @@ Order: data safety → main thread → AI → health → gamification → UI →
     - `VectorSearchEngine` scoring with fake vectors: the floor holds and stop words don't boost.
     - The prompt builder stays within budget.
     - A guard test checks that every prompt ends with the directive.
-- [ ] **1.6 (S) Health Connect (B6)**
+- [x] **1.6 (S) Health Connect (B6)**
   - Keep one catalog entry at `connect-client:1.1.0`, or newer stable.
   - Restore the mindfulness read and permission (`@OptIn(ExperimentalMindfulnessSessionApi::class)`).
   - Check with `dependencyInsight`.
-- [ ] **1.7 (M) Gamification (I3, I8)**
+- [x] **1.7 (M) Gamification (I3, I8)**
   - Per-reward idempotency per date, e.g. a set `{steps, sleep, synergy}` for each date.
   - `GamificationRepository` exposes a `levelUps` `SharedFlow`; the UI turns it into confetti, so the domain no longer imports the UI.
   - *Tests:* sleep bonus in the morning, then the steps bonus later the same day. Each reward is granted at most once.
-- [ ] **1.8 (S) English UI sweep (I1, S1)**
+- [x] **1.8 (S) English UI sweep (I1, S1)**
   - Translate all ~38 strings and update the tests that pin French.
   - Fix or drop the JD badges, and move `parseJohnnyDecimal` to `data/utils`.
   - *Guard test:* fail the build on accented-French literals in `ui/**` and in UI-facing labels (allow-list the `data/ai` prompts).
-- [ ] **1.9 (M) Make the insights honest (I4, I5, I6)**
+- [x] **1.9 (M) Make the insights honest (I4, I5, I6)**
   - Remove the chrono card for now.
   - Graph analyzer:
     - Skip `![[…]]` embeds.
@@ -314,27 +314,34 @@ Order: data safety → main thread → AI → health → gamification → UI →
     - Review state in vault JSON (`99_System/echoes.json`, so it syncs).
     - Age from the git last-commit time: one `RevWalk`, cached.
   - *Tests:* image embeds are not dead links, and echo ages don't change after a re-clone.
-- [ ] **1.10 (S) Commits and DI (I7, I9)**
+- [x] **1.10 (S) Commits and DI (I7, I9)**
   - `VaultPushScheduler.requestPush(path)` accumulates dirty paths, and the message is built from them with no `git.status()`.
   - Inject `SecretManager` into `FileRepository`.
-- [ ] **1.11 (S) Crash screen (I10)**
+- [x] **1.11 (S) Crash screen (I10)**
   - Keep the stack trace in release (it never leaves the device).
   - Set `FLAG_SECURE` on `CrashActivity` in release builds only.
-- [ ] **1.12 (S) Back to 0 lint warnings (I2, S2)**
+- [x] **1.12 (S) Back to 0 lint warnings (I2, S2)**
   - Use `LocalDensity.current.density`.
   - Replace `getIdentifier` with an explicit avatar map.
   - Use `PrimaryTabRow` and the current bottom-sheet API.
   - Add `-Xannotation-default-target=param-property`.
-- [ ] **1.13 (M) Truly on-device dictation**
+- [x] **1.13 (M) Truly on-device dictation**
   - All three voice inputs (private journal, daily capture, chat mic) use `RecognizerIntent`, which hands the audio to Google's speech service and may process it online. For the encrypted private journal, that is a real privacy gap.
   - Use `SpeechRecognizer.createOnDeviceSpeechRecognizer` with the offline fr-FR model, through one shared `OnDeviceDictation` helper.
   - If the on-device recognizer is unavailable, fall back to `RecognizerIntent` with `EXTRA_PREFER_OFFLINE` and tell the user it may not be fully offline.
   - *Test:* the helper's language and offline flags are pinned by unit tests.
-- [ ] **1.14 (S) Release v10.2.0**
+- [x] **1.14 (S) Release v10.2.0**
   - `versionCode 1020` / `versionName "10.2.0"`.
   - CHANGELOG `[10.2.0]`: Added / Fixed / Removed, with credit for the Antigravity batch.
   - CLAUDE.md: Gradle 9.7.1, only `genai-prompt` from ML Kit, the new features.
   - Tag, then build the signed APK in Android Studio, then run the Fold checklist in §8.
+
+> **Phase 1 status (2026-10-17):** 1.1–1.13 done, one commit each, every fix with a test (unit tests: 142 before 866e0d5, 171 after it, 227 now).
+> Findings while executing:
+> - D4 was moot: automatic habits never grant XP.
+> - The chrono-biometric card was removed outright rather than kept.
+> - The memory-echo rotation (hash of path + day) barely rotated; it is now a day-seeded shuffle.
+> - The 7 Kotlin deprecation warnings left predate 866e0d5 and move to Phase 4.
 
 ### Phase 2 — v10.3.0 "Make the new features real"
 
@@ -405,6 +412,7 @@ Order: data safety → main thread → AI → health → gamification → UI →
 - [ ] **4.4 (S)** Guard tests: UI language (1.8), prompt directive (1.5), and version/CHANGELOG consistency (`versionName` must appear in CHANGELOG).
 - [ ] **4.5 (L)** Split the hotspots behind tests: `MainScreen.kt` (1,274 lines), `DailyNoteScreen.kt` (1,239) and `MainViewModel.kt` (1,124).
 - [ ] **4.6 (L)** Externalize strings into `strings.xml` (v10 backlog).
+- [ ] **4.8 (S)** Clear the 7 pre-existing Kotlin deprecation warnings (material3 alpha: `ListItem` overloads, `rememberModalBottomSheetState`, `rememberSwipeToDismissBoxState` `confirmValueChange`, `centerAlignedTopAppBarColors`, `Icons.Filled.VolumeUp`).
 - [ ] **4.7 (M, optional)** A baseline profile for cold start and Daily scrolling. It needs a `:baselineprofile` module, which breaks the single-module rule — your call.
 
 ### Product thesis for Phases 5–6
