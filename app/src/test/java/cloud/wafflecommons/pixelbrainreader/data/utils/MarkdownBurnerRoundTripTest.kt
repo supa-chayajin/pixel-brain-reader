@@ -280,21 +280,50 @@ class MarkdownBurnerRoundTripTest {
     // ---------------------------------------------------------------------------------
 
     @Test
-    fun `LOSSY PIN - dailyMantra is burned into the file but never parsed back`() {
-        // MarkdownBurner.kt:40-42 writes the mantra as "*mantra*"; DailyMarkdownParser has
-        // no mantra field in ParsedDaily and both ingest() and rehydrateTodayFromDiskIfEmpty()
-        // hardcode dailyMantra = "" (DailyDashboardRepository.kt:166 and :199).
+    fun `dailyMantra round-trips and never leaks into another section`() {
+        // Formerly a LOSSY PIN: the parser now reads the "*mantra*" line under the date header.
         val withMantra = dashboard.copy(dailyMantra = "Carpe diem")
         val md = MarkdownBurner.burn(withMantra, timeline, tasks, scraps, gratitudes, "")
 
         assertTrue("Mantra must still be written to disk", md.contains("*Carpe diem*"))
-        // ParsedDaily exposes no mantra — the loss is structural. We pin that the mantra
-        // text at least never corrupts any parsed section.
         val parsed = DailyMarkdownParser.parse(date, md)
+        assertEquals("Carpe diem", parsed.mantra)
         assertFalse(parsed.ideas.contains("Carpe diem"))
         assertFalse(parsed.notes.contains("Carpe diem"))
         assertFalse(parsed.tasks.any { it.label.contains("Carpe diem") })
         assertFalse(parsed.timeline.any { it.content.contains("Carpe diem") })
+    }
+
+    @Test
+    fun `multi-line list content is burned as one line and survives the round-trip`() {
+        // A voice note's multi-line body used to be written into ONE timeline entry: every line
+        // after the first had no time, so the parser dropped it and the next burn erased it.
+        val multiLine = "- first point\n- second point\n\n  third point"
+        val md = MarkdownBurner.burn(
+            dashboard,
+            listOf(TimelineEntryEntity(date = date, time = LocalTime.of(8, 5), content = multiLine)),
+            listOf(DailyTaskEntity(scheduledDate = dateStr, label = "call\nthe bank")),
+            listOf(ScratchNoteEntity(content = "scrap line 1\nscrap line 2")),
+            listOf(GratitudeEntity(date = dateStr, content = "sun\nand coffee")),
+            ""
+        )
+
+        val parsed = DailyMarkdownParser.parse(date, md)
+        assertEquals("- first point · - second point · third point", parsed.timeline.single().content)
+        assertEquals("call · the bank", parsed.tasks.single().label)
+        assertEquals(listOf("scrap line 1 · scrap line 2"), parsed.scraps)
+        assertEquals(listOf("sun · and coffee"), parsed.gratitude)
+
+        // And folding is stable: burning the parsed day again gives the same file.
+        val reburned = MarkdownBurner.burn(
+            dashboard,
+            parsed.timeline,
+            parsed.tasks,
+            parsed.scraps.map { ScratchNoteEntity(content = it) },
+            parsed.gratitude.map { GratitudeEntity(date = dateStr, content = it) },
+            ""
+        )
+        assertEquals(md, reburned)
     }
 
     @Test

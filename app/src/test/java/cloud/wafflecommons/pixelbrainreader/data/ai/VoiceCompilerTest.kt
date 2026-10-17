@@ -1,9 +1,9 @@
 package cloud.wafflecommons.pixelbrainreader.data.ai
 
 import io.mockk.coEvery
-import io.mockk.every
+import io.mockk.coVerify
 import io.mockk.mockk
-import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -12,54 +12,99 @@ import org.junit.Test
 
 class VoiceCompilerTest {
 
-    private lateinit var geminiRagManager: GeminiRagManager
+    private lateinit var localAiManager: LocalAiManager
     private lateinit var voiceCompiler: VoiceCompiler
 
     @Before
     fun setUp() {
-        geminiRagManager = mockk()
-        voiceCompiler = VoiceCompiler(geminiRagManager)
+        localAiManager = mockk()
+        voiceCompiler = VoiceCompiler(localAiManager)
     }
 
     @Test
-    fun compile_emptyTranscript_returnsEmpty() = runBlocking {
-        val result = voiceCompiler.compile("")
+    fun `an empty transcript returns an empty result without calling the model`() = runBlocking {
+        val result = voiceCompiler.compile("   ")
         assertEquals("", result.rawTranscript)
+        assertTrue(result.detectedTasks.isEmpty())
+        coVerify(exactly = 0) { localAiManager.generateResponse(any()) }
+    }
+
+    @Test
+    fun `a well-formed model answer yields tasks without hashtags and the note bullets`() = runBlocking {
+        coEvery { localAiManager.generateResponse(any()) } returns Result.success(
+            """
+            **TÂCHES:**
+            - [ ] Fixer le token GitHub #waffle
+            - [ ] Acheter du café
+            NOTE:
+            - Réunion architecture Waffle planifiée demain.
+            """.trimIndent()
+        )
+
+        val result = voiceCompiler.compile("Réunion Waffle demain, penser à fixer le token et acheter du café")
+
+        assertEquals(listOf("Fixer le token GitHub", "Acheter du café"), result.detectedTasks)
+        assertEquals("- Réunion architecture Waffle planifiée demain.", result.structuredMarkdown)
+    }
+
+    @Test
+    fun `an echoed format template is not turned into tasks or bullets`() = runBlocking {
+        coEvery { localAiManager.generateResponse(any()) } returns Result.success(
+            "TACHES:\n- [ ] action\nNOTE:\n- idée\n- Une vraie idée"
+        )
+
+        val result = voiceCompiler.compile("une vraie idée")
+
+        assertTrue(result.detectedTasks.isEmpty())
+        assertEquals("- Une vraie idée", result.structuredMarkdown)
+    }
+
+    @Test
+    fun `when the model is unavailable the offline heuristic still captures the note`() = runBlocking {
+        coEvery { localAiManager.generateResponse(any()) } returns
+            Result.failure(NanoException.Unavailable("model not downloaded"))
+
+        val result = voiceCompiler.compile("Penser à appeler Camille pour le projet Waffle et acheter du thé")
+
+        assertTrue(result.detectedTasks.any { it.startsWith("Appeler Camille") })
+        assertTrue(result.detectedTasks.contains("Acheter du thé"))
+    }
+
+    @Test
+    fun `an answer without the TACHES or NOTE markers falls back instead of becoming the note`() = runBlocking {
+        // e.g. the unavailable sentence, or the model chatting instead of following the format
+        coEvery { localAiManager.generateResponse(any()) } returns Result.success("Bien sûr ! Voici un résumé…")
+
+        val result = voiceCompiler.compile("Le serveur est indisponible depuis ce matin")
+
+        // The transcript itself is kept — the word "indisponible" no longer means "AI failure".
+        assertEquals("- Le serveur est indisponible depuis ce matin", result.structuredMarkdown)
         assertTrue(result.detectedTasks.isEmpty())
     }
 
-    @Test
-    fun compile_validAiOutput_parsesTasksCategoryAndContent() = runBlocking {
-        val transcript = "Réunion architecture Waffle demain, penser à fixer le token GitHub, et acheter du café"
-        val mockAiResponse = """
-            CATEGORY: 20_Projects
-            TASKS:
-            - [ ] Fixer le token GitHub #waffle #security
-            - [ ] Acheter du café #chores
-            CONTENT:
-            - Réunion architecture Waffle planifiée demain.
-        """.trimIndent()
-
-        coEvery { geminiRagManager.generateResponse(any(), useRAG = false) } returns flowOf(mockAiResponse)
-
-        val result = voiceCompiler.compile(transcript)
-
-        assertEquals("20_Projects", result.suggestedCategory)
-        assertEquals(2, result.detectedTasks.size)
-        assertEquals("Fixer le token GitHub #waffle #security", result.detectedTasks[0])
-        assertEquals("Acheter du café #chores", result.detectedTasks[1])
-        assertTrue(result.structuredMarkdown.contains("Réunion architecture Waffle"))
+    @Test(expected = CancellationException::class)
+    fun `cancellation propagates instead of being swallowed`(): Unit = runBlocking {
+        coEvery { localAiManager.generateResponse(any()) } throws CancellationException("screen closed")
+        voiceCompiler.compile("acheter du pain")
     }
 
     @Test
-    fun fallbackCompile_extractsActionsAndHeuristicCategory() {
-        val transcript = "Penser à appeler Camille pour le projet Waffle et acheter du thé"
+    fun `fallback keeps a sentence without an action intact instead of splitting on et`() {
+        val result = voiceCompiler.fallbackCompile("Paul et Marie sont passés. Acheter du pain, appeler maman")
 
-        val result = voiceCompiler.fallbackCompile(transcript)
+        assertEquals("- Paul et Marie sont passés", result.structuredMarkdown)
+        assertEquals(listOf("Acheter du pain", "Appeler maman"), result.detectedTasks)
+    }
 
-        assertEquals("20_Projects", result.suggestedCategory)
-        assertTrue(result.detectedTasks.isNotEmpty())
-        assertTrue(result.detectedTasks.any { it.contains("Appeler Camille", ignoreCase = true) })
-        assertTrue(result.detectedTasks.any { it.contains("Acheter du thé", ignoreCase = true) })
+    @Test
+    fun `summaryLine takes the first bullet and truncates it`() {
+        val compiled = CompiledVoiceResult(
+            rawTranscript = "raw",
+            structuredMarkdown = "- " + "x".repeat(80) + "\n- second",
+            detectedTasks = emptyList()
+        )
+        val line = VoiceCompiler.summaryLine(compiled, maxChars = 20)
+        assertEquals(20, line.length)
+        assertTrue(line.endsWith("…"))
     }
 }

@@ -103,14 +103,16 @@ class DailyDashboardRepository @Inject constructor(
 
     // --- Core Operations ---
 
+    // A timeline entry is one line in the burned daily note: normalize on write so Room holds
+    // exactly what the file will hold (see MarkdownBurner.singleLine).
     suspend fun addTimelineEntry(date: LocalDate, content: String, time: LocalTime) = withContext(Dispatchers.IO) {
         ensureDashboard(date)
-        val entry = TimelineEntryEntity(date = date, time = time, content = content)
+        val entry = TimelineEntryEntity(date = date, time = time, content = MarkdownBurner.singleLine(content))
         dashboardDao.insertTimelineEntry(entry)
     }
 
     suspend fun updateTimelineEntry(entry: TimelineEntryEntity) = withContext(Dispatchers.IO) {
-        dashboardDao.insertTimelineEntry(entry)
+        dashboardDao.insertTimelineEntry(entry.copy(content = MarkdownBurner.singleLine(entry.content)))
     }
 
     suspend fun deleteTimelineEntry(id: String) = withContext(Dispatchers.IO) {

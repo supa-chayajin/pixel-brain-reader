@@ -143,7 +143,8 @@ class GoogleCalendarRepository @Inject constructor(
                                 id = preservedId ?: java.util.UUID.randomUUID().toString(),
                                 date = today,
                                 time = extractStartTime(evt),
-                                content = "[$calendarName] ${evt.summary ?: "No title"}",
+                                content = cloud.wafflecommons.pixelbrainreader.data.utils.MarkdownBurner
+                                    .singleLine("[$calendarName] ${evt.summary ?: "No title"}"),
                                 googleEventId = evt.id
                             )
                         )

@@ -808,6 +808,8 @@ private fun AddTimelineDialog(onDismiss: () -> Unit, onConfirm: (String, LocalTi
                     value = content,
                     onValueChange = { content = it },
                     label = { Text("What happened?") },
+                    // One line: a timeline entry is one line of the daily note.
+                    singleLine = true,
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
                         capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Sentences
                     ),
@@ -1131,6 +1133,7 @@ private fun EditTimelineDialog(
                     value = content,
                     onValueChange = { content = it },
                     label = { Text("What happened?") },
+                    singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 TimeInput(state = timePickerState)
