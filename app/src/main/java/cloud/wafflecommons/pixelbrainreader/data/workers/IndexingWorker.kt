@@ -150,19 +150,11 @@ class IndexingWorker @AssistedInject constructor(
     private fun filterEmbeddingCandidates(
         files: List<cloud.wafflecommons.pixelbrainreader.data.local.entity.FileEntity>
     ): List<cloud.wafflecommons.pixelbrainreader.data.local.entity.FileEntity> {
-        val todayStr = java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ISO_DATE)
-        val todayPath = "10_Journal/$todayStr.md"
+        val today = java.time.LocalDate.now()
+        val todayPath = todayJournalPath(today)
         val hasVaultPassword = !secretManager.getVaultPassword().isNullOrBlank()
 
-        val candidates = files.filter { entity ->
-            val isPrivate = entity.path.startsWith("99_Private/") ||
-                entity.path.endsWith(".md.enc", ignoreCase = true)
-            entity.type == "file" &&
-                (entity.path.endsWith(".md", ignoreCase = true) ||
-                    entity.path.endsWith(".md.enc", ignoreCase = true)) &&
-                !entity.path.contains("99_System") &&        // SHIELD: system isolation
-                (!isPrivate || hasVaultPassword)             // Skip locked private files before loading model
-        }
+        val candidates = embeddingCandidates(files, today, hasVaultPassword)
 
         if (candidates.isEmpty() && files.isNotEmpty()) {
             val byType = files.groupingBy { it.type }.eachCount()
@@ -391,5 +383,32 @@ class IndexingWorker @AssistedInject constructor(
     companion object {
         /** WorkManager unique-work name for the manual indexing button. */
         const val UNIQUE_WORK_NAME = "ManualVaultIndexing"
+
+        internal fun todayJournalPath(today: java.time.LocalDate): String =
+            "10_Journal/${today.format(java.time.format.DateTimeFormatter.ISO_DATE)}.md"
+
+        /**
+         * Notes worth embedding. Settled decision #3 (CLAUDE.md): today's journal is NOT embedded —
+         * it changes all day, so its vectors would be stale within minutes and every run would pay
+         * a model load for it — and neither is `99_System` (machine JSON, noise for retrieval).
+         * Private notes only when a vault password is stored, checked BEFORE the model is loaded.
+         */
+        internal fun embeddingCandidates(
+            files: List<cloud.wafflecommons.pixelbrainreader.data.local.entity.FileEntity>,
+            today: java.time.LocalDate,
+            hasVaultPassword: Boolean
+        ): List<cloud.wafflecommons.pixelbrainreader.data.local.entity.FileEntity> {
+            val todayPath = todayJournalPath(today)
+            return files.filter { entity ->
+                val isPrivate = entity.path.startsWith("99_Private/") ||
+                    entity.path.endsWith(".md.enc", ignoreCase = true)
+                entity.type == "file" &&
+                    (entity.path.endsWith(".md", ignoreCase = true) ||
+                        entity.path.endsWith(".md.enc", ignoreCase = true)) &&
+                    entity.path != todayPath &&
+                    !entity.path.contains("99_System") &&
+                    (!isPrivate || hasVaultPassword)
+            }
+        }
     }
 }

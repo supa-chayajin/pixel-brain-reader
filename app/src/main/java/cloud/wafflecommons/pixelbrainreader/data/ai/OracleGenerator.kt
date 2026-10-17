@@ -18,7 +18,7 @@ class OracleGenerator @Inject constructor(
     private val healthConnectManager: HealthConnectManager,
     private val moodRepository: MoodRepository,
     private val gamificationRepository: GamificationRepository,
-    private val geminiRagManager: GeminiRagManager
+    private val localAiManager: LocalAiManager
 ) {
     
     private val FALLBACK_INSIGHT = "Les brumes sont épaisses aujourd'hui. Repose-toi bien, Héros, et laisse ton esprit te guider."
@@ -59,20 +59,14 @@ class OracleGenerator @Inject constructor(
             
             Log.d("OracleGenerator", "Generating insight: $prompt")
             
-            // 3. Generate
-            val flow = geminiRagManager.generateResponse(prompt, useRAG = false)
-            var result = ""
-            flow.collect { 
-                if (!it.startsWith("Thinking")) result = it 
-            }
-            
-            val cleaned = result.replace("\"", "").trim()
-            if (cleaned.isBlank() || cleaned.startsWith("Cortex (local) indisponible", ignoreCase = true)) {
-                FALLBACK_INSIGHT
-            } else {
-                cleaned
-            }
-            
+            // 3. Generate — a model failure is a Result, never text that looks like an answer.
+            localAiManager.generateResponse(prompt)
+                .onFailure { Log.w("OracleGenerator", "Insight unavailable: ${it.message}") }
+                .map { it.replace("\"", "").trim() }
+                .getOrNull()
+                ?.takeIf { it.isNotBlank() }
+                ?: FALLBACK_INSIGHT
+
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {

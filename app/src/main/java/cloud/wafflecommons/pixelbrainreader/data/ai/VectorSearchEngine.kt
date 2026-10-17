@@ -7,8 +7,6 @@ import android.util.Log
 import androidx.core.content.edit
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.EmbeddingDao
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.EmbeddingTableSignature
-import cloud.wafflecommons.pixelbrainreader.data.local.dao.FileDao
-import cloud.wafflecommons.pixelbrainreader.data.local.dao.FileContentDao
 import cloud.wafflecommons.pixelbrainreader.data.local.security.CryptoManager
 import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -20,7 +18,6 @@ import kotlinx.coroutines.withContext
 import org.tensorflow.lite.Interpreter
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlin.math.sqrt
 
 /**
  * Resolved top-K result. [content] is ALWAYS plaintext at this point —
@@ -59,9 +56,7 @@ class VectorSearchEngine @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val embeddingDao: EmbeddingDao,
     private val cryptoManager: CryptoManager,
-    private val secretManager: SecretManager,
-    private val fileDao: FileDao,
-    private val fileContentDao: FileContentDao
+    private val secretManager: SecretManager
 ) {
     private data class Engine(
         val interpreter: Interpreter,
@@ -73,14 +68,6 @@ class VectorSearchEngine @Inject constructor(
         // Resolving by NAME makes the engine robust to converter reorderings.
         val inputIdsIndex: Int,
         val attentionMaskIndex: Int,
-    )
-
-    /** One stored chunk as similarity scoring needs it: parsed vector, no text. */
-    private class IndexedChunk(
-        val id: String,
-        val fileId: String,
-        val isPrivate: Boolean,
-        val vector: FloatArray
     )
 
     /** Parsed vectors, valid while the embeddings table keeps the same [signature]. */
@@ -291,14 +278,14 @@ class VectorSearchEngine @Inject constructor(
             val fr = embedInternal(eng, "Qu'est-ce que j'ai pensé de Dune 2 ?")
             val unrelated = embedInternal(eng, "The mitochondrion is the powerhouse of the cell")
 
-            val crossLang = cosineSimilarity(en, fr)
-            val unrelatedSim = cosineSimilarity(en, unrelated)
+            val crossLang = RagRanking.cosine(en, fr)
+            val unrelatedSim = RagRanking.cosine(en, unrelated)
             val spread = crossLang - unrelatedSim
 
             Log.i(
                 "RAG_DEBUG",
-                "MULTILINGUAL PROBE: dim=${en.size} enMag=${"%.4f".format(magnitude(en))} " +
-                    "frMag=${"%.4f".format(magnitude(fr))} unrelatedMag=${"%.4f".format(magnitude(unrelated))}"
+                "MULTILINGUAL PROBE: dim=${en.size} enMag=${"%.4f".format(RagRanking.magnitude(en))} " +
+                    "frMag=${"%.4f".format(RagRanking.magnitude(fr))} unrelatedMag=${"%.4f".format(RagRanking.magnitude(unrelated))}"
             )
             Log.i(
                 "RAG_DEBUG",
@@ -349,12 +336,6 @@ class VectorSearchEngine @Inject constructor(
         prefs.edit { putString(PREFS_KEY_VERSION, EMBEDDER_SCHEMA_VERSION) }
     }
 
-    private fun magnitude(v: FloatArray): Float {
-        var s = 0.0f
-        for (x in v) s += x * x
-        return sqrt(s)
-    }
-
     /**
      * Synchronous embed. Caller must already be off the main thread.
      * `tokenizer` is configured with [optPadToMaxLength] + truncation so
@@ -397,7 +378,7 @@ class VectorSearchEngine @Inject constructor(
         val eng = getEngineSafe()
             ?: throw IllegalStateException("Vector Engine not ready (asset missing or init failed)")
         val vector = embedInternal(eng, text)
-        val mag = magnitude(vector)
+        val mag = RagRanking.magnitude(vector)
         Log.d(
             "RAG_DEBUG",
             "embed: textLen=${text.length} -> dim=${vector.size} mag=${"%.4f".format(mag)} " +
@@ -428,33 +409,20 @@ class VectorSearchEngine @Inject constructor(
         Log.d("RAG_DEBUG", "search: query='${query.take(80).replace("\n", " ")}' (len=${query.length})")
         ensureSchemaVersion()
 
+        // Every failure below returns EMPTY: the assistant then says the notes don't cover the
+        // question. Handing it unrelated notes as "context" is the bug the relevance floor fixed.
         val eng = getEngineSafe()
         if (eng == null) {
-            Log.w("RAG_DEBUG", "search skipped: Vector Engine not ready, falling back to lexical search")
-            return@withContext fallbackLexicalSearch(query, limit)
+            Log.w("RAG_DEBUG", "search skipped: Vector Engine not ready")
+            return@withContext emptyList()
         }
-
         val queryVector = try {
             embedInternal(eng, query)
         } catch (e: Exception) {
-            Log.w("RAG_DEBUG", "Query embedding failed: ${e.message}, falling back to lexical search")
-            return@withContext fallbackLexicalSearch(query, limit)
+            Log.w("RAG_DEBUG", "Query embedding failed: ${e.message}")
+            return@withContext emptyList()
         }
-        val queryMag = magnitude(queryVector)
-        Log.d(
-            "RAG_DEBUG",
-            "search: query embedded -> dim=${queryVector.size} mag=${"%.4f".format(queryMag)} " +
-                "head=${queryVector.take(3).map { "%.3f".format(it) }}"
-        )
-        // Hard-bail on degenerate query vectors.
-        if (queryMag < QUERY_MAG_FLOOR) {
-            Log.w(
-                "RAG_DEBUG",
-                "search: ABORT — query vector is degenerate (mag=${"%.4f".format(queryMag)} < $QUERY_MAG_FLOOR). " +
-                    "Falling back to lexical search."
-            )
-            return@withContext fallbackLexicalSearch(query, limit)
-        }
+        val queryMag = RagRanking.magnitude(queryVector)
         if (queryMag < 0.99f || queryMag > 1.01f) {
             Log.w(
                 "RAG_DEBUG",
@@ -464,93 +432,43 @@ class VectorSearchEngine @Inject constructor(
         }
 
         val chunks = loadChunkIndex()
-        Log.d("RAG_DEBUG", "search: ${chunks.size} embedding(s) to compare against")
-        if (chunks.isEmpty()) {
-            Log.w("RAG_DEBUG", "search: embeddings table is EMPTY — falling back to lexical search")
-            return@withContext fallbackLexicalSearch(query, limit)
-        }
-
-        // Keywords extraction for lexical boosting:
-        val queryKeywords = query.lowercase()
-            .split(Regex("[\\s,.:;!?'\"()\\[\\]{}<>/\\\\_-]+"))
-            .filter { it.length >= 3 }
-
-        // Skip stale-dim embeddings (e.g. left over from the prior 100-dim USE-Lite model) instead of
-        // letting cosineSimilarity return 0 for every comparison.
-        val scored = chunks.mapNotNull { chunk ->
-            if (chunk.vector.size != queryVector.size) return@mapNotNull null
-            val sim = cosineSimilarity(queryVector, chunk.vector)
-
-            // Lexical boost: path/title matching
-            val pathLower = chunk.fileId.lowercase()
-            var lexicalBoost = 0.0f
-            if (queryKeywords.any { kw -> pathLower.contains(kw) }) {
-                lexicalBoost += 0.25f
-            }
-            val totalScore = sim + lexicalBoost
-            Triple(chunk, sim, totalScore)
-        }.sortedByDescending { it.third }
-
-        if (scored.isEmpty()) {
-            Log.w(
-                "RAG_DEBUG",
-                "search: all ${chunks.size} embeddings have wrong dim (expected $EMBED_DIM); " +
-                    "falling back to lexical search."
-            )
-            return@withContext fallbackLexicalSearch(query, limit)
-        }
-
-        val sMin = scored.last().third
-        val sMax = scored.first().third
-        val sMean = scored.sumOf { it.third.toDouble() } / scored.size
-        val spread = sMax - sMin
-        Log.d(
-            "RAG_DEBUG",
-            "search: score dist over ${scored.size} chunks  min=${"%.3f".format(sMin)} " +
-                "mean=${"%.3f".format(sMean)} max=${"%.3f".format(sMax)} spread=${"%.3f".format(spread)}"
-        )
-        // Second guard: even with a unit-length query, if every chunk scores
-        // nearly identically, the top-K is meaningless ordering noise. Bail to lexical in that case.
-        if (scored.size > 1 && spread < MIN_SCORE_SPREAD) {
-            Log.w(
-                "RAG_DEBUG",
-                "search: ABORT — score spread ${"%.4f".format(spread)} < $MIN_SCORE_SPREAD across " +
-                    "${scored.size} chunks. Falling back to lexical search."
-            )
-            return@withContext fallbackLexicalSearch(query, limit)
-        }
-        Log.d("RAG_DEBUG", "search: TOP-5 candidates (pre-decrypt, pre-limit):")
-        scored.take(5).forEachIndexed { idx, (chunk, sim, totalScore) ->
+        val ranking = RagRanking.rank(queryVector, chunks)
+        if (ranking.scored.isNotEmpty()) {
+            val best = ranking.scored.first().similarity
+            val worst = ranking.scored.last().similarity
+            val mean = ranking.scored.sumOf { it.similarity.toDouble() } / ranking.scored.size
             Log.d(
                 "RAG_DEBUG",
-                "  #${idx + 1} score=${"%.3f".format(totalScore)} (sim=${"%.3f".format(sim)}) private=${chunk.isPrivate} " +
-                    "id=${chunk.id.take(8)} file=${chunk.fileId}"
+                "search: score dist over ${ranking.scored.size} chunks  min=${"%.3f".format(worst)} " +
+                    "mean=${"%.3f".format(mean)} max=${"%.3f".format(best)}"
             )
+            ranking.scored.take(5).forEachIndexed { idx, scored ->
+                Log.d(
+                    "RAG_DEBUG",
+                    "  #${idx + 1} sim=${"%.3f".format(scored.similarity)} private=${scored.chunk.isPrivate} " +
+                        "id=${scored.chunk.id.take(8)} file=${scored.chunk.fileId}"
+                )
+            }
         }
-
-        // Relevance floor: only inject chunks that actually resemble the query.
-        val relevant = scored.filter { it.third >= MIN_SIMILARITY }
-        if (relevant.isEmpty()) {
-            Log.i(
-                "RAG_DEBUG",
-                "search: no chunk cleared MIN_SIMILARITY=$MIN_SIMILARITY (best=${"%.3f".format(sMax)}); " +
-                    "falling back to lexical search"
-            )
-            return@withContext fallbackLexicalSearch(query, limit)
+        if (ranking.rejection != null) {
+            Log.i("RAG_DEBUG", "search: nothing relevant — ${ranking.rejection}")
+            return@withContext emptyList()
         }
 
         // Only the candidates' text is loaded (with slack for private chunks dropped below).
-        val candidates = relevant.take(maxOf(limit, 1) * CANDIDATE_SLACK)
-        val contentById = embeddingDao.getContents(candidates.map { it.first.id })
+        val candidates = ranking.relevant.take(maxOf(limit, 1) * CANDIDATE_SLACK)
+        val contentById = embeddingDao.getContents(candidates.map { it.chunk.id })
             .associate { it.id to it.content }
 
         val vaultPassword = secretManager.getVaultPassword()
+        // Private chunks only while the private journal is unlocked in this session.
         val isVaultUnlocked = secretManager.isPrivateVaultSessionUnlocked() && !vaultPassword.isNullOrBlank()
         var privateDecrypted = 0
         var privateDropped = 0
         val hits = mutableListOf<SearchHit>()
-        for ((chunk, _, _) in candidates) {
+        for (scored in candidates) {
             if (hits.size >= limit) break
+            val chunk = scored.chunk
             val content = contentById[chunk.id] ?: continue // removed since the index was loaded
 
             if (chunk.isPrivate) {
@@ -581,10 +499,6 @@ class VectorSearchEngine @Inject constructor(
             }
         }
 
-        if (hits.isEmpty()) {
-            return@withContext fallbackLexicalSearch(query, limit)
-        }
-
         Log.d(
             "RAG_DEBUG",
             "search: returning ${hits.size} hit(s); privateDecrypted=$privateDecrypted privateDropped=$privateDropped " +
@@ -592,36 +506,6 @@ class VectorSearchEngine @Inject constructor(
         )
 
         return@withContext hits
-    }
-
-    private suspend fun fallbackLexicalSearch(query: String, limit: Int): List<SearchHit> {
-        val directFiles = runCatching { fileDao.searchFilesDirect(query, limit) }.getOrDefault(emptyList())
-        if (directFiles.isEmpty()) return emptyList()
-
-        return directFiles.mapNotNull { file ->
-            val content = runCatching { fileContentDao.getContent(file.path) }.getOrNull()
-            if (!content.isNullOrBlank()) {
-                val title = file.name.removeSuffix(".md").removeSuffix(".enc")
-                SearchHit(file.path, "[Note: $title (${file.path})]\n" + content.take(1200), isPrivate = false)
-            } else null
-        }
-    }
-
-    private fun cosineSimilarity(v1: FloatArray, v2: FloatArray): Float {
-        if (v1.size != v2.size) return 0.0f
-        var dotProduct = 0.0f
-        var normA = 0.0f
-        var normB = 0.0f
-
-        for (i in v1.indices) {
-            dotProduct += v1[i] * v2[i]
-            normA += v1[i] * v1[i]
-            normB += v2[i] * v2[i]
-        }
-
-        if (normA == 0.0f || normB == 0.0f) return 0.0f
-
-        return dotProduct / (sqrt(normA) * sqrt(normB))
     }
 
     private companion object {
@@ -643,30 +527,6 @@ class VectorSearchEngine @Inject constructor(
         const val EMBEDDER_SCHEMA_VERSION = "minilm-multilingual-v3-contextual-hybrid"
         private const val PREFS_NAME = "embedder_state"
         private const val PREFS_KEY_VERSION = "schema_version"
-
-        /**
-         * Floor for a *usable* query magnitude. The TFLite graph L2-normalizes
-         * internally, so a healthy query is ~1.0. A magnitude this low only
-         * happens when the output buffer was left zero-initialized (silent
-         * inference failure) — search bails so the LLM doesn't get fed
-         * arbitrary "first-K-in-DB" chunks.
-         */
-        private const val QUERY_MAG_FLOOR = 0.5f
-
-        /**
-         * Floor for the score spread across all stored embeddings. If the
-         * embedding space has collapsed (e.g. swapped input tensors causing
-         * every text to embed to nearly the same vector), all chunks score
-         * nearly equally and top-K becomes ordering noise. Bail in that case.
-         */
-        private const val MIN_SCORE_SPREAD = 0.01f
-
-        /**
-         * Absolute cosine floor a chunk must clear to count as relevant context.
-         * Combined with hybrid lexical boost, 0.22f captures genuine project/concept
-         * matches while filtering background noise.
-         */
-        private const val MIN_SIMILARITY = 0.22f
 
         /** Candidates whose text is loaded per requested hit (private chunks may be dropped). */
         private const val CANDIDATE_SLACK = 4

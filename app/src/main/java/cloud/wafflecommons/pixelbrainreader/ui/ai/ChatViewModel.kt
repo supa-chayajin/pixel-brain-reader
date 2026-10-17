@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import cloud.wafflecommons.pixelbrainreader.data.ai.AiLanguage
 import cloud.wafflecommons.pixelbrainreader.data.ai.LocalAiManager
 import cloud.wafflecommons.pixelbrainreader.data.ai.NanoException
 import cloud.wafflecommons.pixelbrainreader.data.ai.NanoState
@@ -65,57 +66,102 @@ private const val RAG_TOP_K = 6
 // answer is still shown; if nothing arrives in time we surface a timeout notice.
 private const val STREAM_TIMEOUT_MS = 120_000L
 
-/**
- * Single persona used for BOTH chat surfaces (Cortex / RAG and Spark / open chat).
- * Mode only controls whether the vector store is queried, not the model's voice.
- *
- * Tuned for SHORT answers: the on-device model is one-shot, so long, heavily-formatted
- * replies make the user wait on a spinner. Keeping answers terse makes generation prompt.
+// Retrieved notes injected into the prompt, in characters. Gemini Nano's WHOLE input window is
+// ~4,000 tokens (persona + notes + history + question), so the notes get a fixed share of it.
+private const val RAG_CONTEXT_BUDGET_CHARS = 3_000
+private const val RAG_CONTEXT_SEPARATOR = "\n---\n"
+
+/*
+ * Personas. Answers stay SHORT on purpose: Nano is slow on the device, and a long, heavily
+ * formatted reply keeps the user waiting on a spinner — or runs into STREAM_TIMEOUT_MS. Each one
+ * ends with AiLanguage.SYSTEM_DIRECTIVE (the French-answer contract).
  */
-private const val PIXEL_BRAIN_PERSONA = """
-Tu es l'assistant IA de l'application Cortex (PixelBrainReader). Tu dois TOUJOURS répondre en français, quelle que soit la langue de la question ou des notes.
 
-RÔLE : un assistant analytique, structuré, pragmatique et bienveillant. Tu aides l'utilisateur à exploiter son deuxième cerveau, ses notes d'architecture et son organisation quotidienne.
+/** Cortex (RAG over the vault): grounded — says the notes don't cover it rather than improvising. */
+private const val CORTEX_PERSONA = """
+Tu es Cortex, l'assistant du deuxième cerveau de l'utilisateur (ses notes Obsidian).
 
-STYLE ET FORMAT :
-- Réponds de manière claire, structurée et complète, sans troncature artificielle.
-- Organise tes réponses avec des puces Markdown ou des sous-titres courts quand cela apporte de la lisibilité.
-- Référence explicitement les notes pertinentes avec des liens Markdown [[Titre de la note]].
+RÔLE : analytique, pragmatique et bienveillant. Valide brièvement, puis ramène les choses aux faits.
+
+CONCISION (OBLIGATOIRE) : réponds directement, en un court paragraphe ou quelques puces — 120 mots maximum, sauf si l'utilisateur demande explicitement plus de détails.
 
 RÉFÉRENCES :
-- Fonde prioritairement tes réponses sur les INFORMATIONS DE RÉFÉRENCE ci-dessous issues du coffre Obsidian.
-- Si l'information n'est pas dans les notes de référence, réponds avec tes connaissances générales en précisant avec franchise ce qui manque dans les notes.
+- Pour toute question sur ses notes, sa vie ou ses projets, appuie-toi UNIQUEMENT sur les INFORMATIONS DE RÉFÉRENCE. Tu peux citer une note par son titre entre [[crochets doubles]].
+- Si elles sont absentes ou ne contiennent pas la réponse, dis simplement que ses notes ne couvrent pas ce sujet. N'invente rien.
+- Pour une simple conversation, réponds naturellement.
+
+${AiLanguage.SYSTEM_DIRECTIVE}
 """
 
+/** Spark (open chat): creative, and honest that it can't see the notes in this mode. */
+private const val SPARK_PERSONA = """
+Tu es Spark, le partenaire créatif de l'utilisateur : brainstorming, idées, reformulations, plans.
+
+STYLE : vivant, concret et concis — quelques puces ou un court paragraphe, 150 mots maximum sauf demande explicite.
+
+Tu n'as pas accès à ses notes dans ce mode : ne prétends pas les connaître.
+
+${AiLanguage.SYSTEM_DIRECTIVE}
+"""
+
+/** Boardroom: three short expert takes on a technical dilemma, then a decision. */
 private const val BOARDROOM_PERSONA = """
-Tu es le Conseil d'Architecture Virtuel (Cortex Boardroom) de Leslie Petrimaux (Lead Architect & DevSecOps).
-Tu organises un débat d'experts de très haut niveau entre trois personnalités complémentaires et intransigeantes, avant de fournir une synthèse collégiale tranchée :
+Tu es le Boardroom de Cortex : trois experts débattent d'un dilemme technique de l'utilisateur, puis tranchent.
+- Alexandre, architecte DDD : frontières du domaine, couplage, abstractions.
+- Bastien, DevSecOps : sécurité, secrets, fiabilité, modes de défaillance.
+- Camille, tech lead pragmatique : rapport effort/valeur, YAGNI, livraison.
 
-1. 🏛️ Alexandre (Architecte DDD & Clean Architecture) :
-   - Obsédé par le Domain-Driven Design, les Bounded Contexts, le langage omniprésent et la pureté des entités de domaine.
-   - Traque l'anémie de domaine, le couplage temporel ou technique, et les fuites d'abstraction.
+FORMAT OBLIGATOIRE, 200 mots maximum au total :
+### 🏛️ Alexandre
+Deux phrases.
+### 🛡️ Bastien
+Deux phrases.
+### ⚡ Camille
+Deux phrases.
+### 🎯 Décision
+Deux ou trois phrases, avec la prochaine étape concrète.
 
-2. 🛡️ Bastien (Lead DevSecOps & Fiabilité Système) :
-   - Obsédé par le principe du moindre privilège, la sécurité fail-closed, la gestion des secrets, l'auditabilité et les pipelines CI/CD reproductibles.
-   - Analyse les modes de défaillance, la scalabilité, les conteneurs et les risques opérationnels en production.
+Appuie-toi sur les INFORMATIONS DE RÉFÉRENCE quand elles sont présentes ; n'invente pas le contenu de ses notes.
 
-3. ⚡ Camille (Tech Lead Pragmatique & Delivery) :
-   - Obsédée par le pragmatisme, le ratio effort/valeur, l'évitement de l'over-engineering (YAGNI / KISS) et la vitesse de livraison.
-   - Pousse pour des compromis viables et met en garde contre les usines à gaz théoriques.
-
-DIRECTIVES DE FORMAT :
-- Fonde le débat prioritairement sur les INFORMATIONS DE RÉFÉRENCE ci-dessous (notes du coffre Obsidian, projets, architecture).
-- Structure TOUJOURS la réponse en 4 sections claires avec des séparateurs Markdown :
-  ### 🏛️ Alexandre (DDD & Architecture)
-  (Analyse du modèle, frontières contextuelles, patterns)
-  ### 🛡️ Bastien (DevSecOps & Sécurité)
-  (Risques d'exploitation, CI/CD, résilience, secrets)
-  ### ⚡ Camille (Pragmatisme & Delivery)
-  (Mise en œuvre concrète, arbitrage charge/valeur, quick wins)
-  ### 🎯 Synthèse & Décision d'Architecture
-  (Recommandation collégiale tranchée avec prochaines étapes concrètes et références aux notes [[NomDeLaNote]])
-- Réponds TOUJOURS en français technique impeccable.
+${AiLanguage.SYSTEM_DIRECTIVE}
 """
+
+internal fun personaFor(mode: ChatMode): String = when (mode) {
+    ChatMode.ORACLE -> CORTEX_PERSONA
+    ChatMode.SCRIBE -> SPARK_PERSONA
+    ChatMode.BOARDROOM -> BOARDROOM_PERSONA
+}
+
+/**
+ * Joins the retrieved chunks (each already starts with its "[Note: title (folder) > heading]"
+ * header) until [budget] characters, best first. Returns the context and the hits it actually
+ * used — the source chips must list only what the model saw.
+ */
+internal fun buildRagContext(
+    hits: List<cloud.wafflecommons.pixelbrainreader.data.ai.SearchHit>,
+    budget: Int = RAG_CONTEXT_BUDGET_CHARS
+): Pair<String?, List<cloud.wafflecommons.pixelbrainreader.data.ai.SearchHit>> {
+    val parts = mutableListOf<String>()
+    val used = mutableListOf<cloud.wafflecommons.pixelbrainreader.data.ai.SearchHit>()
+    var length = 0
+    for (hit in hits) {
+        val text = hit.content.trim()
+        if (text.isEmpty()) continue
+        val cost = text.length + if (parts.isEmpty()) 0 else RAG_CONTEXT_SEPARATOR.length
+        if (length + cost > budget) {
+            // Never send nothing just because the best chunk alone is over budget.
+            if (parts.isEmpty()) {
+                parts += text.take(budget)
+                used += hit
+            }
+            break
+        }
+        parts += text
+        used += hit
+        length += cost
+    }
+    return parts.takeIf { it.isNotEmpty() }?.joinToString(RAG_CONTEXT_SEPARATOR) to used
+}
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
@@ -216,14 +262,11 @@ class ChatViewModel @Inject constructor(
             var sources = emptyList<String>()
             var ragContext: String? = null
             if (mode == ChatMode.ORACLE || mode == ChatMode.BOARDROOM) {
-                loadingStage = if (mode == ChatMode.BOARDROOM) "🏛️ Summoning the Architecture Boardroom…" else "🔎 Searching your Second Brain…"
+                loadingStage = if (mode == ChatMode.BOARDROOM) "🏛️ Gathering the Boardroom…" else "🔎 Searching your Second Brain…"
                 val hits = vectorSearchEngine.search(query, limit = RAG_TOP_K)
-                ragContext = hits.takeIf { it.isNotEmpty() }
-                    ?.joinToString(separator = "\n---\n") { hit ->
-                        val noteName = hit.fileId.substringAfterLast("/").removeSuffix(".md").removeSuffix(".enc")
-                        "### Note : [[$noteName]] (${hit.fileId})\n${hit.content.trim()}"
-                    }
-                sources = hits.map { it.fileId }.distinct()
+                val (context, usedHits) = buildRagContext(hits)
+                ragContext = context
+                sources = usedHits.map { it.fileId }.distinct()
                 Log.d(
                     "RAG_DEBUG",
                     "ChatViewModel.sendMessage($mode): hits=${hits.size} " +
@@ -238,10 +281,7 @@ class ChatViewModel @Inject constructor(
             _streamingMessage.value =
                 ChatMessage(content = "", isUser = false, isStreaming = true, sources = sources)
             val sb = StringBuilder()
-            val persona = when (mode) {
-                ChatMode.BOARDROOM -> BOARDROOM_PERSONA
-                ChatMode.ORACLE, ChatMode.SCRIBE -> PIXEL_BRAIN_PERSONA
-            }
+            val persona = personaFor(mode)
             try {
                 withTimeout(STREAM_TIMEOUT_MS) {
                     localAiManager.generateAugmentedResponseStream(
