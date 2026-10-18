@@ -140,6 +140,13 @@ class MainViewModel @Inject constructor(
     val attachmentIndex: StateFlow<VaultFileIndex> = vaultDiscoveryRepository.observeAttachmentIndex()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), VaultFileIndex.EMPTY)
 
+    /** Note names for the editor's `[[` completion, minus what the current mode hides. */
+    val noteNames: StateFlow<List<String>> = vaultDiscoveryRepository.observeNotePaths()
+        .combine(modesRepository.visibility) { paths, visibility ->
+            paths.filter(visibility::isVisible).map { it.substringAfterLast('/').removeSuffix(".md") }.distinct()
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     // Expose Theme Preference
     val themeConfig: StateFlow<AppThemeConfig> = userPrefs.themeConfig
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AppThemeConfig.FOLLOW_SYSTEM)
@@ -999,7 +1006,13 @@ class MainViewModel @Inject constructor(
         _showCreateFileDialog.value = false
     }
 
-    fun createNewFile(filename: String? = null, templateName: String? = null) {
+    /** The form fields of [templateName] (its `{{variables}}` but date, time and title). */
+    suspend fun templateVariables(templateName: String): List<String> {
+        val content = repository.getFileContentFlow("${TemplateRepository.TEMPLATE_FOLDER}/$templateName").firstOrNull() ?: return emptyList()
+        return TemplateEngine.variables(content)
+    }
+
+    fun createNewFile(filename: String? = null, templateName: String? = null, values: Map<String, String> = emptyMap()) {
         val parentPath = _currentPath.value
         val finalName = if (filename.isNullOrBlank()) "Untitled_${System.currentTimeMillis()}.md" else (if (filename.endsWith(".md")) filename else "$filename.md")
         val fullPath = if (parentPath.isNotEmpty()) "$parentPath/$finalName" else finalName
@@ -1015,7 +1028,7 @@ class MainViewModel @Inject constructor(
             if (!templateName.isNullOrBlank()) {
                 val templatePath = "${TemplateRepository.TEMPLATE_FOLDER}/$templateName"
                 val templateContent = repository.getFileContentFlow(templatePath).firstOrNull() ?: ""
-                content = TemplateEngine.apply(templateContent, title)
+                content = TemplateEngine.apply(templateContent, title, values)
             }
 
             repository.saveFileLocally(fullPath, content)

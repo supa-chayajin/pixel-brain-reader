@@ -142,8 +142,10 @@ class MainActivity : FragmentActivity() {
                     null -> SplashScreen()
                     true -> {
                         val attachments by viewModel.attachmentIndex.collectAsStateWithLifecycle()
+                        val noteNames by viewModel.noteNames.collectAsStateWithLifecycle()
                         androidx.compose.runtime.CompositionLocalProvider(
-                            cloud.wafflecommons.pixelbrainreader.ui.utils.LocalVaultAttachments provides attachments
+                            cloud.wafflecommons.pixelbrainreader.ui.utils.LocalVaultAttachments provides attachments,
+                            cloud.wafflecommons.pixelbrainreader.ui.utils.LocalNoteNames provides noteNames
                         ) {
                             MainScreen(
                                 viewModel = viewModel,

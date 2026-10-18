@@ -103,6 +103,21 @@ class VaultDiscoveryRepository @Inject constructor(
      * re-emitted only when the SET of attachment paths changes — every note save touches the
      * `files` table, and rebuilding (and re-parsing every open note) on each save would be waste.
      */
+    /** Every non-private note's path, sorted: the `[[` completion's source. */
+    fun observeNotePaths(): Flow<List<String>> = fileDao.getAllFiles()
+        .map { files ->
+            files.asSequence()
+                .filter { it.type == "file" && it.path.endsWith(".md") && !it.path.startsWith("99_Private/") }
+                .map { it.path }
+                .sorted()
+                .toList()
+        }
+        .distinctUntilChanged()
+        .catch { e ->
+            Log.w("VaultDiscovery", "Note names unavailable: ${e.message}")
+            emit(emptyList())
+        }
+
     fun observeAttachmentIndex(): Flow<VaultFileIndex> = fileDao.getAllFiles()
         .map { files ->
             files.asSequence()

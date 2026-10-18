@@ -382,19 +382,72 @@ private fun NoteEditor(
         sentTexts.clear()
     }
 
-    cloud.wafflecommons.pixelbrainreader.ui.components.ComposeCortexEditor(
-        value = editorValue,
-        onValueChange = { newValue ->
-            val textChanged = newValue.text != editorValue.text
-            editorValue = newValue
-            if (textChanged) {
-                sentTexts.addLast(newValue.text)
-                while (sentTexts.size > MAX_TRACKED_EDITS) sentTexts.removeFirst()
-                onContentChange(newValue.text)
+    fun update(newValue: TextFieldValue) {
+        val textChanged = newValue.text != editorValue.text
+        editorValue = newValue
+        if (textChanged) {
+            sentTexts.addLast(newValue.text)
+            while (sentTexts.size > MAX_TRACKED_EDITS) sentTexts.removeFirst()
+            onContentChange(newValue.text)
+        }
+    }
+
+    // `/` commands and `[[` completion read the text right before the caret.
+    val trigger = remember(editorValue.text, editorValue.selection) {
+        if (editorValue.selection.collapsed) {
+            cloud.wafflecommons.pixelbrainreader.data.editor.EditorAssist.trigger(editorValue.text, editorValue.selection.start)
+        } else {
+            null
+        }
+    }
+
+    Column(modifier) {
+        trigger?.let { active ->
+            EditorAssistBar(
+                trigger = active,
+                onEdit = { edit -> update(TextFieldValue(edit.text, TextRange(edit.caret))) },
+                text = editorValue.text,
+                caret = editorValue.selection.start
+            )
+        }
+        cloud.wafflecommons.pixelbrainreader.ui.components.ComposeCortexEditor(
+            value = editorValue,
+            onValueChange = ::update,
+            modifier = Modifier.weight(1f).fillMaxWidth()
+        )
+    }
+}
+
+/** The suggestions for the token before the caret: `/` commands or note names for `[[`. */
+@Composable
+private fun EditorAssistBar(
+    trigger: cloud.wafflecommons.pixelbrainreader.data.editor.EditorTrigger,
+    text: String,
+    caret: Int,
+    onEdit: (cloud.wafflecommons.pixelbrainreader.data.editor.AssistEdit) -> Unit
+) {
+    val assist = cloud.wafflecommons.pixelbrainreader.data.editor.EditorAssist
+    val names = cloud.wafflecommons.pixelbrainreader.ui.utils.LocalNoteNames.current
+    val chips: List<Pair<String, () -> Unit>> = when (trigger) {
+        is cloud.wafflecommons.pixelbrainreader.data.editor.EditorTrigger.Slash ->
+            assist.matchingCommands(trigger.query, java.time.LocalDateTime.now()).map { command ->
+                "/${command.id} · ${command.label}" to { onEdit(assist.apply(text, caret, trigger, command)) }
             }
-        },
-        modifier = modifier
-    )
+        is cloud.wafflecommons.pixelbrainreader.data.editor.EditorTrigger.Link ->
+            assist.matchingNotes(trigger.query, names).map { name ->
+                name to { onEdit(assist.complete(text, caret, trigger, name)) }
+            }
+    }
+    if (chips.isEmpty()) return
+    androidx.compose.foundation.lazy.LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+    ) {
+        items(chips.size) { index ->
+            val (label, action) = chips[index]
+            androidx.compose.material3.SuggestionChip(onClick = action, label = { Text(label, maxLines = 1) })
+        }
+    }
 }
 
 @Composable
