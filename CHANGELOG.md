@@ -20,6 +20,13 @@ Work toward **11.0.0** — the work-direction and dev/lead toolkit release (plan
   private vault. Log from the app (dictation stays on the device), from the new Log and Work
   buttons of the quick-actions widget (now two rows of four) or from a Log tile in Quick Settings
   (after unlocking). Outside Work mode the log is hidden, but capture still works.
+- **Leave & handover** (Work hub). Before leaving, pick a scope (a folder) and the dates: the app
+  writes a handover draft to your inbox, in French — notes in progress and paused in the scope,
+  the last month's decisions, open requests and refusals from the mission log, and the key dates
+  during the leave, plus an optional on-device summary marked as such. In the three days after a
+  leave, the Daily screen says how many work notes changed or appeared meanwhile (from the git
+  history) and writes a "what happened" briefing on request. Leave periods and key dates are the
+  ones set in Modes.
 - **Modes: Work, Personal, Off.** A chip on the Daily screen and a Quick Settings tile switch
   modes. Outside Work mode, the folders marked as work disappear from the file list, search, AI
   answers and resurfaced notes; Off is for evenings, weekends and leave. A schedule (work days

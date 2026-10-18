@@ -78,10 +78,13 @@ fun DailyNoteScreen(
     onOpenWork: () -> Unit = {},
     viewModel: DailyNoteViewModel = hiltViewModel(),
     modesViewModel: cloud.wafflecommons.pixelbrainreader.ui.modes.ModesViewModel = hiltViewModel(),
-    guardStatus: cloud.wafflecommons.pixelbrainreader.ui.guard.GuardStatusViewModel = hiltViewModel()
+    guardStatus: cloud.wafflecommons.pixelbrainreader.ui.guard.GuardStatusViewModel = hiltViewModel(),
+    leaveViewModel: cloud.wafflecommons.pixelbrainreader.ui.work.LeaveViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val guardHeld by guardStatus.held.collectAsStateWithLifecycle()
+    val leaveReturn by leaveViewModel.returning.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { leaveViewModel.loadReturn() }
     val visibility by modesViewModel.visibility.collectAsStateWithLifecycle()
     val countdowns by modesViewModel.countdowns.collectAsStateWithLifecycle()
     var showModeSheet by remember { mutableStateOf(false) }
@@ -295,6 +298,13 @@ fun DailyNoteScreen(
                                 held = guardHeld,
                                 onReview = onOpenConfidentiality
                             )
+                        }
+                    }
+
+                    // The days after a leave: what changed meanwhile (Work mode only).
+                    if (leaveReturn != null && !visibility.hideWork) {
+                        item(key = "back-from-leave") {
+                            cloud.wafflecommons.pixelbrainreader.ui.work.BackFromLeaveCard(onOpenNote = onOpenNote, viewModel = leaveViewModel)
                         }
                     }
 

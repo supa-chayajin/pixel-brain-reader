@@ -3,7 +3,9 @@ package cloud.wafflecommons.pixelbrainreader.ui.work
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.automirrored.rounded.EventNote
+import androidx.compose.material.icons.rounded.BeachAccess
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -66,6 +68,7 @@ class WorkHubViewModel @Inject constructor(
 fun WorkHubScreen(
     onBack: () -> Unit,
     onOpenLog: (add: Boolean) -> Unit,
+    onOpen: (route: String) -> Unit,
     viewModel: WorkHubViewModel = hiltViewModel()
 ) {
     val visibility by viewModel.visibility.collectAsStateWithLifecycle()
@@ -96,5 +99,22 @@ fun WorkHubScreen(
                 OutlinedButton(onClick = { onOpenLog(false) }) { Text("Open") }
             }
         }
+        HubCard(
+            title = "Leave & handover",
+            icon = Icons.Rounded.BeachAccess,
+            subtitle = "A handover draft before you leave, a briefing of what changed when you're back.",
+            onClick = { onOpen(cloud.wafflecommons.pixelbrainreader.ui.main.V11Routes.LEAVE) }
+        )
     }
+}
+
+/** A hub entry that opens a tool. */
+@Composable
+internal fun HubCard(title: String, icon: androidx.compose.ui.graphics.vector.ImageVector, subtitle: String, onClick: () -> Unit) {
+    SectionCard(
+        title = title,
+        icon = icon,
+        subtitle = subtitle,
+        modifier = androidx.compose.ui.Modifier.clickable(onClick = onClick)
+    )
 }
