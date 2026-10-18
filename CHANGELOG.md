@@ -7,7 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_No unreleased changes._
+Work toward **11.0.0** — the work-direction and dev/lead toolkit release (plan:
+`documentation/plans/2026-10-18-v11-work-and-dev-toolkit.md`).
+
+### Added
+
+### Changed
+
+### Fixed
 
 ## [10.2.0] — 2026-10-17
 
