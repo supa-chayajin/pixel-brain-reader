@@ -58,7 +58,7 @@ Unless a path starts with `app/` or `documentation/`, it is relative to
       quick-actions widget and a Quick Settings tile.
 - [x] **B2** Leave mode & handover (#3): key-date countdown, leave = Off for a date range, a
       handover draft for a scope and period, a "what happened" briefing on the first day back.
-- [ ] **B3** Evidence report (#2): monthly / quarterly draft from the log.
+- [x] **B3** Evidence report (#2): monthly / quarterly draft from the log.
 - [ ] **B4** Boards (#4, E3): any folder as a board on the vault's status vocabulary; moving a card
       rewrites `status` + `date_updated` only; next step / blockers / target date; synthesis export.
 - [ ] **B5** Objectives tracker (#5): objective notes with milestones, a weekly protected slot,
