@@ -51,6 +51,14 @@ Work toward **11.0.0** — the work-direction and dev/lead toolkit release (plan
   never twice. Every `- [ ] @moi …` line in the vault is one of your next actions, soonest due
   first, ticked from the app. A week-by-week table shows meetings (and their time when
   recorded), requests and off-ticket time.
+- **Load vs recovery** (Work hub). Eight weeks of work days: each day's load (meeting time and
+  off-ticket time) against the next night's sleep, HRV and resting heart rate and the day's mood.
+  For each, the average after heavy days (above your median load) and after light ones, with the
+  number of days behind each, and the correlation when there are at least ten days — "a
+  correlation is not a cause". An overload signal shows on the Work hub when the last seven days
+  carry at least 30% more load than your usual week and a recovery measure is below your own norm
+  (last night's recovery, the week's HRV or sleep, the week's mood). Hidden outside Work mode and
+  while screen-share safe is on.
 - **Modes: Work, Personal, Off.** A chip on the Daily screen and a Quick Settings tile switch
   modes. Outside Work mode, the folders marked as work disappear from the file list, search, AI
   answers and resurfaced notes; Off is for evenings, weekends and leave. A schedule (work days

@@ -8,6 +8,7 @@ import androidx.compose.material.icons.automirrored.rounded.EventNote
 import androidx.compose.material.icons.rounded.BeachAccess
 import androidx.compose.material.icons.rounded.Flag
 import androidx.compose.material.icons.rounded.Groups
+import androidx.compose.material.icons.rounded.MonitorHeart
 import androidx.compose.material.icons.rounded.Summarize
 import androidx.compose.material.icons.rounded.ViewKanban
 import androidx.compose.material3.FilledTonalButton
@@ -34,6 +35,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import java.time.YearMonth
 import javax.inject.Inject
 
@@ -44,10 +46,28 @@ data class LogSummary(val entries: Int, val decisions: Int, val offTicketMinutes
 @HiltViewModel
 class WorkHubViewModel @Inject constructor(
     missionLogRepository: MissionLogRepository,
-    modesRepository: ModesRepository
+    modesRepository: ModesRepository,
+    private val loadRecoveryRepository: cloud.wafflecommons.pixelbrainreader.data.work.LoadRecoveryRepository
 ) : ViewModel() {
 
     val visibility: StateFlow<Visibility> = modesRepository.visibility
+
+    private val _overload = kotlinx.coroutines.flow.MutableStateFlow<cloud.wafflecommons.pixelbrainreader.data.work.OverloadSignal?>(null)
+
+    /** This week's overload signal, if any (the report is cached, so the hub stays quick). */
+    val overload: StateFlow<cloud.wafflecommons.pixelbrainreader.data.work.OverloadSignal?> = _overload
+
+    init {
+        viewModelScope.launch {
+            _overload.value = try {
+                loadRecoveryRepository.report().overload
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                null
+            }
+        }
+    }
 
     val logSummary: StateFlow<LogSummary?> = missionLogRepository.changes
         .mapLatest {
@@ -77,6 +97,7 @@ fun WorkHubScreen(
 ) {
     val visibility by viewModel.visibility.collectAsStateWithLifecycle()
     val summary by viewModel.logSummary.collectAsStateWithLifecycle()
+    val overload by viewModel.overload.collectAsStateWithLifecycle()
 
     FormScaffold(title = "Work", onBack = onBack) {
         if (visibility.hideWork) {
@@ -86,6 +107,7 @@ fun WorkHubScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+        if (!visibility.hideWork && !visibility.hideHealth) overload?.let { OverloadCard(it) }
         SectionCard(
             title = "Mission log",
             icon = Icons.AutoMirrored.Rounded.EventNote,
@@ -126,6 +148,12 @@ fun WorkHubScreen(
             icon = Icons.Rounded.Summarize,
             subtitle = "A month or a quarter of the log as a draft for your reviews: every number from the data.",
             onClick = { onOpen(cloud.wafflecommons.pixelbrainreader.ui.main.V11Routes.EVIDENCE) }
+        )
+        HubCard(
+            title = "Load vs recovery",
+            icon = Icons.Rounded.MonitorHeart,
+            subtitle = "Meetings and off-ticket time against sleep, HRV, resting heart rate and mood, with sample sizes.",
+            onClick = { onOpen(cloud.wafflecommons.pixelbrainreader.ui.main.V11Routes.LOAD) }
         )
         HubCard(
             title = "Leave & handover",
