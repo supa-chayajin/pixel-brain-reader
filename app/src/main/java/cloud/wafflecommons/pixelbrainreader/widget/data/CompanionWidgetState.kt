@@ -29,5 +29,7 @@ data class CompanionWidgetState(
     val distanceKm: Double = 0.0,
     val hydrationMl: Int = 0,
     val mindfulnessMinutes: Long = 0,
-    val avgHeartRate: Int = 0
+    val avgHeartRate: Int = 0,
+    /** Screen-share safe: no mood or health figure on the widget. */
+    val healthHidden: Boolean = false
 )

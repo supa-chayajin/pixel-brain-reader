@@ -69,6 +69,8 @@ class HealthWidget : GlanceAppWidget() {
                 Spacer(GlanceModifier.height(4.dp))
                 if (s == null) {
                     WidgetEmpty("⌛", "Open the app to sync health")
+                } else if (s.healthHidden) {
+                    WidgetEmpty("🙈", "Hidden while screen-share safe is on")
                 } else {
                     val goal = if (s.stepGoal > 0) s.stepGoal else 10_000
                     ProgressRow(

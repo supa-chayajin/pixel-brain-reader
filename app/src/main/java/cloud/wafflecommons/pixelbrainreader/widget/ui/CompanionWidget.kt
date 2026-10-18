@@ -85,13 +85,13 @@ class CompanionWidget : GlanceAppWidget() {
                 if (showLifeRow) {
                     Spacer(GlanceModifier.height(8.dp))
                     LifePills(state)
-                    if (showHealthRow) {
+                    if (showHealthRow && !state.healthHidden) {
                         Spacer(GlanceModifier.height(6.dp))
                         HealthPills(state)
                     }
                 }
 
-                if (showExtras) {
+                if (showExtras && !state.healthHidden) {
                     // Sub-Column keeps the top-level Column within Glance's 10-direct-child limit and
                     // lets the graph flex to fill whatever vertical space is left after the pills.
                     // The quick-action row is only revealed one row taller (XLARGE); at the current

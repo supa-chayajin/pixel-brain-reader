@@ -3,6 +3,7 @@ package cloud.wafflecommons.pixelbrainreader.di
 import cloud.wafflecommons.pixelbrainreader.data.gamification.GamificationRepository
 import cloud.wafflecommons.pixelbrainreader.data.health.HealthConnectManager
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.HabitDao
+import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.ChoreRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.DailyDashboardRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.HabitRepository
@@ -41,4 +42,5 @@ interface WidgetEntryPoint {
     fun grantXpUseCase(): GrantXpUseCase
     fun widgetSnapshotManager(): WidgetSnapshotManager
     fun widgetUpdateManager(): WidgetUpdateManager
+    fun modesRepository(): ModesRepository
 }

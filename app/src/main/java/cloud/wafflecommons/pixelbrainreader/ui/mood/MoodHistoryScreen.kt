@@ -32,9 +32,11 @@ import androidx.compose.ui.text.intl.Locale as ComposeLocale
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MoodHistoryScreen(
-    viewModel: MoodViewModel = hiltViewModel()
+    viewModel: MoodViewModel = hiltViewModel(),
+    modesViewModel: cloud.wafflecommons.pixelbrainreader.ui.modes.ModesViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val visibility by modesViewModel.visibility.collectAsStateWithLifecycle()
     val context = androidx.compose.ui.platform.LocalContext.current
 
     LaunchedEffect(viewModel.uiEvent) {
@@ -57,6 +59,11 @@ fun MoodHistoryScreen(
             )
         }
     ) { padding ->
+        cloud.wafflecommons.pixelbrainreader.ui.modes.HealthPrivacyGate(
+            hidden = visibility.hideHealth,
+            onReveal = { modesViewModel.setScreenShareSafe(false) },
+            modifier = Modifier.padding(padding)
+        ) {
         Column(
             modifier = Modifier
                 .padding(padding)
@@ -95,6 +102,7 @@ fun MoodHistoryScreen(
                     }
                 }
             }
+        }
         }
     }
 }

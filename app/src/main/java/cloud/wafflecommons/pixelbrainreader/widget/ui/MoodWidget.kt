@@ -50,7 +50,11 @@ class MoodWidget : GlanceAppWidget() {
                 WidgetHeader(
                     emoji = "🫧",
                     title = "How are you?",
-                    subtitle = if (mood.entryCount > 0) "${mood.entryCount} today  ·  ${mood.emoji}" else "Tap to check in",
+                    subtitle = when {
+                        mood.hidden -> "Screen-share safe is on"
+                        mood.entryCount > 0 -> "${mood.entryCount} today  ·  ${mood.emoji}"
+                        else -> "Tap to check in"
+                    },
                     onTitleClick = actionStartActivity(WidgetNav.openIntent(context, WidgetNav.SCREEN_MOOD))
                 )
                 Spacer(GlanceModifier.height(14.dp))

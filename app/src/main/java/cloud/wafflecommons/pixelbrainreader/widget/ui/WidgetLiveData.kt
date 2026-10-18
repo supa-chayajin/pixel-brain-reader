@@ -25,7 +25,7 @@ object WidgetLiveData {
     data class WidgetHabit(val id: String, val title: String, val done: Boolean, val isAutomatic: Boolean = false)
     data class WidgetTask(val id: String, val label: String, val time: String?, val done: Boolean)
     data class WidgetChore(val id: String, val name: String, val effort: Int)
-    data class WidgetMood(val emoji: String, val entryCount: Int)
+    data class WidgetMood(val emoji: String, val entryCount: Int, val hidden: Boolean = false)
 
     /** Today's SCHEDULED habits (via [HabitScheduler]) with their done state, ordered by sortOrder. */
     suspend fun habitsForToday(context: Context): List<WidgetHabit> {
@@ -81,10 +81,11 @@ object WidgetLiveData {
         } catch (e: CancellationException) { throw e } catch (e: Exception) { emptyList() }
     }
 
-    /** Today's mood summary (main emoji + entry count). */
+    /** Today's mood summary (main emoji + entry count); nothing while screen-share safe is on. */
     suspend fun moodToday(context: Context): WidgetMood {
         return try {
             val ep = entryPoint(context)
+            if (ep.modesRepository().currentVisibility().hideHealth) return WidgetMood("🙈", 0, hidden = true)
             val daily = ep.moodRepository().getDailyMood(LocalDate.now()).firstOrNull()
             WidgetMood(daily?.summary?.mainEmoji ?: "🫥", daily?.entries?.size ?: 0)
         } catch (e: CancellationException) { throw e } catch (e: Exception) { WidgetMood("🫥", 0) }

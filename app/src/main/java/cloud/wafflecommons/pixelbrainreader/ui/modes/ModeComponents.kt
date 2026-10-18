@@ -1,8 +1,10 @@
 package cloud.wafflecommons.pixelbrainreader.ui.modes
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -35,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import cloud.wafflecommons.pixelbrainreader.data.modes.ContextMode
 import cloud.wafflecommons.pixelbrainreader.data.modes.ModeSource
@@ -160,5 +163,40 @@ fun CountdownCard(countdowns: List<KeyDateCountdown>, modifier: Modifier = Modif
                 )
             }
         }
+    }
+}
+
+/**
+ * Mood and health stay off screen while screen-share safe is on: [content] shows only when
+ * [hidden] is false, a placeholder with a way out otherwise.
+ */
+@Composable
+fun HealthPrivacyGate(hidden: Boolean, onReveal: () -> Unit, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    if (!hidden) {
+        content()
+        return
+    }
+    Column(
+        modifier = modifier.fillMaxSize().padding(32.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(
+            Icons.Rounded.VisibilityOff,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(48.dp)
+        )
+        Spacer(Modifier.size(16.dp))
+        Text("Hidden while screen-share safe is on", style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
+        Spacer(Modifier.size(8.dp))
+        Text(
+            "Mood and health figures stay off screen until you turn it off.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.size(16.dp))
+        OutlinedButton(onClick = onReveal) { Text("Turn off screen-share safe") }
     }
 }

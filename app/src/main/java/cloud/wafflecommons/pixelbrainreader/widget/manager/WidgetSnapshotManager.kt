@@ -8,6 +8,7 @@ import cloud.wafflecommons.pixelbrainreader.data.health.DailyHealthMetrics
 import cloud.wafflecommons.pixelbrainreader.data.health.HealthConnectManager
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.ChoreEntity
 import cloud.wafflecommons.pixelbrainreader.data.model.HabitStatus
+import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.ChoreRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.DailyDashboardRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.HabitRepository
@@ -56,7 +57,8 @@ class WidgetSnapshotManager @Inject constructor(
     private val habitRepository: HabitRepository,
     private val choreRepository: ChoreRepository,
     private val dailyDashboardRepository: DailyDashboardRepository,
-    private val appClock: AppClock
+    private val appClock: AppClock,
+    private val modesRepository: dagger.Lazy<ModesRepository>
 ) {
     private val snapshotFileName = "widget_snapshot.json"
     private val json = Json { ignoreUnknownKeys = true; prettyPrint = true }
@@ -164,6 +166,7 @@ class WidgetSnapshotManager @Inject constructor(
             choresDue = choresDue,
             chartHeartRate = chartPoints,
             chartMoods = chartMoods,
+            healthHidden = try { modesRepository.get().currentVisibility().hideHealth } catch (e: CancellationException) { throw e } catch (e: Exception) { false },
             lastUpdatedAt = System.currentTimeMillis()
         )
 

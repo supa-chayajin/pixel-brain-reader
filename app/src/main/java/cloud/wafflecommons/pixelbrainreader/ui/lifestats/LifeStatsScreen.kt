@@ -46,9 +46,11 @@ fun LifeStatsScreen(
     onNavigateBack: () -> Unit,
     onNavigateToHabits: () -> Unit = {},
     onNavigateToChores: () -> Unit = {},
-    viewModel: LifeStatsViewModel = hiltViewModel()
+    viewModel: LifeStatsViewModel = hiltViewModel(),
+    modesViewModel: cloud.wafflecommons.pixelbrainreader.ui.modes.ModesViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.finalUiState.collectAsStateWithLifecycle()
+    val visibility by modesViewModel.visibility.collectAsStateWithLifecycle()
     val sleepDuration by viewModel.sleepDurationState.collectAsStateWithLifecycle()
     val globalCompletion by viewModel.globalCompletionState.collectAsStateWithLifecycle()
     val syncState by viewModel.isSyncing.collectAsStateWithLifecycle()
@@ -87,7 +89,12 @@ fun LifeStatsScreen(
             statusText = (syncState as? SyncState.Syncing)?.step?.label,
             modifier = Modifier.fillMaxSize().padding(innerPadding)
         ) {
-            if (uiState.isLoading) {
+            if (visibility.hideHealth) {
+                cloud.wafflecommons.pixelbrainreader.ui.modes.HealthPrivacyGate(
+                    hidden = true,
+                    onReveal = { modesViewModel.setScreenShareSafe(false) }
+                ) {}
+            } else if (uiState.isLoading) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     LoadingIndicator()
                 }
