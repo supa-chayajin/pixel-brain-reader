@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -276,9 +278,30 @@ fun FileDetailPane(
 
                             val moodState by moodViewModel.uiState.collectAsStateWithLifecycle()
 
-                            if (isEditing) {
+                            val tabletop = cloud.wafflecommons.pixelbrainreader.ui.utils.rememberTabletop()
+                            @OptIn(ExperimentalLayoutApi::class)
+                            val imeVisible = WindowInsets.isImeVisible
+                            if (isEditing && tabletop && !imeVisible) {
+                                // --- TABLETOP (E6): the rendered note above the hinge, the editor below it ---
+                                cloud.wafflecommons.pixelbrainreader.ui.utils.HingeSplit(
+                                    modifier = Modifier.fillMaxSize(),
+                                    top = { LivePreview(content = content, onWikiLinkClick = onWikiLinkClick) },
+                                    bottom = {
+                                        NoteEditor(
+                                            fileKey = fileName,
+                                            content = content,
+                                            onContentChange = onContentChange,
+                                            notePath = filePath,
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .windowInsetsPadding(WindowInsets.navigationBars)
+                                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                                        )
+                                    }
+                                )
+                            } else if (isEditing) {
                                 if (isExpandedScreen) {
-                                    // --- TABLETOP MODE: Split View ---
+                                    // --- EXPANDED (unfolded) SCREEN ---
                                     Column(Modifier.fillMaxSize()) {
                                         // Editor fills the pane and is IME/nav-inset, so its bounded
                                         // height lets BasicTextField scroll to the caret natively.
@@ -286,6 +309,7 @@ fun FileDetailPane(
                                             fileKey = fileName,
                                             content = content,
                                             onContentChange = onContentChange,
+                                            notePath = filePath,
                                             modifier = Modifier
                                                 .weight(1f)
                                                 .fillMaxWidth()
@@ -302,6 +326,7 @@ fun FileDetailPane(
                                             fileKey = fileName,
                                             content = content,
                                             onContentChange = onContentChange,
+                                            notePath = filePath,
                                             modifier = Modifier
                                                 .fillMaxSize()
                                                 .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars))
@@ -317,12 +342,14 @@ fun FileDetailPane(
                                     ScrollState(initial = 0)
                                 }
 
-                                // View Mode also benefits from the clean slate structure for consistency
+                                // View Mode also benefits from the clean slate structure for consistency.
+                                // Dropping text or an image here appends it to the note (E6).
                                 Box(
                                     modifier = Modifier
                                         .fillMaxSize()
                                         .navigationBarsPadding()
                                         .imePadding()
+                                        .noteDropTarget(filePath) { dropped -> onContentChange(content.trimEnd() + "\n\n" + dropped + "\n") }
                                 ) {
                                     Column(
                                         modifier = Modifier
@@ -398,6 +425,7 @@ private fun NoteEditor(
     fileKey: String?,
     content: String,
     onContentChange: (String) -> Unit,
+    notePath: String?,
     modifier: Modifier
 ) {
     var editorValue by remember(fileKey) { mutableStateOf(TextFieldValue(content)) }
@@ -427,7 +455,16 @@ private fun NoteEditor(
         }
     }
 
-    Column(modifier) {
+    // Dropped text or files (E6) go in at the caret, on their own line.
+    val dropModifier = Modifier.noteDropTarget(notePath) { dropped ->
+        val at = editorValue.selection.start.coerceIn(0, editorValue.text.length)
+        val before = editorValue.text.substring(0, at)
+        val prefix = if (before.isEmpty() || before.endsWith("\n")) "" else "\n"
+        val inserted = prefix + dropped + "\n"
+        update(TextFieldValue(before + inserted + editorValue.text.substring(at), TextRange(at + inserted.length)))
+    }
+
+    Column(modifier.then(dropModifier)) {
         trigger?.let { active ->
             EditorAssistBar(
                 trigger = active,
@@ -727,3 +764,23 @@ fun MarkwonContent(content: String, onWikiLinkClick: (String) -> Unit) {
         }
     )
 }
+
+/** The note as it renders, re-parsed a moment after typing stops (tabletop editing, E6). */
+@Composable
+private fun LivePreview(content: String, onWikiLinkClick: (String) -> Unit) {
+    var preview by remember { mutableStateOf(content) }
+    LaunchedEffect(content) {
+        kotlinx.coroutines.delay(LIVE_PREVIEW_DELAY_MS)
+        preview = content
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp)
+    ) {
+        MarkwonContent(content = FrontmatterManager.stripFrontmatter(preview), onWikiLinkClick = onWikiLinkClick)
+    }
+}
+
+private const val LIVE_PREVIEW_DELAY_MS = 400L

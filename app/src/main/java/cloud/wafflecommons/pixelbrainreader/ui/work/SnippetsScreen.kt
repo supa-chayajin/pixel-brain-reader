@@ -6,8 +6,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
@@ -191,7 +193,10 @@ fun RunbooksScreen(onBack: () -> Unit, onPlay: (String) -> Unit, viewModel: Snip
     }
 }
 
-/** Plays a runbook step by step; finishing writes an incident log to the inbox. */
+/**
+ * Plays a runbook step by step; finishing writes an incident log to the inbox. Half-folded on a
+ * desk (tabletop, E6), the step stands above the hinge and the buttons lie below it.
+ */
 @Composable
 fun RunbookPlayerScreen(path: String, onBack: () -> Unit, onOpenNote: (String) -> Unit, viewModel: SnippetsViewModel = hiltViewModel()) {
     LaunchedEffect(path) { viewModel.loadRunbook(path) }
@@ -204,8 +209,61 @@ fun RunbookPlayerScreen(path: String, onBack: () -> Unit, onOpenNote: (String) -
     var stepNote by remember { mutableStateOf("") }
     var runNotes by remember { mutableStateOf("") }
     val copy = rememberCopyToClipboard()
+    val tabletop = cloud.wafflecommons.pixelbrainreader.ui.utils.rememberTabletop()
 
     val (note, steps) = loaded ?: (null to emptyList())
+
+    fun record(status: StepStatus) {
+        val step = steps.getOrNull(index) ?: return
+        results += StepResult(step, status, LocalDateTime.now().withSecond(0).withNano(0), stepNote.ifBlank { null })
+        stepNote = ""
+        index++
+    }
+
+    val stepContent: @Composable () -> Unit = {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            LinearProgressIndicator(progress = { if (steps.isEmpty()) 0f else index.toFloat() / steps.size }, modifier = Modifier.fillMaxWidth())
+            val step = steps.getOrNull(index)
+            if (step != null) {
+                Text("Step ${index + 1} of ${steps.size}", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                Text(step.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                val prose = step.body.lines().filterNot { it.trim().startsWith("```") }.joinToString("\n").trim()
+                if (step.code.isEmpty() && prose.isNotEmpty()) Text(prose, style = MaterialTheme.typography.bodyMedium)
+                step.code.forEach { block -> SnippetCard(block, note?.title.orEmpty(), onCopy = { copy(block.code) }, onOpen = null) }
+            } else {
+                Text("All steps played.", style = MaterialTheme.typography.titleMedium)
+            }
+        }
+    }
+    val controls: @Composable () -> Unit = {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (index < steps.size) {
+                OutlinedTextField(stepNote, { stepNote = it }, label = { Text("Note for this step") }, modifier = Modifier.fillMaxWidth())
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { record(StepStatus.DONE) }) { Text("Done") }
+                    OutlinedButton(onClick = { record(StepStatus.FAILED) }) { Text("Failed") }
+                    TextButton(onClick = { record(StepStatus.SKIPPED) }) { Text("Skip") }
+                }
+            }
+            OutlinedTextField(runNotes, { runNotes = it }, label = { Text("Incident notes") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+            Button(
+                enabled = results.isNotEmpty() && note != null,
+                onClick = { note?.let { viewModel.finish(it, startedAt, results.toList(), runNotes, onOpenNote) } }
+            ) { Text(if (index < steps.size) "Stop and write the incident log" else "Write the incident log") }
+        }
+    }
+
+    if (tabletop && note != null && steps.isNotEmpty()) {
+        androidx.compose.material3.Scaffold(snackbarHost = { androidx.compose.material3.SnackbarHost(snackbarHostState) }) { padding ->
+            cloud.wafflecommons.pixelbrainreader.ui.utils.HingeSplit(
+                modifier = Modifier.padding(padding).fillMaxSize(),
+                top = { Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) { stepContent() } },
+                bottom = { Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) { controls() } }
+            )
+        }
+        return
+    }
+
     FormScaffold(title = note?.title ?: "Runbook", onBack = onBack, snackbarHostState = snackbarHostState) {
         if (note == null) {
             LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
@@ -215,32 +273,7 @@ fun RunbookPlayerScreen(path: String, onBack: () -> Unit, onOpenNote: (String) -
             EmptyHint("This runbook has no step: give it ## sections, or a list.")
             return@FormScaffold
         }
-        LinearProgressIndicator(progress = { index.toFloat() / steps.size }, modifier = Modifier.fillMaxWidth())
-        if (index < steps.size) {
-            val step = steps[index]
-            Text("Step ${index + 1} of ${steps.size}", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-            Text(step.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            val prose = step.body.lines().filterNot { it.trim().startsWith("```") }.joinToString("\n").trim()
-            if (step.code.isEmpty() && prose.isNotEmpty()) Text(prose, style = MaterialTheme.typography.bodyMedium)
-            step.code.forEach { block -> SnippetCard(block, note.title, onCopy = { copy(block.code) }, onOpen = null) }
-            OutlinedTextField(stepNote, { stepNote = it }, label = { Text("Note for this step") }, modifier = Modifier.fillMaxWidth())
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                fun record(status: StepStatus) {
-                    results += StepResult(step, status, LocalDateTime.now().withSecond(0).withNano(0), stepNote.ifBlank { null })
-                    stepNote = ""
-                    index++
-                }
-                Button(onClick = { record(StepStatus.DONE) }) { Text("Done") }
-                OutlinedButton(onClick = { record(StepStatus.FAILED) }) { Text("Failed") }
-                TextButton(onClick = { record(StepStatus.SKIPPED) }) { Text("Skip") }
-            }
-        } else {
-            Text("All steps played.", style = MaterialTheme.typography.titleMedium)
-        }
-        OutlinedTextField(runNotes, { runNotes = it }, label = { Text("Incident notes") }, minLines = 3, modifier = Modifier.fillMaxWidth())
-        Button(
-            enabled = results.isNotEmpty(),
-            onClick = { viewModel.finish(note, startedAt, results.toList(), runNotes, onOpenNote) }
-        ) { Text(if (index < steps.size) "Stop and write the incident log" else "Write the incident log") }
+        stepContent()
+        controls()
     }
 }

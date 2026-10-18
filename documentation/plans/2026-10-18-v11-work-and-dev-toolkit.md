@@ -75,7 +75,7 @@ Unless a path starts with `app/` or `documentation/`, it is relative to
 - [x] **C3** Snippets & runbooks (E4): code-block index with copy, runbook player with incident log,
       copy buttons in rendered notes, PHP / TOML / C# highlighting.
 - [x] **C4** Sync digest + vault activity (E5).
-- [ ] **C5** Fold (E6): tabletop layouts, drag & drop into notes.
+- [x] **C5** Fold (E6): tabletop layouts, drag & drop into notes.
 - [ ] **C6** Vault rules on the phone (E7): advisory lint badge; inbox filing with folder and tag
       suggestions (roadmap 2.6).
 - [ ] **C7** AI pairing dashboard (N2) from the auto-generated worklogs.

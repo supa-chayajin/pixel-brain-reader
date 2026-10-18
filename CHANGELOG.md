@@ -33,6 +33,12 @@ Work toward **11.0.0** — the work-direction and dev/lead toolkit release (plan
   came from the remote — notes new, changed and removed, and where — until dismissed. Vault
   activity (Work hub) shows that digest, commits per day over 30 days, the notes that changed most
   this week and the new ones, all from the git history and filtered by the current mode.
+- **Fold: tabletop and drag & drop.** Half-folded like a small laptop, editing a note shows it
+  rendered above the hinge and the editor below (until the keyboard opens), and a runbook shows
+  the step above and its buttons below. Text, images and PDFs dragged from another app — a
+  browser beside the app on the unfolded screen — drop into a note: text where you drop it
+  (appended in reading view), files saved to the vault's attachment folder from its Obsidian
+  settings (`99_System/Assets` here) and embedded as `![[Pasted image 20261018143205.png]]`.
 - **Work hub and mission log.** A Work chip on the Daily screen opens the Work hub. Its first tool
   is the mission log: facts, decisions, requests, refusals and off-ticket time, each with the role
   you held, a status, minutes, who asked and who decided (as roles, never names), a reference and
