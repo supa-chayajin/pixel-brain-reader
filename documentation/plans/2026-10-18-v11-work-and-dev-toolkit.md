@@ -78,6 +78,11 @@ Unless a path starts with `app/` or `documentation/`, it is relative to
 - [x] **C5** Fold (E6): tabletop layouts, drag & drop into notes.
 - [x] **C6** Vault rules on the phone (E7): advisory lint badge; inbox filing with folder and tag
       suggestions (roadmap 2.6).
+- [x] **Share import** (asked during the batch): reader-mode share screen, browser fallbacks,
+      Stack Exchange threads, video cards — shipped in 11.0.0.
+
+C7–C15 move to 11.x: 11.0.0 shipped early for dogfooding (2026-10-18, owner's call).
+
 - [ ] **C7** AI pairing dashboard (N2) from the auto-generated worklogs.
 - [ ] **C8** Explain this error (N3): shared stack trace → past occurrences, explanation, bug note.
 - [ ] **C9** Decision records (N4).
@@ -89,6 +94,6 @@ Unless a path starts with `app/` or `documentation/`, it is relative to
 - [ ] **C15** Authorship timeline (N11).
 
 ### D — Release 11.0.0
-- [ ] **D1** `versionCode 1100` / `versionName "11.0.0"`, CHANGELOG section, CLAUDE.md facts,
-      settled decision #14 (deny-list on the device — added with A5), lint 0/0, tests, `assembleRelease`,
-      instrumented tests compile; an emulator run before calling it a release candidate.
+- [x] **D1** `versionCode 1100` / `versionName "11.0.0"`, CHANGELOG section, CLAUDE.md facts,
+      settled decision #14 (deny-list on the device — added with A5), lint 0/0, tests, instrumented
+      tests on the emulator; the signed `assembleRelease` is built by the owner in Android Studio.
