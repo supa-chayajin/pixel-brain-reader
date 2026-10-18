@@ -55,6 +55,11 @@ class GitFileAges @Inject constructor(
             } catch (e: Exception) {
                 Log.w(TAG, "File ages unavailable: ${e.message}")
                 memory?.lastChanged ?: emptyMap()
+            } catch (e: LinkageError) {
+                // A JGit class R8 broke (NoClassDefFoundError, ExceptionInInitializerError…) is an
+                // Error, not an Exception: still never worth crashing the screen over.
+                Log.w(TAG, "File ages unavailable (linkage): ${e.message}")
+                memory?.lastChanged ?: emptyMap()
             }
         }
     }

@@ -13,6 +13,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
@@ -69,6 +70,11 @@ class VaultDiscoveryRepository @Inject constructor(
         }
         .distinctUntilChanged()
         .map { VaultFileIndex(it) }
+        .catch { e ->
+            // Without the index, embeds only fall back to vault paths; never crash a screen over it.
+            Log.w("VaultDiscovery", "Attachment index unavailable: ${e.message}")
+            emit(VaultFileIndex.EMPTY)
+        }
         .flowOn(Dispatchers.Default)
 
     /** Every directory path in the vault, for wikilink folder resolution. */

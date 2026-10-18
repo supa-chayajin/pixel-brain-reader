@@ -15,21 +15,30 @@ letting the debug-keystore fallback slip through.
 - Release commit tagged locally (`git tag -a vX.Y.Z`). **Do not push yet** —
   the tag only goes to origin after the signature is verified.
 
-## 1. Dogfood a release candidate first (no signing needed)
+## 1. Run a release candidate on the EMULATOR first (no signing needed)
 
-While `local.properties` has no `storeFile`/`storePassword`/`keyAlias`/
-`keyPassword`, `assembleRelease` falls back to the **debug** keystore
-(`app/build.gradle.kts`, `signingConfigs` block). A debug-signed release APK has
-the same signature as the installed debug build, so:
+Unit tests run on the JVM, not on Android: anything Android-only — R8 keep-rule
+gaps, Android's ICU regex engine, platform APIs — only shows up on a device.
+v10.2.0's first signed build crashed at every start on a regex flag the JVM
+accepts and Android rejects (`(?U)`), with every unit test green. So before
+signing, start the minified app on the emulator:
 
 ```bash
-./gradlew :app:assembleRelease
-adb install -r app/build/outputs/apk/release/app-release.apk   # in-place, no data loss
+# The Fold_Emulator has a lock-screen PIN: unlock it once after a cold boot,
+# or apps (and instrumented tests) can't start.
+./gradlew :app:connectedDebugAndroidTest              # device-side tests (ICU regex…)
+./gradlew :app:assembleRelease                        # debug-signed: keys absent from local.properties
+adb -s emulator-5554 install -r app/build/outputs/apk/release/app-release.apk
+adb -s emulator-5554 shell monkey -p cloud.wafflecommons.pixelbrainreader 1
+adb -s emulator-5554 logcat -b crash -d               # must stay empty
 ```
 
-This is the only way to catch **release-only** bugs (R8 keep-rule gaps) on the
-real device before signing. v10.0.0's frozen-widgets bug (stripped WorkManager
-`InputMerger` constructor) was caught exactly here.
+Then open Daily, a note, Chat, Settings and the widgets on the emulator. Since
+v10.0.0 the daily-driver device runs **release-signed** builds, so this
+debug-signed candidate can no longer go on it (signature mismatch → forced
+uninstall): the emulator is the place to catch release-only bugs. v10.0.0's
+frozen-widgets bug (stripped WorkManager `InputMerger` constructor) was the
+first one caught this way.
 
 ## 2. Produce the signed APK
 
