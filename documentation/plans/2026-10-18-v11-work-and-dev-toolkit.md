@@ -46,7 +46,7 @@ Unless a path starts with `app/` or `documentation/`, it is relative to
 - [x] **A5** Confidentiality guard (#8, E9): on-device deny-list + secret patterns, checked on the
       staged diff before every commit; a hit holds the commit (fail-closed) until reviewed.
 - [x] **A6** Recovery signals (E8): HRV, resting heart rate, sleep stages from Health Connect.
-- [ ] **A7** Code-aware chunking (E9): code blocks are their own chunks, labelled with their
+- [x] **A7** Code-aware chunking (E9): code blocks are their own chunks, labelled with their
       language; people notes are never embedded.
 - [ ] **A8** First-seen times in the git history walk (for N11).
 - [ ] **A9** Prompt presets (roadmap 2.7) in `99_System/presets.md` + the Coach preset (N9).
