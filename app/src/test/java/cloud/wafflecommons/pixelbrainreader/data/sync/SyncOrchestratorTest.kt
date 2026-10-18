@@ -77,7 +77,8 @@ class SyncOrchestratorTest {
             automateHabitsUseCase = mockk(relaxed = true),
             dailyDashboardRepository = daily,
             gitSyncCoordinator = coordinator,
-            appScope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+            appScope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined),
+            modesRepository = { mockk(relaxed = true) }
         )
     }
 

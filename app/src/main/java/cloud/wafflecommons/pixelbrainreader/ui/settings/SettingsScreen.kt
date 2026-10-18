@@ -53,6 +53,7 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.widget.Toast
 import androidx.compose.material.icons.rounded.CleaningServices
+import androidx.compose.material.icons.rounded.Work
 import androidx.compose.material.icons.rounded.DateRange
 import androidx.compose.material.icons.rounded.Mood
 import androidx.health.connect.client.records.StepsRecord
@@ -79,6 +80,7 @@ fun SettingsScreen(
     onNavigateToHabitConfig: () -> Unit = {},
     onNavigateToHomeConfig: () -> Unit = {},
     onNavigateToReminders: () -> Unit = {},
+    onNavigateToModes: () -> Unit = {},
     onNavigateToNavBarReorder: () -> Unit = {},
     onNavigateToMoodTags: () -> Unit = {},
     onNavigateToGamificationSettings: () -> Unit = {},
@@ -482,6 +484,16 @@ fun SettingsScreen(
                     leadingContent = { Icon(Icons.Filled.Notifications, contentDescription = null) }
                 ) {
                     Text("Reminders & Notifications")
+                }
+
+                ListItem(
+                    modifier = Modifier.clickable {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onNavigateToModes()
+                    },
+                    leadingContent = { Icon(Icons.Rounded.Work, contentDescription = null) }
+                ) {
+                    Text("Modes: work, personal, off")
                 }
 
                 ListItem(

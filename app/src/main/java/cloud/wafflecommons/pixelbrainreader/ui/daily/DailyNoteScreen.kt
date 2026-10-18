@@ -72,9 +72,24 @@ fun DailyNoteScreen(
     onCheckInClicked: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onOpenNote: (String) -> Unit = {},
-    viewModel: DailyNoteViewModel = hiltViewModel()
+    onOpenModesSettings: () -> Unit = {},
+    viewModel: DailyNoteViewModel = hiltViewModel(),
+    modesViewModel: cloud.wafflecommons.pixelbrainreader.ui.modes.ModesViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val visibility by modesViewModel.visibility.collectAsStateWithLifecycle()
+    val countdowns by modesViewModel.countdowns.collectAsStateWithLifecycle()
+    var showModeSheet by remember { mutableStateOf(false) }
+    if (showModeSheet) {
+        cloud.wafflecommons.pixelbrainreader.ui.modes.ModeSheet(
+            visibility = visibility,
+            onSelect = { mode -> modesViewModel.setMode(mode); showModeSheet = false },
+            onFollowSchedule = { modesViewModel.followSchedule(); showModeSheet = false },
+            onScreenShareSafe = modesViewModel::setScreenShareSafe,
+            onOpenSettings = { showModeSheet = false; onOpenModesSettings() },
+            onDismiss = { showModeSheet = false }
+        )
+    }
     val saveState by viewModel.saveState.collectAsStateWithLifecycle()
     val gratitudes by viewModel.gratitudes.collectAsStateWithLifecycle() // RFC-009
     val memoryEchoes by viewModel.memoryEchoes.collectAsStateWithLifecycle()
@@ -246,10 +261,26 @@ fun DailyNoteScreen(
                     contentPadding = PaddingValues(top = 16.dp, bottom = NavBarClearance),
                     verticalArrangement = Arrangement.spacedBy(24.dp)
                 ) {
+                    // Mode (Work / Personal / Off)
+                    item(key = "mode") {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            cloud.wafflecommons.pixelbrainreader.ui.modes.ModeChip(
+                                visibility = visibility,
+                                onClick = { showModeSheet = true }
+                            )
+                        }
+                    }
+
                     // 0. Weather Dashboard
                     item {
                         cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 0) {
                             PremiumWeatherCard(weather = state.weather)
+                        }
+                    }
+
+                    if (countdowns.isNotEmpty()) {
+                        item(key = "countdowns") {
+                            cloud.wafflecommons.pixelbrainreader.ui.modes.CountdownCard(countdowns)
                         }
                     }
 
@@ -258,12 +289,14 @@ fun DailyNoteScreen(
                         cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 2) {
                             val moodData = state.moodData
                             val lastUpdate = remember(moodData) { moodData?.entries?.firstOrNull()?.time }
+                            // Screen-share safe: no mood or health figures on screen.
+                            val hideHealth = visibility.hideHealth
                             DailyNoteHeader(
-                                emoji = moodData?.summary?.mainEmoji,
-                                lastUpdate = lastUpdate,
-                                topDailyTags = state.topDailyTags,
-                                healthMetrics = state.healthMetrics,
-                                moodTrend = state.moodTrend
+                                emoji = if (hideHealth) null else moodData?.summary?.mainEmoji,
+                                lastUpdate = if (hideHealth) null else lastUpdate,
+                                topDailyTags = if (hideHealth) emptyList() else state.topDailyTags,
+                                healthMetrics = if (hideHealth) null else state.healthMetrics,
+                                moodTrend = if (hideHealth) emptyList() else state.moodTrend
                             )
                         }
                     }

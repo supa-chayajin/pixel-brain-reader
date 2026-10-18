@@ -32,7 +32,11 @@ class MemoryEchoRepositoryTest {
     }
     private val today = MutableStateFlow(LocalDate.of(2026, 10, 17))
     private val appClock: AppClock = mockk { every { this@mockk.today } returns this@MemoryEchoRepositoryTest.today }
-    private val repository = MemoryEchoRepository(fileDao, fileContentDao, gitFileAges, echoReviewStore, appClock)
+    private val visibility = MutableStateFlow(cloud.wafflecommons.pixelbrainreader.data.modes.Visibility.ALL)
+    private val modesRepository: cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository = mockk {
+        every { this@mockk.visibility } returns this@MemoryEchoRepositoryTest.visibility
+    }
+    private val repository = MemoryEchoRepository(fileDao, fileContentDao, gitFileAges, echoReviewStore, appClock, modesRepository)
 
     private fun note(path: String, mtime: Long? = now) =
         FileEntity(path = path, name = path.substringAfterLast('/'), type = "file", downloadUrl = null, localModifiedTimestamp = mtime)

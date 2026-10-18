@@ -2,6 +2,7 @@ package cloud.wafflecommons.pixelbrainreader.data.repository
 
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.FileContentDao
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.FileDao
+import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.FileEntity
 import cloud.wafflecommons.pixelbrainreader.data.model.MemoryEcho
 import cloud.wafflecommons.pixelbrainreader.data.remote.GitFileAges
@@ -27,7 +28,8 @@ class MemoryEchoRepository @Inject constructor(
     private val fileContentDao: FileContentDao,
     private val gitFileAges: GitFileAges,
     private val echoReviewStore: EchoReviewStore,
-    private val appClock: AppClock
+    private val appClock: AppClock,
+    private val modesRepository: ModesRepository
 ) {
     suspend fun getDailyEchoes(limit: Int = 3, now: Long = System.currentTimeMillis()): List<MemoryEcho> =
         withContext(Dispatchers.IO) {
@@ -35,10 +37,11 @@ class MemoryEchoRepository @Inject constructor(
             val lastChanged = gitFileAges.lastChanged()
             val reviewedAt = echoReviewStore.reviewedAt()
             val todayEpochDay = appClock.today.value.toEpochDay()
+            val visibility = modesRepository.visibility.value
 
             val candidates = files.mapNotNull { entity ->
                 val changedAt = lastChanged[entity.path] ?: return@mapNotNull null // not committed yet: not forgotten
-                if (!isEchoable(entity)) return@mapNotNull null
+                if (!isEchoable(entity) || !visibility.isVisible(entity.path)) return@mapNotNull null
                 if (now - changedAt < MIN_AGE_MS) return@mapNotNull null
                 val reviewed = reviewedAt[entity.path]
                 if (reviewed != null && now - reviewed < REST_MS) return@mapNotNull null

@@ -32,4 +32,7 @@
     <string name="shortcut_search_short">Ask</string>
     <string name="shortcut_search_long">Ask Cortex</string>
     <string name="shortcut_disabled">Log in to Cortex first</string>
+
+    <!-- Quick Settings tiles -->
+    <string name="tile_mode_label">Mode</string>
 </resources>

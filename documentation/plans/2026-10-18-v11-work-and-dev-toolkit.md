@@ -38,7 +38,7 @@ Unless a path starts with `app/` or `documentation/`, it is relative to
 - [x] **A2** Full-text index (roadmap 2.1): Room FTS4 over `file_contents`, accent-insensitive,
       BM25 ranking. Replaces the `LIKE` search.
 - [x] **A3** Links index (roadmap 2.3): `links(source, target, kind)` maintained by the vault scan.
-- [ ] **A4** Modes (N1): Work / Personal / Off, a schedule, leave periods, key dates, screen-share
+- [x] **A4** Modes (N1): Work / Personal / Off, a schedule, leave periods, key dates, screen-share
       safe; one visibility policy applied to lists, search, AI search, echoes, health/mood cards,
       widgets and notifications; a Quick Settings tile.
 - [ ] **A5** Confidentiality guard (#8, E9): on-device deny-list + secret patterns, checked on the
