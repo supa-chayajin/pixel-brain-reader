@@ -63,7 +63,7 @@ Unless a path starts with `app/` or `documentation/`, it is relative to
       rewrites `status` + `date_updated` only; next step / blockers / target date; synthesis export.
 - [x] **B5** Objectives tracker (#5): objective notes with milestones, a weekly protected slot,
       nudges, tagged log entries as material.
-- [ ] **B6** Meetings & requests (#6): meeting notes with decisions and owned actions; my actions
+- [x] **B6** Meetings & requests (#6): meeting notes with decisions and owned actions; my actions
       become next actions; workload metrics.
 - [ ] **B7** Load vs recovery (#7): off-ticket time and meetings against sleep, HRV and mood, with
       sample sizes; an overload warning.

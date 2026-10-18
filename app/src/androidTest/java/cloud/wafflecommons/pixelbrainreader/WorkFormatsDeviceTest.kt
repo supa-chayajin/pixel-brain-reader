@@ -2,6 +2,7 @@ package cloud.wafflecommons.pixelbrainreader
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import cloud.wafflecommons.pixelbrainreader.data.work.LogKind
+import cloud.wafflecommons.pixelbrainreader.data.work.MeetingFormat
 import cloud.wafflecommons.pixelbrainreader.data.work.MissionLogFormat
 import cloud.wafflecommons.pixelbrainreader.data.work.ObjectiveFormat
 import org.junit.Assert.assertEquals
@@ -31,5 +32,12 @@ class WorkFormatsDeviceTest {
         val milestones = ObjectiveFormat.milestones("- [x] Inventaire 📅 2026-03-01\n- [ ] Rotation [due:: 2026-11-15]")
         assertEquals(listOf("Inventaire", "Rotation"), milestones.map { it.text })
         assertEquals("2026-11-15", milestones[1].due.toString())
+    }
+
+    @Test
+    fun meetingActionOwnersParseOnIcu() {
+        val actions = MeetingFormat.actions("m.md", "- [ ] @moi Écrire l'ADR 📅 2026-10-20\n- [ ] @Tech.lead Revoir")
+        assertEquals(listOf("moi", "Tech.lead"), actions.map { it.owner })
+        assertEquals("Écrire l'ADR", actions[0].text)
     }
 }
