@@ -17,8 +17,8 @@ Work toward **11.0.0** — the work-direction and dev/lead toolkit release (plan
   answers and resurfaced notes; Off is for evenings, weekends and leave. A schedule (work days
   and hours) can switch modes automatically, a manual choice lasts until the next schedule
   change or midnight, and a leave period makes every day Off. **Screen-share safe** hides work,
-  private and health content (mood and health figures on the Daily screen included) until it is
-  turned off. Key dates get a countdown card on the Daily screen; work dates hide outside Work
+  private and health content until it is turned off: the mood and health figures on the Daily
+  screen, Life Stats and the mood history, and the Health, Companion and Mood widgets. Key dates get a countdown card on the Daily screen; work dates hide outside Work
   mode. The configuration lives in the vault (`10_Journal/system/context_modes.json`) so it
   syncs; the manual choice stays on the device. Settings → Modes.
 - **Confidentiality guard.** Before every commit, what the change adds is checked against a

@@ -49,6 +49,9 @@ data class WidgetDataSnapshot(
     val chartHeartRate: List<SnapshotPoint> = emptyList(),
     val chartMoods: List<SnapshotMood> = emptyList(),
 
+    /** Screen-share safe is on: the widgets show no mood or health figure. */
+    val healthHidden: Boolean = false,
+
     val lastUpdatedAt: Long = System.currentTimeMillis()
 )
 

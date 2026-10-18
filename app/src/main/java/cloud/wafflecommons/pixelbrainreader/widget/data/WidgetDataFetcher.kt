@@ -84,7 +84,8 @@ class WidgetDataFetcher @Inject constructor(
                 distanceKm = snapshot.distanceKm,
                 hydrationMl = snapshot.hydrationMl,
                 mindfulnessMinutes = snapshot.mindfulnessMinutes,
-                avgHeartRate = snapshot.avgHeartRate
+                avgHeartRate = snapshot.avgHeartRate,
+                healthHidden = snapshot.healthHidden
             )
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e

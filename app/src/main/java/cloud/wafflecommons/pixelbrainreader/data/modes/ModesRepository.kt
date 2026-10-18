@@ -14,6 +14,7 @@ import cloud.wafflecommons.pixelbrainreader.data.repository.FileRepository
 import cloud.wafflecommons.pixelbrainreader.data.sync.VaultPushScheduler
 import cloud.wafflecommons.pixelbrainreader.data.system.AppClock
 import cloud.wafflecommons.pixelbrainreader.di.ApplicationScope
+import cloud.wafflecommons.pixelbrainreader.widget.ui.WidgetUpdateManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -58,7 +59,8 @@ class ModesRepository @Inject constructor(
     private val fileRepository: FileRepository,
     private val pushScheduler: VaultPushScheduler,
     appClock: AppClock,
-    @param:ApplicationScope private val appScope: CoroutineScope
+    @param:ApplicationScope private val appScope: CoroutineScope,
+    private val widgetUpdateManager: dagger.Lazy<WidgetUpdateManager>
 ) {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true; prettyPrint = true }
     private val writeMutex = Mutex()
@@ -144,6 +146,9 @@ class ModesRepository @Inject constructor(
 
     suspend fun setScreenShareSafe(enabled: Boolean) {
         context.modesStore.edit { it[KEY_SCREEN_SHARE_SAFE] = enabled }
+        // The health, companion and mood widgets hide their figures too: rebuild and re-render them.
+        widgetUpdateManager.get().scheduleSnapshotUpdate()
+        widgetUpdateManager.get().triggerUpdate()
     }
 
     private fun compute(cfg: ModesConfig, ov: ModeOverride?, safe: Boolean): Visibility {
