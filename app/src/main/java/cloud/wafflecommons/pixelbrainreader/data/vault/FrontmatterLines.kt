@@ -97,6 +97,13 @@ object FrontmatterLines {
         return lines.joinToString("\n")
     }
 
+    /** Sets [key] to a block list (`[]` when empty), the vault's list style. */
+    fun setList(content: String, key: String, values: List<String>): String {
+        if (values.isEmpty()) return set(content, key, "[]")
+        val marker = "\u0000list"
+        return set(content, key, marker).replace("$key: $marker", "$key:\n" + values.joinToString("\n") { "  - $it" })
+    }
+
     /** Removes [key] (and its continuation lines); unchanged when absent. */
     fun remove(content: String, key: String): String {
         val lines = content.split("\n").toMutableList()

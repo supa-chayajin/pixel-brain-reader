@@ -39,6 +39,16 @@ Work toward **11.0.0** — the work-direction and dev/lead toolkit release (plan
   browser beside the app on the unfolded screen — drop into a note: text where you drop it
   (appended in reading view), files saved to the vault's attachment folder from its Obsidian
   settings (`99_System/Assets` here) and embedded as `![[Pasted image 20261018143205.png]]`.
+- **Vault rules on the phone.** A note that breaks the vault's linting contract shows a count on
+  its header: missing or misordered standard keys, quoting, a type the folder contradicts, an
+  unprefixed status, uppercase tags, H1 count, links that don't resolve, CRLF, trailing spaces,
+  no final newline. Advisory — the desktop mutator stays the reference — with "Fix what's safe"
+  for the one-line repairs (missing keys at their place, quoting, line endings, final newline).
+  Worklogs, the dashboard and private notes are never checked.
+- **Inbox filing** (Work hub). Each inbox note can ask for a destination: the folders of the notes
+  it reads like and links to (links count double), and the tags those notes share. Filing moves
+  it with git, sets the destination's type and default status, adds the chosen tags in block
+  style and touches `date_updated`, one key at a time.
 - **Work hub and mission log.** A Work chip on the Daily screen opens the Work hub. Its first tool
   is the mission log: facts, decisions, requests, refusals and off-ticket time, each with the role
   you held, a status, minutes, who asked and who decided (as roles, never names), a reference and

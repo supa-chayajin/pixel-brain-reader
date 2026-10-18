@@ -76,7 +76,7 @@ Unless a path starts with `app/` or `documentation/`, it is relative to
       copy buttons in rendered notes, PHP / TOML / C# highlighting.
 - [x] **C4** Sync digest + vault activity (E5).
 - [x] **C5** Fold (E6): tabletop layouts, drag & drop into notes.
-- [ ] **C6** Vault rules on the phone (E7): advisory lint badge; inbox filing with folder and tag
+- [x] **C6** Vault rules on the phone (E7): advisory lint badge; inbox filing with folder and tag
       suggestions (roadmap 2.6).
 - [ ] **C7** AI pairing dashboard (N2) from the auto-generated worklogs.
 - [ ] **C8** Explain this error (N3): shared stack trace → past occurrences, explanation, bug note.

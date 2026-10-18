@@ -215,6 +215,9 @@ fun FileDetailPane(
                             )
                         }
                         Spacer(Modifier.weight(1f))
+                        if (filePath != null && content != null) {
+                            VaultRulesBadge(path = filePath, content = content, onFix = onContentChange)
+                        }
                         if (filePath != null && filePath.endsWith(".md")) {
                             IconButton(
                                 onClick = { showConnections = true },
