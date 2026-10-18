@@ -23,6 +23,12 @@ Work toward **11.0.0** — the work-direction and dev/lead toolkit release (plan
   links), its unlinked mentions — notes naming it as a whole word, outside links and code, found
   through the full-text index — each linkable in one tap (the text's own spelling becomes the
   alias), and the notes closest in meaning from the on-device search.
+- **Snippets & runbooks** (Work hub). Every fenced code block of the vault in one list, searchable,
+  filtered by language, each with a copy button. A runbook — a note tagged `#runbook` or kept in
+  a `Runbooks` folder — plays step by step (its `##` sections, or its list): copy the step's code,
+  mark it done, failed or skipped with a note, and finishing (or stopping) writes a French
+  incident log to the inbox. A rendered note now lists its code blocks at the end, each with a
+  copy button. Code is highlighted in C#, PHP and TOML too.
 - **Work hub and mission log.** A Work chip on the Daily screen opens the Work hub. Its first tool
   is the mission log: facts, decisions, requests, refusals and off-ticket time, each with the role
   you held, a status, minutes, who asked and who decided (as roles, never names), a reference and

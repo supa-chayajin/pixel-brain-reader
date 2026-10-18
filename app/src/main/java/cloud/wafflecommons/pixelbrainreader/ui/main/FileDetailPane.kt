@@ -365,6 +365,9 @@ fun FileDetailPane(
 
                                         MarkwonContent(content = displayContent, onWikiLinkClick = onWikiLinkClick)
 
+                                        // Copy buttons for the note's code (E4): rendered code is plain text.
+                                        CodeBlocksFooter(path = filePath ?: fileName.orEmpty(), content = content)
+
                                         // Reserve bottom space for the floating ExpressiveNavBar, which
                                         // overlays the content and reserves no layout space. Without this
                                         // the last markdown lines scroll under the bar and are unreadable.

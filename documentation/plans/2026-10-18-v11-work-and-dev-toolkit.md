@@ -72,7 +72,7 @@ Unless a path starts with `app/` or `documentation/`, it is relative to
 - [x] **C1** Template forms (E1): every `{{variable}}` becomes a field; `/` commands in the editor.
       *(`[[` completion landed here too: same suggestion strip.)*
 - [x] **C2** Connections panel (E2): backlinks, unlinked mentions, related notes; `[[` completion.
-- [ ] **C3** Snippets & runbooks (E4): code-block index with copy, runbook player with incident log,
+- [x] **C3** Snippets & runbooks (E4): code-block index with copy, runbook player with incident log,
       copy buttons in rendered notes, PHP / TOML / C# highlighting.
 - [ ] **C4** Sync digest + vault activity (E5).
 - [ ] **C5** Fold (E6): tabletop layouts, drag & drop into notes.
