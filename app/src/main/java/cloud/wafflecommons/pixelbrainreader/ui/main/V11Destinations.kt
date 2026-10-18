@@ -16,6 +16,9 @@ import cloud.wafflecommons.pixelbrainreader.ui.work.MeetingsScreen
 import cloud.wafflecommons.pixelbrainreader.ui.work.MissionLogScreen
 import cloud.wafflecommons.pixelbrainreader.ui.work.NextActionsScreen
 import cloud.wafflecommons.pixelbrainreader.ui.work.ObjectivesScreen
+import cloud.wafflecommons.pixelbrainreader.ui.work.RunbookPlayerScreen
+import cloud.wafflecommons.pixelbrainreader.ui.work.RunbooksScreen
+import cloud.wafflecommons.pixelbrainreader.ui.work.SnippetsScreen
 import cloud.wafflecommons.pixelbrainreader.ui.work.WorkHubScreen
 
 /** Routes added in v11, kept out of MainScreen's NavHost body. */
@@ -29,6 +32,11 @@ object V11Routes {
     const val OBJECTIVES = "objectives"
     const val MEETINGS = "meetings"
     const val LOAD = "load_recovery"
+    const val SNIPPETS = "snippets"
+    const val RUNBOOKS = "runbooks"
+    const val RUNBOOK = "runbook?path={path}"
+
+    fun runbook(path: String) = "runbook?path=" + android.net.Uri.encode(path)
     const val NEXT_ACTIONS = "next_actions"
     const val BOARD = "board?folder={folder}"
 
@@ -62,6 +70,19 @@ fun NavGraphBuilder.v11Destinations(navController: NavHostController, openNote: 
             onBack = { navController.popBackStack() },
             onOpenNote = openNote
         )
+    }
+    composable(V11Routes.SNIPPETS) {
+        SnippetsScreen(
+            onBack = { navController.popBackStack() },
+            onOpenNote = openNote,
+            onOpenRunbooks = { navController.navigate(V11Routes.RUNBOOKS) }
+        )
+    }
+    composable(V11Routes.RUNBOOKS) {
+        RunbooksScreen(onBack = { navController.popBackStack() }, onPlay = { navController.navigate(V11Routes.runbook(it)) })
+    }
+    composable(V11Routes.RUNBOOK, arguments = listOf(navArgument("path") { type = NavType.StringType; defaultValue = "" })) { entry ->
+        RunbookPlayerScreen(path = entry.arguments?.getString("path").orEmpty(), onBack = { navController.popBackStack() }, onOpenNote = openNote)
     }
     composable(V11Routes.LOAD) {
         LoadRecoveryScreen(onBack = { navController.popBackStack() })

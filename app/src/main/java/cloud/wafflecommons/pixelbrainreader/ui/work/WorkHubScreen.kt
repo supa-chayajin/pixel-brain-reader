@@ -6,6 +6,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.automirrored.rounded.EventNote
 import androidx.compose.material.icons.rounded.BeachAccess
+import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.Flag
 import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.MonitorHeart
@@ -148,6 +149,12 @@ fun WorkHubScreen(
             icon = Icons.Rounded.Summarize,
             subtitle = "A month or a quarter of the log as a draft for your reviews: every number from the data.",
             onClick = { onOpen(cloud.wafflecommons.pixelbrainreader.ui.main.V11Routes.EVIDENCE) }
+        )
+        HubCard(
+            title = "Snippets & runbooks",
+            icon = Icons.Rounded.Code,
+            subtitle = "Every code block of the vault, ready to copy; runbooks played step by step, with an incident log.",
+            onClick = { onOpen(cloud.wafflecommons.pixelbrainreader.ui.main.V11Routes.SNIPPETS) }
         )
         HubCard(
             title = "Load vs recovery",

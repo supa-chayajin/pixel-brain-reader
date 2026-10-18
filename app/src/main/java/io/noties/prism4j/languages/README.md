@@ -11,7 +11,9 @@ built-in Kotlin — adding kapt would destabilize the toolchain. The manual
 `GrammarLocator` in `ui/utils/PrismHelper.kt` dispatches to these classes
 directly (no `Class.forName`), so R8 needs no extra keep rules.
 
-`Prism_bash.java` is hand-written here (upstream ships no bash grammar).
+`Prism_bash.java`, `Prism_php.java` and `Prism_toml.java` are hand-written here (upstream ships
+no bash, PHP or TOML grammar), and so is `Prism_csharp.java` (written from the Prism.js C#
+definition, simplified). Token names follow Prism.js so the themes color them unchanged.
 
 To add a language: drop the upstream `Prism_<lang>.java` in this package and
 add a `when` branch (+ aliases) in `PrismHelper.ManualGrammarLocator`.

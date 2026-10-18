@@ -62,8 +62,50 @@ class PrismGrammarsTest {
             # Title
 
             Some **bold** text and a [link](https://example.com).
+        """.trimIndent(),
+        "csharp" to """
+            #region Setup
+            [Serializable]
+            public sealed record User(string Name) {
+                public static decimal Price = 9.99m; // price
+                var path = @"C:\temp";
+            }
+        """.trimIndent(),
+        "php" to """
+            <?php
+            namespace App\Http;
+            # a shell-style comment
+            function greet(${'$'}name) { return "hi " . ${'$'}name ?? null; }
+        """.trimIndent(),
+        "toml" to """
+            # app settings
+            [server.http]
+            port = 8_080
+            "quoted.key" = 'literal'
+            started = 2026-10-18T09:00:00Z
+            enabled = true
         """.trimIndent()
     )
+
+    /** Tokens of [lang] in [sample], by type, flattened. */
+    private fun tokenTypes(lang: String, sample: String): Set<String> {
+        val types = mutableSetOf<String>()
+        fun walk(nodes: List<Prism4j.Node>) {
+            nodes.filterIsInstance<Prism4j.Syntax>().forEach { syntax ->
+                types += syntax.type()
+                walk(syntax.children())
+            }
+        }
+        walk(prism.tokenize(sample, prism.grammar(lang)!!))
+        return types
+    }
+
+    @Test
+    fun `the hand-written grammars find their own constructs`() {
+        assertTrue(tokenTypes("csharp", samples.getValue("csharp")).containsAll(listOf("preprocessor", "attribute", "keyword", "string", "number", "comment")))
+        assertTrue(tokenTypes("php", samples.getValue("php")).containsAll(listOf("delimiter", "package", "shell-comment", "variable", "keyword", "boolean")))
+        assertTrue(tokenTypes("toml", samples.getValue("toml")).containsAll(listOf("comment", "table", "key", "string", "date", "number", "boolean")))
+    }
 
     @Test
     fun `all bundled languages resolve to a grammar`() {
@@ -77,7 +119,8 @@ class PrismGrammarsTest {
     fun `aliases resolve to their canonical grammar`() {
         val aliases = mapOf(
             "kt" to "kotlin", "sh" to "bash", "shell" to "bash", "yml" to "yaml",
-            "md" to "markdown", "py" to "python", "js" to "javascript", "html" to "markup"
+            "md" to "markdown", "py" to "python", "js" to "javascript", "html" to "markup",
+            "cs" to "csharp", "c#" to "csharp"
         )
         for ((alias, canonical) in aliases) {
             val grammar = prism.grammar(alias)

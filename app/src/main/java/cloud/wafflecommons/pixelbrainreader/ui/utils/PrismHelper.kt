@@ -4,13 +4,16 @@ import io.noties.prism4j.GrammarLocator
 import io.noties.prism4j.Prism4j
 import io.noties.prism4j.languages.Prism_bash
 import io.noties.prism4j.languages.Prism_clike
+import io.noties.prism4j.languages.Prism_csharp
 import io.noties.prism4j.languages.Prism_java
 import io.noties.prism4j.languages.Prism_javascript
 import io.noties.prism4j.languages.Prism_json
 import io.noties.prism4j.languages.Prism_kotlin
 import io.noties.prism4j.languages.Prism_markdown
 import io.noties.prism4j.languages.Prism_markup
+import io.noties.prism4j.languages.Prism_php
 import io.noties.prism4j.languages.Prism_python
+import io.noties.prism4j.languages.Prism_toml
 import io.noties.prism4j.languages.Prism_yaml
 import java.util.concurrent.ConcurrentHashMap
 
@@ -40,7 +43,7 @@ object PrismHelper {
 
         override fun languages(): Set<String> = setOf(
             "clike", "kotlin", "java", "javascript", "json", "yaml",
-            "bash", "python", "markup", "markdown"
+            "bash", "python", "markup", "markdown", "csharp", "php", "toml"
         )
 
         private fun createGrammar(prism4j: Prism4j, name: String): Prism4j.Grammar? =
@@ -55,6 +58,9 @@ object PrismHelper {
                 "python" -> Prism_python.create(prism4j)
                 "markup" -> Prism_markup.create(prism4j)
                 "markdown" -> Prism_markdown.create(prism4j)
+                "csharp" -> Prism_csharp.create(prism4j)
+                "php" -> Prism_php.create(prism4j)
+                "toml" -> Prism_toml.create(prism4j)
                 else -> null
             }
 
@@ -66,6 +72,7 @@ object PrismHelper {
             "md" -> "markdown"
             "py" -> "python"
             "html", "xml", "svg" -> "markup"
+            "cs", "c#", "dotnet" -> "csharp"
             else -> name.lowercase()
         }
     }
