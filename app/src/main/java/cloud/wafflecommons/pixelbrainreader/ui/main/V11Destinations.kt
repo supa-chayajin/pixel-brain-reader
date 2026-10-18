@@ -11,6 +11,7 @@ import cloud.wafflecommons.pixelbrainreader.ui.work.ActivityScreen
 import cloud.wafflecommons.pixelbrainreader.ui.work.BoardScreen
 import cloud.wafflecommons.pixelbrainreader.ui.work.BoardsScreen
 import cloud.wafflecommons.pixelbrainreader.ui.work.EvidenceScreen
+import cloud.wafflecommons.pixelbrainreader.ui.work.InboxScreen
 import cloud.wafflecommons.pixelbrainreader.ui.work.LeaveScreen
 import cloud.wafflecommons.pixelbrainreader.ui.work.LoadRecoveryScreen
 import cloud.wafflecommons.pixelbrainreader.ui.work.MeetingsScreen
@@ -35,6 +36,7 @@ object V11Routes {
     const val LOAD = "load_recovery"
     const val SNIPPETS = "snippets"
     const val ACTIVITY = "activity"
+    const val INBOX = "inbox_filing"
     const val RUNBOOKS = "runbooks"
     const val RUNBOOK = "runbook?path={path}"
 
@@ -72,6 +74,9 @@ fun NavGraphBuilder.v11Destinations(navController: NavHostController, openNote: 
             onBack = { navController.popBackStack() },
             onOpenNote = openNote
         )
+    }
+    composable(V11Routes.INBOX) {
+        InboxScreen(onBack = { navController.popBackStack() }, onOpenNote = openNote)
     }
     composable(V11Routes.ACTIVITY) {
         ActivityScreen(onBack = { navController.popBackStack() }, onOpenNote = openNote)

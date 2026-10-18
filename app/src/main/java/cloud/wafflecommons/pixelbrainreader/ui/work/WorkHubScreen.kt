@@ -11,6 +11,7 @@ import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.Flag
 import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.MonitorHeart
+import androidx.compose.material.icons.rounded.MoveToInbox
 import androidx.compose.material.icons.rounded.Summarize
 import androidx.compose.material.icons.rounded.ViewKanban
 import androidx.compose.material3.FilledTonalButton
@@ -150,6 +151,12 @@ fun WorkHubScreen(
             icon = Icons.Rounded.Summarize,
             subtitle = "A month or a quarter of the log as a draft for your reviews: every number from the data.",
             onClick = { onOpen(cloud.wafflecommons.pixelbrainreader.ui.main.V11Routes.EVIDENCE) }
+        )
+        HubCard(
+            title = "Inbox filing",
+            icon = Icons.Rounded.MoveToInbox,
+            subtitle = "Each inbox note with the folder and tags its closest notes suggest; filing keeps the vault's rules.",
+            onClick = { onOpen(cloud.wafflecommons.pixelbrainreader.ui.main.V11Routes.INBOX) }
         )
         HubCard(
             title = "Vault activity",
