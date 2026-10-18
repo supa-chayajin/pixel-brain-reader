@@ -43,7 +43,9 @@ class QuickActionsWidget : GlanceAppWidget() {
             Item("🫧", "Mood", actionStartActivity(WidgetNav.openIntent(context, WidgetNav.SCREEN_MOOD))),
             Item("✅", "Habits", actionStartActivity(WidgetNav.openIntent(context, WidgetNav.SCREEN_HABITS))),
             Item("🧹", "Chores", actionStartActivity(WidgetNav.openIntent(context, WidgetNav.SCREEN_CHORES))),
-            Item("🔍", "Ask", actionStartActivity(WidgetNav.openIntent(context, WidgetNav.SCREEN_CHAT)))
+            Item("🔍", "Ask", actionStartActivity(WidgetNav.openIntent(context, WidgetNav.SCREEN_CHAT))),
+            Item("🗒️", "Log", actionStartActivity(WidgetNav.openIntent(context, WidgetNav.SCREEN_LOG))),
+            Item("💼", "Work", actionStartActivity(WidgetNav.openIntent(context, WidgetNav.SCREEN_WORK)))
         )
         WidgetSurface {
             Column(modifier = GlanceModifier.fillMaxSize()) {
@@ -54,11 +56,11 @@ class QuickActionsWidget : GlanceAppWidget() {
         }
     }
 
-    /** Lays the six actions out as two rows of three, each cell an even-weight [ActionButton]. */
+    /** Lays the eight actions out as two rows of four, each cell an even-weight [ActionButton]. */
     @Composable
     private fun ActionGrid(items: List<Item>) {
         Column(modifier = GlanceModifier.fillMaxSize()) {
-            items.chunked(3).forEachIndexed { rowIndex, rowItems ->
+            items.chunked(4).forEachIndexed { rowIndex, rowItems ->
                 Row(
                     modifier = GlanceModifier.fillMaxWidth().defaultWeight(),
                     verticalAlignment = Alignment.CenterVertically

@@ -310,7 +310,8 @@ class IndexingWorker @AssistedInject constructor(
          * a model load for it — and neither is `99_System` (machine JSON, noise for retrieval).
          * Private notes only when a vault password is stored, checked BEFORE the model is loaded.
          * People notes never: what is written about a person is not something to retrieve into an
-         * AI answer.
+         * AI answer. Nor the encrypted mission log: work content outside any work folder would
+         * reach AI answers in every mode.
          */
         internal fun embeddingCandidates(
             files: List<cloud.wafflecommons.pixelbrainreader.data.local.entity.FileEntity>,
@@ -327,6 +328,7 @@ class IndexingWorker @AssistedInject constructor(
                     entity.path != todayPath &&
                     !entity.path.contains("99_System") &&
                     !cloud.wafflecommons.pixelbrainreader.data.vault.VaultSchema.isPeopleNote(entity.path) &&
+                    !entity.path.startsWith(cloud.wafflecommons.pixelbrainreader.data.work.MissionLogSettings.ENCRYPTED_FOLDER + "/") &&
                     (!isPrivate || hasVaultPassword)
             }
         }

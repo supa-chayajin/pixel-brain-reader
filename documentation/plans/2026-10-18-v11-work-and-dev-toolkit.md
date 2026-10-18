@@ -52,7 +52,7 @@ Unless a path starts with `app/` or `documentation/`, it is relative to
 - [x] **A9** Prompt presets (roadmap 2.7) in `99_System/presets.md` + the Coach preset (N9).
 
 ### B — Work direction
-- [ ] **B1** Mission log (#1): fact / decision / request / refusal / off-ticket time, a role
+- [x] **B1** Mission log (#1): fact / decision / request / refusal / off-ticket time, a role
       dimension, a status label, optional minutes, requester/decider by role, reference, tags; one
       markdown file per month (optionally encrypted); capture from the app, by voice, from the
       quick-actions widget and a Quick Settings tile.
