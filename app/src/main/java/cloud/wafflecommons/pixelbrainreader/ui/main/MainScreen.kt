@@ -1139,6 +1139,7 @@ fun MainScreen(
                     onNavigateToMoodTags = { navController.navigate("mood_tags") },
                     onNavigateToGamificationSettings = { navController.navigate("gamification_settings") },
                     onNavigateToModes = { navController.navigate(V11Routes.MODES_SETTINGS) },
+                    onNavigateToConfidentiality = { navController.navigate(V11Routes.CONFIDENTIALITY) },
                     onOpenNote = { path ->
                         viewModel.openVaultFile(path)
                         navController.popBackStack()
@@ -1221,7 +1222,8 @@ fun MainScreen(
                     onCheckInClicked = { showMoodSheet = true },
                     onNavigateToSettings = { navController.navigate(Screen.Settings) },
                     onOpenNote = { path -> viewModel.openVaultFile(path) },
-                    onOpenModesSettings = { navController.navigate(V11Routes.MODES_SETTINGS) }
+                    onOpenModesSettings = { navController.navigate(V11Routes.MODES_SETTINGS) },
+                    onOpenConfidentiality = { navController.navigate(V11Routes.CONFIDENTIALITY) }
                 )
             }
             

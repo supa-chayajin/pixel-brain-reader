@@ -73,10 +73,13 @@ fun DailyNoteScreen(
     onNavigateToSettings: () -> Unit,
     onOpenNote: (String) -> Unit = {},
     onOpenModesSettings: () -> Unit = {},
+    onOpenConfidentiality: () -> Unit = {},
     viewModel: DailyNoteViewModel = hiltViewModel(),
-    modesViewModel: cloud.wafflecommons.pixelbrainreader.ui.modes.ModesViewModel = hiltViewModel()
+    modesViewModel: cloud.wafflecommons.pixelbrainreader.ui.modes.ModesViewModel = hiltViewModel(),
+    guardStatus: cloud.wafflecommons.pixelbrainreader.ui.guard.GuardStatusViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val guardHeld by guardStatus.held.collectAsStateWithLifecycle()
     val visibility by modesViewModel.visibility.collectAsStateWithLifecycle()
     val countdowns by modesViewModel.countdowns.collectAsStateWithLifecycle()
     var showModeSheet by remember { mutableStateOf(false) }
@@ -267,6 +270,16 @@ fun DailyNoteScreen(
                             cloud.wafflecommons.pixelbrainreader.ui.modes.ModeChip(
                                 visibility = visibility,
                                 onClick = { showModeSheet = true }
+                            )
+                        }
+                    }
+
+                    // Changes held back by the confidentiality guard
+                    if (guardHeld.isNotEmpty()) {
+                        item(key = "guard") {
+                            cloud.wafflecommons.pixelbrainreader.ui.guard.GuardHoldBanner(
+                                held = guardHeld,
+                                onReview = onOpenConfidentiality
                             )
                         }
                     }

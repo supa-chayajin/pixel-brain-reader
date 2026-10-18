@@ -2,6 +2,10 @@ package cloud.wafflecommons.pixelbrainreader.data.remote
 
 import android.content.Context
 import android.util.Log
+import cloud.wafflecommons.pixelbrainreader.data.guard.CommitGuard
+import cloud.wafflecommons.pixelbrainreader.data.guard.CommitHeldException
+import cloud.wafflecommons.pixelbrainreader.data.guard.GuardFinding
+import cloud.wafflecommons.pixelbrainreader.data.guard.StagedText
 import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
 import cloud.wafflecommons.pixelbrainreader.data.sync.ConflictResolver
 import cloud.wafflecommons.pixelbrainreader.data.sync.SemanticCommitMessageGenerator
@@ -45,7 +49,8 @@ data class GitCommitDto(
 class JGitProvider @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val secretManager: SecretManager,
-    private val conflictResolver: ConflictResolver
+    private val conflictResolver: ConflictResolver,
+    private val commitGuard: CommitGuard
 ) {
 
     /**
@@ -291,14 +296,21 @@ class JGitProvider @Inject constructor(
                         return@use
                     }
 
+                    // 2b. Confidentiality guard, fail-closed: a finding holds the whole commit. The
+                    // changes stay staged on the device until the user reviews them.
+                    val held = commitGuard.review(stagedTexts(repo))
+                    if (held.isNotEmpty()) throw CommitHeldException(held)
+
                     // 3. Commit. A generic message ("Auto-save…") is replaced by one naming what
                     // changed, read from the index vs HEAD — never from `git status`, which would
-                    // walk the whole working tree a third time on every background commit.
-                    val finalMessage = if (hasHead && SemanticCommitMessageGenerator.isGenericMessage(message)) {
+                    // walk the whole working tree a third time on every background commit. A message
+                    // naming a protected term (a file name in "Delete …") gets a neutral one instead.
+                    val namedMessage = if (hasHead && SemanticCommitMessageGenerator.isGenericMessage(message)) {
                         SemanticCommitMessageGenerator.generate(stagedPaths(repo), message)
                     } else {
                         message
                     }
+                    val finalMessage = if (commitGuard.mentionsProtectedTerm(namedMessage)) NEUTRAL_COMMIT_MESSAGE else namedMessage
 
                     try {
                         val revCommit = git.commit()
@@ -312,10 +324,36 @@ class JGitProvider @Inject constructor(
                     }
                 }
                 Result.success(Unit)
+            } catch (e: CommitHeldException) {
+                Log.w("JGitProvider", "Commit held by the confidentiality guard: ${e.findings.size} finding(s)")
+                Result.failure(e)
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 onGitFailure(e)
                 Log.e("JGitProvider", "Commit Failed", e)
+                Result.failure(e)
+            }
+        }
+    }
+
+    /**
+     * Stages everything and runs the confidentiality guard WITHOUT committing — the review screen's
+     * "Check again". Returns what would hold the next commit (empty: it would go through).
+     */
+    suspend fun reviewPendingChanges(): Result<List<GuardFinding>> = withContext(Dispatchers.IO) {
+        if (!isReady()) return@withContext Result.success(emptyList())
+        gitMutex.withLock {
+            cleanStaleLocksIfNeeded()
+            try {
+                Git.open(rootDir).use { git ->
+                    recoverRepositoryStateIfNeeded(git)
+                    git.add().addFilepattern(".").call()
+                    git.add().addFilepattern(".").setUpdate(true).call()
+                    Result.success(commitGuard.review(stagedTexts(git.repository)))
+                }
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                onGitFailure(e)
                 Result.failure(e)
             }
         }
@@ -509,6 +547,10 @@ class JGitProvider @Inject constructor(
                     git.add().addFilepattern(".").call()
                     git.add().addFilepattern(".").setUpdate(true).call()
 
+                    // Every commit goes through the confidentiality guard, this one included.
+                    val held = commitGuard.review(stagedTexts(git.repository))
+                    if (held.isNotEmpty()) throw CommitHeldException(held)
+
                     // Step B: Commit
                     try {
                         git.commit()
@@ -537,6 +579,9 @@ class JGitProvider @Inject constructor(
                 }
                 Log.w("GitSync", "EMERGENCY FORCE PUSH COMPLETED")
                 Result.success(Unit)
+            } catch (e: CommitHeldException) {
+                Log.w("GitSync", "Force push held by the confidentiality guard")
+                Result.failure(e)
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 onGitFailure(e)
@@ -677,7 +722,79 @@ class JGitProvider @Inject constructor(
         }
     }
 
+    /**
+     * What the next commit would record, as text, for the confidentiality guard: index vs HEAD (or
+     * vs nothing in a repository without commits), renames paired with their source. Deletions add
+     * nothing and are skipped. Binary, oversized and encrypted content is left out ([StagedText.newText]
+     * null): only its path is checked.
+     */
+    private fun stagedTexts(repo: org.eclipse.jgit.lib.Repository): List<StagedText> {
+        val headTree = repo.resolve("HEAD^{tree}")
+        repo.newObjectReader().use { reader ->
+            val committed = if (headTree != null) {
+                org.eclipse.jgit.treewalk.CanonicalTreeParser().apply { reset(reader, headTree) }
+            } else {
+                org.eclipse.jgit.treewalk.EmptyTreeIterator()
+            }
+            val staged = org.eclipse.jgit.dircache.DirCacheIterator(repo.readDirCache())
+            org.eclipse.jgit.diff.DiffFormatter(org.eclipse.jgit.util.io.DisabledOutputStream.INSTANCE).use { diff ->
+                diff.setRepository(repo)
+                diff.isDetectRenames = true
+                return diff.scan(committed, staged).mapNotNull { entry ->
+                    when (entry.changeType) {
+                        org.eclipse.jgit.diff.DiffEntry.ChangeType.DELETE -> null
+                        org.eclipse.jgit.diff.DiffEntry.ChangeType.ADD -> StagedText(
+                            path = entry.newPath,
+                            oldPath = null,
+                            oldText = null,
+                            newText = blobText(reader, entry.newPath, entry.newId),
+                            isNewPath = true
+                        )
+                        org.eclipse.jgit.diff.DiffEntry.ChangeType.MODIFY -> StagedText(
+                            path = entry.newPath,
+                            oldPath = null,
+                            oldText = blobText(reader, entry.oldPath, entry.oldId),
+                            newText = blobText(reader, entry.newPath, entry.newId),
+                            isNewPath = false
+                        )
+                        else -> StagedText( // RENAME, COPY
+                            path = entry.newPath,
+                            oldPath = entry.oldPath,
+                            oldText = blobText(reader, entry.oldPath, entry.oldId),
+                            newText = blobText(reader, entry.newPath, entry.newId),
+                            isNewPath = true
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    /** A blob as UTF-8 text, or null when it can't be checked as text (encrypted, binary, oversized). */
+    private fun blobText(
+        reader: org.eclipse.jgit.lib.ObjectReader,
+        path: String,
+        id: org.eclipse.jgit.lib.AbbreviatedObjectId
+    ): String? {
+        if (path.endsWith(".enc")) return null
+        val objectId = id.toObjectId() ?: return null
+        val loader = reader.open(objectId, org.eclipse.jgit.lib.Constants.OBJ_BLOB)
+        if (loader.size > GUARD_MAX_TEXT_BYTES) {
+            Log.w("JGitProvider", "Guard: content too large to check, path only")
+            return null
+        }
+        val bytes = loader.bytes
+        if (org.eclipse.jgit.diff.RawText.isBinary(bytes)) return null
+        return String(bytes, Charsets.UTF_8)
+    }
+
     private companion object {
+        /** Notes are small; larger text (exports, dumps) is left to the path check. */
+        const val GUARD_MAX_TEXT_BYTES = 4L * 1024 * 1024
+
+        /** Used when a commit message would name a protected term. */
+        const val NEUTRAL_COMMIT_MESSAGE = "vault: update notes"
+
         /**
          * Socket inactivity timeout for clone/pull/push. JGit defaults to 0 = none, and Android's
          * HttpURLConnection is also unbounded, so one stalled connection (network handover, Wi-Fi

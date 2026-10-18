@@ -1,6 +1,7 @@
 package cloud.wafflecommons.pixelbrainreader.data.remote
 
 import android.content.Context
+import cloud.wafflecommons.pixelbrainreader.data.guard.CommitGuard
 import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
 import cloud.wafflecommons.pixelbrainreader.data.sync.ConflictResolver
 import io.mockk.every
@@ -78,7 +79,7 @@ class JGitProviderConflictTest {
             every { getToken() } returns "fake-token"
             every { getProvider() } returns "github"
         }
-        provider = JGitProvider(context, secretManager, ConflictResolver(context))
+        provider = JGitProvider(context, secretManager, ConflictResolver(context), CommitGuard.NONE)
     }
 
     @After
