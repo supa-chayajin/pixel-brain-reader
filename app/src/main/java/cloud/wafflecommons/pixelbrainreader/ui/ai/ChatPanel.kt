@@ -26,11 +26,13 @@ import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Psychology
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cloud.wafflecommons.pixelbrainreader.data.ai.NanoState
+import cloud.wafflecommons.pixelbrainreader.data.ai.PromptPreset
 import cloud.wafflecommons.pixelbrainreader.ui.main.MarkwonContent
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -68,6 +70,8 @@ fun ChatPanel(
     val haptic = LocalHapticFeedback.current
 
     val currentMode by viewModel.currentMode.collectAsStateWithLifecycle()
+    val presets by viewModel.presets.collectAsStateWithLifecycle()
+    val activePreset by viewModel.activePreset.collectAsStateWithLifecycle()
     val persistedHistory by viewModel.chatHistory.collectAsStateWithLifecycle()
     val streaming by viewModel.streamingMessage.collectAsStateWithLifecycle()
 
@@ -90,11 +94,11 @@ fun ChatPanel(
     }
 
     // Mode brand routed through MaterialTheme:
-    // ORACLE (RAG) = primary, BOARDROOM (Debate) = secondary, SCRIBE (Creative) = tertiary.
+    // ORACLE (RAG) = primary, PRESET = secondary, SCRIBE (Creative) = tertiary.
     val modeColor by animateColorAsState(
         targetValue = when (currentMode) {
             ChatMode.ORACLE -> MaterialTheme.colorScheme.primary
-            ChatMode.BOARDROOM -> MaterialTheme.colorScheme.secondary
+            ChatMode.PRESET -> MaterialTheme.colorScheme.secondary
             ChatMode.SCRIBE -> MaterialTheme.colorScheme.tertiary
         },
         label = "modeColor"
@@ -102,7 +106,7 @@ fun ChatPanel(
     val modeContentColor by animateColorAsState(
         targetValue = when (currentMode) {
             ChatMode.ORACLE -> MaterialTheme.colorScheme.onPrimary
-            ChatMode.BOARDROOM -> MaterialTheme.colorScheme.onSecondary
+            ChatMode.PRESET -> MaterialTheme.colorScheme.onSecondary
             ChatMode.SCRIBE -> MaterialTheme.colorScheme.onTertiary
         },
         label = "modeContentColor"
@@ -141,7 +145,12 @@ fun ChatPanel(
                 // --- MODE SWITCHER ---
                 BrainModeSwitch(
                     currentMode = currentMode,
+                    presets = presets,
+                    activePreset = activePreset,
                     onModeChanged = { viewModel.setMode(it) },
+                    onPresetSelected = viewModel::selectPreset,
+                    onPresetMenuOpened = viewModel::reloadPresets,
+                    onEditPresets = { viewModel.editPresets(onSourceClick) },
                     activeColor = modeColor,
                     activeContentColor = modeContentColor
                 )
@@ -164,7 +173,7 @@ fun ChatPanel(
             // Chat Content
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 if (displayedMessages.isEmpty()) {
-                    EmptyStatePlaceholder(mode = currentMode)
+                    EmptyStatePlaceholder(mode = currentMode, preset = activePreset)
                 } else {
                     LazyColumn(
                         state = listState,
@@ -220,7 +229,7 @@ fun ChatPanel(
                     isLoading = viewModel.loadingStage != null,
                     hint = when (currentMode) {
                         ChatMode.ORACLE -> "Ask your Second Brain..."
-                        ChatMode.BOARDROOM -> "Debate an architectural dilemma..."
+                        ChatMode.PRESET -> "Message ${activePreset.title}..."
                         ChatMode.SCRIBE -> "Spark a creative idea..."
                     },
                     accentColor = modeColor,
@@ -233,19 +242,30 @@ fun ChatPanel(
 
 // --- COMPONENTS ---
 
+/**
+ * Cortex, the active preset and Spark. Tapping the preset segment while it is selected opens the
+ * preset menu (re-read from the vault), with a way to edit the presets file.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BrainModeSwitch(
     currentMode: ChatMode,
+    presets: List<PromptPreset>,
+    activePreset: PromptPreset,
     onModeChanged: (ChatMode) -> Unit,
+    onPresetSelected: (String) -> Unit,
+    onPresetMenuOpened: () -> Unit,
+    onEditPresets: () -> Unit,
     activeColor: Color,
     activeContentColor: Color
 ) {
+    var presetMenu by remember { mutableStateOf(false) }
     val modes = listOf(
         Triple(ChatMode.ORACLE, Icons.Rounded.Psychology, "Cortex"),
-        Triple(ChatMode.BOARDROOM, Icons.Rounded.Groups, "Boardroom"),
+        Triple(ChatMode.PRESET, if (activePreset.id == "boardroom") Icons.Rounded.Groups else Icons.Rounded.Tune, activePreset.title),
         Triple(ChatMode.SCRIBE, Icons.Rounded.AutoAwesome, "Spark")
     )
+    Box {
     SingleChoiceSegmentedButtonRow(
         modifier = Modifier
             .fillMaxWidth()
@@ -254,7 +274,15 @@ fun BrainModeSwitch(
         modes.forEachIndexed { index, (mode, icon, label) ->
             SegmentedButton(
                 selected = currentMode == mode,
-                onClick = { if (currentMode != mode) onModeChanged(mode) },
+                onClick = {
+                    when {
+                        currentMode != mode -> onModeChanged(mode)
+                        mode == ChatMode.PRESET -> {
+                            onPresetMenuOpened()
+                            presetMenu = true
+                        }
+                    }
+                },
                 shape = SegmentedButtonDefaults.itemShape(index = index, count = modes.size),
                 colors = SegmentedButtonDefaults.colors(
                     activeContainerColor = activeColor,
@@ -263,9 +291,37 @@ fun BrainModeSwitch(
                 icon = {
                     Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
                 },
-                label = { Text(label, style = MaterialTheme.typography.labelLarge) }
+                label = { Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis) }
             )
         }
+    }
+    DropdownMenu(expanded = presetMenu, onDismissRequest = { presetMenu = false }) {
+        presets.forEach { preset ->
+            DropdownMenuItem(
+                text = {
+                    Column {
+                        Text(preset.title, style = MaterialTheme.typography.bodyLarge)
+                        if (preset.description.isNotBlank()) {
+                            Text(preset.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                },
+                onClick = {
+                    presetMenu = false
+                    onPresetSelected(preset.id)
+                }
+            )
+        }
+        HorizontalDivider()
+        DropdownMenuItem(
+            text = { Text("Edit presets") },
+            leadingIcon = { Icon(Icons.Rounded.Tune, contentDescription = null) },
+            onClick = {
+                presetMenu = false
+                onEditPresets()
+            }
+        )
+    }
     }
 }
 
@@ -592,7 +648,7 @@ fun ClearChatDialog(
 }
 
 @Composable
-fun EmptyStatePlaceholder(mode: ChatMode) {
+fun EmptyStatePlaceholder(mode: ChatMode, preset: PromptPreset) {
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
@@ -604,10 +660,11 @@ fun EmptyStatePlaceholder(mode: ChatMode) {
                     "Accessing Cortex...",
                     "Ask questions grounded in your Second Brain notes"
                 )
-                ChatMode.BOARDROOM -> Triple(
-                    Icons.Rounded.Groups,
-                    "Architecture Boardroom",
-                    "Alexandre (DDD), Bastien (DevSecOps) & Camille (Tech Lead)"
+                ChatMode.PRESET -> Triple(
+                    if (preset.id == "boardroom") Icons.Rounded.Groups else Icons.Rounded.Tune,
+                    preset.title,
+                    preset.description.ifBlank { "A preset from your vault" } +
+                        if (preset.useNotes) " · grounded in your notes" else ""
                 )
                 ChatMode.SCRIBE -> Triple(
                     Icons.Rounded.AutoAwesome,
