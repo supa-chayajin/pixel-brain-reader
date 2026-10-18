@@ -23,7 +23,6 @@ import cloud.wafflecommons.pixelbrainreader.data.sync.SyncOrchestrator
 import cloud.wafflecommons.pixelbrainreader.data.sync.SyncState
 import cloud.wafflecommons.pixelbrainreader.data.sync.VaultPushScheduler
 import cloud.wafflecommons.pixelbrainreader.data.system.AppClock
-import cloud.wafflecommons.pixelbrainreader.data.utils.ContentSanitizer
 import cloud.wafflecommons.pixelbrainreader.data.utils.SoundEffectManager
 import cloud.wafflecommons.pixelbrainreader.data.utils.TaskCompletionDetector
 import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
@@ -103,9 +102,7 @@ class MainViewModel @Inject constructor(
     private val _saveState = MutableStateFlow(SaveState.IDLE)
     private val _userMessage = MutableStateFlow<String?>(null)
     private val _error = MutableStateFlow<String?>(null)
-    private val _importState = MutableStateFlow<ImportState?>(null)
     private val _isFocusMode = MutableStateFlow(false)
-    private val _isExitPending = MutableStateFlow(false)
     private val _showDeleteConfirmation = MutableStateFlow(false)
 
     private val _isIndexing = MutableStateFlow(false)
@@ -263,8 +260,6 @@ class MainViewModel @Inject constructor(
     private data class MessageSlice(
         val userMessage: String?,
         val error: String?,
-        val importState: ImportState?,
-        val isExitPending: Boolean,
         val showDeleteConfirmation: Boolean
     )
 
@@ -301,8 +296,8 @@ class MainViewModel @Inject constructor(
         combine(_isLoading, _isRefreshing, _isSyncing, _isIndexing, _isFocusMode) { loading, refreshing, syncing, indexing, focus ->
             ProgressSlice(loading, refreshing, syncing, indexing, focus)
         },
-        combine(_userMessage, _error, _importState, _isExitPending, _showDeleteConfirmation) { message, error, import, exitPending, showDelete ->
-            MessageSlice(message, error, import, exitPending, showDelete)
+        combine(_userMessage, _error, _showDeleteConfirmation) { message, error, showDelete ->
+            MessageSlice(message, error, showDelete)
         },
         combine(_analysisResult, _availableMoveDestinations, _moveDialogCurrentPath, _availableTemplates, _showCreateFileDialog) { analysis, destinations, movePath, templates, showCreate ->
             DialogSlice(analysis, destinations, movePath, templates, showCreate)
@@ -322,7 +317,6 @@ class MainViewModel @Inject constructor(
             saveState = document.saveState,
             userMessage = messages.userMessage,
             error = messages.error,
-            importState = messages.importState,
             isFocusMode = progress.isFocusMode,
             isEditing = document.isEditing,
             listPaneWidth = browser.paneWidth,
@@ -330,7 +324,6 @@ class MainViewModel @Inject constructor(
             analysisResult = dialogs.analysis,
             availableMoveDestinations = dialogs.moveDestinations,
             moveDialogCurrentPath = dialogs.moveDialogPath,
-            isExitPending = messages.isExitPending,
             showDeleteConfirmation = messages.showDeleteConfirmation,
             availableTemplates = dialogs.templates,
             showCreateFileDialog = dialogs.showCreateFileDialog,
@@ -341,7 +334,6 @@ class MainViewModel @Inject constructor(
     private val _autoSaveTrigger = MutableStateFlow<String?>(null)
 
     // Flag to track if the current import session came from an external Intent
-    private var isExternalShare = false
 
     // The file targeted by a swipe-delete. Null means "delete the currently open file"
     // (the detail-pane top-bar delete action). Kept out of uiState — the UI never reads it.
@@ -723,77 +715,6 @@ class MainViewModel @Inject constructor(
         sha = sha,
         lastModified = localModifiedTimestamp ?: lastSyncedAt
     )
-
-    fun handleShareIntent(intent: android.content.Intent) {
-        if (intent.action == android.content.Intent.ACTION_SEND) {
-            val htmlText = intent.getStringExtra(android.content.Intent.EXTRA_HTML_TEXT)
-            val plainText = intent.getCharSequenceExtra(android.content.Intent.EXTRA_TEXT)
-
-            val textToProcess: CharSequence?
-            val isMarkdown: Boolean
-
-            if (htmlText != null) {
-                textToProcess = ContentSanitizer.htmlToMarkdown(htmlText)
-                isMarkdown = true
-            } else if (plainText != null) {
-                textToProcess = plainText
-                isMarkdown = !ContentSanitizer.URL_REGEX.matches(plainText.trim())
-            } else {
-                textToProcess = null
-                isMarkdown = false
-            }
-
-            if (textToProcess != null) {
-                isExternalShare = true
-                _isLoading.value = true
-                viewModelScope.launch {
-                    val result = ContentSanitizer.processSharedContent(textToProcess, isMarkdown)
-                    _isLoading.value = false
-                    _importState.value = ImportState(result.title, result.markdownContent)
-                }
-            }
-        }
-    }
-
-    fun confirmImport(filename: String, folder: String, content: String) {
-        val fullPath = if (folder.isNotBlank()) "$folder/$filename" else filename
-        val fromExternalShare = isExternalShare
-        viewModelScope.launch {
-            try {
-                repository.saveFileLocally(fullPath, content)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                _uiEvent.emit(UiEvent.ShowToast("Import failed ❌: ${e.message}"))
-                return@launch
-            }
-            // Batched background push: it also survives this screen closing right away, which
-            // cancelled the inline push of an external share.
-            pushScheduler.requestPush()
-
-            dismissImport()
-            if (fromExternalShare) {
-                _userMessage.value = "Imported & Saved"
-                _isExitPending.value = true
-            } else {
-                loadFile(
-                    GithubFileDto(
-                        name = filename,
-                        path = fullPath,
-                        type = "file",
-                        downloadUrl = null,
-                        lastModified = System.currentTimeMillis()
-                    )
-                )
-                _userMessage.value = "Imported successfully"
-            }
-        }
-    }
-
-    fun dismissImport() {
-        _importState.value = null
-        isExternalShare = false
-    }
 
     fun userMessageShown() {
         _userMessage.value = null
@@ -1210,11 +1131,9 @@ data class UiState(
     val saveState: SaveState = SaveState.IDLE,
     val userMessage: String? = null,
     val error: String? = null,
-    val importState: ImportState? = null,
     val isFocusMode: Boolean = false,
     val isEditing: Boolean = false,
     val folders: List<String> = emptyList(),
-    val isExitPending: Boolean = false,
     val showDeleteConfirmation: Boolean = false,
     val listPaneWidth: Float = 300f,
     val availableMoveDestinations: List<String> = emptyList(),
@@ -1224,5 +1143,3 @@ data class UiState(
     val navigationTrigger: String? = null,
     val analysisResult: String? = null
 )
-
-data class ImportState(val title: String, val content: String)

@@ -69,6 +69,7 @@ import cloud.wafflecommons.pixelbrainreader.data.work.BoardsConfig
 import cloud.wafflecommons.pixelbrainreader.data.work.StatusColumn
 import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
 import cloud.wafflecommons.pixelbrainreader.ui.components.EmptyHint
+import cloud.wafflecommons.pixelbrainreader.ui.components.FolderPickerDialog
 import cloud.wafflecommons.pixelbrainreader.ui.components.FormScaffold
 import cloud.wafflecommons.pixelbrainreader.ui.components.PickDateDialog
 import cloud.wafflecommons.pixelbrainreader.ui.components.SectionCard
@@ -187,23 +188,6 @@ fun BoardsScreen(onBack: () -> Unit, onOpenBoard: (String) -> Unit, viewModel: B
     if (adding) {
         FolderPickerDialog(folders = folders, onPick = { viewModel.addBoard(it); adding = false }, onDismiss = { adding = false })
     }
-}
-
-@Composable
-private fun FolderPickerDialog(folders: List<String>, onPick: (String) -> Unit, onDismiss: () -> Unit) {
-    androidx.compose.material3.AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Choose a folder") },
-        text = {
-            LazyColumn {
-                items(folders) { folder ->
-                    Text(folder, modifier = Modifier.fillMaxWidth().clickable { onPick(folder) }.padding(vertical = 10.dp))
-                }
-            }
-        },
-        confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
-    )
 }
 
 /** One board: columns side by side when there is room, one column per tab otherwise. */

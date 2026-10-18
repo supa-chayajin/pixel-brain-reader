@@ -1,5 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.ui.components
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,6 +13,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -158,6 +161,24 @@ fun RemovableRow(title: String, subtitle: String?, onRemove: () -> Unit) {
         }
         TextButton(onClick = onRemove) { Text("Remove") }
     }
+}
+
+/** Picks one folder of the vault from a list. */
+@Composable
+fun FolderPickerDialog(folders: List<String>, onPick: (String) -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Choose a folder") },
+        text = {
+            LazyColumn {
+                items(folders) { folder ->
+                    Text(folder, modifier = Modifier.fillMaxWidth().clickable { onPick(folder) }.padding(vertical = 10.dp))
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
 }
 
 /** Material 3 time picker in a dialog; returns "HH:mm". */

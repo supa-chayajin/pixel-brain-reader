@@ -135,6 +135,23 @@ Work toward **11.0.0** — the work-direction and dev/lead toolkit release (plan
 
 ### Changed
 
+- **Sharing a web page saves the article, not the page.** The share screen was rebuilt. A shared
+  link — alone, after a title, or after a highlighted passage — is downloaded the way a desktop
+  browser asks for it and read in reader mode: the article without its menus, ads, comments and
+  banners, code blocks with their language and spacing, absolute links and images (lazy images
+  get their real source, tracking parameters go), with its title, site, author and date. A site
+  that refuses the download or builds its text with scripts is rendered in a hidden browser; one
+  that asks for a human check can be opened in the app ("Open it here"): pass the check, then
+  "Import this page". Stack Overflow and its sister sites keep the question and its three best
+  answers, accepted first; YouTube, Vimeo and Dailymotion links become a card (thumbnail,
+  channel, description). The screen shows the title, folder, source and length, a preview or the
+  markdown to edit, an optional on-device summary (three bullet points by Gemini Nano), and the
+  passage you shared, kept as a quote. A page that can't be read is saved as its link with the
+  reason. Notes follow the vault's frontmatter (plus `source`, `author`, `published`,
+  `captured`), a title can no longer create folders, an existing note is never overwritten
+  ("Title (2).md"), and a share from another app returns to it once saved. The
+  `pixelbrain://import` link uses the same reader, and keeps the link when the page can't be
+  read instead of dropping the import after its retries.
 - **The AI search reads code as code.** Each fenced code block is now embedded as its own chunk,
   labelled with its language, instead of being packed into the prose around it; a `#` comment
   inside a fence is no longer taken for a heading, and a `#tag` line is no longer either. The

@@ -408,7 +408,9 @@ private fun NavPiece(
 fun MainScreen(
     onLogout: () -> Unit,
     onExitApp: () -> Unit,
+    launchedForShare: Boolean = false,
     viewModel: MainViewModel = hiltViewModel(),
+    shareImportViewModel: cloud.wafflecommons.pixelbrainreader.ui.share.ShareImportViewModel = hiltViewModel(),
     moodViewModel: cloud.wafflecommons.pixelbrainreader.ui.mood.MoodViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -544,7 +546,8 @@ fun MainScreen(
     // Also hide it while editing a file in the detail pane: editor mode wants the full
     // height for writing, and the floating bar would otherwise overlay the editor.
     val isEditingFile = uiState.isEditing && uiState.selectedFileName != null
-    val navLayoutType = if (WindowInsets.isImeVisible || isEditingFile) {
+    // Hidden too on the share screen: an import is one focused flow, not a tab.
+    val navLayoutType = if (WindowInsets.isImeVisible || isEditingFile || currentRoute == Screen.Import) {
         androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType.None
     } else {
         // Custom ExpressiveNavBar is a bottom bar in all sizes (Finance-style).
@@ -610,10 +613,11 @@ fun MainScreen(
         }
     }
     
-    // Auto-navigate to Import if state present
-    LaunchedEffect(uiState.importState) {
-        if (uiState.importState != null) {
-            navController.navigate("import")
+    // A share from another app opens the import screen (also when an older one is still parked).
+    val shareGeneration by shareImportViewModel.generation.collectAsStateWithLifecycle()
+    LaunchedEffect(shareGeneration) {
+        if (shareImportViewModel.state.value != null && navController.currentDestination?.route != Screen.Import) {
+            navController.navigate(Screen.Import) { launchSingleTop = true }
         }
     }
 
@@ -633,13 +637,6 @@ fun MainScreen(
         }
     }
     
-    // Auto-Close logic for External Imports
-    LaunchedEffect(uiState.isExitPending) {
-        if (uiState.isExitPending) {
-            (context as? android.app.Activity)?.finish()
-        }
-    }
-
     // Mood Event Listening
     LaunchedEffect(moodViewModel.uiEvent) {
         moodViewModel.uiEvent.collect { event ->
@@ -1193,29 +1190,22 @@ fun MainScreen(
             }
 
             composable(Screen.Import) {
-                // Intercept System Back to clear state
-                BackHandler {
-                    viewModel.dismissImport()
-                    navController.popBackStack()
-                }
-
-                if (uiState.importState != null) {
-                    cloud.wafflecommons.pixelbrainreader.ui.components.ImportScreen(
-                        initialTitle = uiState.importState!!.title,
-                        initialContent = uiState.importState!!.content,
-                        onDismiss = { 
-                            viewModel.dismissImport()
+                // A share launched from another app goes back to it once saved or cancelled.
+                cloud.wafflecommons.pixelbrainreader.ui.share.ShareImportScreen(
+                    viewModel = shareImportViewModel,
+                    onClose = {
+                        if (launchedForShare) (context as? android.app.Activity)?.finish() else navController.popBackStack()
+                    },
+                    onSaved = { path ->
+                        android.widget.Toast.makeText(context, "Saved to $path", android.widget.Toast.LENGTH_SHORT).show()
+                        if (launchedForShare) {
+                            (context as? android.app.Activity)?.finish()
+                        } else {
                             navController.popBackStack()
-                        },
-                        onSave = { name, folder, content -> 
-                            viewModel.confirmImport(name, folder, content)
-                            navController.popBackStack()
+                            viewModel.openVaultFile(path)
                         }
-                    )
-                } else {
-                    // Fallback if state lost
-                    LaunchedEffect(Unit) { navController.popBackStack() }
-                }
+                    }
+                )
             }
 
             composable(Screen.DailyNote) {
