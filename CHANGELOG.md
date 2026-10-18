@@ -7,8 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Work toward **11.0.0** — the work-direction and dev/lead toolkit release (plan:
-`documentation/plans/2026-10-18-v11-work-and-dev-toolkit.md`).
+Still planned for 11.x (`documentation/plans/2026-10-18-v11-work-and-dev-toolkit.md`): the
+AI-pairing dashboard, "explain this error", decision records, people & 1:1s, the project
+dashboard, security watch, desktop hand-off, the workshop kit and the authorship timeline.
+
+## [11.0.0] — 2026-10-18
+
+The work-direction and dev/lead toolkit release, shipped for dogfooding before the rest of its
+plan (`documentation/plans/2026-10-18-v11-work-and-dev-toolkit.md`).
 
 ### Added
 
