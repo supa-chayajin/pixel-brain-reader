@@ -108,6 +108,7 @@ fun LifeStatsScreen(
                 ) {
                     item { RpgHeroCard(uiState) }
                     item { TodayVitalsCard(uiState) }
+                    item { RecoveryCard() }
                     item { MoodVsHeartRateChartCard(uiState.moodHistory) }
                     item { MoodSummaryCard(uiState) }
                     item { CompletionRingsCard(uiState, globalCompletion) }
