@@ -21,8 +21,16 @@ import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/** Per vault path, from git: last change and first appearance (epoch millis, author time), commit count. */
+data class FileHistory(
+    val lastChanged: Map<String, Long> = emptyMap(),
+    val firstSeen: Map<String, Long> = emptyMap(),
+    val changes: Map<String, Int> = emptyMap()
+)
+
 /**
- * When each vault file was last changed IN GIT (epoch millis, by author time).
+ * When each vault file was last changed IN GIT (epoch millis, by author time), when it first
+ * appeared, and how many commits touched it.
  *
  * A file's on-disk mtime is useless as "last edited": every clone, pull or checkout rewrites it,
  * so after a re-clone every note looks brand new. The history is walked once and the result is
@@ -33,8 +41,17 @@ import javax.inject.Singleton
 class GitFileAges @Inject constructor(
     @param:ApplicationContext private val context: Context
 ) {
+    /** [version] below [SNAPSHOT_VERSION]: a cache from before first-seen times — walk it all again. */
     @Serializable
-    private data class Snapshot(val head: String, val lastChanged: Map<String, Long>)
+    private data class Snapshot(
+        val head: String,
+        val lastChanged: Map<String, Long>,
+        val firstSeen: Map<String, Long> = emptyMap(),
+        val changes: Map<String, Int> = emptyMap(),
+        val version: Int = 1
+    ) {
+        fun toHistory() = FileHistory(lastChanged, firstSeen, changes)
+    }
 
     private val json = Json { ignoreUnknownKeys = true }
     private val mutex = Mutex()
@@ -46,7 +63,10 @@ class GitFileAges @Inject constructor(
     private val cacheFile: File get() = File(context.filesDir, CACHE_FILE)
 
     /** Vault-relative path → last commit time touching it. Empty if the vault isn't a git repo. */
-    suspend fun lastChanged(): Map<String, Long> = withContext(Dispatchers.IO) {
+    suspend fun lastChanged(): Map<String, Long> = history().lastChanged
+
+    /** The whole per-path history. Empty if the vault isn't a git repo. */
+    suspend fun history(): FileHistory = withContext(Dispatchers.IO) {
         mutex.withLock {
             try {
                 compute()
@@ -54,28 +74,30 @@ class GitFileAges @Inject constructor(
                 throw e
             } catch (e: Exception) {
                 Log.w(TAG, "File ages unavailable: ${e.message}")
-                memory?.lastChanged ?: emptyMap()
+                memory?.toHistory() ?: FileHistory()
             } catch (e: LinkageError) {
                 // A JGit class R8 broke (NoClassDefFoundError, ExceptionInInitializerError…) is an
                 // Error, not an Exception: still never worth crashing the screen over.
                 Log.w(TAG, "File ages unavailable (linkage): ${e.message}")
-                memory?.lastChanged ?: emptyMap()
+                memory?.toHistory() ?: FileHistory()
             }
         }
     }
 
-    private fun compute(): Map<String, Long> {
-        if (!File(vaultDir, ".git").isDirectory) return emptyMap()
+    private fun compute(): FileHistory {
+        if (!File(vaultDir, ".git").isDirectory) return FileHistory()
         Git.open(vaultDir).use { git ->
             val repo = git.repository
-            val head = repo.resolve("HEAD") ?: return emptyMap()
-            val cached = memory ?: readCache()
+            val head = repo.resolve("HEAD") ?: return FileHistory()
+            val cached = (memory ?: readCache())?.takeIf { it.version >= SNAPSHOT_VERSION }
             if (cached?.head == head.name) {
                 memory = cached
-                return cached.lastChanged
+                return cached.toHistory()
             }
 
             val ages = HashMap(cached?.lastChanged.orEmpty())
+            val firstSeen = HashMap(cached?.firstSeen.orEmpty())
+            val changes = HashMap(cached?.changes.orEmpty())
             val seen = HashSet<String>() // newest-first: the first commit seen for a path wins
             RevWalk(repo).use { walk ->
                 walk.sort(RevSort.COMMIT_TIME_DESC)
@@ -93,14 +115,17 @@ class GitFileAges @Inject constructor(
                         for (entry in diff.scan(parentTree, commit.tree)) {
                             val path = if (entry.changeType == DiffEntry.ChangeType.DELETE) entry.oldPath else entry.newPath
                             if (seen.add(path)) ages[path] = time
+                            // Author times aren't ordered like the walk (rebases keep them): keep the oldest.
+                            firstSeen.merge(path, time, ::minOf)
+                            changes.merge(path, 1, Int::plus)
                         }
                     }
                 }
             }
-            val snapshot = Snapshot(head.name, ages)
+            val snapshot = Snapshot(head.name, ages, firstSeen, changes, SNAPSHOT_VERSION)
             memory = snapshot
             writeCache(snapshot)
-            return ages
+            return snapshot.toHistory()
         }
     }
 
@@ -122,5 +147,6 @@ class GitFileAges @Inject constructor(
     private companion object {
         const val TAG = "GitFileAges"
         const val CACHE_FILE = "git_file_ages.json"
+        const val SNAPSHOT_VERSION = 2
     }
 }
