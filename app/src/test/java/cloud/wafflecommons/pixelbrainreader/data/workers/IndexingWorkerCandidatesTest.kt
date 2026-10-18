@@ -5,7 +5,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.time.LocalDate
 
-/** Settled decision #3 (CLAUDE.md): today's journal and 99_System are never embedded. */
+/** Settled decision #3 (CLAUDE.md): today's journal and 99_System are never embedded; people notes never either. */
 class IndexingWorkerCandidatesTest {
 
     private val today = LocalDate.of(2026, 10, 17)
@@ -19,6 +19,7 @@ class IndexingWorkerCandidatesTest {
         file("20_Projects/plan.md"),
         file("99_System/gamification.md"),
         file("99_Private/diary.md.enc"),
+        file("99_Private/People/alias-a.md.enc"),
         file("assets/photo.png"),
         file("20_Projects", type = "dir")
     )
@@ -27,6 +28,12 @@ class IndexingWorkerCandidatesTest {
     fun `today's journal, system files, attachments and folders are skipped`() {
         val candidates = IndexingWorker.embeddingCandidates(vault, today, hasVaultPassword = false)
         assertEquals(listOf("10_Journal/2026-10-16.md", "20_Projects/plan.md"), candidates.map { it.path })
+    }
+
+    @Test
+    fun `people notes are never embedded, even with the vault password stored`() {
+        val candidates = IndexingWorker.embeddingCandidates(vault, today, hasVaultPassword = true)
+        assertEquals(false, candidates.any { it.path.startsWith("99_Private/People/") })
     }
 
     @Test

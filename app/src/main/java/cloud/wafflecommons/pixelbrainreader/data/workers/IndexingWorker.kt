@@ -233,7 +233,7 @@ class IndexingWorker @AssistedInject constructor(
                     return@forEach
                 }
 
-                val chunks = chunkText(plaintext, entity.path)
+                val chunks = cloud.wafflecommons.pixelbrainreader.data.ai.NoteChunker.chunk(plaintext, entity.path)
                 Log.d("RAG_DEBUG", "  ${entity.path}: ${chunks.size} chunk(s) from ${plaintext.length} chars (private=$isPrivate)")
                 totalChunks += chunks.size
 
@@ -297,89 +297,6 @@ class IndexingWorker @AssistedInject constructor(
         )
     }
 
-    /**
-     * Sentence/paragraph-aware chunker. The TFLite embedder truncates at
-     * MAX_SEQ_LEN (256 tokens); the old fixed 1000-char window routinely exceeded
-     * that, so each chunk's tail was silently dropped from its vector. We now split
-     * on sentence terminators + blank lines and greedily pack units into
-     * ~[targetSize]-char chunks that stay within the token window and don't cut
-     * mid-thought. A single oversized unit is hard-split as a fallback.
-     */
-    private fun chunkText(
-        text: String,
-        filePath: String,
-        targetSize: Int = 400
-    ): List<String> {
-        val trimmed = text.trim()
-        if (trimmed.isEmpty()) return emptyList()
-
-        val noteTitle = filePath.substringAfterLast("/").removeSuffix(".md").removeSuffix(".enc")
-        val folder = filePath.substringBeforeLast("/", "").ifEmpty { "Vault" }
-        val baseHeader = "[Note: $noteTitle ($folder)]\n"
-
-        // Track Markdown headings
-        val lines = trimmed.lines()
-        val sections = mutableListOf<Pair<String, String>>()
-        var currentHeading = "Général"
-        val currentSection = StringBuilder()
-
-        for (line in lines) {
-            val trimmedLine = line.trim()
-            if (trimmedLine.startsWith("#")) {
-                if (currentSection.isNotBlank()) {
-                    sections.add(currentHeading to currentSection.toString().trim())
-                    currentSection.setLength(0)
-                }
-                currentHeading = trimmedLine.replace(Regex("^#+\\s*"), "").take(60)
-            } else {
-                if (currentSection.isNotEmpty()) currentSection.append('\n')
-                currentSection.append(line)
-            }
-        }
-        if (currentSection.isNotBlank()) {
-            sections.add(currentHeading to currentSection.toString().trim())
-        }
-
-        val chunks = mutableListOf<String>()
-        val maxBodySize = (targetSize - baseHeader.length - 50).coerceAtLeast(150)
-
-        for ((heading, content) in sections) {
-            val headingPrefix = "[Note: $noteTitle ($folder) > $heading]\n"
-            val units = content
-                .split(Regex("(?<=[.!?。！？])\\s+|\\n+"))
-                .map { it.trim() }
-                .filter { it.isNotEmpty() }
-
-            val current = StringBuilder()
-            for (unit in units) {
-                if (unit.length > maxBodySize) {
-                    if (current.isNotEmpty()) {
-                        chunks.add(headingPrefix + current.toString().trim())
-                        current.setLength(0)
-                    }
-                    var s = 0
-                    while (s < unit.length) {
-                        val e = (s + maxBodySize).coerceAtMost(unit.length)
-                        chunks.add(headingPrefix + unit.substring(s, e))
-                        s = e
-                    }
-                    continue
-                }
-                if (current.isNotEmpty() && current.length + unit.length + 1 > maxBodySize) {
-                    chunks.add(headingPrefix + current.toString().trim())
-                    current.setLength(0)
-                }
-                if (current.isNotEmpty()) current.append(' ')
-                current.append(unit)
-            }
-            if (current.isNotBlank()) {
-                chunks.add(headingPrefix + current.toString().trim())
-            }
-        }
-
-        return if (chunks.isNotEmpty()) chunks else listOf(baseHeader + trimmed.take(targetSize))
-    }
-
     companion object {
         /** WorkManager unique-work name for the manual indexing button. */
         const val UNIQUE_WORK_NAME = "ManualVaultIndexing"
@@ -392,6 +309,8 @@ class IndexingWorker @AssistedInject constructor(
          * it changes all day, so its vectors would be stale within minutes and every run would pay
          * a model load for it — and neither is `99_System` (machine JSON, noise for retrieval).
          * Private notes only when a vault password is stored, checked BEFORE the model is loaded.
+         * People notes never: what is written about a person is not something to retrieve into an
+         * AI answer.
          */
         internal fun embeddingCandidates(
             files: List<cloud.wafflecommons.pixelbrainreader.data.local.entity.FileEntity>,
@@ -407,6 +326,7 @@ class IndexingWorker @AssistedInject constructor(
                         entity.path.endsWith(".md.enc", ignoreCase = true)) &&
                     entity.path != todayPath &&
                     !entity.path.contains("99_System") &&
+                    !cloud.wafflecommons.pixelbrainreader.data.vault.VaultSchema.isPeopleNote(entity.path) &&
                     (!isPrivate || hasVaultPassword)
             }
         }

@@ -30,6 +30,9 @@ object VaultSchema {
 
     const val INBOX_FOLDER = "00_Inbox"
 
+    /** People & 1:1 notes: encrypted, one per person alias, never embedded or sent to the AI. */
+    const val PEOPLE_FOLDER = "99_Private/People/"
+
     private val DAILY_NOTE = Regex("""^10_Journal/\d{4}-\d{2}-\d{2}\.md$""")
     private val WHITESPACE = Regex("""\s+""")
 
@@ -56,6 +59,8 @@ object VaultSchema {
         TYPE_ARCHIVE -> "📦 archive"
         else -> "🟢 done"
     }
+
+    fun isPeopleNote(path: String): Boolean = path.startsWith(PEOPLE_FOLDER)
 
     /** R2: daily notes carry only `date:`. */
     fun isDailyNote(path: String): Boolean = DAILY_NOTE.matches(path)

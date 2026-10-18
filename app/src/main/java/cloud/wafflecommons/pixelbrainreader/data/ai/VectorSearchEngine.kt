@@ -528,7 +528,7 @@ class VectorSearchEngine @Inject constructor(
          * a one-shot `embeddings` table wipe; IndexingWorker then re-embeds
          * every `.md` via the existing `getFilesWithoutEmbeddings` backfill.
          */
-        const val EMBEDDER_SCHEMA_VERSION = "minilm-multilingual-v3-contextual-hybrid"
+        const val EMBEDDER_SCHEMA_VERSION = "minilm-multilingual-v4-code-aware"
         private const val PREFS_NAME = "embedder_state"
         private const val PREFS_KEY_VERSION = "schema_version"
 

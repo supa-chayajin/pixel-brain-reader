@@ -44,6 +44,11 @@ Work toward **11.0.0** — the work-direction and dev/lead toolkit release (plan
 
 ### Changed
 
+- **The AI search reads code as code.** Each fenced code block is now embedded as its own chunk,
+  labelled with its language, instead of being packed into the prose around it; a `#` comment
+  inside a fence is no longer taken for a heading, and a `#tag` line is no longer either. The
+  vault is re-embedded once in the background. People notes (`99_Private/People/`, used by the
+  coming People & 1:1s feature) are never embedded.
 - **Search reads a full-text index.** Note bodies are searched through an SQLite FTS4 index
   (accent-insensitive: "reseau" finds "réseau"; every word is a prefix) ranked by BM25, with
   file and folder names first. It replaces a `LIKE '%…%'` scan of every note on each keystroke.
