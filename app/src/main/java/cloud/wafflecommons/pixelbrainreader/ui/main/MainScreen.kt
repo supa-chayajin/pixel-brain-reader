@@ -1069,7 +1069,9 @@ fun MainScreen(
                                             onFetchHistory = if (uiState.selectedFileName?.endsWith(".enc") == true) null
                                                 else ({ viewModel.getFileCommitHistory() }),
                                             onFetchRevisionContent = { commitId -> viewModel.getFileContentAtCommit(commitId = commitId) },
-                                            onRestoreRevision = { restored -> viewModel.restoreRevision(restored) }
+                                            onRestoreRevision = { restored -> viewModel.restoreRevision(restored) },
+                                            filePath = uiState.selectedFilePath,
+                                            onOpenNote = { path -> viewModel.openVaultFile(path) }
                                         )
                                     } else {
                                         cloud.wafflecommons.pixelbrainreader.ui.components.WelcomeScreen()

@@ -19,6 +19,10 @@ Work toward **11.0.0** — the work-direction and dev/lead toolkit release (plan
   start of a line or after a space offers commands (date, time, checkbox, my action `@moi`, due
   date, callout, code block, table, heading, quote, link, separator), and typing `[[` offers the
   vault's note names, accents and case aside — never the notes the current mode hides.
+- **Connections.** A Connections button on an open note lists its backlinks (with the line that
+  links), its unlinked mentions — notes naming it as a whole word, outside links and code, found
+  through the full-text index — each linkable in one tap (the text's own spelling becomes the
+  alias), and the notes closest in meaning from the on-device search.
 - **Work hub and mission log.** A Work chip on the Daily screen opens the Work hub. Its first tool
   is the mission log: facts, decisions, requests, refusals and off-ticket time, each with the role
   you held, a status, minutes, who asked and who decided (as roles, never names), a reference and
