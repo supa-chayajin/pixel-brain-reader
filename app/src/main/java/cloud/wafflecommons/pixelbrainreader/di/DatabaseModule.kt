@@ -48,6 +48,12 @@ object DatabaseModule {
 
     @Provides
     @Singleton
+    fun provideFileSearchDao(database: AppDatabase): cloud.wafflecommons.pixelbrainreader.data.local.dao.FileSearchDao {
+        return database.fileSearchDao()
+    }
+
+    @Provides
+    @Singleton
     fun provideEmbeddingDao(database: AppDatabase): cloud.wafflecommons.pixelbrainreader.data.local.dao.EmbeddingDao {
         return database.embeddingDao()
     }

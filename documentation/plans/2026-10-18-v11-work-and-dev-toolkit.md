@@ -35,7 +35,7 @@ Unless a path starts with `app/` or `documentation/`, it is relative to
 ### A — Foundations
 - [x] **A1** Vault schema in code: folder → type → default status, an R1-compliant frontmatter
       builder, a surgical frontmatter line editor. Voice captures and web imports use them (E7).
-- [ ] **A2** Full-text index (roadmap 2.1): Room FTS4 over `file_contents`, accent-insensitive,
+- [x] **A2** Full-text index (roadmap 2.1): Room FTS4 over `file_contents`, accent-insensitive,
       BM25 ranking. Replaces the `LIKE` search.
 - [ ] **A3** Links index (roadmap 2.3): `links(source, target, kind)` maintained by the vault scan.
 - [ ] **A4** Modes (N1): Work / Personal / Off, a schedule, leave periods, key dates, screen-share

@@ -5,7 +5,11 @@ import android.util.Log
 import androidx.room.withTransaction
 import cloud.wafflecommons.pixelbrainreader.data.local.AppDatabase
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.FileDao
+import cloud.wafflecommons.pixelbrainreader.data.local.dao.FileSearchDao
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.FileEntity
+import cloud.wafflecommons.pixelbrainreader.data.search.Bm25
+import cloud.wafflecommons.pixelbrainreader.data.search.FtsQuery
+import cloud.wafflecommons.pixelbrainreader.data.search.FullTextHit
 import cloud.wafflecommons.pixelbrainreader.data.utils.FrontmatterManager
 import cloud.wafflecommons.pixelbrainreader.data.utils.VaultFileIndex
 import com.google.gson.Gson
@@ -32,6 +36,7 @@ import javax.inject.Singleton
 class VaultDiscoveryRepository @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val fileDao: FileDao,
+    private val fileSearchDao: FileSearchDao,
     private val database: AppDatabase,
     private val gson: Gson // For JSON serialization of simplified metadata
 ) {
@@ -51,9 +56,45 @@ class VaultDiscoveryRepository @Inject constructor(
         return fileDao.getFiles(path ?: "")
     }
 
-    fun searchFiles(query: String): Flow<List<FileEntity>> {
-        return fileDao.searchFiles(query)
+    /**
+     * In-app search: file and folder names first, then note bodies ranked by BM25 through the
+     * full-text index (accent-insensitive, prefix terms). Re-runs whenever the vault changes while
+     * the search is open.
+     */
+    fun searchFiles(query: String): Flow<List<FileEntity>> = fileSearchDao.observeChanges()
+        .map { searchNow(query) }
+        .flowOn(Dispatchers.IO)
+
+    suspend fun searchNow(query: String): List<FileEntity> = withContext(Dispatchers.IO) {
+        val trimmed = query.trim()
+        if (trimmed.isEmpty()) return@withContext emptyList()
+        val byName = fileDao.searchByName(escapeLike(trimmed), NAME_MATCH_LIMIT)
+        val hits = fullTextHits(trimmed, BODY_MATCH_LIMIT)
+        val byBody = if (hits.isEmpty()) {
+            emptyList()
+        } else {
+            val rows = fileDao.getFilesByPaths(hits.map { it.path }).associateBy { it.path }
+            hits.mapNotNull { rows[it.path] }
+        }
+        (byName + byBody).distinctBy { it.path }
     }
+
+    /** Ranked full-text hits with an excerpt (`«…»` marks the matched words). */
+    suspend fun fullTextHits(query: String, limit: Int = BODY_MATCH_LIMIT): List<FullTextHit> = withContext(Dispatchers.IO) {
+        val match = FtsQuery.build(query) ?: return@withContext emptyList()
+        val rows = try {
+            fileSearchDao.match(match, FTS_CANDIDATES)
+        } catch (e: android.database.sqlite.SQLiteException) {
+            Log.w("VaultDiscovery", "Full-text query failed: ${e.message}")
+            return@withContext emptyList()
+        }
+        rows.map { FullTextHit(it.path, Bm25.score(Bm25.decode(it.matchInfo), FTS_COLUMN_WEIGHTS), it.excerpt) }
+            .sortedByDescending { it.score }
+            .take(limit)
+    }
+
+    private fun escapeLike(raw: String): String =
+        raw.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
     /**
      * Attachment index for `![[embeds]]`, built off the main thread from the file table. It is
@@ -308,6 +349,13 @@ class VaultDiscoveryRepository @Inject constructor(
 
         /** Stay well under SQLite's bound-variable limit for `DELETE … WHERE path IN (…)`. */
         const val DELETE_CHUNK_SIZE = 500
+
+        const val NAME_MATCH_LIMIT = 30
+        const val BODY_MATCH_LIMIT = 50
+        /** Full-text rows fetched before BM25 ranking (the MATCH itself is unordered). */
+        const val FTS_CANDIDATES = 300
+        /** `file_contents_fts` columns: path (≈ the title) counts double, the body once. */
+        val FTS_COLUMN_WEIGHTS = doubleArrayOf(2.0, 1.0)
 
         val HEX_DIGITS = "0123456789abcdef".toCharArray()
     }
