@@ -16,6 +16,13 @@ Work toward **11.0.0** — the work-direction and dev/lead toolkit release (plan
 
 ### Fixed
 
+- **Notes the app creates follow the vault's frontmatter contract.** Voice captures, web
+  imports, chat answers saved to the inbox and blank notes now carry the standard keys in
+  order (title, date_created, date_updated, type, status, tags, aliases) with the type the
+  folder implies and its default status, plus one `# H1`; new daily notes carry only `date:`.
+  The vault's linter used to flag every phone capture, and the old daily-note template was the
+  source of the `type: system` / `status: active` drift in the journal.
+
 ## [10.2.0] — 2026-10-17
 
 The **vault insights** release. It ships the feature batch built with Antigravity (Gemini) —

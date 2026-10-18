@@ -3,6 +3,7 @@ package cloud.wafflecommons.pixelbrainreader.data.repository
 import cloud.wafflecommons.pixelbrainreader.data.ai.CompiledVoiceResult
 import cloud.wafflecommons.pixelbrainreader.data.sync.VaultPushScheduler
 import cloud.wafflecommons.pixelbrainreader.data.utils.SafeFileProvider
+import cloud.wafflecommons.pixelbrainreader.data.vault.VaultSchema
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.LocalDateTime
@@ -48,12 +49,21 @@ class CaptureRepository @Inject constructor(
         private val HEADING_TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
 
         internal fun renderVoiceNote(capturedAt: LocalDateTime, compiled: CompiledVoiceResult): String = buildString {
-            append("---\n")
-            append("captured: ").append(capturedAt.withSecond(0).withNano(0)).append('\n')
-            append("source: voice\n")
-            append("tags: [inbox, voice]\n")
-            append("---\n\n")
-            append("# Voice note — ").append(capturedAt.format(HEADING_TIME)).append("\n\n")
+            val title = "Voice note ${capturedAt.format(HEADING_TIME)}"
+            append(
+                VaultSchema.frontmatter(
+                    title = title,
+                    path = "$INBOX/$title.md",
+                    date = capturedAt.toLocalDate(),
+                    tags = listOf("inbox", "voice"),
+                    extra = listOf(
+                        "source" to "voice",
+                        "captured" to VaultSchema.singleQuoted(capturedAt.withSecond(0).withNano(0).toString())
+                    )
+                )
+            )
+            append('\n')
+            append("# ").append(title).append("\n\n")
             if (compiled.structuredMarkdown.isNotBlank()) {
                 append(compiled.structuredMarkdown.trim()).append("\n\n")
             }

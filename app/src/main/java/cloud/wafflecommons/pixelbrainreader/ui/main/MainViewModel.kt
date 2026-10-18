@@ -27,6 +27,7 @@ import cloud.wafflecommons.pixelbrainreader.data.utils.ContentSanitizer
 import cloud.wafflecommons.pixelbrainreader.data.utils.SoundEffectManager
 import cloud.wafflecommons.pixelbrainreader.data.utils.TaskCompletionDetector
 import cloud.wafflecommons.pixelbrainreader.data.utils.TemplateEngine
+import cloud.wafflecommons.pixelbrainreader.data.vault.VaultSchema
 import cloud.wafflecommons.pixelbrainreader.di.ApplicationScope
 import cloud.wafflecommons.pixelbrainreader.ui.components.SaveState
 import cloud.wafflecommons.pixelbrainreader.ui.utils.ConfettiType
@@ -989,11 +990,17 @@ class MainViewModel @Inject constructor(
         val fullPath = if (parentPath.isNotEmpty()) "$parentPath/$finalName" else finalName
 
         viewModelScope.launch {
-            var content = ""
+            val title = finalName.substringBeforeLast(".")
+            var content = if (VaultSchema.isDailyNote(fullPath)) {
+                ""
+            } else {
+                // A blank note still carries the vault's standard frontmatter and its one H1 (R1, R3).
+                VaultSchema.frontmatter(title = title, path = fullPath, date = LocalDate.now()) + "\n# $title\n"
+            }
             if (!templateName.isNullOrBlank()) {
                 val templatePath = "${TemplateRepository.TEMPLATE_FOLDER}/$templateName"
                 val templateContent = repository.getFileContentFlow(templatePath).firstOrNull() ?: ""
-                content = TemplateEngine.apply(templateContent, finalName.substringBeforeLast("."))
+                content = TemplateEngine.apply(templateContent, title)
             }
 
             repository.saveFileLocally(fullPath, content)
@@ -1123,7 +1130,11 @@ class MainViewModel @Inject constructor(
             repository.createLocalFolder(folderName)
             // ROOT: the timestamp is part of a file name and must stay ASCII.
             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.ROOT).format(Date())
-            repository.saveFileLocally("$folderName/AI_Note_$timestamp.md", content)
+            val path = "$folderName/AI_Note_$timestamp.md"
+            val title = "AI note " + SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.ROOT).format(Date())
+            val note = VaultSchema.frontmatter(title = title, path = path, date = LocalDate.now(), tags = listOf("inbox", "ai")) +
+                "\n# $title\n\n" + content.trim() + "\n"
+            repository.saveFileLocally(path, note)
             pushScheduler.requestPush()
             _userMessage.value = "Saved to $folderName"
         }
