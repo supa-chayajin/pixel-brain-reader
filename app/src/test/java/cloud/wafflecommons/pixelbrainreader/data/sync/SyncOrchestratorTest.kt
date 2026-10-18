@@ -61,6 +61,7 @@ class SyncOrchestratorTest {
         coEvery { jGit.addAll() } returns Result.success(Unit)
         coEvery { jGit.pull() } returns SyncResult.Success
         coEvery { jGit.push() } returns Result.success(Unit)
+        coEvery { jGit.headId() } returns "abc"
         coEvery { health.invoke(any()) } returns Result.success(Unit)
         coEvery { calendar.syncTodayEvents(any()) } returns Result.success(0)
         coEvery { tasks.syncPendingTasks(any()) } returns Result.success(0)
@@ -81,7 +82,8 @@ class SyncOrchestratorTest {
             dailyDashboardRepository = daily,
             gitSyncCoordinator = coordinator,
             appScope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined),
-            modesRepository = { mockk(relaxed = true) }
+            modesRepository = { mockk(relaxed = true) },
+            syncDigestRepository = { mockk(relaxed = true) }
         )
     }
 

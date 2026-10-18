@@ -1227,7 +1227,8 @@ fun MainScreen(
                     onOpenNote = { path -> viewModel.openVaultFile(path) },
                     onOpenModesSettings = { navController.navigate(V11Routes.MODES_SETTINGS) },
                     onOpenConfidentiality = { navController.navigate(V11Routes.CONFIDENTIALITY) },
-                    onOpenWork = { navController.navigate(V11Routes.WORK_HUB) }
+                    onOpenWork = { navController.navigate(V11Routes.WORK_HUB) },
+                    onOpenActivity = { navController.navigate(V11Routes.ACTIVITY) }
                 )
             }
             

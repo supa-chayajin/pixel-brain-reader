@@ -29,6 +29,10 @@ Work toward **11.0.0** — the work-direction and dev/lead toolkit release (plan
   mark it done, failed or skipped with a note, and finishing (or stopping) writes a French
   incident log to the inbox. A rendered note now lists its code blocks at the end, each with a
   copy button. Code is highlighted in C#, PHP and TOML too.
+- **Sync digest and vault activity.** After a sync that pulls changes, the Daily screen says what
+  came from the remote — notes new, changed and removed, and where — until dismissed. Vault
+  activity (Work hub) shows that digest, commits per day over 30 days, the notes that changed most
+  this week and the new ones, all from the git history and filtered by the current mode.
 - **Work hub and mission log.** A Work chip on the Daily screen opens the Work hub. Its first tool
   is the mission log: facts, decisions, requests, refusals and off-ticket time, each with the role
   you held, a status, minutes, who asked and who decided (as roles, never names), a reference and
