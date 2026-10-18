@@ -1,6 +1,7 @@
 package cloud.wafflecommons.pixelbrainreader.ui.components
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -21,13 +22,20 @@ import androidx.compose.ui.unit.dp
 fun NewFileBottomSheet(
     availableTemplates: List<String>,
     onDismiss: () -> Unit,
-    onCreate: (filename: String, templateName: String?) -> Unit
+    loadVariables: suspend (templateName: String) -> List<String> = { emptyList() },
+    onCreate: (filename: String, templateName: String?, values: Map<String, String>) -> Unit
 ) {
     // Expressive: Allow partial expansion (half-height)
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
     val haptic = LocalHapticFeedback.current
     var filename by remember { mutableStateOf("") }
     var selectedTemplate by remember { mutableStateOf<String?>(null) } // null = Blank
+    // The selected template's form: one field per {{variable}} (E1).
+    var variables by remember { mutableStateOf(emptyList<String>()) }
+    val values = remember { androidx.compose.runtime.mutableStateMapOf<String, String>() }
+    androidx.compose.runtime.LaunchedEffect(selectedTemplate) {
+        variables = selectedTemplate?.let { loadVariables(it) }.orEmpty()
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -105,11 +113,16 @@ fun NewFileBottomSheet(
             
             Spacer(modifier = Modifier.height(24.dp))
 
+            if (variables.isNotEmpty()) {
+                TemplateForm(variables, values)
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
             // 3. Create Action
             Button(
                 onClick = {
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    onCreate(filename, selectedTemplate)
+                    onCreate(filename, selectedTemplate, values.filterKeys { it in variables })
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -166,4 +179,48 @@ private fun formatTemplateName(filename: String): String {
         name = name.removePrefix("T_")
     }
     return name.replace("_", " ")
+}
+
+/** One field per template variable; a date picker for the date-like ones. Blank fields stay as placeholders. */
+@Composable
+private fun TemplateForm(variables: List<String>, values: MutableMap<String, String>) {
+    var picking by remember { mutableStateOf<String?>(null) }
+    Text(
+        text = "Fill in the template",
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(bottom = 8.dp)
+    )
+    // Bounded and scrollable, so a long form never pushes "Create Note" off the sheet.
+    Column(
+        modifier = Modifier
+            .heightIn(max = 280.dp)
+            .verticalScroll(androidx.compose.foundation.rememberScrollState()),
+        verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
+    ) {
+        variables.forEach { name ->
+            val label = name.replace('_', ' ').replaceFirstChar { it.uppercase() }
+            if (cloud.wafflecommons.pixelbrainreader.data.utils.TemplateEngine.isDateVariable(name)) {
+                androidx.compose.material3.AssistChip(
+                    onClick = { picking = name },
+                    label = { Text(values[name]?.let { "$label: $it" } ?: label) }
+                )
+            } else {
+                OutlinedTextField(
+                    value = values[name].orEmpty(),
+                    onValueChange = { values[name] = it },
+                    label = { Text(label) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+    }
+    picking?.let { name ->
+        PickDateDialog(
+            initial = values[name]?.let { runCatching { java.time.LocalDate.parse(it) }.getOrNull() },
+            onConfirm = { date -> values[name] = date.toString(); picking = null },
+            onDismiss = { picking = null }
+        )
+    }
 }

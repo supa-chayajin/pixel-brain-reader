@@ -725,7 +725,8 @@ fun MainScreen(
                     cloud.wafflecommons.pixelbrainreader.ui.components.NewFileBottomSheet(
                         availableTemplates = uiState.availableTemplates,
                         onDismiss = { viewModel.dismissCreateFileDialog() },
-                        onCreate = { name, template -> viewModel.createNewFile(name, template) }
+                        loadVariables = viewModel::templateVariables,
+                        onCreate = { name, template, values -> viewModel.createNewFile(name, template, values) }
                     )
                 }
 

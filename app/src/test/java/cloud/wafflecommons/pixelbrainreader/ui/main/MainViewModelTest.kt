@@ -80,6 +80,7 @@ class MainViewModelTest {
             MutableStateFlow(cloud.wafflecommons.pixelbrainreader.data.modes.Visibility.ALL)
         every { vaultDiscoveryRepository.observeAttachmentIndex() } returns
             flowOf(cloud.wafflecommons.pixelbrainreader.data.utils.VaultFileIndex.EMPTY)
+        every { vaultDiscoveryRepository.observeNotePaths() } returns flowOf(emptyList())
 
         viewModel = MainViewModel(
             repository = fileRepository,
