@@ -5,8 +5,6 @@ import cloud.wafflecommons.pixelbrainreader.data.local.dao.FileContentDao
 import cloud.wafflecommons.pixelbrainreader.data.modes.LeavePeriod
 import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
 import cloud.wafflecommons.pixelbrainreader.data.remote.GitFileAges
-import cloud.wafflecommons.pixelbrainreader.data.repository.FileRepository
-import cloud.wafflecommons.pixelbrainreader.data.sync.VaultPushScheduler
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -29,8 +27,7 @@ class LeaveRepository @Inject constructor(
     private val modesRepository: ModesRepository,
     private val gitFileAges: GitFileAges,
     private val localAiManager: LocalAiManager,
-    private val fileRepository: FileRepository,
-    private val pushScheduler: VaultPushScheduler
+    private val draftWriter: DraftWriter
 ) {
 
     /** Writes a handover draft for [scope] (a folder) and the leave [start]..[end]; returns its path. */
@@ -119,18 +116,7 @@ class LeaveRepository @Inject constructor(
     private suspend fun summarize(prompt: String): String? =
         localAiManager.generateResponse(prompt).getOrNull()?.takeIf { it.isNotBlank() }
 
-    /** Writes [content] at [path], or next to it when a draft is already there (never over the user's edits). */
-    private suspend fun write(path: String, content: String): String {
-        var target = path
-        var n = 2
-        while (fileRepository.fileExists(target)) {
-            target = "${path.removeSuffix(".md")} ($n).md"
-            n++
-        }
-        fileRepository.saveFileLocally(target, content)
-        pushScheduler.requestPush()
-        return target
-    }
+    private suspend fun write(path: String, content: String): String = draftWriter.write(path, content)
 
     private companion object {
         /** Mission-log entries included in a handover: the last month. */

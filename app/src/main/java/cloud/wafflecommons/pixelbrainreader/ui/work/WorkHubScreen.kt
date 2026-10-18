@@ -6,6 +6,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.automirrored.rounded.EventNote
 import androidx.compose.material.icons.rounded.BeachAccess
+import androidx.compose.material.icons.rounded.Summarize
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -99,6 +100,12 @@ fun WorkHubScreen(
                 OutlinedButton(onClick = { onOpenLog(false) }) { Text("Open") }
             }
         }
+        HubCard(
+            title = "Evidence report",
+            icon = Icons.Rounded.Summarize,
+            subtitle = "A month or a quarter of the log as a draft for your reviews: every number from the data.",
+            onClick = { onOpen(cloud.wafflecommons.pixelbrainreader.ui.main.V11Routes.EVIDENCE) }
+        )
         HubCard(
             title = "Leave & handover",
             icon = Icons.Rounded.BeachAccess,

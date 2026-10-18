@@ -27,6 +27,11 @@ Work toward **11.0.0** — the work-direction and dev/lead toolkit release (plan
   leave, the Daily screen says how many work notes changed or appeared meanwhile (from the git
   history) and writes a "what happened" briefing on request. Leave periods and key dates are the
   ones set in Modes.
+- **Evidence report** (Work hub). A month or a quarter of the mission log becomes a French draft
+  for an annual review or a status meeting: counts by kind (with open requests), off-ticket time
+  ("non mesuré" when no minutes were logged), breakdowns by role and by tag, the decisions,
+  requests, refusals and facts, and the notes moved to done in your work folders during the
+  period. Every number comes from the log; an on-device summary is optional and marked.
 - **Modes: Work, Personal, Off.** A chip on the Daily screen and a Quick Settings tile switch
   modes. Outside Work mode, the folders marked as work disappear from the file list, search, AI
   answers and resurfaced notes; Off is for evenings, weekends and leave. A schedule (work days
