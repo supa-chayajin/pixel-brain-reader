@@ -1138,6 +1138,7 @@ fun MainScreen(
                     onNavigateToNavBarReorder = { navController.navigate("navbar_reorder") },
                     onNavigateToMoodTags = { navController.navigate("mood_tags") },
                     onNavigateToGamificationSettings = { navController.navigate("gamification_settings") },
+                    onNavigateToModes = { navController.navigate(V11Routes.MODES_SETTINGS) },
                     onOpenNote = { path ->
                         viewModel.openVaultFile(path)
                         navController.popBackStack()
@@ -1219,7 +1220,8 @@ fun MainScreen(
                 cloud.wafflecommons.pixelbrainreader.ui.daily.DailyNoteScreen(
                     onCheckInClicked = { showMoodSheet = true },
                     onNavigateToSettings = { navController.navigate(Screen.Settings) },
-                    onOpenNote = { path -> viewModel.openVaultFile(path) }
+                    onOpenNote = { path -> viewModel.openVaultFile(path) },
+                    onOpenModesSettings = { navController.navigate(V11Routes.MODES_SETTINGS) }
                 )
             }
             
@@ -1257,6 +1259,8 @@ fun MainScreen(
                     onNavigateBack = { navController.popBackStack() }
                 )
             }
+
+            v11Destinations(navController, openNote = { path -> viewModel.openVaultFile(path) })
         }
 
         // --- Global Effects Overlay ---

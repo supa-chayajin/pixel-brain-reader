@@ -221,6 +221,11 @@ class MainActivity : FragmentActivity() {
             viewModel.handleShareIntent(intent)
         }
 
+        // Long-press on one of our Quick Settings tiles: open that tile's settings.
+        if (intent.action == android.service.quicksettings.TileService.ACTION_QS_TILE_PREFERENCES) {
+            pendingDestination = WidgetNav.screenToRoute(WidgetNav.SCREEN_MODES)
+        }
+
         // pixelbrain:// deep links. `import` is a PUBLIC, BROWSABLE entry point (any web page can
         // fire it) so it stays untrusted: validate the URL (SSRF guard) and require explicit
         // confirmation before writing to the vault. `open`/`capture` are fired only by our own

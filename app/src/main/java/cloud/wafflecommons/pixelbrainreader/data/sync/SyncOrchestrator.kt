@@ -77,7 +77,8 @@ class SyncOrchestrator @Inject constructor(
     private val automateHabitsUseCase: AutomateHabitsUseCase,
     private val dailyDashboardRepository: DailyDashboardRepository,
     private val gitSyncCoordinator: GitSyncCoordinator,
-    @param:ApplicationScope private val appScope: CoroutineScope
+    @param:ApplicationScope private val appScope: CoroutineScope,
+    private val modesRepository: dagger.Lazy<cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository>
 ) {
     companion object {
         private const val TAG = "SyncOrchestrator"
@@ -315,6 +316,7 @@ class SyncOrchestrator @Inject constructor(
         reconcileStep("Habit") { habitRepository.syncWithFileSystem() }
         reconcileStep("Chore") { choreRepository.syncWithFileSystem() }
         reconcileStep("Gamification") { gamificationRepository.loadState() }
+        reconcileStep("Modes") { modesRepository.get().reload() }
     }
 
     private suspend fun reconcileStep(name: String, block: suspend () -> Unit) {

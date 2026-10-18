@@ -56,7 +56,8 @@ class VectorSearchEngine @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val embeddingDao: EmbeddingDao,
     private val cryptoManager: CryptoManager,
-    private val secretManager: SecretManager
+    private val secretManager: SecretManager,
+    private val modesRepository: dagger.Lazy<cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository>
 ) {
     private data class Engine(
         val interpreter: Interpreter,
@@ -431,7 +432,10 @@ class VectorSearchEngine @Inject constructor(
             )
         }
 
-        val chunks = loadChunkIndex()
+        // Notes the current mode hides (work outside Work mode, private while sharing the screen)
+        // are never candidates — not even as sources the answer could quote.
+        val visibility = modesRepository.get().visibility.value
+        val chunks = loadChunkIndex().let { all -> if (visibility.hideWork || visibility.hidePrivate) all.filter { visibility.isVisible(it.fileId) } else all }
         val ranking = RagRanking.rank(queryVector, chunks)
         if (ranking.scored.isNotEmpty()) {
             val best = ranking.scored.first().similarity

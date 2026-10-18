@@ -26,6 +26,8 @@ import cloud.wafflecommons.pixelbrainreader.data.system.AppClock
 import cloud.wafflecommons.pixelbrainreader.data.utils.ContentSanitizer
 import cloud.wafflecommons.pixelbrainreader.data.utils.SoundEffectManager
 import cloud.wafflecommons.pixelbrainreader.data.utils.TaskCompletionDetector
+import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
+import cloud.wafflecommons.pixelbrainreader.data.modes.Visibility
 import cloud.wafflecommons.pixelbrainreader.data.utils.TemplateEngine
 import cloud.wafflecommons.pixelbrainreader.data.vault.VaultSchema
 import cloud.wafflecommons.pixelbrainreader.di.ApplicationScope
@@ -86,7 +88,8 @@ class MainViewModel @Inject constructor(
     soundEffectManager: SoundEffectManager,
     appClock: AppClock,
     @param:ApplicationScope private val appScope: CoroutineScope,
-    vaultDiscoveryRepository: VaultDiscoveryRepository
+    vaultDiscoveryRepository: VaultDiscoveryRepository,
+    private val modesRepository: ModesRepository
 ) : ViewModel() {
 
     private val _currentPath = MutableStateFlow("")
@@ -195,6 +198,10 @@ class MainViewModel @Inject constructor(
     ) { path, query -> path to query }
         .flatMapLatest { (path, query) ->
             if (query.isBlank()) repository.getFiles(path) else repository.searchFiles(query)
+        }
+        // Work / Personal / Off and screen-share safe: hidden folders never reach the list or search.
+        .combine(modesRepository.visibility) { files, visibility ->
+            if (visibility == Visibility.ALL) files else files.filter { visibility.isVisible(it.path) }
         }
 
     // Reactive File Content (a one-shot disk read, re-run on every content refresh).
@@ -340,6 +347,14 @@ class MainViewModel @Inject constructor(
         // Keep the global sound-effects flag in sync with the user's preference.
         userPrefs.soundEffectsEnabled
             .onEach { soundEffectManager.enabled = it }
+            .launchIn(viewModelScope)
+
+        // A note that the new mode hides (switching to Personal, sharing the screen) closes.
+        modesRepository.visibility
+            .onEach { visibility ->
+                val open = _selectedFilePath.value
+                if (open != null && !visibility.isVisible(open)) closeFile()
+            }
             .launchIn(viewModelScope)
 
         viewModelScope.launch(Dispatchers.IO) {

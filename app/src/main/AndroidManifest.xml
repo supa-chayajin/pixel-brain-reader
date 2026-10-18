@@ -71,6 +71,11 @@
                 <data android:scheme="pixelbrain" android:host="import" />
             </intent-filter>
 
+            <!-- Long-press on one of our Quick Settings tiles opens its settings. -->
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE_PREFERENCES" />
+            </intent-filter>
+
             <!-- Launcher long-press shortcuts (open/capture use EXPLICIT intents, no browsable filter). -->
             <meta-data
                 android:name="android.app.shortcuts"
@@ -204,6 +209,17 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/quickactions_widget_info" />
         </receiver>
+        <!-- Quick Settings: cycle Work / Personal / Off. -->
+        <service
+            android:name=".ui.modes.ModeTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_tile_work"
+            android:label="@string/tile_mode_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
     </application>
 
 </manifest>
