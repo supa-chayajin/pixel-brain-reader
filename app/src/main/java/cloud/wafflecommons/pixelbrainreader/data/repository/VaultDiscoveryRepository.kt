@@ -7,11 +7,13 @@ import cloud.wafflecommons.pixelbrainreader.data.local.AppDatabase
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.FileDao
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.FileSearchDao
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.FileEntity
+import cloud.wafflecommons.pixelbrainreader.data.local.entity.LinkEntity
 import cloud.wafflecommons.pixelbrainreader.data.search.Bm25
 import cloud.wafflecommons.pixelbrainreader.data.search.FtsQuery
 import cloud.wafflecommons.pixelbrainreader.data.search.FullTextHit
 import cloud.wafflecommons.pixelbrainreader.data.utils.FrontmatterManager
 import cloud.wafflecommons.pixelbrainreader.data.utils.VaultFileIndex
+import cloud.wafflecommons.pixelbrainreader.data.vault.LinkExtractor
 import com.google.gson.Gson
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
@@ -228,10 +230,17 @@ class VaultDiscoveryRepository @Inject constructor(
         if (newFiles.isNotEmpty() || mtimeRefreshes.isNotEmpty() || toDelete.isNotEmpty()) {
             val contentDao = runCatching { database.fileContentDao() }.getOrNull()
             val embeddingDao = runCatching { database.embeddingDao() }.getOrNull()
+            val linkDao = runCatching { database.linkDao() }.getOrNull()
+            // Parsed outside the transaction: the write lock is held only for the inserts.
+            val newLinks = newContents.flatMap { linksOf(it.path, it.content) }
             database.withTransaction {
                 if (newFiles.isNotEmpty()) {
                     fileDao.insertAll(newFiles)
-                    if (newContents.isNotEmpty()) contentDao?.saveContents(newContents)
+                    if (newContents.isNotEmpty()) {
+                        contentDao?.saveContents(newContents)
+                        newContents.map { it.path }.chunked(DELETE_CHUNK_SIZE).forEach { linkDao?.deleteBySources(it) }
+                        if (newLinks.isNotEmpty()) linkDao?.insertAll(newLinks)
+                    }
                     // Clear stale embeddings for files whose content SHA changed.
                     changedFiles.filter { it.path in dbPaths }.forEach { changed ->
                         embeddingDao?.deleteByFileId(changed.path)
@@ -241,6 +250,7 @@ class VaultDiscoveryRepository @Inject constructor(
                 toDelete.chunked(DELETE_CHUNK_SIZE).forEach { chunk ->
                     fileDao.deleteFiles(chunk)
                     contentDao?.deleteContents(chunk)
+                    linkDao?.deleteBySources(chunk)
                 }
             }
         }
@@ -265,17 +275,27 @@ class VaultDiscoveryRepository @Inject constructor(
         // Lightweight update for single file
         val file = File(rootDir, path)
         val contentDao = runCatching { database.fileContentDao() }.getOrNull()
+        val linkDao = runCatching { database.linkDao() }.getOrNull()
         if (file.exists()) {
             val (entity, contentEntity) = createFileEntityWithContent(file, path)
             fileDao.insertFile(entity) // Upsert (does not cascade-delete embeddings)
             if (contentEntity != null) {
                 contentDao?.saveContent(contentEntity)
+                val links = linksOf(path, contentEntity.content)
+                linkDao?.deleteBySources(listOf(path))
+                if (links.isNotEmpty()) linkDao?.insertAll(links)
             }
         } else {
             fileDao.deleteFiles(listOf(path))
             contentDao?.deleteContents(listOf(path))
+            linkDao?.deleteBySources(listOf(path))
         }
     }
+
+    private fun linksOf(path: String, content: String): List<LinkEntity> =
+        LinkExtractor.extract(content).map {
+            LinkEntity(source = path, target = it.target, targetKey = it.targetKey, kind = it.kind, line = it.line, context = it.context)
+        }
 
     private fun createFileEntityWithContent(
         file: File,
