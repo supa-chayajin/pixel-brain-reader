@@ -33,7 +33,7 @@ Unless a path starts with `app/` or `documentation/`, it is relative to
 ## Checklist
 
 ### A — Foundations
-- [ ] **A1** Vault schema in code: folder → type → default status, an R1-compliant frontmatter
+- [x] **A1** Vault schema in code: folder → type → default status, an R1-compliant frontmatter
       builder, a surgical frontmatter line editor. Voice captures and web imports use them (E7).
 - [ ] **A2** Full-text index (roadmap 2.1): Room FTS4 over `file_contents`, accent-insensitive,
       BM25 ranking. Replaces the `LIKE` search.

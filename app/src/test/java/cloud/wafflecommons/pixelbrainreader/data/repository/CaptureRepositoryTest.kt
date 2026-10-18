@@ -51,7 +51,14 @@ class CaptureRepositoryTest {
     fun `the note keeps the transcript and lists tasks without checkboxes`() {
         val md = CaptureRepository.renderVoiceNote(capturedAt, compiled)
 
-        assertTrue(md.startsWith("---\ncaptured: 2026-10-17T14:32\nsource: voice\n"))
+        // The vault's standard frontmatter (R1, in order), then the capture's own keys.
+        assertTrue(
+            md.startsWith(
+                "---\ntitle: \"Voice note 2026-10-17 14:32\"\ndate_created: '2026-10-17'\n" +
+                    "date_updated: '2026-10-17'\ntype: inbox\nstatus: 📥 inbox\ntags:\n  - inbox\n  - voice\n" +
+                    "aliases: []\nsource: voice\ncaptured: '2026-10-17T14:32'\n---\n\n# Voice note 2026-10-17 14:32\n"
+            )
+        )
         assertTrue(md.contains("- Penser au projet"))
         assertTrue(md.contains("## Added to the day's tasks\n\n- Acheter du pain\n"))
         // A second checkbox would be a second place to tick the task (and earn XP twice).

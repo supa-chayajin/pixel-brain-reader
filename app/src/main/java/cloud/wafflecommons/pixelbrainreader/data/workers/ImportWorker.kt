@@ -11,6 +11,7 @@ import cloud.wafflecommons.pixelbrainreader.data.repository.FileRepository
 import cloud.wafflecommons.pixelbrainreader.data.sync.VaultPushScheduler
 import cloud.wafflecommons.pixelbrainreader.data.utils.BlockedAddressException
 import cloud.wafflecommons.pixelbrainreader.data.utils.SafeWebFetcher
+import cloud.wafflecommons.pixelbrainreader.data.vault.VaultSchema
 import com.vladsch.flexmark.html2md.converter.FlexmarkHtmlConverter
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
@@ -176,23 +177,27 @@ class ImportWorker @AssistedInject constructor(
             .replace(Regex("[ \\t]+\\n"), "\n")
             .trim()
 
-    private fun sanitizeYamlScalar(raw: String): String =
-        raw.replace("\r", " ").replace("\n", " ").replace("\"", "'").trim()
-
     private fun buildNote(meta: ArticleMeta, summary: String?, body: String): String {
         val today = java.time.LocalDate.now()
-        val yamlTitle = sanitizeYamlScalar(meta.title)
         val sb = StringBuilder()
 
-        // Frontmatter
-        sb.append("---\n")
-        sb.append("title: \"$yamlTitle\"\n")
-        sb.append("source: \"${sanitizeYamlScalar(meta.url)}\"\n")
-        meta.author?.let { sb.append("author: \"${sanitizeYamlScalar(it)}\"\n") }
-        meta.published?.let { sb.append("published: \"${sanitizeYamlScalar(it)}\"\n") }
-        sb.append("captured: $today\n")
-        sb.append("tags: [clipping, web]\n")
-        sb.append("---\n\n")
+        // Frontmatter: the vault's standard keys first (the desktop linter checks them), then the
+        // clipping's own metadata.
+        sb.append(
+            VaultSchema.frontmatter(
+                title = meta.title,
+                path = "${VaultSchema.INBOX_FOLDER}/clipping.md",
+                date = today,
+                tags = listOf("clipping", "web"),
+                extra = buildList {
+                    add("source" to VaultSchema.doubleQuoted(meta.url))
+                    meta.author?.let { add("author" to VaultSchema.doubleQuoted(it)) }
+                    meta.published?.let { add("published" to VaultSchema.doubleQuoted(it)) }
+                    add("captured" to VaultSchema.singleQuoted(today.toString()))
+                }
+            )
+        )
+        sb.append('\n')
 
         // Title
         sb.append("# ${meta.title.replace("\r", " ").replace("\n", " ").trim()}\n\n")

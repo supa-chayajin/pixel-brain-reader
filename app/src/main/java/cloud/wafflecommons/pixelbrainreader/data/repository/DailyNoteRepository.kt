@@ -31,19 +31,10 @@ class DailyNoteRepository @Inject constructor(
     companion object {
         private const val JOURNAL_ROOT = "10_Journal"
         private const val TEMPLATE_PATH = "99_System/Templates/T_Daily_Journal.md"
+        // Daily notes carry only `date:` (the vault's rule R2); the old title/type/status keys
+        // were flagged by its linter on every day the app created.
         private const val DEFAULT_TEMPLATE = """---
-title: {{date}}
 date: {{date}}
-updated: {{date}}
-type: system
-status: active
-tags:
-  - journal
-  - log
-  - daily
-  - system
-summary: "Don't you dare go hollow, my friend."
-links: []
 ---
 
 # 📅 {{date}}
