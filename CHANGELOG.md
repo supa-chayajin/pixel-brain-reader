@@ -45,6 +45,12 @@ Work toward **11.0.0** — the work-direction and dev/lead toolkit release (plan
   material for the review. An objective with no progress for three weeks is flagged. A weekly
   protected slot (day, start, length) sends a nudge when it starts — what is due within two weeks
   and what stalled — never outside Work mode.
+- **Meetings & next actions** (Work hub). "New meeting" writes a French meeting note (agenda,
+  notes, decisions, actions; its length in `duration_min`) to a meetings folder, by default
+  `Réunions` in your first work folder. A meeting's decisions go to the mission log in one tap,
+  never twice. Every `- [ ] @moi …` line in the vault is one of your next actions, soonest due
+  first, ticked from the app. A week-by-week table shows meetings (and their time when
+  recorded), requests and off-ticket time.
 - **Modes: Work, Personal, Off.** A chip on the Daily screen and a Quick Settings tile switch
   modes. Outside Work mode, the folders marked as work disappear from the file list, search, AI
   answers and resurfaced notes; Off is for evenings, weekends and leave. A schedule (work days

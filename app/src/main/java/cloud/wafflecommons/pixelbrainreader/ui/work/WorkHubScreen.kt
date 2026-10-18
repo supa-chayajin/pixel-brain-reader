@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.automirrored.rounded.EventNote
 import androidx.compose.material.icons.rounded.BeachAccess
 import androidx.compose.material.icons.rounded.Flag
+import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.Summarize
 import androidx.compose.material.icons.rounded.ViewKanban
 import androidx.compose.material3.FilledTonalButton
@@ -107,6 +108,12 @@ fun WorkHubScreen(
             icon = Icons.Rounded.ViewKanban,
             subtitle = "Any folder as a board on the vault's statuses, with next steps, blockers and target dates.",
             onClick = { onOpen(cloud.wafflecommons.pixelbrainreader.ui.main.V11Routes.BOARDS) }
+        )
+        HubCard(
+            title = "Meetings & next actions",
+            icon = Icons.Rounded.Groups,
+            subtitle = "Meeting notes with decisions and actions; your @moi actions from every note; the weekly load.",
+            onClick = { onOpen(cloud.wafflecommons.pixelbrainreader.ui.main.V11Routes.MEETINGS) }
         )
         HubCard(
             title = "Objectives",

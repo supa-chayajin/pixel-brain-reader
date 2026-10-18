@@ -11,7 +11,9 @@ import cloud.wafflecommons.pixelbrainreader.ui.work.BoardScreen
 import cloud.wafflecommons.pixelbrainreader.ui.work.BoardsScreen
 import cloud.wafflecommons.pixelbrainreader.ui.work.EvidenceScreen
 import cloud.wafflecommons.pixelbrainreader.ui.work.LeaveScreen
+import cloud.wafflecommons.pixelbrainreader.ui.work.MeetingsScreen
 import cloud.wafflecommons.pixelbrainreader.ui.work.MissionLogScreen
+import cloud.wafflecommons.pixelbrainreader.ui.work.NextActionsScreen
 import cloud.wafflecommons.pixelbrainreader.ui.work.ObjectivesScreen
 import cloud.wafflecommons.pixelbrainreader.ui.work.WorkHubScreen
 
@@ -24,6 +26,8 @@ object V11Routes {
     const val EVIDENCE = "evidence"
     const val BOARDS = "boards"
     const val OBJECTIVES = "objectives"
+    const val MEETINGS = "meetings"
+    const val NEXT_ACTIONS = "next_actions"
     const val BOARD = "board?folder={folder}"
 
     fun board(folder: String) = "board?folder=" + android.net.Uri.encode(folder)
@@ -56,6 +60,16 @@ fun NavGraphBuilder.v11Destinations(navController: NavHostController, openNote: 
             onBack = { navController.popBackStack() },
             onOpenNote = openNote
         )
+    }
+    composable(V11Routes.MEETINGS) {
+        MeetingsScreen(
+            onBack = { navController.popBackStack() },
+            onOpenNote = openNote,
+            onOpenActions = { navController.navigate(V11Routes.NEXT_ACTIONS) }
+        )
+    }
+    composable(V11Routes.NEXT_ACTIONS) {
+        NextActionsScreen(onBack = { navController.popBackStack() }, onOpenNote = openNote)
     }
     composable(V11Routes.OBJECTIVES) {
         ObjectivesScreen(onBack = { navController.popBackStack() }, onOpenNote = openNote)
