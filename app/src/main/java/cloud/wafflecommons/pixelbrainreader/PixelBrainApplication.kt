@@ -43,6 +43,7 @@ class PixelBrainApplication : Application(), Configuration.Provider {
     @Inject lateinit var syncOrchestrator: dagger.Lazy<SyncOrchestrator>
     @Inject lateinit var widgetUpdateManager: dagger.Lazy<WidgetUpdateManager>
     @Inject lateinit var foregroundRefresher: dagger.Lazy<ForegroundRefresher>
+    @Inject lateinit var objectiveRepository: dagger.Lazy<cloud.wafflecommons.pixelbrainreader.data.work.ObjectiveRepository>
 
     /** Application-scoped coroutine scope — survives Activity recreation. */
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -78,6 +79,7 @@ class PixelBrainApplication : Application(), Configuration.Provider {
         // (Re)schedule reminder notifications from the saved preferences. Also
         // creates the notification channels. Cheap; runs off the main thread.
         appScope.launch { safely("Reminder scheduling") { reminderScheduler.get().reschedule() } }
+        appScope.launch { safely("Objectives slot scheduling") { objectiveRepository.get().scheduleSlot() } }
     }
 
     /**

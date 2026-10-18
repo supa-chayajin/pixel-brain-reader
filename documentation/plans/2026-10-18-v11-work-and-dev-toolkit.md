@@ -61,7 +61,7 @@ Unless a path starts with `app/` or `documentation/`, it is relative to
 - [x] **B3** Evidence report (#2): monthly / quarterly draft from the log.
 - [x] **B4** Boards (#4, E3): any folder as a board on the vault's status vocabulary; moving a card
       rewrites `status` + `date_updated` only; next step / blockers / target date; synthesis export.
-- [ ] **B5** Objectives tracker (#5): objective notes with milestones, a weekly protected slot,
+- [x] **B5** Objectives tracker (#5): objective notes with milestones, a weekly protected slot,
       nudges, tagged log entries as material.
 - [ ] **B6** Meetings & requests (#6): meeting notes with decisions and owned actions; my actions
       become next actions; workload metrics.

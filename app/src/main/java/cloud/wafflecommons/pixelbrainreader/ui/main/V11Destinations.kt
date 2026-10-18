@@ -12,6 +12,7 @@ import cloud.wafflecommons.pixelbrainreader.ui.work.BoardsScreen
 import cloud.wafflecommons.pixelbrainreader.ui.work.EvidenceScreen
 import cloud.wafflecommons.pixelbrainreader.ui.work.LeaveScreen
 import cloud.wafflecommons.pixelbrainreader.ui.work.MissionLogScreen
+import cloud.wafflecommons.pixelbrainreader.ui.work.ObjectivesScreen
 import cloud.wafflecommons.pixelbrainreader.ui.work.WorkHubScreen
 
 /** Routes added in v11, kept out of MainScreen's NavHost body. */
@@ -22,6 +23,7 @@ object V11Routes {
     const val LEAVE = "leave"
     const val EVIDENCE = "evidence"
     const val BOARDS = "boards"
+    const val OBJECTIVES = "objectives"
     const val BOARD = "board?folder={folder}"
 
     fun board(folder: String) = "board?folder=" + android.net.Uri.encode(folder)
@@ -54,6 +56,9 @@ fun NavGraphBuilder.v11Destinations(navController: NavHostController, openNote: 
             onBack = { navController.popBackStack() },
             onOpenNote = openNote
         )
+    }
+    composable(V11Routes.OBJECTIVES) {
+        ObjectivesScreen(onBack = { navController.popBackStack() }, onOpenNote = openNote)
     }
     composable(V11Routes.EVIDENCE) {
         EvidenceScreen(onBack = { navController.popBackStack() }, onOpenNote = openNote)
