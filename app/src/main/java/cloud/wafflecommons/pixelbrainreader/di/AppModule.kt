@@ -1,5 +1,7 @@
 package cloud.wafflecommons.pixelbrainreader.di
 
+import cloud.wafflecommons.pixelbrainreader.data.guard.CommitGuard
+import cloud.wafflecommons.pixelbrainreader.data.guard.ConfidentialityGuard
 import com.google.gson.Gson
 import dagger.Module
 import dagger.Provides
@@ -32,4 +34,8 @@ object AppModule {
     @Singleton
     @ApplicationScope
     fun provideApplicationScope(): CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    /** Every commit goes through the confidentiality guard. */
+    @Provides
+    fun provideCommitGuard(guard: ConfidentialityGuard): CommitGuard = guard
 }

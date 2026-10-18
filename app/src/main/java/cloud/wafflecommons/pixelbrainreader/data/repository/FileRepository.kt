@@ -2,6 +2,7 @@ package cloud.wafflecommons.pixelbrainreader.data.repository
 
 import android.content.Context
 import android.util.Log
+import cloud.wafflecommons.pixelbrainreader.data.guard.CommitHeldException
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.FileEntity
 import cloud.wafflecommons.pixelbrainreader.data.remote.GitCommitDto
 import cloud.wafflecommons.pixelbrainreader.data.remote.JGitProvider
@@ -85,9 +86,11 @@ class FileRepository @Inject constructor(
                return@withLock Result.failure(error)
            }
 
-           // 2. Commit (commit() stages everything itself)
+           // 2. Commit (commit() stages everything itself). A commit held by the confidentiality
+           // guard stops here: the edits stay staged, so the rebase couldn't run anyway.
            _syncStatus.value = "Committing locally…"
-           jGitProvider.commit("Auto-sync")
+           val held = jGitProvider.commit("Auto-sync").exceptionOrNull() as? CommitHeldException
+           if (held != null) return@withLock Result.failure(held)
 
            // 3. Pull
            _syncStatus.value = SyncStep.PULLING.label
@@ -163,7 +166,10 @@ class FileRepository @Inject constructor(
     suspend fun resolveLink(targetPath: String): FileEntity? =
         vaultDiscoveryRepository.resolveLink(targetPath)
 
-    /** Commit + push, WITHOUT pulling (callers that must not bring remote changes in). */
+    /**
+     * Commit + push, WITHOUT pulling (callers that must not bring remote changes in). A commit held
+     * by the confidentiality guard doesn't stop the push: the commits already recorded passed it.
+     */
     suspend fun pushDirtyFiles(owner: String, repo: String, message: String? = null): Result<Unit> {
         jGitProvider.commit(message ?: "Auto-sync")
         return jGitProvider.push()

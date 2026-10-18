@@ -15,9 +15,10 @@ import androidx.core.graphics.drawable.toBitmap
 import cloud.wafflecommons.pixelbrainreader.MainActivity
 import cloud.wafflecommons.pixelbrainreader.R
 import cloud.wafflecommons.pixelbrainreader.ui.privatevault.PrivateJournalActivity
+import cloud.wafflecommons.pixelbrainreader.widget.ui.WidgetNav
 
 /**
- * Single home for reminder notifications (Phase 3). Stateless object — callers
+ * Single home for the app's notifications: reminders (Phase 3) and sync alerts. Stateless object — callers
  * (the reminder workers) pass a Context. Channels are created lazily/idempotently
  * before every post so we never depend on init order.
  */
@@ -25,12 +26,14 @@ object NotificationHelper {
 
     const val CHANNEL_VAULT = "reminder_vault"
     const val CHANNEL_CHORES = "reminder_chores_habits"
+    const val CHANNEL_SYNC = "sync_alerts"
 
     // Groups both reminder channels under one "Reminders" category in system settings.
     private const val GROUP_REMINDERS = "reminders"
 
     private const val NOTIF_VAULT = 2001
     private const val NOTIF_CHORES = 2002
+    private const val NOTIF_GUARD = 2003
 
     fun ensureChannels(context: Context) {
         val nm = context.getSystemService(NotificationManager::class.java) ?: return
@@ -55,6 +58,15 @@ object NotificationHelper {
             ).apply {
                 description = "Reminders for due chores and unfinished habits"
                 group = GROUP_REMINDERS
+            }
+        )
+        nm.createNotificationChannel(
+            NotificationChannel(
+                CHANNEL_SYNC,
+                "Sync alerts",
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = "Changes held back before they reach your git remote"
             }
         )
     }
@@ -83,6 +95,31 @@ object NotificationHelper {
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setContentIntent(activityPending(context, 1, intent))
         notify(context, NOTIF_CHORES, builder)
+    }
+
+    /**
+     * The confidentiality guard held a commit. Counts only: the lock screen must never show what
+     * was found. Deep-links to the review screen.
+     */
+    fun postGuardHold(context: Context, items: Int, notes: Int) {
+        ensureChannels(context)
+        val intent = WidgetNav.openIntent(context, WidgetNav.SCREEN_CONFIDENTIALITY)
+        val what = if (items == 1) "1 item" else "$items items"
+        val where = if (notes == 1) "1 note" else "$notes notes"
+        val builder = baseBuilder(
+            context,
+            CHANNEL_SYNC,
+            title = "Sync held",
+            text = "$what in $where to review before your notes can sync."
+        )
+            .setCategory(NotificationCompat.CATEGORY_ERROR)
+            .setOnlyAlertOnce(true)
+            .setContentIntent(activityPending(context, 2, intent))
+        notify(context, NOTIF_GUARD, builder)
+    }
+
+    fun cancelGuardHold(context: Context) {
+        NotificationManagerCompat.from(context).cancel(NOTIF_GUARD)
     }
 
     private fun baseBuilder(context: Context, channel: String, title: String, text: String) =

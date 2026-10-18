@@ -1,5 +1,8 @@
 package cloud.wafflecommons.pixelbrainreader.data.sync
 
+import cloud.wafflecommons.pixelbrainreader.data.guard.CommitHeldException
+import cloud.wafflecommons.pixelbrainreader.data.guard.FindingKind
+import cloud.wafflecommons.pixelbrainreader.data.guard.GuardFinding
 import cloud.wafflecommons.pixelbrainreader.data.remote.JGitProvider
 import cloud.wafflecommons.pixelbrainreader.data.remote.SyncResult
 import cloud.wafflecommons.pixelbrainreader.data.repository.DailyDashboardRepository
@@ -112,6 +115,33 @@ class SyncOrchestratorTest {
         assertTrue(orchestrator.syncState.value is SyncState.Error)
         coVerify(exactly = 0) { jGit.push() } // don't push into a diverged history
     }
+
+    @Test
+    fun `a commit held by the confidentiality guard stops the cycle before the pull`() = runBlocking {
+        coEvery { jGit.commit(any()) } returns Result.failure(CommitHeldException(listOf(heldFinding)))
+
+        val ran = orchestrator.executeFullSyncCycle(force = true)
+
+        assertFalse(ran)
+        val state = orchestrator.syncState.value
+        assertTrue(state is SyncState.Error && state.message.startsWith("Sync held"))
+        coVerify(exactly = 0) { jGit.pull() }
+        coVerify(exactly = 0) { jGit.push() }
+    }
+
+    @Test
+    fun `a hold on the final commit still pushes what passed, then reports the hold`() = runBlocking {
+        coEvery { jGit.commit("Auto-sync: lifecycle foreground cycle") } returns
+            Result.failure(CommitHeldException(listOf(heldFinding)))
+
+        val ran = orchestrator.executeFullSyncCycle(force = true)
+
+        assertFalse(ran)
+        assertTrue(orchestrator.syncState.value is SyncState.Error)
+        coVerify(exactly = 1) { jGit.push() }
+    }
+
+    private val heldFinding = GuardFinding("00_Inbox/x.md", FindingKind.SECRET, "secret:aws:0", "AWS access key", 1, "AKIA…")
 
     @Test
     fun `cancellation propagates instead of being swallowed into Error`() {

@@ -2,6 +2,7 @@ package cloud.wafflecommons.pixelbrainreader.data.sync
 
 import android.util.Log
 import cloud.wafflecommons.pixelbrainreader.data.gamification.GamificationRepository
+import cloud.wafflecommons.pixelbrainreader.data.guard.CommitHeldException
 import cloud.wafflecommons.pixelbrainreader.data.remote.JGitProvider
 import cloud.wafflecommons.pixelbrainreader.data.remote.SyncResult
 import cloud.wafflecommons.pixelbrainreader.data.repository.ChoreRepository
@@ -185,9 +186,21 @@ class SyncOrchestrator @Inject constructor(
 
         // Phase 0: Commit any pending local edits BEFORE the pull. JGit's rebase requires a
         // clean working tree; commit() self-stages and is a no-op when nothing changed.
+        // A commit held by the confidentiality guard stops the cycle here: the edits stay staged,
+        // so the rebase couldn't run anyway, and the user has something to review.
         Log.i(TAG, "Phase 0: Pre-pull commit of local edits...")
-        jGitProvider.commit("Auto-sync: local edits before pull")
-            .onFailure { if (it is CancellationException) throw it; Log.w(TAG, "Phase 0: Pre-pull commit failed (non-fatal)", it) }
+        val preCommit = jGitProvider.commit("Auto-sync: local edits before pull")
+        when (val failure = preCommit.exceptionOrNull()) {
+            null -> Unit
+            is CancellationException -> throw failure
+            is CommitHeldException -> {
+                Log.w(TAG, "Phase 0: commit held by the confidentiality guard; sync stopped before the pull")
+                _syncState.value = SyncState.Error(failure.message.orEmpty())
+                lastSyncTimestamp = System.currentTimeMillis()
+                return false
+            }
+            else -> Log.w(TAG, "Phase 0: Pre-pull commit failed (non-fatal)", failure)
+        }
 
         // Phase 1: Git Pull (Rebase)
         Log.i(TAG, "Phase 1: Pull (rebase)...")
@@ -264,8 +277,11 @@ class SyncOrchestrator @Inject constructor(
         // Phase 3: Commit + Push (commit() stages everything itself)
         _syncState.value = SyncState.Syncing(SyncStep.PUSHING)
         Log.i(TAG, "Phase 3: Commit/Push...")
+        // What the middle phases wrote can be held too; the commits already recorded passed the
+        // guard, so they are still pushed, and the cycle ends on the hold instead of Success.
+        var held: CommitHeldException? = null
         try {
-            jGitProvider.commit("Auto-sync: lifecycle foreground cycle")
+            held = jGitProvider.commit("Auto-sync: lifecycle foreground cycle").exceptionOrNull() as? CommitHeldException
             val pushResult = jGitProvider.push()
             if (pushResult.isSuccess) {
                 Log.i(TAG, "Phase 3: Push OK")
@@ -298,9 +314,14 @@ class SyncOrchestrator @Inject constructor(
         Log.i(TAG, "Phase 4: Inline vault JSON → Room reconcile...")
         reconcileVaultIntoRoom()
 
+        lastSyncTimestamp = System.currentTimeMillis()
+        if (held != null) {
+            Log.w(TAG, "=== Sync Cycle Complete, new changes held by the confidentiality guard ===")
+            _syncState.value = SyncState.Error(held.message.orEmpty())
+            return false
+        }
         Log.i(TAG, "=== Full Sync Cycle Complete ===")
         _syncState.value = SyncState.Success
-        lastSyncTimestamp = System.currentTimeMillis()
         return true
     }
 

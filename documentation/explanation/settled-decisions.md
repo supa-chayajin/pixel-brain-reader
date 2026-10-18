@@ -102,3 +102,14 @@ one — until the owner explicitly decides to go public. Publishing releases on 
 
 *Why:* the app is a personal, dogfooded tool for now; going public is a deliberate decision,
 not something to drift into.
+
+## 14. The confidentiality deny-list stays on the device
+
+The protected names (clients, employers, people) and the guard's exceptions live in
+encrypted preferences on the phone — never in the vault, never in this repository, never
+in a commit message. Every commit goes through the guard (`CommitGuard`), and a finding
+holds the commit (fail-closed) until the user reviews it.
+
+*Why:* the vault is pushed to a git remote and this repository is public. A deny-list
+written to either would publish the very names it protects; the work rule is "no client
+data in any external tool".

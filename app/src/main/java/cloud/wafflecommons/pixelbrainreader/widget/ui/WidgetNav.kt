@@ -34,6 +34,7 @@ object WidgetNav {
     const val SCREEN_JOURNAL = "journal"
     const val SCREEN_SETTINGS = "settings"
     const val SCREEN_MODES = "modes"
+    const val SCREEN_CONFIDENTIALITY = "confidentiality"
 
     /** Maps a public screen key to the internal NavHost route, or null if unknown (→ reject). */
     fun screenToRoute(screen: String?): String? = when (screen?.lowercase()?.trim()) {
@@ -46,6 +47,7 @@ object WidgetNav {
         SCREEN_JOURNAL -> "home"
         SCREEN_SETTINGS -> "settings"
         SCREEN_MODES -> "modes_settings"
+        SCREEN_CONFIDENTIALITY -> "confidentiality"
         else -> null
     }
 

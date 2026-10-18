@@ -41,7 +41,7 @@ Unless a path starts with `app/` or `documentation/`, it is relative to
 - [x] **A4** Modes (N1): Work / Personal / Off, a schedule, leave periods, key dates, screen-share
       safe; one visibility policy applied to lists, search, AI search, echoes, health/mood cards,
       widgets and notifications; a Quick Settings tile.
-- [ ] **A5** Confidentiality guard (#8, E9): on-device deny-list + secret patterns, checked on the
+- [x] **A5** Confidentiality guard (#8, E9): on-device deny-list + secret patterns, checked on the
       staged diff before every commit; a hit holds the commit (fail-closed) until reviewed.
 - [ ] **A6** Recovery signals (E8): HRV, resting heart rate, sleep stages from Health Connect.
 - [ ] **A7** Code-aware chunking (E9): code blocks are their own chunks, labelled with their
@@ -87,5 +87,5 @@ Unless a path starts with `app/` or `documentation/`, it is relative to
 
 ### D — Release 11.0.0
 - [ ] **D1** `versionCode 1100` / `versionName "11.0.0"`, CHANGELOG section, CLAUDE.md facts,
-      settled decision #14 (deny-list stays on the device), lint 0/0, tests, `assembleRelease`,
+      settled decision #14 (deny-list on the device — added with A5), lint 0/0, tests, `assembleRelease`,
       instrumented tests compile; an emulator run before calling it a release candidate.

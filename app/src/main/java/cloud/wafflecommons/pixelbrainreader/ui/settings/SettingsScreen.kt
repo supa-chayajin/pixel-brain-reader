@@ -53,6 +53,7 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.widget.Toast
 import androidx.compose.material.icons.rounded.CleaningServices
+import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.Work
 import androidx.compose.material.icons.rounded.DateRange
 import androidx.compose.material.icons.rounded.Mood
@@ -81,6 +82,7 @@ fun SettingsScreen(
     onNavigateToHomeConfig: () -> Unit = {},
     onNavigateToReminders: () -> Unit = {},
     onNavigateToModes: () -> Unit = {},
+    onNavigateToConfidentiality: () -> Unit = {},
     onNavigateToNavBarReorder: () -> Unit = {},
     onNavigateToMoodTags: () -> Unit = {},
     onNavigateToGamificationSettings: () -> Unit = {},
@@ -494,6 +496,16 @@ fun SettingsScreen(
                     leadingContent = { Icon(Icons.Rounded.Work, contentDescription = null) }
                 ) {
                     Text("Modes: work, personal, off")
+                }
+
+                ListItem(
+                    modifier = Modifier.clickable {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onNavigateToConfidentiality()
+                    },
+                    leadingContent = { Icon(Icons.Rounded.Shield, contentDescription = null) }
+                ) {
+                    Text("Confidentiality guard")
                 }
 
                 ListItem(

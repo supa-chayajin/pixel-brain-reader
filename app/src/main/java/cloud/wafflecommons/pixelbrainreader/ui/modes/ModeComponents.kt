@@ -1,6 +1,5 @@
 package cloud.wafflecommons.pixelbrainreader.ui.modes
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -161,17 +160,5 @@ fun CountdownCard(countdowns: List<KeyDateCountdown>, modifier: Modifier = Modif
                 )
             }
         }
-    }
-}
-
-/** Rows of "label — dates" with a remove button, for the settings lists. */
-@Composable
-internal fun RemovableRow(title: String, subtitle: String, onRemove: () -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        TextButton(onClick = onRemove) { Text("Remove") }
     }
 }

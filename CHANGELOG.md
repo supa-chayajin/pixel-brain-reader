@@ -21,6 +21,18 @@ Work toward **11.0.0** — the work-direction and dev/lead toolkit release (plan
   turned off. Key dates get a countdown card on the Daily screen; work dates hide outside Work
   mode. The configuration lives in the vault (`10_Journal/system/context_modes.json`) so it
   syncs; the manual choice stays on the device. Settings → Modes.
+- **Confidentiality guard.** Before every commit, what the change adds is checked against a
+  list of protected names (clients, employers, people) and against secret formats (GitHub,
+  GitLab, AWS, Google, Slack, Stripe and AI-provider keys, private keys, JSON Web Tokens,
+  passwords in URLs, generated-looking `password=`/`token=` values). A finding holds the
+  commit (fail-closed): nothing is recorded or pushed, the sync stops before the pull with
+  "Sync held", and a notification and a Daily banner (counts only) lead to the review screen,
+  where each finding can be opened, moved to the private vault (encrypted, clear copy deleted)
+  or allowed in its note or folder. Only additions count: what is already committed never holds
+  a later edit. Names match as whole words, ignoring case and accents, in text and new file
+  names; a commit message that would name one gets a neutral message. The protected names and
+  exceptions stay on the device in encrypted preferences — never in the vault, which would push
+  them. Settings → Confidentiality guard.
 
 ### Changed
 

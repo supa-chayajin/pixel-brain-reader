@@ -146,6 +146,20 @@ fun EmptyHint(text: String, modifier: Modifier = Modifier) {
     )
 }
 
+/** A row with a title, an optional subtitle and a remove button, for the settings lists. */
+@Composable
+fun RemovableRow(title: String, subtitle: String?, onRemove: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            if (subtitle != null) {
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        TextButton(onClick = onRemove) { Text("Remove") }
+    }
+}
+
 /** Material 3 time picker in a dialog; returns "HH:mm". */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
