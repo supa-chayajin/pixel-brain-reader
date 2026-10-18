@@ -22,6 +22,7 @@ import cloud.wafflecommons.pixelbrainreader.data.local.entity.ChoreEntity
         SyncMetadataEntity::class, 
         FileContentEntity::class,
         cloud.wafflecommons.pixelbrainreader.data.local.entity.FileContentFtsEntity::class, // v11 full-text index
+        cloud.wafflecommons.pixelbrainreader.data.local.entity.LinkEntity::class, // v11 links index
         EmbeddingEntity::class, // V4.0 Neural Vault
         cloud.wafflecommons.pixelbrainreader.data.local.entity.NewsArticleEntity::class, // V4.2 Neural Briefing
         cloud.wafflecommons.pixelbrainreader.data.local.entity.MoodEntity::class,
@@ -38,7 +39,7 @@ import cloud.wafflecommons.pixelbrainreader.data.local.entity.ChoreEntity
         ChoreEntity::class, // V4.6 Home OS
         cloud.wafflecommons.pixelbrainreader.data.local.entity.ChatMessageEntity::class // Nano chat memory (RAG + CREATIVE)
     ],
-    version = 30, // file_contents_fts (full-text search)
+    version = 31, // links (backlinks / dead links)
     exportSchema = false
 )
 @androidx.room.TypeConverters(RoomTypeConverters::class)
@@ -47,6 +48,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun metadataDao(): SyncMetadataDao
     abstract fun fileContentDao(): FileContentDao
     abstract fun fileSearchDao(): cloud.wafflecommons.pixelbrainreader.data.local.dao.FileSearchDao
+    abstract fun linkDao(): cloud.wafflecommons.pixelbrainreader.data.local.dao.LinkDao
     abstract fun embeddingDao(): EmbeddingDao
     abstract fun newsDao(): NewsDao
     abstract fun moodDao(): cloud.wafflecommons.pixelbrainreader.data.local.dao.MoodDao
