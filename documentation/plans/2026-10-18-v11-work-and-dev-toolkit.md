@@ -45,7 +45,7 @@ Unless a path starts with `app/` or `documentation/`, it is relative to
       (B5 nudges, C10 reminders) must check `Visibility.muteWorkNotifications`.)*
 - [x] **A5** Confidentiality guard (#8, E9): on-device deny-list + secret patterns, checked on the
       staged diff before every commit; a hit holds the commit (fail-closed) until reviewed.
-- [ ] **A6** Recovery signals (E8): HRV, resting heart rate, sleep stages from Health Connect.
+- [x] **A6** Recovery signals (E8): HRV, resting heart rate, sleep stages from Health Connect.
 - [ ] **A7** Code-aware chunking (E9): code blocks are their own chunks, labelled with their
       language; people notes are never embedded.
 - [ ] **A8** First-seen times in the git history walk (for N11).

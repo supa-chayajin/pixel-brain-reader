@@ -33,6 +33,14 @@ Work toward **11.0.0** — the work-direction and dev/lead toolkit release (plan
   names; a commit message that would name one gets a neutral message. The protected names and
   exceptions stay on the device in encrypted preferences — never in the vault, which would push
   them. Settings → Confidentiality guard.
+- **Recovery on Life Stats.** Resting heart rate, heart rate variability (RMSSD) and sleep stages
+  are read from Health Connect and saved with each day's health metrics. A Recovery card compares
+  last night with your own previous 28 nights: in range, below your usual recovery (HRV more than
+  one standard deviation under your norm, or resting heart rate more than one above), or better
+  recovered than usual; deep / REM / light / awake time shows as a bar. The baseline needs seven
+  measured nights, and nothing is estimated: a missing signal reads "not measured". The two new
+  Health Connect grants are asked for from the card; Health Connect still counts as connected
+  without them.
 
 ### Changed
 

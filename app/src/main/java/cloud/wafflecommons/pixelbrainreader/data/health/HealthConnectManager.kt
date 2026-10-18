@@ -6,6 +6,8 @@ import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.feature.ExperimentalMindfulnessSessionApi
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.HeartRateRecord
+import androidx.health.connect.client.records.HeartRateVariabilityRmssdRecord
+import androidx.health.connect.client.records.RestingHeartRateRecord
 import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.HydrationRecord
@@ -43,7 +45,14 @@ data class DailyHealthMetrics(
     val caloriesConsumed: Double = 0.0,
     val caloriesBurned: Double = 0.0,
     val mindfulnessMinutes: Long = 0L,
-    val weight: Double = 0.0
+    val weight: Double = 0.0,
+    // Recovery signals (v11). 0 = not measured.
+    val restingHeartRate: Int = 0,
+    val hrvRmssdMs: Double = 0.0,
+    val sleepDeepMinutes: Long = 0L,
+    val sleepRemMinutes: Long = 0L,
+    val sleepLightMinutes: Long = 0L,
+    val sleepAwakeMinutes: Long = 0L
 )
 
 @Singleton
@@ -133,17 +142,20 @@ class HealthConnectManager @Inject constructor(
             }
         }
 
-        // 2. Read Sleep Sessions
+        // 2. Read Sleep Sessions (duration, and the stages when the device records them)
         var sleepDurationMinutes = 0L
+        var sleepStages = SleepStages()
         if (granted.contains(HealthPermission.getReadPermission(SleepSessionRecord::class))) {
             try {
                 val sleepRequest = ReadRecordsRequest(SleepSessionRecord::class, sleepFilter)
                 val sleepResponse = healthConnectClient.readRecords(sleepRequest)
-                sleepDurationMinutes = sleepResponse.records.filter { 
-                    it.endTime.atZone(zoneId).toLocalDate() == date 
-                }.sumOf {
+                val nightSessions = sleepResponse.records.filter {
+                    it.endTime.atZone(zoneId).toLocalDate() == date
+                }
+                sleepDurationMinutes = nightSessions.sumOf {
                     Duration.between(it.startTime, it.endTime).toMinutes()
                 }
+                sleepStages = nightSessions.fold(SleepStages()) { acc, session -> acc + stagesOf(session) }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -164,6 +176,32 @@ class HealthConnectManager @Inject constructor(
                 throw e
             } catch (e: Exception) {
                 Log.e("HealthConnectManager", "Failed to read heart rate", e)
+            }
+        }
+
+        // 3b. Recovery: resting heart rate over the day, HRV (RMSSD) over the night's sleep window.
+        var restingHeartRate = 0
+        if (granted.contains(HealthPermission.getReadPermission(RestingHeartRateRecord::class))) {
+            try {
+                val resting = healthConnectClient.aggregate(
+                    AggregateRequest(metrics = setOf(RestingHeartRateRecord.BPM_AVG), timeRangeFilter = timeRangeFilter)
+                )
+                restingHeartRate = resting[RestingHeartRateRecord.BPM_AVG]?.toInt() ?: 0
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e("HealthConnectManager", "Failed to read resting heart rate", e)
+            }
+        }
+        var hrvRmssdMs = 0.0
+        if (granted.contains(HealthPermission.getReadPermission(HeartRateVariabilityRmssdRecord::class))) {
+            try {
+                val hrv = healthConnectClient.readRecords(ReadRecordsRequest(HeartRateVariabilityRmssdRecord::class, sleepFilter))
+                hrvRmssdMs = hrv.records.map { it.heartRateVariabilityMillis }.takeIf { it.isNotEmpty() }?.average() ?: 0.0
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e("HealthConnectManager", "Failed to read heart rate variability", e)
             }
         }
 
@@ -250,12 +288,133 @@ class HealthConnectManager @Inject constructor(
             caloriesConsumed = caloriesConsumed,
             caloriesBurned = caloriesBurned,
             mindfulnessMinutes = mindfulnessMinutes,
-            weight = weightKg
+            weight = weightKg,
+            restingHeartRate = restingHeartRate,
+            hrvRmssdMs = hrvRmssdMs,
+            sleepDeepMinutes = sleepStages.deep,
+            sleepRemMinutes = sleepStages.rem,
+            sleepLightMinutes = sleepStages.light,
+            sleepAwakeMinutes = sleepStages.awake
         )
     }
 
+    private fun stagesOf(session: SleepSessionRecord): SleepStages =
+        SleepStages.of(session.stages.map { it.stage to Duration.between(it.startTime, it.endTime).toMinutes() })
+
+    /** Resting heart rate and HRV need their own grants; sleep stages come with sleep. */
+    suspend fun hasRecoveryPermissions(): Boolean = try {
+        healthConnectClient.permissionController.getGrantedPermissions().containsAll(recoveryPermissions)
+    } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        false
+    }
+
+    /**
+     * Recovery signals for every night from [first] to [last], one [RecoveryDay] per night with
+     * data (the baseline needs weeks of history; the vault only has days written since v11).
+     * Health Connect answers a foreground app only.
+     */
+    suspend fun readRecoveryNights(first: LocalDate, last: LocalDate): List<RecoveryDay> = withContext(Dispatchers.IO) {
+        val zone = ZoneId.systemDefault()
+        val windowStart = first.minusDays(1).atTime(18, 0).atZone(zone).toInstant()
+        val windowEnd = last.atTime(18, 0).atZone(zone).toInstant()
+        val granted = try {
+            healthConnectClient.permissionController.getGrantedPermissions()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            emptySet()
+        }
+
+        val resting = mutableMapOf<LocalDate, Int>()
+        if (granted.contains(HealthPermission.getReadPermission(RestingHeartRateRecord::class))) {
+            try {
+                healthConnectClient.aggregateGroupByPeriod(
+                    androidx.health.connect.client.request.AggregateGroupByPeriodRequest(
+                        metrics = setOf(RestingHeartRateRecord.BPM_AVG),
+                        timeRangeFilter = TimeRangeFilter.between(first.atStartOfDay(), last.plusDays(1).atStartOfDay()),
+                        timeRangeSlicer = java.time.Period.ofDays(1)
+                    )
+                ).forEach { bucket ->
+                    bucket.result[RestingHeartRateRecord.BPM_AVG]?.let { resting[bucket.startTime.toLocalDate()] = it.toInt() }
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e("HealthConnectManager", "Failed to read resting heart rate history", e)
+            }
+        }
+
+        val hrvByNight = mutableMapOf<LocalDate, MutableList<Double>>()
+        if (granted.contains(HealthPermission.getReadPermission(HeartRateVariabilityRmssdRecord::class))) {
+            try {
+                readAllPages(HeartRateVariabilityRmssdRecord::class, TimeRangeFilter.between(windowStart, windowEnd)).forEach { record ->
+                    hrvByNight.getOrPut(RecoveryDay.nightOf(record.time, zone)) { mutableListOf() } += record.heartRateVariabilityMillis
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e("HealthConnectManager", "Failed to read heart rate variability history", e)
+            }
+        }
+
+        val sleepMinutes = mutableMapOf<LocalDate, Long>()
+        val stagesByNight = mutableMapOf<LocalDate, SleepStages>()
+        if (granted.contains(HealthPermission.getReadPermission(SleepSessionRecord::class))) {
+            try {
+                readAllPages(SleepSessionRecord::class, TimeRangeFilter.between(windowStart, windowEnd)).forEach { session ->
+                    val night = session.endTime.atZone(zone).toLocalDate()
+                    sleepMinutes[night] = (sleepMinutes[night] ?: 0L) + Duration.between(session.startTime, session.endTime).toMinutes()
+                    stagesByNight[night] = (stagesByNight[night] ?: SleepStages()) + stagesOf(session)
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e("HealthConnectManager", "Failed to read sleep history", e)
+            }
+        }
+
+        (resting.keys + hrvByNight.keys + sleepMinutes.keys)
+            .filter { it in first..last }
+            .sorted()
+            .map { night ->
+                RecoveryDay(
+                    date = night,
+                    restingHeartRate = resting[night]?.takeIf { it > 0 },
+                    hrvMs = hrvByNight[night]?.average(),
+                    sleepMinutes = sleepMinutes[night]?.takeIf { it > 0 },
+                    stages = stagesByNight[night]?.takeIf { it.recorded }
+                )
+            }
+    }
+
+    /** Every record in range, following page tokens (capped: a runaway source can't stall the screen). */
+    private suspend fun <T : androidx.health.connect.client.records.Record> readAllPages(
+        type: kotlin.reflect.KClass<T>,
+        range: TimeRangeFilter
+    ): List<T> {
+        val records = mutableListOf<T>()
+        var pageToken: String? = null
+        var pages = 0
+        do {
+            val response = healthConnectClient.readRecords(ReadRecordsRequest(type, range, pageToken = pageToken))
+            records += response.records
+            pageToken = response.pageToken
+            pages++
+        } while (pageToken != null && pages < MAX_PAGES)
+        return records
+    }
+
+    private val recoveryPermissions: Set<String>
+        get() = setOf(
+            HealthPermission.getReadPermission(RestingHeartRateRecord::class),
+            HealthPermission.getReadPermission(HeartRateVariabilityRmssdRecord::class)
+        )
+
+    /** What "connected" means: the recovery grants are asked for alongside, never required. */
     @OptIn(ExperimentalMindfulnessSessionApi::class)
-    private val permissions = setOf(
+    private val corePermissions = setOf(
         HealthPermission.getReadPermission(StepsRecord::class),
         HealthPermission.getReadPermission(SleepSessionRecord::class),
         HealthPermission.getReadPermission(HeartRateRecord::class),
@@ -269,6 +428,8 @@ class HealthConnectManager @Inject constructor(
         HealthPermission.getReadPermission(androidx.health.connect.client.records.WeightRecord::class)
     )
 
+    private val permissions: Set<String> get() = corePermissions + recoveryPermissions
+
     fun getSdkStatus(): Int {
         return HealthConnectClient.getSdkStatus(context)
     }
@@ -276,8 +437,7 @@ class HealthConnectManager @Inject constructor(
     suspend fun checkPermissions(): Boolean {
         return try {
             val granted = healthConnectClient.permissionController.getGrantedPermissions()
-            val hasAll = granted.containsAll(permissions)
-            hasAll
+            granted.containsAll(corePermissions)
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -441,5 +601,9 @@ class HealthConnectManager @Inject constructor(
         } catch (e: Exception) {
             emptyList()
         }
+    }
+
+    private companion object {
+        const val MAX_PAGES = 20
     }
 }
