@@ -6,8 +6,15 @@ import androidx.room.Upsert
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.FileContentEntity
 import kotlinx.coroutines.flow.Flow
 
+/** A note's text, as `file_contents` mirrors it. */
+data class PathContent(val path: String, val content: String)
+
 @Dao
 interface FileContentDao {
+    /** Every mirrored note under [prefix] (a folder path ending with `/`; empty = the whole vault). */
+    @Query("SELECT path, content FROM file_contents WHERE substr(path, 1, length(:prefix)) = :prefix")
+    suspend fun contentsUnder(prefix: String): List<PathContent>
+
     @Query("SELECT content FROM file_contents WHERE path = :path")
     fun getContentFlow(path: String): Flow<String?>
 

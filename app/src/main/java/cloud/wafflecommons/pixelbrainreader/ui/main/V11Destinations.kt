@@ -7,6 +7,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import cloud.wafflecommons.pixelbrainreader.ui.guard.ConfidentialityScreen
 import cloud.wafflecommons.pixelbrainreader.ui.modes.ModesSettingsScreen
+import cloud.wafflecommons.pixelbrainreader.ui.work.LeaveScreen
 import cloud.wafflecommons.pixelbrainreader.ui.work.MissionLogScreen
 import cloud.wafflecommons.pixelbrainreader.ui.work.WorkHubScreen
 
@@ -15,6 +16,7 @@ object V11Routes {
     const val MODES_SETTINGS = "modes_settings"
     const val CONFIDENTIALITY = "confidentiality"
     const val WORK_HUB = "work_hub"
+    const val LEAVE = "leave"
     const val MISSION_LOG = "mission_log?add={add}"
 
     fun missionLog(add: Boolean = false) = "mission_log?add=$add"
@@ -31,7 +33,15 @@ fun NavGraphBuilder.v11Destinations(navController: NavHostController, openNote: 
     composable(V11Routes.WORK_HUB) {
         WorkHubScreen(
             onBack = { navController.popBackStack() },
-            onOpenLog = { add -> navController.navigate(V11Routes.missionLog(add)) }
+            onOpenLog = { add -> navController.navigate(V11Routes.missionLog(add)) },
+            onOpen = { route -> navController.navigate(route) }
+        )
+    }
+    composable(V11Routes.LEAVE) {
+        LeaveScreen(
+            onBack = { navController.popBackStack() },
+            onOpenNote = openNote,
+            onManageLeave = { navController.navigate(V11Routes.MODES_SETTINGS) }
         )
     }
     composable(
