@@ -65,7 +65,7 @@ Unless a path starts with `app/` or `documentation/`, it is relative to
       nudges, tagged log entries as material.
 - [x] **B6** Meetings & requests (#6): meeting notes with decisions and owned actions; my actions
       become next actions; workload metrics.
-- [ ] **B7** Load vs recovery (#7): off-ticket time and meetings against sleep, HRV and mood, with
+- [x] **B7** Load vs recovery (#7): off-ticket time and meetings against sleep, HRV and mood, with
       sample sizes; an overload warning.
 
 ### C — Dev & lead toolkit
