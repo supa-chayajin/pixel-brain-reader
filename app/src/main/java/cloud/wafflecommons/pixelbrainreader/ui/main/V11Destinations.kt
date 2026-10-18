@@ -7,6 +7,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import cloud.wafflecommons.pixelbrainreader.ui.guard.ConfidentialityScreen
 import cloud.wafflecommons.pixelbrainreader.ui.modes.ModesSettingsScreen
+import cloud.wafflecommons.pixelbrainreader.ui.work.ActivityScreen
 import cloud.wafflecommons.pixelbrainreader.ui.work.BoardScreen
 import cloud.wafflecommons.pixelbrainreader.ui.work.BoardsScreen
 import cloud.wafflecommons.pixelbrainreader.ui.work.EvidenceScreen
@@ -33,6 +34,7 @@ object V11Routes {
     const val MEETINGS = "meetings"
     const val LOAD = "load_recovery"
     const val SNIPPETS = "snippets"
+    const val ACTIVITY = "activity"
     const val RUNBOOKS = "runbooks"
     const val RUNBOOK = "runbook?path={path}"
 
@@ -70,6 +72,9 @@ fun NavGraphBuilder.v11Destinations(navController: NavHostController, openNote: 
             onBack = { navController.popBackStack() },
             onOpenNote = openNote
         )
+    }
+    composable(V11Routes.ACTIVITY) {
+        ActivityScreen(onBack = { navController.popBackStack() }, onOpenNote = openNote)
     }
     composable(V11Routes.SNIPPETS) {
         SnippetsScreen(

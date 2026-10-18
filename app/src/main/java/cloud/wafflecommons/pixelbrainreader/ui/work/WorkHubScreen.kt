@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.material.icons.Icons
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.automirrored.rounded.EventNote
+import androidx.compose.material.icons.rounded.BarChart
 import androidx.compose.material.icons.rounded.BeachAccess
 import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.Flag
@@ -149,6 +150,12 @@ fun WorkHubScreen(
             icon = Icons.Rounded.Summarize,
             subtitle = "A month or a quarter of the log as a draft for your reviews: every number from the data.",
             onClick = { onOpen(cloud.wafflecommons.pixelbrainreader.ui.main.V11Routes.EVIDENCE) }
+        )
+        HubCard(
+            title = "Vault activity",
+            icon = Icons.Rounded.BarChart,
+            subtitle = "What the last sync brought, commits per day, the notes that changed most and the new ones.",
+            onClick = { onOpen(cloud.wafflecommons.pixelbrainreader.ui.main.V11Routes.ACTIVITY) }
         )
         HubCard(
             title = "Snippets & runbooks",

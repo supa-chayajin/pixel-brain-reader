@@ -76,15 +76,18 @@ fun DailyNoteScreen(
     onOpenModesSettings: () -> Unit = {},
     onOpenConfidentiality: () -> Unit = {},
     onOpenWork: () -> Unit = {},
+    onOpenActivity: () -> Unit = {},
     viewModel: DailyNoteViewModel = hiltViewModel(),
     modesViewModel: cloud.wafflecommons.pixelbrainreader.ui.modes.ModesViewModel = hiltViewModel(),
     guardStatus: cloud.wafflecommons.pixelbrainreader.ui.guard.GuardStatusViewModel = hiltViewModel(),
-    leaveViewModel: cloud.wafflecommons.pixelbrainreader.ui.work.LeaveViewModel = hiltViewModel()
+    leaveViewModel: cloud.wafflecommons.pixelbrainreader.ui.work.LeaveViewModel = hiltViewModel(),
+    activityViewModel: cloud.wafflecommons.pixelbrainreader.ui.work.ActivityViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val guardHeld by guardStatus.held.collectAsStateWithLifecycle()
     val leaveReturn by leaveViewModel.returning.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { leaveViewModel.loadReturn() }
+    val syncDigest by activityViewModel.digest.collectAsStateWithLifecycle()
     val visibility by modesViewModel.visibility.collectAsStateWithLifecycle()
     val countdowns by modesViewModel.countdowns.collectAsStateWithLifecycle()
     var showModeSheet by remember { mutableStateOf(false) }
@@ -298,6 +301,13 @@ fun DailyNoteScreen(
                                 held = guardHeld,
                                 onReview = onOpenConfidentiality
                             )
+                        }
+                    }
+
+                    // What the last sync brought, until dismissed.
+                    if (syncDigest?.let { !it.dismissed && it.total > 0 } == true) {
+                        item(key = "sync-digest") {
+                            cloud.wafflecommons.pixelbrainreader.ui.work.SyncDigestCard(onOpen = onOpenActivity, viewModel = activityViewModel)
                         }
                     }
 

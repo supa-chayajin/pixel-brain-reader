@@ -33,6 +33,12 @@ sealed class SyncResult {
     data class Error(val exception: Exception) : SyncResult()
 }
 
+/** A commit for the activity views: when, by whom, its subject and the paths it touched. */
+data class CommitSummary(val id: String, val timeMillis: Long, val author: String, val message: String, val paths: List<String>)
+
+/** A path a pull changed, and how: "add", "modify", "delete" or "rename". */
+data class ChangedPath(val path: String, val change: String)
+
 data class GitCommitDto(
     val commitId: String,
     val shortId: String,
@@ -649,6 +655,90 @@ class JGitProvider @Inject constructor(
                 }
             }
             override fun close() { flush() }
+        }
+    }
+
+    /** The current HEAD commit id, or null (no repository, no commit yet). */
+    suspend fun headId(): String? = withContext(Dispatchers.IO) {
+        gitMutex.withLock {
+            if (!File(rootDir, ".git").isDirectory) return@withLock null
+            try {
+                Git.open(rootDir).use { it.repository.resolve("HEAD")?.name }
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                null
+            }
+        }
+    }
+
+    /** What changed between two commits (a pull's before and after), renames paired. */
+    suspend fun changesBetween(fromId: String, toId: String): List<ChangedPath> = withContext(Dispatchers.IO) {
+        if (fromId == toId) return@withContext emptyList()
+        gitMutex.withLock {
+            try {
+                Git.open(rootDir).use { git ->
+                    val repo = git.repository
+                    repo.newObjectReader().use { reader ->
+                        fun tree(id: String) = org.eclipse.jgit.treewalk.CanonicalTreeParser().apply {
+                            reset(reader, repo.parseCommit(org.eclipse.jgit.lib.ObjectId.fromString(id)).tree)
+                        }
+                        org.eclipse.jgit.diff.DiffFormatter(org.eclipse.jgit.util.io.DisabledOutputStream.INSTANCE).use { diff ->
+                            diff.setRepository(repo)
+                            diff.isDetectRenames = true
+                            diff.scan(tree(fromId), tree(toId)).map { entry ->
+                                when (entry.changeType) {
+                                    org.eclipse.jgit.diff.DiffEntry.ChangeType.ADD -> ChangedPath(entry.newPath, "add")
+                                    org.eclipse.jgit.diff.DiffEntry.ChangeType.DELETE -> ChangedPath(entry.oldPath, "delete")
+                                    org.eclipse.jgit.diff.DiffEntry.ChangeType.MODIFY -> ChangedPath(entry.newPath, "modify")
+                                    else -> ChangedPath(entry.newPath, "rename")
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.w("JGitProvider", "Couldn't diff $fromId..$toId: ${e.message}")
+                emptyList()
+            }
+        }
+    }
+
+    /** Commits since [sinceMillis] (author time), newest first, at most [max], with the paths each touched. */
+    suspend fun commitsSince(sinceMillis: Long, max: Int = 500): List<CommitSummary> = withContext(Dispatchers.IO) {
+        gitMutex.withLock {
+            if (!File(rootDir, ".git").isDirectory) return@withLock emptyList()
+            try {
+                Git.open(rootDir).use { git ->
+                    val repo = git.repository
+                    val head = repo.resolve("HEAD") ?: return@use emptyList()
+                    org.eclipse.jgit.revwalk.RevWalk(repo).use { walk ->
+                        walk.sort(org.eclipse.jgit.revwalk.RevSort.COMMIT_TIME_DESC)
+                        walk.markStart(walk.parseCommit(head))
+                        org.eclipse.jgit.diff.DiffFormatter(org.eclipse.jgit.util.io.DisabledOutputStream.INSTANCE).use { diff ->
+                            diff.setRepository(repo)
+                            val result = mutableListOf<CommitSummary>()
+                            for (commit in walk) {
+                                val time = commit.authorIdent.whenAsInstant.toEpochMilli()
+                                // Commit-time order: once both clocks are past the window, nothing older follows.
+                                if (time < sinceMillis && commit.commitTime * 1000L < sinceMillis) break
+                                if (time < sinceMillis) continue
+                                val parent = if (commit.parentCount > 0) walk.parseCommit(commit.getParent(0)).tree else null
+                                val paths = diff.scan(parent, commit.tree).map {
+                                    if (it.changeType == org.eclipse.jgit.diff.DiffEntry.ChangeType.DELETE) it.oldPath else it.newPath
+                                }
+                                result += CommitSummary(commit.name, time, commit.authorIdent.name, commit.shortMessage, paths)
+                                if (result.size >= max) break
+                            }
+                            result
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.w("JGitProvider", "Couldn't read recent commits: ${e.message}")
+                emptyList()
+            }
         }
     }
 

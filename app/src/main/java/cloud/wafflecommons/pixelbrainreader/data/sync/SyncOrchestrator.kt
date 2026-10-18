@@ -79,7 +79,8 @@ class SyncOrchestrator @Inject constructor(
     private val dailyDashboardRepository: DailyDashboardRepository,
     private val gitSyncCoordinator: GitSyncCoordinator,
     @param:ApplicationScope private val appScope: CoroutineScope,
-    private val modesRepository: dagger.Lazy<cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository>
+    private val modesRepository: dagger.Lazy<cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository>,
+    private val syncDigestRepository: dagger.Lazy<SyncDigestRepository>
 ) {
     companion object {
         private const val TAG = "SyncOrchestrator"
@@ -202,10 +203,14 @@ class SyncOrchestrator @Inject constructor(
             else -> Log.w(TAG, "Phase 0: Pre-pull commit failed (non-fatal)", failure)
         }
 
-        // Phase 1: Git Pull (Rebase)
+        // Phase 1: Git Pull (Rebase). HEAD before it feeds the sync digest (what the pull brought).
         Log.i(TAG, "Phase 1: Pull (rebase)...")
+        val headBeforePull = jGitProvider.headId()
         when (val pullResult = jGitProvider.pull()) {
-            is SyncResult.Success -> Log.i(TAG, "Phase 1: Pull OK")
+            is SyncResult.Success -> {
+                Log.i(TAG, "Phase 1: Pull OK")
+                syncDigestRepository.get().recordPull(headBeforePull)
+            }
             is SyncResult.ResolvedWithConflicts -> {
                 // pull() already aborted the rebase and backed up the conflicting local files:
                 // local now DIVERGES from remote, so a push could never fast-forward. Stop with

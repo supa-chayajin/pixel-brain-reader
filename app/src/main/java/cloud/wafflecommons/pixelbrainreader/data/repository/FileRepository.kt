@@ -35,7 +35,8 @@ class FileRepository @Inject constructor(
     private val jGitProvider: JGitProvider, // Still needed for Direct Sync ops
     private val gitSyncCoordinator: GitSyncCoordinator,
     private val secretManager: cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager,
-    @param:ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context,
+    private val syncDigestRepository: dagger.Lazy<cloud.wafflecommons.pixelbrainreader.data.sync.SyncDigestRepository>
 ) {
 
     private val vaultRoot: File
@@ -92,8 +93,9 @@ class FileRepository @Inject constructor(
            val held = jGitProvider.commit("Auto-sync").exceptionOrNull() as? CommitHeldException
            if (held != null) return@withLock Result.failure(held)
 
-           // 3. Pull
+           // 3. Pull (HEAD before it feeds the sync digest)
            _syncStatus.value = SyncStep.PULLING.label
+           val headBeforePull = jGitProvider.headId()
            val pullResult = jGitProvider.pull()
            if (pullResult is SyncResult.ResolvedWithConflicts) {
                // The rebase was aborted and clean local copies backed up, so local now
@@ -109,6 +111,8 @@ class FileRepository @Inject constructor(
                Log.e("FileRepository", "Pull failed during sync", pullResult.exception)
                return@withLock Result.failure(pullResult.exception)
            }
+
+           syncDigestRepository.get().recordPull(headBeforePull)
 
            // 4. Push
            _syncStatus.value = SyncStep.PUSHING.label
