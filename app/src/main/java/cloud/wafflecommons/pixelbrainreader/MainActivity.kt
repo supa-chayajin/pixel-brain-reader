@@ -221,9 +221,11 @@ class MainActivity : FragmentActivity() {
             viewModel.handleShareIntent(intent)
         }
 
-        // Long-press on one of our Quick Settings tiles: open that tile's settings.
+        // Long-press on one of our Quick Settings tiles: open that tile's screen.
         if (intent.action == android.service.quicksettings.TileService.ACTION_QS_TILE_PREFERENCES) {
-            pendingDestination = WidgetNav.screenToRoute(WidgetNav.SCREEN_MODES)
+            val tile = intent.getParcelableExtra(Intent.EXTRA_COMPONENT_NAME, android.content.ComponentName::class.java)
+            val screen = if (tile?.className?.endsWith(".MissionLogTileService") == true) WidgetNav.SCREEN_WORK else WidgetNav.SCREEN_MODES
+            pendingDestination = WidgetNav.screenToRoute(screen)
         }
 
         // pixelbrain:// deep links. `import` is a PUBLIC, BROWSABLE entry point (any web page can

@@ -60,6 +60,7 @@ import androidx.compose.material.icons.rounded.Event
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Mood
 import androidx.compose.material.icons.rounded.TextFields
+import androidx.compose.material.icons.rounded.WorkOutline
 import androidx.compose.material.icons.sharp.AddCircle
 import androidx.compose.material.icons.sharp.CheckCircle
 import androidx.compose.material.icons.sharp.Lightbulb
@@ -74,6 +75,7 @@ fun DailyNoteScreen(
     onOpenNote: (String) -> Unit = {},
     onOpenModesSettings: () -> Unit = {},
     onOpenConfidentiality: () -> Unit = {},
+    onOpenWork: () -> Unit = {},
     viewModel: DailyNoteViewModel = hiltViewModel(),
     modesViewModel: cloud.wafflecommons.pixelbrainreader.ui.modes.ModesViewModel = hiltViewModel(),
     guardStatus: cloud.wafflecommons.pixelbrainreader.ui.guard.GuardStatusViewModel = hiltViewModel()
@@ -270,6 +272,18 @@ fun DailyNoteScreen(
                             cloud.wafflecommons.pixelbrainreader.ui.modes.ModeChip(
                                 visibility = visibility,
                                 onClick = { showModeSheet = true }
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            androidx.compose.material3.AssistChip(
+                                onClick = onOpenWork,
+                                label = { Text("Work") },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Rounded.WorkOutline,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
                             )
                         }
                     }

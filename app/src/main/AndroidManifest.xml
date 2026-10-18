@@ -220,6 +220,18 @@
                 <action android:name="android.service.quicksettings.action.QS_TILE" />
             </intent-filter>
         </service>
+
+        <!-- Quick Settings: log a mission-log entry. -->
+        <service
+            android:name=".ui.work.MissionLogTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_tile_log"
+            android:label="@string/tile_log_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
     </application>
 
 </manifest>

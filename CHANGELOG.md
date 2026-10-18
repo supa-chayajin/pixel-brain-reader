@@ -12,6 +12,14 @@ Work toward **11.0.0** — the work-direction and dev/lead toolkit release (plan
 
 ### Added
 
+- **Work hub and mission log.** A Work chip on the Daily screen opens the Work hub. Its first tool
+  is the mission log: facts, decisions, requests, refusals and off-ticket time, each with the role
+  you held, a status, minutes, who asked and who decided (as roles, never names), a reference and
+  tags. One markdown file per month, one line per entry as Dataview fields so Obsidian can query
+  them, in a vault folder of your choice (by default your first work folder) or encrypted in the
+  private vault. Log from the app (dictation stays on the device), from the new Log and Work
+  buttons of the quick-actions widget (now two rows of four) or from a Log tile in Quick Settings
+  (after unlocking). Outside Work mode the log is hidden, but capture still works.
 - **Modes: Work, Personal, Off.** A chip on the Daily screen and a Quick Settings tile switch
   modes. Outside Work mode, the folders marked as work disappear from the file list, search, AI
   answers and resurfaced notes; Off is for evenings, weekends and leave. A schedule (work days
