@@ -27,6 +27,7 @@ object NotificationHelper {
     const val CHANNEL_VAULT = "reminder_vault"
     const val CHANNEL_CHORES = "reminder_chores_habits"
     const val CHANNEL_SYNC = "sync_alerts"
+    const val CHANNEL_WORK = "work_nudges"
 
     // Groups both reminder channels under one "Reminders" category in system settings.
     private const val GROUP_REMINDERS = "reminders"
@@ -34,6 +35,7 @@ object NotificationHelper {
     private const val NOTIF_VAULT = 2001
     private const val NOTIF_CHORES = 2002
     private const val NOTIF_GUARD = 2003
+    private const val NOTIF_OBJECTIVES = 2004
 
     fun ensureChannels(context: Context) {
         val nm = context.getSystemService(NotificationManager::class.java) ?: return
@@ -67,6 +69,16 @@ object NotificationHelper {
                 NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
                 description = "Changes held back before they reach your git remote"
+            }
+        )
+        nm.createNotificationChannel(
+            NotificationChannel(
+                CHANNEL_WORK,
+                "Work nudges",
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = "Your weekly objectives slot. Muted outside Work mode."
+                group = GROUP_REMINDERS
             }
         )
     }
@@ -116,6 +128,21 @@ object NotificationHelper {
             .setOnlyAlertOnce(true)
             .setContentIntent(activityPending(context, 2, intent))
         notify(context, NOTIF_GUARD, builder)
+    }
+
+    /** The weekly objectives slot starts. Counts only; deep-links to the objectives. */
+    fun postObjectiveSlot(context: Context, minutes: Int, objectives: Int, dueSoon: Int, stalled: Int) {
+        ensureChannels(context)
+        val intent = WidgetNav.openIntent(context, WidgetNav.SCREEN_OBJECTIVES)
+        val parts = buildList {
+            add(if (objectives == 1) "1 objective" else "$objectives objectives")
+            if (dueSoon > 0) add("$dueSoon with a milestone due within 2 weeks")
+            if (stalled > 0) add("$stalled without progress for 3 weeks")
+        }
+        val builder = baseBuilder(context, CHANNEL_WORK, title = "Objectives time: $minutes min", text = parts.joinToString(" · "))
+            .setStyle(NotificationCompat.BigTextStyle().bigText(parts.joinToString("\n")))
+            .setContentIntent(activityPending(context, 3, intent))
+        notify(context, NOTIF_OBJECTIVES, builder)
     }
 
     fun cancelGuardHold(context: Context) {

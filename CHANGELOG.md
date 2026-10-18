@@ -39,6 +39,12 @@ Work toward **11.0.0** — the work-direction and dev/lead toolkit release (plan
   its frontmatter, and late cards show in red. Columns sit side by side on the unfolded screen and
   in tabs when folded. "Export" writes a French synthesis for a status meeting to the inbox. The
   boards list syncs (`10_Journal/system/boards.json`); cards in work folders hide outside Work mode.
+- **Objectives** (Work hub). Notes tagged `#objectif` are your objectives: their checkboxes are
+  milestones (a due date as `📅 2026-12-01` or `[due:: 2026-12-01]`), ticked from the app with a
+  surgical edit, and the mission-log entries sharing one of their other tags are listed as
+  material for the review. An objective with no progress for three weeks is flagged. A weekly
+  protected slot (day, start, length) sends a nudge when it starts — what is due within two weeks
+  and what stalled — never outside Work mode.
 - **Modes: Work, Personal, Off.** A chip on the Daily screen and a Quick Settings tile switch
   modes. Outside Work mode, the folders marked as work disappear from the file list, search, AI
   answers and resurfaced notes; Off is for evenings, weekends and leave. A schedule (work days
