@@ -3,10 +3,15 @@ package cloud.wafflecommons.pixelbrainreader.ui.ai
 import cloud.wafflecommons.pixelbrainreader.data.ai.LocalAiManager
 import cloud.wafflecommons.pixelbrainreader.data.ai.NanoException
 import cloud.wafflecommons.pixelbrainreader.data.ai.NanoState
+import cloud.wafflecommons.pixelbrainreader.data.ai.PromptPresetFormat
+import cloud.wafflecommons.pixelbrainreader.data.ai.PromptPresetRepository
 import cloud.wafflecommons.pixelbrainreader.data.ai.VectorSearchEngine
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.ChatMessageEntity
 import cloud.wafflecommons.pixelbrainreader.data.repository.ChatRepository
 import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.just
+import io.mockk.runs
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
@@ -81,6 +86,10 @@ class ChatViewModelTest {
 
     private val localAiManager: LocalAiManager = mockk(relaxed = true)
     private val vectorSearchEngine: VectorSearchEngine = mockk(relaxed = true)
+    private val presetRepository: PromptPresetRepository = mockk {
+        every { presets } returns MutableStateFlow(PromptPresetFormat.DEFAULTS)
+        coEvery { reload() } just runs
+    }
     private val nanoStateFlow = MutableStateFlow<NanoState>(NanoState.Ready)
     private lateinit var fakeRepo: FakeChatRepository
 
@@ -95,7 +104,8 @@ class ChatViewModelTest {
         viewModel = ChatViewModel(
             localAiManager = localAiManager,
             chatRepository = fakeRepo.real,
-            vectorSearchEngine = vectorSearchEngine
+            vectorSearchEngine = vectorSearchEngine,
+            presetRepository = presetRepository
         )
     }
 
@@ -167,10 +177,10 @@ class ChatViewModelTest {
     }
 
     @Test
-    fun `toggleMode cycles through ORACLE, BOARDROOM, and SCRIBE`() {
+    fun `toggleMode cycles through ORACLE, PRESET, and SCRIBE`() {
         assertEquals(ChatMode.ORACLE, viewModel.currentMode.value)
         viewModel.toggleMode()
-        assertEquals(ChatMode.BOARDROOM, viewModel.currentMode.value)
+        assertEquals(ChatMode.PRESET, viewModel.currentMode.value)
         viewModel.toggleMode()
         assertEquals(ChatMode.SCRIBE, viewModel.currentMode.value)
         viewModel.toggleMode()
@@ -178,7 +188,7 @@ class ChatViewModelTest {
     }
 
     @Test
-    fun `BOARDROOM mode triggers vector search and stores in BOARDROOM bucket`() = runTest {
+    fun `the Boardroom preset searches the notes and keeps its BOARDROOM history`() = runTest {
         coEvery { vectorSearchEngine.search("arch query", any()) } returns listOf(
             cloud.wafflecommons.pixelbrainreader.data.ai.SearchHit(
                 fileId = "20_Projects/21_Waffle_Framework/Architecture.md",
@@ -195,7 +205,7 @@ class ChatViewModelTest {
             )
         } returns flowOf("### 🏛️ Alexandre\nDDD Analysis...")
 
-        viewModel.setMode(ChatMode.BOARDROOM)
+        viewModel.setMode(ChatMode.PRESET)
         viewModel.sendMessage("arch query")
         advanceUntilIdle()
 
@@ -204,6 +214,26 @@ class ChatViewModelTest {
         assertEquals("arch query", persisted[0].content)
         assertEquals("### 🏛️ Alexandre\nDDD Analysis...", persisted[1].content)
         assertEquals(listOf("20_Projects/21_Waffle_Framework/Architecture.md"), persisted[1].sources)
+    }
+
+    @Test
+    fun `a preset without notes skips the search, ends with the French directive and keeps its own history`() = runTest {
+        every {
+            localAiManager.generateAugmentedResponseStream(
+                systemPrompt = match { it.contains("coach de poche") && it.endsWith(cloud.wafflecommons.pixelbrainreader.data.ai.AiLanguage.SYSTEM_DIRECTIVE) },
+                ragContext = null,
+                chatHistory = any(),
+                currentQuery = "a hard 1:1"
+            )
+        } returns flowOf("Reformulation…")
+
+        viewModel.selectPreset("coach")
+        viewModel.sendMessage("a hard 1:1")
+        advanceUntilIdle()
+
+        coVerify(exactly = 0) { vectorSearchEngine.search(any(), any()) }
+        assertEquals(listOf("a hard 1:1", "Reformulation…"), fakeRepo.snapshot("PRESET:coach").map { it.content })
+        assertTrue(fakeRepo.snapshot("BOARDROOM").isEmpty())
     }
 
     @Test

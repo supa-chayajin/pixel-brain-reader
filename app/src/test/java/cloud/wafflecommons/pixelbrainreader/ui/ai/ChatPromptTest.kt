@@ -1,6 +1,7 @@
 package cloud.wafflecommons.pixelbrainreader.ui.ai
 
 import cloud.wafflecommons.pixelbrainreader.data.ai.AiLanguage
+import cloud.wafflecommons.pixelbrainreader.data.ai.PromptPresetFormat
 import cloud.wafflecommons.pixelbrainreader.data.ai.SearchHit
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -14,14 +15,19 @@ class ChatPromptTest {
 
     @Test
     fun `every chat persona carries the French-answer directive`() {
-        ChatMode.entries.forEach { mode ->
-            assertTrue("$mode persona must end with the directive", personaFor(mode).trim().endsWith(AiLanguage.SYSTEM_DIRECTIVE))
+        PromptPresetFormat.DEFAULTS.forEach { preset ->
+            ChatMode.entries.forEach { mode ->
+                assertTrue(
+                    "$mode/${preset.id} persona must end with the directive",
+                    personaFor(mode, preset).trim().endsWith(AiLanguage.SYSTEM_DIRECTIVE)
+                )
+            }
         }
     }
 
     @Test
     fun `the grounded persona never invites general-knowledge answers`() {
-        val cortex = personaFor(ChatMode.ORACLE)
+        val cortex = personaFor(ChatMode.ORACLE, PromptPresetFormat.DEFAULTS.first())
         assertTrue(cortex.contains("N'invente rien"))
         assertFalse(cortex.contains("connaissances générales"))
     }

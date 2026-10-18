@@ -10,6 +10,8 @@ import cloud.wafflecommons.pixelbrainreader.data.ai.AiLanguage
 import cloud.wafflecommons.pixelbrainreader.data.ai.LocalAiManager
 import cloud.wafflecommons.pixelbrainreader.data.ai.NanoException
 import cloud.wafflecommons.pixelbrainreader.data.ai.NanoState
+import cloud.wafflecommons.pixelbrainreader.data.ai.PromptPreset
+import cloud.wafflecommons.pixelbrainreader.data.ai.PromptPresetRepository
 import cloud.wafflecommons.pixelbrainreader.data.ai.VectorSearchEngine
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.ChatMessageEntity
 import cloud.wafflecommons.pixelbrainreader.data.repository.ChatRepository
@@ -22,6 +24,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -39,14 +43,20 @@ data class ChatMessage(
     val sources: List<String> = emptyList()
 )
 
-/** Three persisted chat surfaces. ORACLE = RAG over the vault, SCRIBE = open chat, BOARDROOM = architecture debate. */
-enum class ChatMode { SCRIBE, ORACLE, BOARDROOM }
+/**
+ * Three chat surfaces. ORACLE = RAG over the vault, SCRIBE = open chat, PRESET = one of the user's
+ * prompt presets (`99_System/presets.md`; Boardroom and Coach by default).
+ */
+enum class ChatMode { SCRIBE, ORACLE, PRESET }
 
-/** Map UI enum to the storage strings agreed at the data layer boundary. */
-private fun ChatMode.storage(): String = when (this) {
+/**
+ * The storage string of a surface's history, agreed at the data layer boundary. Each preset keeps
+ * its own history; Boardroom keeps the bucket it had as a fixed mode.
+ */
+internal fun storageOf(mode: ChatMode, preset: PromptPreset): String = when (mode) {
     ChatMode.ORACLE -> "RAG"
     ChatMode.SCRIBE -> "CREATIVE"
-    ChatMode.BOARDROOM -> "BOARDROOM"
+    ChatMode.PRESET -> if (preset.id == "boardroom") "BOARDROOM" else "PRESET:${preset.id}"
 }
 
 private fun ChatMessageEntity.toUi(): ChatMessage = ChatMessage(
@@ -104,32 +114,10 @@ Tu n'as pas accès à ses notes dans ce mode : ne prétends pas les connaître.
 ${AiLanguage.SYSTEM_DIRECTIVE}
 """
 
-/** Boardroom: three short expert takes on a technical dilemma, then a decision. */
-private const val BOARDROOM_PERSONA = """
-Tu es le Boardroom de Cortex : trois experts débattent d'un dilemme technique de l'utilisateur, puis tranchent.
-- Alexandre, architecte DDD : frontières du domaine, couplage, abstractions.
-- Bastien, DevSecOps : sécurité, secrets, fiabilité, modes de défaillance.
-- Camille, tech lead pragmatique : rapport effort/valeur, YAGNI, livraison.
-
-FORMAT OBLIGATOIRE, 200 mots maximum au total :
-### 🏛️ Alexandre
-Deux phrases.
-### 🛡️ Bastien
-Deux phrases.
-### ⚡ Camille
-Deux phrases.
-### 🎯 Décision
-Deux ou trois phrases, avec la prochaine étape concrète.
-
-Appuie-toi sur les INFORMATIONS DE RÉFÉRENCE quand elles sont présentes ; n'invente pas le contenu de ses notes.
-
-${AiLanguage.SYSTEM_DIRECTIVE}
-"""
-
-internal fun personaFor(mode: ChatMode): String = when (mode) {
+internal fun personaFor(mode: ChatMode, preset: PromptPreset): String = when (mode) {
     ChatMode.ORACLE -> CORTEX_PERSONA
     ChatMode.SCRIBE -> SPARK_PERSONA
-    ChatMode.BOARDROOM -> BOARDROOM_PERSONA
+    ChatMode.PRESET -> preset.systemPrompt
 }
 
 /**
@@ -168,13 +156,31 @@ internal fun buildRagContext(
 class ChatViewModel @Inject constructor(
     private val localAiManager: LocalAiManager,
     private val chatRepository: ChatRepository,
-    private val vectorSearchEngine: VectorSearchEngine
+    private val vectorSearchEngine: VectorSearchEngine,
+    private val presetRepository: PromptPresetRepository
 ) : ViewModel() {
 
     // --- Mode (UI-only state) ------------------------------------------------
 
     private val _currentMode = MutableStateFlow(ChatMode.ORACLE)
     val currentMode: StateFlow<ChatMode> = _currentMode.asStateFlow()
+
+    // --- Presets (from the vault) --------------------------------------------
+
+    val presets: StateFlow<List<PromptPreset>> = presetRepository.presets
+    private val selectedPresetId = MutableStateFlow(presets.value.first().id)
+
+    /** The preset the PRESET surface uses: the selected one, else the first (the list is never empty). */
+    val activePreset: StateFlow<PromptPreset> = combine(presets, selectedPresetId, ::presetOf)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, presetOf(presets.value, selectedPresetId.value))
+
+    private fun presetOf(list: List<PromptPreset>, id: String): PromptPreset = list.firstOrNull { it.id == id } ?: list.first()
+
+    private fun currentPreset(): PromptPreset = presetOf(presets.value, selectedPresetId.value)
+
+    init {
+        viewModelScope.launch { presetRepository.reload() }
+    }
 
     // --- Persisted history (per-mode Flow) -----------------------------------
 
@@ -183,8 +189,11 @@ class ChatViewModel @Inject constructor(
      * `flatMapLatest` swaps the upstream Flow whenever the user toggles modes —
      * old subscriptions cancel cleanly so we never blend the two histories.
      */
-    val chatHistory: StateFlow<List<ChatMessage>> = _currentMode
-        .flatMapLatest { mode -> chatRepository.streamMessages(mode.storage()) }
+    val chatHistory: StateFlow<List<ChatMessage>> = combine(_currentMode, presets, selectedPresetId) { mode, list, id ->
+        storageOf(mode, presetOf(list, id))
+    }
+        .distinctUntilChanged()
+        .flatMapLatest { storage -> chatRepository.streamMessages(storage) }
         // Map at the boundary so the bubble composable stays Room-agnostic. Mapping in the
         // pipeline (instead of an extra MutableStateFlow fed by a permanent collector) keeps
         // WhileSubscribed meaningful — the Room query actually stops ~5s after the Chat
@@ -219,10 +228,26 @@ class ChatViewModel @Inject constructor(
 
     fun toggleMode() {
         _currentMode.value = when (_currentMode.value) {
-            ChatMode.ORACLE -> ChatMode.BOARDROOM
-            ChatMode.BOARDROOM -> ChatMode.SCRIBE
+            ChatMode.ORACLE -> ChatMode.PRESET
+            ChatMode.PRESET -> ChatMode.SCRIBE
             ChatMode.SCRIBE -> ChatMode.ORACLE
         }
+    }
+
+    /** Switches to the PRESET surface on [id]. */
+    fun selectPreset(id: String) {
+        selectedPresetId.value = id
+        _currentMode.value = ChatMode.PRESET
+    }
+
+    /** Re-reads `99_System/presets.md` (edited in Obsidian, then synced). */
+    fun reloadPresets() {
+        viewModelScope.launch { presetRepository.reload() }
+    }
+
+    /** Opens the presets file, writing the defaults there first if it doesn't exist. */
+    fun editPresets(open: (String) -> Unit) {
+        viewModelScope.launch { open(presetRepository.ensureFile()) }
     }
 
     // --- Send pipeline -------------------------------------------------------
@@ -230,7 +255,8 @@ class ChatViewModel @Inject constructor(
     /**
      * 1. Persist user turn to Room (atomic — never lost on crash mid-call).
      * 2. Derive the *prior* sliding-window history.
-     * 3. In ORACLE and BOARDROOM modes, run one vector search for grounding context + citations.
+     * 3. In ORACLE mode, and for a preset grounded on notes, run one vector search for grounding
+     *    context + citations.
      * 4. Generate on-device via Gemini Nano.
      * 5. On success: persist the model turn. On failure: persist an inline error turn
      *    (there is no cloud fallback — the app is 100% on-device).
@@ -243,7 +269,9 @@ class ChatViewModel @Inject constructor(
 
         generationJob = viewModelScope.launch {
             val mode = _currentMode.value
-            val modeStorage = mode.storage()
+            val preset = currentPreset()
+            val modeStorage = storageOf(mode, preset)
+            val grounded = mode == ChatMode.ORACLE || (mode == ChatMode.PRESET && preset.useNotes)
 
             // 1. Persist user turn immediately.
             chatRepository.addMessage(
@@ -261,8 +289,8 @@ class ChatViewModel @Inject constructor(
             // 3. RAG context (single search call, reuse for both grounding + citations).
             var sources = emptyList<String>()
             var ragContext: String? = null
-            if (mode == ChatMode.ORACLE || mode == ChatMode.BOARDROOM) {
-                loadingStage = if (mode == ChatMode.BOARDROOM) "🏛️ Gathering the Boardroom…" else "🔎 Searching your Second Brain…"
+            if (grounded) {
+                loadingStage = "🔎 Searching your Second Brain…"
                 val hits = vectorSearchEngine.search(query, limit = RAG_TOP_K)
                 val (context, usedHits) = buildRagContext(hits)
                 ragContext = context
@@ -273,15 +301,15 @@ class ChatViewModel @Inject constructor(
                         "sources=$sources contextLen=${ragContext?.length ?: 0}"
                 )
             } else {
-                Log.d("RAG_DEBUG", "ChatViewModel.sendMessage(SCRIBE): RAG search skipped")
+                Log.d("RAG_DEBUG", "ChatViewModel.sendMessage($mode): RAG search skipped")
             }
 
             // 4. On-device Nano STREAMING call.
-            loadingStage = if (mode == ChatMode.BOARDROOM) "🏛️ Boardroom debating (on-device)…" else "🔒 Asking Gemini Nano (on-device)…"
+            loadingStage = "🔒 Asking Gemini Nano (on-device)…"
             _streamingMessage.value =
                 ChatMessage(content = "", isUser = false, isStreaming = true, sources = sources)
             val sb = StringBuilder()
-            val persona = personaFor(mode)
+            val persona = personaFor(mode, preset)
             try {
                 withTimeout(STREAM_TIMEOUT_MS) {
                     localAiManager.generateAugmentedResponseStream(
@@ -356,7 +384,7 @@ class ChatViewModel @Inject constructor(
      * is untouched (Room delete is keyed by mode).
      */
     fun resetChat() {
-        val modeStorage = _currentMode.value.storage()
+        val modeStorage = storageOf(_currentMode.value, currentPreset())
         val job = generationJob
         generationJob = null
         loadingStage = null

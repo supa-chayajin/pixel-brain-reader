@@ -41,6 +41,13 @@ Work toward **11.0.0** — the work-direction and dev/lead toolkit release (plan
   measured nights, and nothing is estimated: a missing signal reads "not measured". The two new
   Health Connect grants are asked for from the card; Health Connect still counts as connected
   without them.
+- **Prompt presets, and a Coach.** The chat's middle mode is now your presets, kept in
+  `99_System/presets.md` so you can edit them in Obsidian: one `##` section per preset, with
+  `notes: yes` to ground it on your notes and a `description:` for the menu. Tap the selected
+  segment to switch presets or open the file ("Edit presets" writes the defaults the first time).
+  Boardroom moved there, keeping its history, and **Coach** joins it: a pocket coach for a lead
+  that rephrases, then asks one open question at a time. Whatever a preset says, answers stay in
+  French, and a prompt is capped at 1,500 characters to leave Gemini Nano room.
 
 ### Changed
 

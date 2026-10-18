@@ -49,7 +49,7 @@ Unless a path starts with `app/` or `documentation/`, it is relative to
 - [x] **A7** Code-aware chunking (E9): code blocks are their own chunks, labelled with their
       language; people notes are never embedded.
 - [x] **A8** First-seen times in the git history walk (for N11).
-- [ ] **A9** Prompt presets (roadmap 2.7) in `99_System/presets.md` + the Coach preset (N9).
+- [x] **A9** Prompt presets (roadmap 2.7) in `99_System/presets.md` + the Coach preset (N9).
 
 ### B — Work direction
 - [ ] **B1** Mission log (#1): fact / decision / request / refusal / off-ticket time, a role
