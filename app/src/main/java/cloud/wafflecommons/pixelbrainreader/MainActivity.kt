@@ -29,6 +29,8 @@ import androidx.lifecycle.lifecycleScope
 import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
 import cloud.wafflecommons.pixelbrainreader.data.repository.AppThemeConfig
 import cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
+import cloud.wafflecommons.pixelbrainreader.data.web.ShareImportRepository
+import cloud.wafflecommons.pixelbrainreader.data.web.SharedContent
 import cloud.wafflecommons.pixelbrainreader.ui.login.LoginScreen
 import cloud.wafflecommons.pixelbrainreader.ui.main.MainScreen
 import cloud.wafflecommons.pixelbrainreader.ui.main.MainViewModel
@@ -48,6 +50,9 @@ class MainActivity : FragmentActivity() {
 
     @Inject
     lateinit var userPrefs: UserPreferencesRepository
+
+    @Inject
+    lateinit var shareImportRepository: ShareImportRepository
 
     private val viewModel: MainViewModel by viewModels()
 
@@ -157,7 +162,8 @@ class MainActivity : FragmentActivity() {
                                         loginState = false
                                     }
                                 },
-                                onExitApp = { finishAffinity() }
+                                onExitApp = { finishAffinity() },
+                                launchedForShare = intent?.action == Intent.ACTION_SEND
                             )
                         }
                     }
@@ -218,9 +224,14 @@ class MainActivity : FragmentActivity() {
     private fun handleIntent(intent: Intent?) {
         if (intent == null) return
 
-        // Share Intent
+        // Shared from another app: a page (its link), a highlight with its link, or text.
         if (intent.action == Intent.ACTION_SEND) {
-            viewModel.handleShareIntent(intent)
+            val text = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()
+            val html = intent.getStringExtra(Intent.EXTRA_HTML_TEXT)
+            if (!text.isNullOrBlank() || !html.isNullOrBlank()) {
+                val subject = intent.getStringExtra(Intent.EXTRA_SUBJECT) ?: intent.getStringExtra(Intent.EXTRA_TITLE)
+                shareImportRepository.start(SharedContent.of(text, subject), html)
+            }
         }
 
         // Long-press on one of our Quick Settings tiles: open that tile's screen.
