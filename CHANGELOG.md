@@ -32,6 +32,13 @@ Work toward **11.0.0** — the work-direction and dev/lead toolkit release (plan
   ("non mesuré" when no minutes were logged), breakdowns by role and by tag, the decisions,
   requests, refusals and facts, and the notes moved to done in your work folders during the
   period. Every number comes from the log; an on-device summary is optional and marked.
+- **Boards** (Work hub). Any folder can be a board: its notes are cards in the vault's status
+  columns (To do 📥, In progress 🏗️, Paused ⏸️, Done 🟢, Archived 📦), older statuses such as
+  "active" or "🏗️ en cours" included. Moving a card rewrites only its `status` and `date_updated`;
+  a card's next step, blockers and target date are `next_step`, `blockers` and `target_date` in
+  its frontmatter, and late cards show in red. Columns sit side by side on the unfolded screen and
+  in tabs when folded. "Export" writes a French synthesis for a status meeting to the inbox. The
+  boards list syncs (`10_Journal/system/boards.json`); cards in work folders hide outside Work mode.
 - **Modes: Work, Personal, Off.** A chip on the Daily screen and a Quick Settings tile switch
   modes. Outside Work mode, the folders marked as work disappear from the file list, search, AI
   answers and resurfaced notes; Off is for evenings, weekends and leave. A schedule (work days

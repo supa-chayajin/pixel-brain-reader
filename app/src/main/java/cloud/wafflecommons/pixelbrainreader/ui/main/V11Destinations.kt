@@ -7,6 +7,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import cloud.wafflecommons.pixelbrainreader.ui.guard.ConfidentialityScreen
 import cloud.wafflecommons.pixelbrainreader.ui.modes.ModesSettingsScreen
+import cloud.wafflecommons.pixelbrainreader.ui.work.BoardScreen
+import cloud.wafflecommons.pixelbrainreader.ui.work.BoardsScreen
 import cloud.wafflecommons.pixelbrainreader.ui.work.EvidenceScreen
 import cloud.wafflecommons.pixelbrainreader.ui.work.LeaveScreen
 import cloud.wafflecommons.pixelbrainreader.ui.work.MissionLogScreen
@@ -19,6 +21,10 @@ object V11Routes {
     const val WORK_HUB = "work_hub"
     const val LEAVE = "leave"
     const val EVIDENCE = "evidence"
+    const val BOARDS = "boards"
+    const val BOARD = "board?folder={folder}"
+
+    fun board(folder: String) = "board?folder=" + android.net.Uri.encode(folder)
     const val MISSION_LOG = "mission_log?add={add}"
 
     fun missionLog(add: Boolean = false) = "mission_log?add=$add"
@@ -37,6 +43,16 @@ fun NavGraphBuilder.v11Destinations(navController: NavHostController, openNote: 
             onBack = { navController.popBackStack() },
             onOpenLog = { add -> navController.navigate(V11Routes.missionLog(add)) },
             onOpen = { route -> navController.navigate(route) }
+        )
+    }
+    composable(V11Routes.BOARDS) {
+        BoardsScreen(onBack = { navController.popBackStack() }, onOpenBoard = { navController.navigate(V11Routes.board(it)) })
+    }
+    composable(V11Routes.BOARD, arguments = listOf(navArgument("folder") { type = NavType.StringType; defaultValue = "" })) { entry ->
+        BoardScreen(
+            folder = entry.arguments?.getString("folder").orEmpty(),
+            onBack = { navController.popBackStack() },
+            onOpenNote = openNote
         )
     }
     composable(V11Routes.EVIDENCE) {

@@ -7,12 +7,12 @@ import java.time.LocalDate
  * The vault's status vocabulary as board columns. [vaultStatus] is what a move writes; [of] also
  * reads the older and hand-written statuses found in the vault ("active", "🏗️ en cours", "draft"…).
  */
-enum class StatusColumn(val vaultStatus: String, val label: String) {
-    TODO("📥 inbox", "To do"),
-    WIP("🏗️ wip", "In progress"),
-    PAUSED("⏸️ en pause", "Paused"),
-    DONE("🟢 done", "Done"),
-    ARCHIVE("📦 archive", "Archived");
+enum class StatusColumn(val vaultStatus: String, val label: String, val frenchLabel: String) {
+    TODO("📥 inbox", "To do", "À faire"),
+    WIP("🏗️ wip", "In progress", "En cours"),
+    PAUSED("⏸️ en pause", "Paused", "En pause"),
+    DONE("🟢 done", "Done", "Terminé"),
+    ARCHIVE("📦 archive", "Archived", "Archivé");
 
     companion object {
         private val TODO_WORDS = listOf("inbox", "todo", "to do", "à faire", "draft", "idée", "idea", "backlog")
