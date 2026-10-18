@@ -116,16 +116,32 @@ class VoiceCompiler @Inject constructor(
         private const val SECTION_TASKS = "TASKS"
         private const val SECTION_NOTE = "NOTE"
 
-        private val SENTENCE_SPLIT = Regex("[.;!?\\n]+")
-        private val CLAUSE_SPLIT = Regex("(?U),|\\bet\\b|\\bpuis\\b|\\band\\b|\\bthen\\b")
-        private val ACTION = Regex(
-            "(?iU)\\b(penser à|pense à|il faut|je dois|ne pas oublier|n'oublie pas|acheter|appeler|" +
-                "rappeler|envoyer|réparer|fixer|finir|terminer|vérifier|auditer|réserver|payer|" +
-                "prendre rendez-vous|écrire|préparer|buy|call|send|fix|finish|check|book|pay|remember to)\\b"
-        )
-        private val LEADING_REMINDER = Regex(
-            "(?iU)^(penser à|pense à|il faut|je dois|ne pas oublier de|n'oublie pas de|remember to)\\s*"
-        )
+        // Android's java.util.regex is ICU, not the JVM's: it rejects the (?U) flag
+        // (UNICODE_CHARACTER_CLASS) — that crashed the app at start in 10.2.0 — and its \b is
+        // already Unicode-aware while the JVM's is ASCII-only. Explicit letter lookarounds behave
+        // the same on both. Lazy, so a bad pattern could only ever break voice capture.
+        private const val NOT_LETTER_BEFORE = "(?<![\\p{L}\\p{N}])"
+        private const val NOT_LETTER_AFTER = "(?![\\p{L}\\p{N}])"
+
+        private val SENTENCE_SPLIT by lazy { Regex("[.;!?\\n]+") }
+        private val CLAUSE_SPLIT by lazy { Regex(",|${NOT_LETTER_BEFORE}(?:et|puis|and|then)$NOT_LETTER_AFTER") }
+        private val ACTION by lazy {
+            Regex(
+                "$NOT_LETTER_BEFORE(?:penser à|pense à|il faut|je dois|ne pas oublier|n'oublie pas|acheter|appeler|" +
+                    "rappeler|envoyer|réparer|fixer|finir|terminer|vérifier|auditer|réserver|payer|" +
+                    "prendre rendez-vous|écrire|préparer|buy|call|send|fix|finish|check|book|pay|remember to)$NOT_LETTER_AFTER",
+                RegexOption.IGNORE_CASE
+            )
+        }
+        private val LEADING_REMINDER by lazy {
+            Regex(
+                "^(?:penser à|pense à|il faut|je dois|ne pas oublier de|n'oublie pas de|remember to)\\s*",
+                RegexOption.IGNORE_CASE
+            )
+        }
+        private val COMBINING_MARKS by lazy { Regex("\\p{Mn}+") }
+        private val TASK_CHECKBOX by lazy { Regex("^\\[[ xX]?\\]\\s*") }
+        private val TASK_HASHTAG by lazy { Regex("\\s+#\\S+") }
 
         /** One-line summary of a compiled note, for its timeline entry. */
         fun summaryLine(result: CompiledVoiceResult, maxChars: Int = 60): String {
@@ -138,7 +154,7 @@ class VoiceCompiler @Inject constructor(
 
         private fun sectionMarker(line: String): String? {
             val bare = Normalizer.normalize(line.trim().trim('*', '#', ' ', '_'), Normalizer.Form.NFD)
-                .replace(Regex("\\p{Mn}+"), "")
+                .replace(COMBINING_MARKS, "")
                 .uppercase()
             return when (bare.removeSuffix(":").trim()) {
                 "TACHES", "TASKS" -> SECTION_TASKS
@@ -150,8 +166,8 @@ class VoiceCompiler @Inject constructor(
         private fun taskLabel(line: String): String? {
             val label = line
                 .removePrefix("-").removePrefix("*").trim()
-                .replace(Regex("^\\[[ xX]?]\\s*"), "")
-                .replace(Regex("\\s+#\\S+"), "") // no hashtags in task labels
+                .replace(TASK_CHECKBOX, "")
+                .replace(TASK_HASHTAG, "") // no hashtags in task labels
                 .trim()
             return label.takeUnless { it.isEmpty() || isPlaceholder(it) }
         }

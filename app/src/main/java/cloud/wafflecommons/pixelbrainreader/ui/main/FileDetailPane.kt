@@ -616,7 +616,17 @@ fun MarkwonContent(content: String, onWikiLinkClick: (String) -> Unit) {
     // thread: a long note (or a streaming chat answer) used to be parsed during composition.
     // produceState keeps the previous rendering until the new one is ready, so nothing flickers.
     val rendered by produceState<android.text.Spanned?>(initialValue = null, markwon, content, attachments) {
-        value = withContext(Dispatchers.Default) { markwon.toMarkdown(convertWikiLinks(content)) }
+        value = withContext(Dispatchers.Default) {
+            try {
+                markwon.toMarkdown(convertWikiLinks(content))
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // A note the renderer chokes on is shown as plain text, never a crash.
+                android.util.Log.w("MarkwonContent", "Markdown render failed: ${e.message}")
+                android.text.SpannableString(content)
+            }
+        }
     }
 
     AndroidView(

@@ -280,7 +280,15 @@ class DailyNoteViewModel @Inject constructor(
 
     fun refreshMemoryEchoes() {
         viewModelScope.launch {
-            _memoryEchoes.value = memoryEchoRepository.getDailyEchoes(limit = 2)
+            // Echoes are a nice-to-have: whatever goes wrong computing them (git history, the
+            // index…) must never take the Daily screen down with it.
+            try {
+                _memoryEchoes.value = memoryEchoRepository.getDailyEchoes(limit = 2)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w("DailyNoteViewModel", "Memory echoes unavailable: ${e.message}")
+            }
         }
     }
 
