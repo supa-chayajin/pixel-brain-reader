@@ -14,6 +14,10 @@ Work toward **11.0.0** — the work-direction and dev/lead toolkit release (plan
 
 ### Changed
 
+- **Search reads a full-text index.** Note bodies are searched through an SQLite FTS4 index
+  (accent-insensitive: "reseau" finds "réseau"; every word is a prefix) ranked by BM25, with
+  file and folder names first. It replaces a `LIKE '%…%'` scan of every note on each keystroke.
+
 ### Fixed
 
 - **Notes the app creates follow the vault's frontmatter contract.** Voice captures, web

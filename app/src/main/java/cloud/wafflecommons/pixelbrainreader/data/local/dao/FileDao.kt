@@ -19,14 +19,12 @@ abstract class FileDao {
     @Query("SELECT * FROM files")
     abstract fun getAllFiles(): Flow<List<FileEntity>>
 
-    @Query("""
-        SELECT files.* FROM files 
-        LEFT JOIN file_contents ON files.path = file_contents.path 
-        WHERE files.name LIKE '%' || :query || '%' 
-           OR files.path LIKE '%' || :query || '%' 
-           OR file_contents.content LIKE '%' || :query || '%'
-    """)
-    abstract fun searchFiles(query: String): Flow<List<FileEntity>>
+    /** Name/path matches (folders and attachments included); note bodies go through the full-text index. */
+    @Query("SELECT * FROM files WHERE name LIKE '%' || :query || '%' ESCAPE '\\' ORDER BY type = 'file', name LIMIT :limit")
+    abstract suspend fun searchByName(query: String, limit: Int): List<FileEntity>
+
+    @Query("SELECT * FROM files WHERE path IN (:paths)")
+    abstract suspend fun getFilesByPaths(paths: List<String>): List<FileEntity>
 
     @androidx.room.Upsert
     abstract suspend fun insertAll(files: List<FileEntity>)
