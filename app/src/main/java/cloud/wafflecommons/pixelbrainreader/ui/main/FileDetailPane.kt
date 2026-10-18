@@ -30,6 +30,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Hub
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
@@ -114,9 +115,19 @@ fun FileDetailPane(
     moodViewModel: MoodViewModel = hiltViewModel(),
     onFetchHistory: (suspend () -> List<cloud.wafflecommons.pixelbrainreader.data.remote.GitCommitDto>)? = null,
     onFetchRevisionContent: (suspend (String) -> String?)? = null,
-    onRestoreRevision: ((String) -> Unit)? = null
+    onRestoreRevision: ((String) -> Unit)? = null,
+    filePath: String? = null,
+    onOpenNote: (String) -> Unit = {}
 ) {
     var showTimeMachine by rememberSaveable { mutableStateOf(false) }
+    var showConnections by rememberSaveable { mutableStateOf(false) }
+    if (showConnections && filePath != null) {
+        ConnectionsSheet(
+            path = filePath,
+            onOpen = { target -> showConnections = false; onOpenNote(target) },
+            onDismiss = { showConnections = false }
+        )
+    }
     var commitHistory by remember { mutableStateOf<List<cloud.wafflecommons.pixelbrainreader.data.remote.GitCommitDto>>(emptyList()) }
     var isLoadingHistory by remember { mutableStateOf(false) }
 
@@ -202,6 +213,18 @@ fun FileDetailPane(
                             )
                         }
                         Spacer(Modifier.weight(1f))
+                        if (filePath != null && filePath.endsWith(".md")) {
+                            IconButton(
+                                onClick = { showConnections = true },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Hub,
+                                    contentDescription = "Connections",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
                         if (onFetchHistory != null) {
                             IconButton(
                                 onClick = { showTimeMachine = true },
