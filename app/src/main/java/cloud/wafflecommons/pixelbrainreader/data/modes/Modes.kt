@@ -11,6 +11,38 @@ import java.time.ZoneId
 @Serializable
 enum class ContextMode { WORK, PERSONAL, OFF }
 
+/** How the user calls a mode: a [label] and an [icon] key (`ui/modes/ModeIcons`). Blank = the default. */
+@Serializable
+data class ModeStyle(val label: String = "", val icon: String = "")
+
+/** The names and icons the user gave the modes and the toolkit (Modes settings). */
+data class ModeAppearance(
+    val styles: Map<ContextMode, ModeStyle> = emptyMap(),
+    val toolkit: String = ""
+) {
+    fun label(mode: ContextMode): String = styles[mode]?.label?.trim()?.takeIf { it.isNotEmpty() } ?: defaultLabel(mode)
+    fun iconKey(mode: ContextMode): String = styles[mode]?.icon?.trim()?.takeIf { it.isNotEmpty() } ?: defaultIcon(mode)
+    val toolkitName: String get() = toolkit.trim().ifEmpty { DEFAULT_TOOLKIT }
+
+    companion object {
+        const val DEFAULT_TOOLKIT = "Toolkit"
+        /** Long enough for a word or two, short enough for a chip and a Quick Settings tile. */
+        const val MAX_LABEL = 20
+
+        fun defaultLabel(mode: ContextMode): String = when (mode) {
+            ContextMode.WORK -> "Work"
+            ContextMode.PERSONAL -> "Personal"
+            ContextMode.OFF -> "Off"
+        }
+
+        fun defaultIcon(mode: ContextMode): String = when (mode) {
+            ContextMode.WORK -> "work"
+            ContextMode.PERSONAL -> "home"
+            ContextMode.OFF -> "bedtime"
+        }
+    }
+}
+
 /** A leave: the mode is Off for every day from [start] to [end] (ISO dates, inclusive). */
 @Serializable
 data class LeavePeriod(val start: String, val end: String, val label: String = "") {
@@ -40,8 +72,14 @@ data class ModesConfig(
     val workEnd: String = "18:00",
     val outsideHoursMode: ContextMode = ContextMode.OFF,
     val leavePeriods: List<LeavePeriod> = emptyList(),
-    val keyDates: List<KeyDate> = emptyList()
+    val keyDates: List<KeyDate> = emptyList(),
+    /** The user's names and icons for the modes. */
+    val modeStyles: Map<ContextMode, ModeStyle> = emptyMap(),
+    /** The name of the tools hub (the Daily screen chip); blank = "Toolkit". */
+    val toolkitName: String = ""
 ) {
+    fun appearance(): ModeAppearance = ModeAppearance(modeStyles, toolkitName)
+
     fun startTime(): LocalTime = parseTime(workStart, LocalTime.of(9, 0))
     fun endTime(): LocalTime = parseTime(workEnd, LocalTime.of(18, 0))
 
@@ -66,8 +104,13 @@ data class Visibility(
     val source: ModeSource = ModeSource.DEFAULT,
     val screenShareSafe: Boolean = false,
     val workFolders: List<String> = emptyList(),
-    val leave: LeavePeriod? = null
+    val leave: LeavePeriod? = null,
+    val appearance: ModeAppearance = ModeAppearance()
 ) {
+    fun label(mode: ContextMode = this.mode): String = appearance.label(mode)
+    /** The user's name for Work mode, for "hidden outside … mode" hints. */
+    val workLabel: String get() = appearance.label(ContextMode.WORK)
+
     /** Work is out of the picture: any mode but Work, or the screen is being shared. */
     val workContextHidden: Boolean get() = mode != ContextMode.WORK || screenShareSafe
     /** Work folders are hidden outside Work mode, and always while sharing the screen. */

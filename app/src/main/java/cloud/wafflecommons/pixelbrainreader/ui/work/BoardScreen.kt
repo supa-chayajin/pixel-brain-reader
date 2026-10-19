@@ -174,7 +174,7 @@ fun BoardsScreen(onBack: () -> Unit, onOpenBoard: (String) -> Unit, viewModel: B
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         val shown = config.boards.filter { visibility.isVisible("$it/") }
-        if (shown.isEmpty()) EmptyHint(if (config.boards.isEmpty()) "No board yet: add a folder." else "Your boards are hidden outside Work mode.")
+        if (shown.isEmpty()) EmptyHint(if (config.boards.isEmpty()) "No board yet: add a folder." else "Your boards are hidden outside ${visibility.workLabel} mode.")
         shown.forEach { board ->
             SectionCard(
                 title = board.substringAfterLast('/'),

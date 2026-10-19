@@ -167,7 +167,7 @@ fun LeaveScreen(
     FormScaffold(title = "Leave & handover", onBack = onBack, snackbarHostState = snackbarHostState) {
         if (visibility.hideWork) {
             Text(
-                "Outside Work mode. The documents are still written to your inbox, to read in Work mode.",
+                "Outside ${visibility.workLabel} mode. The documents are still written to your inbox, to read in ${visibility.workLabel} mode.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

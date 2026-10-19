@@ -146,7 +146,7 @@ fun MeetingsScreen(onBack: () -> Unit, onOpenNote: (String) -> Unit, onOpenActio
             return@FormScaffold
         }
         if (visibility.hideWork) {
-            Text("Outside Work mode: meetings in work folders are hidden.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Outside ${visibility.workLabel} mode: meetings in work folders are hidden.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         SectionCard(
             title = "My next actions",

@@ -163,7 +163,7 @@ fun EvidenceScreen(onBack: () -> Unit, onOpenNote: (String) -> Unit, viewModel: 
         ) {
             val f = figures
             when {
-                visibility.hideWork -> Text("Hidden outside Work mode.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                visibility.hideWork -> Text("Hidden outside ${visibility.workLabel} mode.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 f == null -> Text("The mission log couldn't be read.", style = MaterialTheme.typography.bodyMedium)
                 else -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Figure("Facts", f.count(LogKind.FACT).toString())

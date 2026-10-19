@@ -135,7 +135,7 @@ fun MissionLogScreen(startWithAdd: Boolean, onBack: () -> Unit, viewModel: Missi
         snackbarHost = { SnackbarHost(snackbarHostState, modifier = Modifier.padding(bottom = NavBarClearance)) }
     ) { padding ->
         if (visibility.hideWork) {
-            HiddenWork(Modifier.padding(padding))
+            HiddenWork(visibility.workLabel, Modifier.padding(padding))
         } else {
             LazyColumn(
                 modifier = Modifier.padding(padding).fillMaxSize(),
@@ -212,7 +212,7 @@ fun MissionLogScreen(startWithAdd: Boolean, onBack: () -> Unit, viewModel: Missi
 }
 
 @Composable
-private fun HiddenWork(modifier: Modifier) {
+private fun HiddenWork(workLabel: String, modifier: Modifier) {
     Column(
         modifier = modifier.fillMaxSize().padding(32.dp),
         verticalArrangement = Arrangement.Center,
@@ -220,7 +220,7 @@ private fun HiddenWork(modifier: Modifier) {
     ) {
         Icon(Icons.Rounded.VisibilityOff, contentDescription = null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.size(16.dp))
-        Text("Hidden outside Work mode", style = MaterialTheme.typography.titleMedium)
+        Text("Hidden outside $workLabel mode", style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.size(8.dp))
         Text(
             "You can still log something: it is saved without showing the rest.",

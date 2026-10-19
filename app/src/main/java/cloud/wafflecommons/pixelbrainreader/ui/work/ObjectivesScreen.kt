@@ -114,11 +114,11 @@ fun ObjectivesScreen(onBack: () -> Unit, onOpenNote: (String) -> Unit, viewModel
     val today = LocalDate.now()
 
     FormScaffold(title = "Objectives", onBack = onBack, snackbarHostState = snackbarHostState) {
-        SlotCard(settings, viewModel::updateSlot)
+        SlotCard(settings, visibility.workLabel, viewModel::updateSlot)
         val list = objectives
         when {
             list == null -> EmptyHint("Reading your objectives…")
-            list.isEmpty() && visibility.hideWork -> EmptyHint("Your objectives are hidden outside Work mode.")
+            list.isEmpty() && visibility.hideWork -> EmptyHint("Your objectives are hidden outside ${visibility.workLabel} mode.")
             list.isEmpty() -> EmptyHint(
                 "No objective yet. Tag a note #objectif, list its milestones as checkboxes (a due date with 📅 2026-12-01), " +
                     "and give it the tags your log entries use: they become its material."
@@ -132,12 +132,12 @@ fun ObjectivesScreen(onBack: () -> Unit, onOpenNote: (String) -> Unit, viewModel
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun SlotCard(settings: ObjectiveSettings, update: ((ObjectiveSettings) -> ObjectiveSettings) -> Unit) {
+private fun SlotCard(settings: ObjectiveSettings, workLabel: String, update: ((ObjectiveSettings) -> ObjectiveSettings) -> Unit) {
     var pickTime by remember { mutableStateOf(false) }
     SectionCard(
         title = "Weekly slot",
         icon = Icons.Rounded.Schedule,
-        subtitle = "Time kept for your objectives. When it starts, a nudge names what is due soon and what stalled — never outside Work mode.",
+        subtitle = "Time kept for your objectives. When it starts, a nudge names what is due soon and what stalled — never outside $workLabel mode.",
         trailing = { Switch(checked = settings.slotEnabled, onCheckedChange = { on -> update { it.copy(slotEnabled = on) } }) }
     ) {
         if (settings.slotEnabled) {

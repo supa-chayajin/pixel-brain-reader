@@ -87,7 +87,7 @@ fun LoadRecoveryScreen(onBack: () -> Unit, viewModel: LoadRecoveryViewModel = hi
 
     FormScaffold(title = "Load vs recovery", onBack = onBack) {
         if (visibility.hideWork || visibility.hideHealth) {
-            EmptyHint("Hidden outside Work mode and while screen-share safe is on.")
+            EmptyHint("Hidden outside ${visibility.workLabel} mode and while screen-share safe is on.")
             return@FormScaffold
         }
         val r = report

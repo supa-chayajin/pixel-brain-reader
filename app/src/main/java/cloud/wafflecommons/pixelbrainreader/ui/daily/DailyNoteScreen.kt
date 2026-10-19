@@ -55,12 +55,12 @@ import cloud.wafflecommons.pixelbrainreader.ui.components.PremiumWeatherCard
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.Checklist
 import androidx.compose.material.icons.rounded.Event
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Mood
 import androidx.compose.material.icons.rounded.TextFields
-import androidx.compose.material.icons.rounded.WorkOutline
 import androidx.compose.material.icons.sharp.AddCircle
 import androidx.compose.material.icons.sharp.CheckCircle
 import androidx.compose.material.icons.sharp.Lightbulb
@@ -272,7 +272,7 @@ fun DailyNoteScreen(
                     contentPadding = PaddingValues(top = 16.dp, bottom = NavBarClearance),
                     verticalArrangement = Arrangement.spacedBy(24.dp)
                 ) {
-                    // Mode (Work / Personal / Off)
+                    // Mode (Work / Personal / Off, under the user's names) and the tools hub
                     item(key = "mode") {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             cloud.wafflecommons.pixelbrainreader.ui.modes.ModeChip(
@@ -282,10 +282,10 @@ fun DailyNoteScreen(
                             Spacer(Modifier.width(8.dp))
                             androidx.compose.material3.AssistChip(
                                 onClick = onOpenWork,
-                                label = { Text("Work") },
+                                label = { Text(visibility.appearance.toolkitName) },
                                 leadingIcon = {
                                     Icon(
-                                        Icons.Rounded.WorkOutline,
+                                        Icons.Rounded.Apps,
                                         contentDescription = null,
                                         modifier = Modifier.size(18.dp)
                                     )
