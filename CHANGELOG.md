@@ -11,6 +11,26 @@ Still planned for 11.x (`documentation/plans/2026-10-18-v11-work-and-dev-toolkit
 AI-pairing dashboard, "explain this error", decision records, people & 1:1s, the project
 dashboard, security watch, desktop hand-off, the workshop kit and the authorship timeline.
 
+## [11.1.0] — 2026-10-19
+
+Dogfooding feedback on 11.0.0.
+
+### Fixed
+
+- **On-device AI answered nothing but "maxOutputTokens must be between 1 and 256".** Every
+  generation request asked ML Kit for 2,048 output tokens, which the Prompt API rejects; the
+  pre-load sends a bare prompt, so the model still showed Ready and re-downloading it changed
+  nothing. Requests now use the API's ceiling (256 tokens) through one shared builder.
+
+### Changed
+
+- **Your own names and icons for the modes, and a renamable tools hub.** Modes settings gains a
+  "Names & icons" section: each mode (Work / Personal / Off by default) takes a name and one of 23
+  icons, used by the Daily chip, the mode sheet, the settings, the Quick Settings tile's subtitle
+  and every "hidden outside … mode" hint. The tools hub — the Daily chip that was also called
+  "Work" — is now "Toolkit" by default and can be renamed too (the quick-actions widget follows).
+  Both live in `context_modes.json`, so they sync; the tile keeps its per-mode drawable.
+
 ## [11.0.0] — 2026-10-18
 
 The work-direction and dev/lead toolkit release, shipped for dogfooding before the rest of its
