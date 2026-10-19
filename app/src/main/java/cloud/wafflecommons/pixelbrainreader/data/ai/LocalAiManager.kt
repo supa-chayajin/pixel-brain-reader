@@ -192,9 +192,7 @@ class LocalAiManager @Inject constructor(
         sessionMutex.withLock {
             try {
                 val start = System.currentTimeMillis()
-                val request = GenerateContentRequest.Builder(TextPart(prompt)).apply {
-                    maxOutputTokens = 2048
-                }.build()
+                val request = request(prompt)
                 val response = withTimeoutOrNull(INFERENCE_TIMEOUT_MS) {
                     ensureModel().generateContent(request)
                 }
@@ -302,9 +300,7 @@ class LocalAiManager @Inject constructor(
             var chunks = 0
             var chars = 0
             try {
-                val request = GenerateContentRequest.Builder(TextPart(prompt)).apply {
-                    maxOutputTokens = 2048
-                }.build()
+                val request = request(prompt)
                 ensureModel().generateContentStream(request).collect { response ->
                     val text = response.candidates.firstOrNull()?.text
                     val finishReason = response.candidates.firstOrNull()?.finishReason
@@ -324,6 +320,12 @@ class LocalAiManager @Inject constructor(
             }
         }
     }.flowOn(Dispatchers.IO)
+
+    /** One request shape for both paths; ML Kit rejects any maxOutputTokens outside 1..256. */
+    private fun request(prompt: String): GenerateContentRequest =
+        GenerateContentRequest.Builder(TextPart(prompt)).apply {
+            maxOutputTokens = MAX_OUTPUT_TOKENS
+        }.build()
 
     private fun buildAugmentedPrompt(
         systemPrompt: String,
@@ -367,6 +369,11 @@ class LocalAiManager @Inject constructor(
         // Generous — the first inference after a fresh (re)download reloads the model into
         // memory and can take a while. Chat streaming uses its own tighter budget.
         const val INFERENCE_TIMEOUT_MS = 120_000L
+        /**
+         * The Prompt API's ceiling: 2048 made every request fail with "maxOutputTokens must be
+         * between 1 and 256" while the plain-string pre-load still reported the model Ready.
+         */
+        const val MAX_OUTPUT_TOKENS = 256
         // Bound the AICore availability probe. checkStatus() has been observed to wedge
         // indefinitely on some devices; without this, nanoState stays Checking forever and
         // every AI surface fast-fails with "still checking…" (i.e. "Nano not responding anywhere").
