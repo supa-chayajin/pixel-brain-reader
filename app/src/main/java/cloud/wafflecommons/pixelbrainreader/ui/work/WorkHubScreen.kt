@@ -90,7 +90,7 @@ class WorkHubViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 }
 
-/** Work: the mission log and the tools built on it. Figures stay hidden outside Work mode. */
+/** The tools hub (named in Modes settings): the mission log and the tools built on it. Figures stay hidden outside Work mode. */
 @Composable
 fun WorkHubScreen(
     onBack: () -> Unit,
@@ -102,10 +102,10 @@ fun WorkHubScreen(
     val summary by viewModel.logSummary.collectAsStateWithLifecycle()
     val overload by viewModel.overload.collectAsStateWithLifecycle()
 
-    FormScaffold(title = "Work", onBack = onBack) {
+    FormScaffold(title = visibility.appearance.toolkitName, onBack = onBack) {
         if (visibility.hideWork) {
             Text(
-                "Outside Work mode: figures are hidden. Capture still works.",
+                "Outside ${visibility.workLabel} mode: figures are hidden. Capture still works.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

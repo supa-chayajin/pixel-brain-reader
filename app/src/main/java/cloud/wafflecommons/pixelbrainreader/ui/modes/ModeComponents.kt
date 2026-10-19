@@ -2,6 +2,8 @@ package cloud.wafflecommons.pixelbrainreader.ui.modes
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -11,53 +13,46 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.Event
-import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.VisibilityOff
-import androidx.compose.material.icons.rounded.Work
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledIconToggleButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import cloud.wafflecommons.pixelbrainreader.data.modes.ContextMode
+import cloud.wafflecommons.pixelbrainreader.data.modes.ModeAppearance
+import cloud.wafflecommons.pixelbrainreader.data.modes.ModeStyle
 import cloud.wafflecommons.pixelbrainreader.data.modes.ModeSource
 import cloud.wafflecommons.pixelbrainreader.data.modes.Visibility
 import cloud.wafflecommons.pixelbrainreader.ui.components.SectionCard
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-
-fun ContextMode.label(): String = when (this) {
-    ContextMode.WORK -> "Work"
-    ContextMode.PERSONAL -> "Personal"
-    ContextMode.OFF -> "Off"
-}
-
-fun ContextMode.icon(): ImageVector = when (this) {
-    ContextMode.WORK -> Icons.Rounded.Work
-    ContextMode.PERSONAL -> Icons.Rounded.Home
-    ContextMode.OFF -> Icons.Rounded.Bedtime
-}
 
 private fun ContextMode.description(): String = when (this) {
     ContextMode.WORK -> "Everything visible; work notifications on."
@@ -80,13 +75,13 @@ private fun shortDate(iso: String): String = runCatching {
 /** The current mode, as a chip that opens the mode sheet. */
 @Composable
 fun ModeChip(visibility: Visibility, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val label = visibility.mode.label() + if (visibility.screenShareSafe) " · Safe" else ""
+    val label = visibility.label() + if (visibility.screenShareSafe) " · Safe" else ""
     AssistChip(
         onClick = onClick,
         label = { Text(label) },
         leadingIcon = {
             Icon(
-                if (visibility.screenShareSafe) Icons.Rounded.VisibilityOff else visibility.mode.icon(),
+                if (visibility.screenShareSafe) Icons.Rounded.VisibilityOff else ModeIcons.of(visibility.appearance, visibility.mode),
                 contentDescription = null,
                 modifier = Modifier.size(AssistChipDefaults.IconSize)
             )
@@ -113,9 +108,9 @@ fun ModeSheet(
             Spacer(Modifier.size(8.dp))
             ContextMode.entries.forEach { mode ->
                 ListItem(
-                    headlineContent = { Text(mode.label()) },
+                    headlineContent = { Text(visibility.label(mode)) },
                     supportingContent = { Text(mode.description()) },
-                    leadingContent = { Icon(mode.icon(), contentDescription = null) },
+                    leadingContent = { Icon(ModeIcons.of(visibility.appearance, mode), contentDescription = null) },
                     trailingContent = { RadioButton(selected = visibility.mode == mode, onClick = null) },
                     modifier = Modifier.selectable(
                         selected = visibility.mode == mode,
@@ -141,6 +136,59 @@ fun ModeSheet(
             }
         }
     }
+}
+
+/** Rename a mode and pick its icon; "Reset" brings the default name and icon back. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun ModeStyleDialog(
+    mode: ContextMode,
+    appearance: ModeAppearance,
+    onConfirm: (ModeStyle) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var label by remember { mutableStateOf(appearance.label(mode)) }
+    var iconKey by remember { mutableStateOf(appearance.iconKey(mode)) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("${ModeAppearance.defaultLabel(mode)} mode") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = label,
+                    onValueChange = { label = it.take(ModeAppearance.MAX_LABEL) },
+                    label = { Text("Name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text("Icon", style = MaterialTheme.typography.labelLarge)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    ModeIcons.all.forEach { (key, icon) ->
+                        FilledIconToggleButton(checked = key == iconKey, onCheckedChange = { iconKey = key }) {
+                            Icon(icon, contentDescription = key)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = label.isNotBlank(), onClick = {
+                val name = label.trim()
+                onConfirm(
+                    ModeStyle(
+                        label = if (name == ModeAppearance.defaultLabel(mode)) "" else name,
+                        icon = if (iconKey == ModeAppearance.defaultIcon(mode)) "" else iconKey
+                    )
+                )
+            }) { Text("Save") }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = { onConfirm(ModeStyle()) }) { Text("Reset") }
+                TextButton(onClick = onDismiss) { Text("Cancel") }
+            }
+        }
+    )
 }
 
 /** Upcoming key dates with a countdown (today, tomorrow, in N days). */

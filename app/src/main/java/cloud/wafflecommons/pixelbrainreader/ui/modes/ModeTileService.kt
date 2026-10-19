@@ -15,7 +15,10 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/** Quick Settings tile: tap to cycle Work → Personal → Off; long-press opens the modes settings. */
+/**
+ * Quick Settings tile: tap to cycle Work → Personal → Off (under the user's names); long-press opens
+ * the modes settings. The tile keeps one drawable per mode: a custom icon only shows in the app.
+ */
 @AndroidEntryPoint
 class ModeTileService : TileService() {
 
@@ -49,7 +52,7 @@ class ModeTileService : TileService() {
     private fun render(visibility: Visibility) {
         val tile = qsTile ?: return
         tile.label = getString(R.string.tile_mode_label)
-        tile.subtitle = visibility.mode.label() + if (visibility.screenShareSafe) " · Safe" else ""
+        tile.subtitle = visibility.label() + if (visibility.screenShareSafe) " · Safe" else ""
         tile.state = if (visibility.mode == ContextMode.WORK) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
         tile.icon = Icon.createWithResource(
             this,

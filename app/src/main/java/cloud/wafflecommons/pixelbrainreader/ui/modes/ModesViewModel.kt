@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import cloud.wafflecommons.pixelbrainreader.data.modes.ContextMode
 import cloud.wafflecommons.pixelbrainreader.data.modes.KeyDate
 import cloud.wafflecommons.pixelbrainreader.data.modes.LeavePeriod
+import cloud.wafflecommons.pixelbrainreader.data.modes.ModeAppearance
+import cloud.wafflecommons.pixelbrainreader.data.modes.ModeStyle
 import cloud.wafflecommons.pixelbrainreader.data.modes.ModeResolver
 import cloud.wafflecommons.pixelbrainreader.data.modes.ModesConfig
 import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
@@ -78,6 +80,17 @@ class ModesViewModel @Inject constructor(
     fun setWorkHours(start: String, end: String) = update { it.copy(workStart = start, workEnd = end) }
 
     fun setOutsideHoursMode(mode: ContextMode) = update { it.copy(outsideHoursMode = mode) }
+
+    /** A blank [ModeStyle] puts the default name and icon back. */
+    fun setModeStyle(mode: ContextMode, style: ModeStyle) = update { cfg ->
+        val styles = if (style == ModeStyle()) cfg.modeStyles - mode else cfg.modeStyles + (mode to style)
+        cfg.copy(modeStyles = styles)
+    }
+
+    fun setToolkitName(name: String) = update { cfg ->
+        val trimmed = name.trim().take(ModeAppearance.MAX_LABEL)
+        cfg.copy(toolkitName = if (trimmed == ModeAppearance.DEFAULT_TOOLKIT) "" else trimmed)
+    }
 
     fun addLeave(leave: LeavePeriod) = update { cfg -> cfg.copy(leavePeriods = (cfg.leavePeriods + leave).sortedBy { it.start }) }
 

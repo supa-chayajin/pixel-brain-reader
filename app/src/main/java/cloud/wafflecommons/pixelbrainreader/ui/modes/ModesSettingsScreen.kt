@@ -1,5 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.ui.modes
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -9,7 +10,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.BeachAccess
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Event
 import androidx.compose.material.icons.rounded.FolderShared
 import androidx.compose.material.icons.rounded.Schedule
@@ -18,6 +21,8 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -33,12 +38,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cloud.wafflecommons.pixelbrainreader.data.modes.ContextMode
 import cloud.wafflecommons.pixelbrainreader.data.modes.KeyDate
 import cloud.wafflecommons.pixelbrainreader.data.modes.LeavePeriod
+import cloud.wafflecommons.pixelbrainreader.data.modes.ModeAppearance
 import cloud.wafflecommons.pixelbrainreader.ui.components.EmptyHint
 import cloud.wafflecommons.pixelbrainreader.ui.components.FormScaffold
 import cloud.wafflecommons.pixelbrainreader.ui.components.PickDateDialog
@@ -66,12 +73,39 @@ fun ModesSettingsScreen(onBack: () -> Unit, viewModel: ModesViewModel = hiltView
     var pickKeyDate by remember { mutableStateOf(false) }
     var pendingKeyDate by remember { mutableStateOf<LocalDate?>(null) }
     var pendingKeyDateWork by remember { mutableStateOf(true) }
+    var editMode by remember { mutableStateOf<ContextMode?>(null) }
+    var editToolkit by remember { mutableStateOf(false) }
+    val appearance = config.appearance()
+    val workLabel = appearance.label(ContextMode.WORK)
 
     FormScaffold(title = "Modes", onBack = onBack) {
         SectionCard(
+            title = "Names & icons",
+            icon = Icons.Rounded.Edit,
+            subtitle = "What the modes and the tools hub are called on the Daily screen, the mode sheet and the Quick Settings tile."
+        ) {
+            ContextMode.entries.forEach { mode ->
+                ListItem(
+                    headlineContent = { Text(appearance.label(mode)) },
+                    supportingContent = { Text("${ModeAppearance.defaultLabel(mode)} mode") },
+                    leadingContent = { Icon(ModeIcons.of(appearance, mode), contentDescription = null) },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    modifier = Modifier.clickable { editMode = mode }
+                )
+            }
+            ListItem(
+                headlineContent = { Text(appearance.toolkitName) },
+                supportingContent = { Text("Tools hub: mission log, boards, meetings, objectives…") },
+                leadingContent = { Icon(Icons.Rounded.Apps, contentDescription = null) },
+                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                modifier = Modifier.clickable { editToolkit = true }
+            )
+        }
+
+        SectionCard(
             title = "Work folders",
             icon = Icons.Rounded.FolderShared,
-            subtitle = "Hidden outside Work mode: lists, search, AI answers, resurfaced notes, widgets and notifications."
+            subtitle = "Hidden outside $workLabel mode: lists, search, AI answers, resurfaced notes, widgets and notifications."
         ) {
             if (folders.isEmpty()) EmptyHint("No folders yet — sync the vault first.")
             folders.forEach { folder ->
@@ -85,7 +119,7 @@ fun ModesSettingsScreen(onBack: () -> Unit, viewModel: ModesViewModel = hiltView
         SectionCard(
             title = "Schedule",
             icon = Icons.Rounded.Schedule,
-            subtitle = "Work mode during work hours; another mode the rest of the time.",
+            subtitle = "$workLabel mode during work hours; another mode the rest of the time.",
             trailing = { Switch(checked = config.scheduleEnabled, onCheckedChange = viewModel::setScheduleEnabled) }
         ) {
             if (config.scheduleEnabled) {
@@ -114,7 +148,7 @@ fun ModesSettingsScreen(onBack: () -> Unit, viewModel: ModesViewModel = hiltView
                             selected = config.outsideHoursMode == mode,
                             onClick = { viewModel.setOutsideHoursMode(mode) },
                             shape = SegmentedButtonDefaults.itemShape(index, choices.size)
-                        ) { Text(mode.label()) }
+                        ) { Text(appearance.label(mode)) }
                     }
                 }
             }
@@ -143,7 +177,7 @@ fun ModesSettingsScreen(onBack: () -> Unit, viewModel: ModesViewModel = hiltView
         SectionCard(
             title = "Key dates",
             icon = Icons.Rounded.Event,
-            subtitle = "Countdowns on the Daily screen. Work dates hide outside Work mode."
+            subtitle = "Countdowns on the Daily screen. Work dates hide outside $workLabel mode."
         ) {
             if (config.keyDates.isEmpty()) EmptyHint("No key dates.")
             config.keyDates.forEach { key ->
@@ -173,6 +207,23 @@ fun ModesSettingsScreen(onBack: () -> Unit, viewModel: ModesViewModel = hiltView
         )
     }
 
+    editMode?.let { mode ->
+        ModeStyleDialog(
+            mode = mode,
+            appearance = appearance,
+            onConfirm = { style -> viewModel.setModeStyle(mode, style); editMode = null },
+            onDismiss = { editMode = null }
+        )
+    }
+    if (editToolkit) {
+        TextPromptDialog(
+            title = "Name the tools hub",
+            label = "Name",
+            initial = appearance.toolkitName,
+            onConfirm = { name -> viewModel.setToolkitName(name); editToolkit = false },
+            onDismiss = { editToolkit = false }
+        )
+    }
     timePicker?.let { (initial, onConfirm) ->
         PickTimeDialog(initial = initial, onConfirm = { onConfirm(it); timePicker = null }, onDismiss = { timePicker = null })
     }

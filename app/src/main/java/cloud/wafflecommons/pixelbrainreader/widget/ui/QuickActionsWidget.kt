@@ -19,6 +19,10 @@ import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
 import androidx.glance.layout.width
+import cloud.wafflecommons.pixelbrainreader.data.modes.ModeAppearance
+import cloud.wafflecommons.pixelbrainreader.di.WidgetEntryPoint
+import dagger.hilt.android.EntryPointAccessors
+import kotlinx.coroutines.CancellationException
 
 /**
  * A compact launchpad of deep-link buttons — the app's "app actions" surfaced on the home screen.
@@ -30,13 +34,22 @@ class QuickActionsWidget : GlanceAppWidget() {
     private data class Item(val emoji: String, val label: String, val action: Action)
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
+        // The tools hub carries the name the user gave it (Modes settings).
+        val toolkit = try {
+            EntryPointAccessors.fromApplication(context.applicationContext, WidgetEntryPoint::class.java)
+                .modesRepository().currentVisibility().appearance.toolkitName
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            ModeAppearance.DEFAULT_TOOLKIT
+        }
         provideContent {
-            GlanceTheme { Content(context) }
+            GlanceTheme { Content(context, toolkit) }
         }
     }
 
     @Composable
-    private fun Content(context: Context) {
+    private fun Content(context: Context, toolkit: String) {
         val items = listOf(
             Item("📝", "Capture", actionStartActivity(WidgetNav.captureIntent(context))),
             Item("📓", "Daily", actionStartActivity(WidgetNav.openIntent(context, WidgetNav.SCREEN_DAILY))),
@@ -45,7 +58,7 @@ class QuickActionsWidget : GlanceAppWidget() {
             Item("🧹", "Chores", actionStartActivity(WidgetNav.openIntent(context, WidgetNav.SCREEN_CHORES))),
             Item("🔍", "Ask", actionStartActivity(WidgetNav.openIntent(context, WidgetNav.SCREEN_CHAT))),
             Item("🗒️", "Log", actionStartActivity(WidgetNav.openIntent(context, WidgetNav.SCREEN_LOG))),
-            Item("💼", "Work", actionStartActivity(WidgetNav.openIntent(context, WidgetNav.SCREEN_WORK)))
+            Item("🧰", toolkit, actionStartActivity(WidgetNav.openIntent(context, WidgetNav.SCREEN_WORK)))
         )
         WidgetSurface {
             Column(modifier = GlanceModifier.fillMaxSize()) {

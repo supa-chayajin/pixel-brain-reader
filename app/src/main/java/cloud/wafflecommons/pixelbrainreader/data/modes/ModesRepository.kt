@@ -124,6 +124,8 @@ class ModesRepository @Inject constructor(
             fileRepository.saveFileLocally(PATH, json.encodeToString(ModesConfig.serializer(), updated) + "\n")
             _config.value = updated
             pushScheduler.requestPush()
+            // The quick-actions widget shows the toolkit's name.
+            if (updated.toolkitName != base.toolkitName) widgetUpdateManager.get().triggerUpdate()
         }
     }
 
@@ -153,7 +155,7 @@ class ModesRepository @Inject constructor(
 
     private fun compute(cfg: ModesConfig, ov: ModeOverride?, safe: Boolean): Visibility {
         val resolved = ModeResolver.resolve(cfg, ov, LocalDateTime.now(), ZoneId.systemDefault())
-        return Visibility(resolved.mode, resolved.source, safe, cfg.workFolders, resolved.leave)
+        return Visibility(resolved.mode, resolved.source, safe, cfg.workFolders, resolved.leave, cfg.appearance())
     }
 
     private fun overrideOf(prefs: Preferences): ModeOverride? {
