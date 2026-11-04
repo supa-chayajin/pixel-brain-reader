@@ -87,6 +87,7 @@ fun DailyNoteScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val shownSections by layoutViewModel.shown.collectAsStateWithLifecycle()
+    val sectionOrder by layoutViewModel.order.collectAsStateWithLifecycle()
     val moreExpanded by layoutViewModel.moreExpanded.collectAsStateWithLifecycle()
     val guardHeld by guardStatus.held.collectAsStateWithLifecycle()
     val leaveReturn by leaveViewModel.returning.collectAsStateWithLifecycle()
@@ -444,12 +445,14 @@ fun DailyNoteScreen(
                             }
                         }
                     }
-                    // On a wide screen, Timeline and Tasks sit side by side when they are in the same group.
+                    // On a wide screen, Timeline and Tasks sit side by side when they follow each other in a
+                    // group (in the place of the first of the two); otherwise each keeps its own place.
                     val renderGroup: androidx.compose.foundation.lazy.LazyListScope.(List<DailySection>) -> Unit = { group ->
-                        val sideBySide = isWide && DailySection.TIMELINE in group && DailySection.TASKS in group
-                        group.filter(hasContent).forEachIndexed { index, s ->
-                            if (sideBySide && s == DailySection.TASKS) return@forEachIndexed
-                            if (sideBySide && s == DailySection.TIMELINE) {
+                        val visible = group.filter(hasContent)
+                        val pairAt = if (isWide) timelineTasksPairAt(visible) else null
+                        visible.forEachIndexed { index, s ->
+                            if (pairAt != null && index == pairAt + 1) return@forEachIndexed
+                            if (index == pairAt) {
                                 item(key = "timeline-tasks") {
                                     cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = index) {
                                         Row(
@@ -479,8 +482,8 @@ fun DailyNoteScreen(
                             }
                         }
                     }
-                    val shownGroup = DailySection.entries.filter { it in shownSections }
-                    val foldGroup = DailySection.entries.filter { it !in shownSections }
+                    val shownGroup = sectionOrder.filter { it in shownSections }
+                    val foldGroup = sectionOrder.filter { it !in shownSections }
                     renderGroup(shownGroup)
                     if (foldGroup.any(hasContent)) {
                         item(key = "more-today") {

@@ -252,10 +252,15 @@ class UserPreferencesRepository @Inject constructor(
     // --- Simpler screens (v12): what the Daily screen shows, the fold, pinned tools ---
     private val KEY_DAILY_SHOWN = androidx.datastore.preferences.core.stringSetPreferencesKey("daily_shown_sections")
     private val KEY_DAILY_MORE_EXPANDED = booleanPreferencesKey("daily_more_expanded")
+    private val KEY_DAILY_ORDER = stringPreferencesKey("daily_section_order")
     private val KEY_PINNED_TOOLS = androidx.datastore.preferences.core.stringSetPreferencesKey("toolkit_pinned_tools")
 
     val dailyShownSections: Flow<Set<cloud.wafflecommons.pixelbrainreader.data.model.DailySection>> =
         setting { cloud.wafflecommons.pixelbrainreader.data.model.DailySection.fromKeys(it[KEY_DAILY_SHOWN]) }
+
+    /** Every Daily block in the user's order (Settings → Daily screen); on screen and in the fold, each group follows it. */
+    val dailySectionOrder: Flow<List<cloud.wafflecommons.pixelbrainreader.data.model.DailySection>> =
+        setting { cloud.wafflecommons.pixelbrainreader.data.model.DailySection.orderFromKeys(it[KEY_DAILY_ORDER]) }
 
     val dailyMoreExpanded: Flow<Boolean> = setting { it[KEY_DAILY_MORE_EXPANDED] ?: false }
 
@@ -267,6 +272,19 @@ class UserPreferencesRepository @Inject constructor(
             val current = cloud.wafflecommons.pixelbrainreader.data.model.DailySection.fromKeys(prefs[KEY_DAILY_SHOWN])
             val next = if (shown) current + section else current - section
             prefs[KEY_DAILY_SHOWN] = next.map { it.key }.toSet()
+        }
+    }
+
+    /**
+     * Moves [section] one step within its group. The order and the shown set are read inside the
+     * same edit, so quick taps on the arrows never compute from a stale order and lose a move.
+     */
+    suspend fun moveDailySection(section: cloud.wafflecommons.pixelbrainreader.data.model.DailySection, up: Boolean) {
+        context.dataStore.edit { prefs ->
+            val ds = cloud.wafflecommons.pixelbrainreader.data.model.DailySection
+            val order = ds.orderFromKeys(prefs[KEY_DAILY_ORDER])
+            val shown = ds.fromKeys(prefs[KEY_DAILY_SHOWN])
+            prefs[KEY_DAILY_ORDER] = ds.toKeys(ds.moved(order, shown, section, up))
         }
     }
 

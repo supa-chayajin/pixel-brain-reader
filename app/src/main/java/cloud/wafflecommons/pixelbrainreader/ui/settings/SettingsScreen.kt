@@ -57,6 +57,7 @@ import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.Work
 import androidx.compose.material.icons.rounded.DateRange
 import androidx.compose.material.icons.rounded.Mood
+import androidx.compose.material.icons.rounded.ViewAgenda
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.HeartRateRecord
@@ -78,6 +79,7 @@ private fun Context.findActivity(): Activity? {
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
+    onNavigateToDailyLayout: () -> Unit = {},
     onNavigateToHabitConfig: () -> Unit = {},
     onNavigateToHomeConfig: () -> Unit = {},
     onNavigateToReminders: () -> Unit = {},
@@ -207,7 +209,16 @@ fun SettingsScreen(
                 title = "Your day",
                 icon = Icons.Rounded.DateRange
             ) {
-                DailyScreenSettings()
+                ListItem(
+                    modifier = Modifier.clickable {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onNavigateToDailyLayout()
+                    },
+                    leadingContent = { Icon(Icons.Rounded.ViewAgenda, contentDescription = null) },
+                    supportingContent = { Text("Order the blocks and choose which stay on screen") }
+                ) {
+                    Text("Daily screen")
+                }
 
                 ListItem(
                     modifier = Modifier.clickable {

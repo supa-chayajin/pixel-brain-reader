@@ -48,6 +48,18 @@ internal fun moreTodaySummary(
 
 private fun plural(n: Int, one: String, many: String = one + "s") = "$n ${if (n == 1) one else many}"
 
+/**
+ * Where Timeline and Tasks pair up side by side on a wide screen: the index of the first of the
+ * two when they follow each other in [visible], else null — then each keeps its own place, so the
+ * user's order is never bent to make the pair.
+ */
+internal fun timelineTasksPairAt(visible: List<DailySection>): Int? {
+    val timeline = visible.indexOf(DailySection.TIMELINE)
+    val tasks = visible.indexOf(DailySection.TASKS)
+    if (timeline < 0 || tasks < 0 || kotlin.math.abs(timeline - tasks) != 1) return null
+    return minOf(timeline, tasks)
+}
+
 @Composable
 internal fun MoreTodayHeader(summary: String, expanded: Boolean, onToggle: () -> Unit) {
     Surface(

@@ -28,6 +28,17 @@ class MoreTodayTest {
     }
 
     @Test
+    fun `timeline and tasks pair only when they follow each other`() {
+        val (weather, vitals, tasks, timeline) = listOf(
+            DailySection.WEATHER, DailySection.VITALS, DailySection.TASKS, DailySection.TIMELINE
+        )
+        assertEquals(2, timelineTasksPairAt(listOf(weather, vitals, tasks, timeline)))
+        assertEquals(0, timelineTasksPairAt(listOf(timeline, tasks, weather)))
+        assertEquals(null, timelineTasksPairAt(listOf(tasks, DailySection.GRATITUDE, timeline)))
+        assertEquals(null, timelineTasksPairAt(listOf(weather, timeline)))
+    }
+
+    @Test
     fun `stored keys round-trip, unknown keys are dropped, nothing stored means defaults`() {
         assertEquals(DailySection.DEFAULT_SHOWN, DailySection.fromKeys(null))
         assertEquals(emptySet<DailySection>(), DailySection.fromKeys(emptySet()))

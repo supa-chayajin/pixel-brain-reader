@@ -2,8 +2,9 @@ package cloud.wafflecommons.pixelbrainreader.data.model
 
 /**
  * The optional blocks of the Daily screen. "Shown" ones are always on screen; the others sit in
- * the "More today" fold, one tap away. Banners (guard, sync digest, back from leave) are not
- * here: they appear only when they have something to say.
+ * the "More today" fold, one tap away. Both groups follow the user's order (Settings → Daily
+ * screen); the declaration order below is only the default. Banners (guard, sync digest, back
+ * from leave) are not here: they appear only when they have something to say.
  */
 enum class DailySection(val key: String, val label: String, val description: String) {
     WEATHER("weather", "Weather", "Today's forecast"),
@@ -23,5 +24,43 @@ enum class DailySection(val key: String, val label: String, val description: Str
 
         fun fromKeys(keys: Set<String>?): Set<DailySection> =
             keys?.mapNotNull { k -> entries.firstOrNull { it.key == k } }?.toSet() ?: DEFAULT_SHOWN
+
+        /**
+         * The user's order from the stored comma-separated keys. Unknown keys are dropped, a
+         * repeated one counts once, and blocks the list doesn't name (never ordered, or added by
+         * an update) follow in their default order — so the order stays valid without a migration.
+         */
+        fun orderFromKeys(stored: String?): List<DailySection> {
+            val saved = stored?.split(",")
+                ?.mapNotNull { k -> entries.firstOrNull { it.key == k.trim() } }
+                ?.distinct()
+                .orEmpty()
+            return saved + entries.filter { it !in saved }
+        }
+
+        fun toKeys(order: List<DailySection>): String = order.distinct().joinToString(",") { it.key }
+
+        /**
+         * [order] with [section] swapped with its nearest neighbour in the same group (both on
+         * screen, or both in "More today"), one step [up] or down. Each group is shown in this
+         * order, so a move always changes what the Daily screen shows; at a group's edge, or for
+         * a block not in [order], nothing moves.
+         */
+        fun moved(
+            order: List<DailySection>,
+            shown: Set<DailySection>,
+            section: DailySection,
+            up: Boolean
+        ): List<DailySection> {
+            val from = order.indexOf(section)
+            if (from < 0) return order
+            val sameGroup = { s: DailySection -> (s in shown) == (section in shown) }
+            val steps = if (up) (from - 1 downTo 0) else (from + 1..order.lastIndex)
+            val to = steps.firstOrNull { sameGroup(order[it]) } ?: return order
+            return order.toMutableList().also {
+                it[from] = order[to]
+                it[to] = section
+            }
+        }
     }
 }

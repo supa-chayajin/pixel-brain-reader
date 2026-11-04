@@ -1132,6 +1132,7 @@ fun MainScreen(
             composable(Screen.Settings) {
                 SettingsScreen(
                     onBack = { navController.popBackStack() },
+                    onNavigateToDailyLayout = { navController.navigate("daily_layout") },
                     onNavigateToHabitConfig = { navController.navigate("habit_config") },
                     onNavigateToHomeConfig = { navController.navigate(Screen.ROUTE_HOME_CONFIG) },
                     onNavigateToReminders = { navController.navigate("reminders") },
@@ -1161,6 +1162,12 @@ fun MainScreen(
 
             composable("habit_config") {
                 cloud.wafflecommons.pixelbrainreader.ui.settings.HabitConfigScreen(
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
+
+            composable("daily_layout") {
+                cloud.wafflecommons.pixelbrainreader.ui.settings.DailyLayoutScreen(
                     onNavigateBack = { navController.popBackStack() }
                 )
             }
