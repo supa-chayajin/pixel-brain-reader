@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Still planned (`documentation/plans/2026-10-18-v11-work-and-dev-toolkit.md`): the AI-pairing
+dashboard, "explain this error", decision records, people & 1:1s, security watch, the workshop
+kit and the authorship timeline.
+
+## [12.1.0] — 2026-11-04
+
+Linking the phone with the desktops.
+
 ### Added
 
 - **Projects (C11).** A page per `20_Projects/` folder, built from what the vault already holds:
@@ -20,10 +28,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   open ones (`second-brain/scripts/handoff.sh`, read-only, each machine limited to its own vault
   folders by a local allow-list). Tick a line on either side to close it. Setup:
   `documentation/how-to/desktop-handoff.md`.
-
-Still planned for 11.x/12.x (`documentation/plans/2026-10-18-v11-work-and-dev-toolkit.md`): the
-AI-pairing dashboard, "explain this error", decision records, people & 1:1s, security watch,
-the workshop kit and the authorship timeline.
 
 ## [12.0.0] — 2026-11-04
 
