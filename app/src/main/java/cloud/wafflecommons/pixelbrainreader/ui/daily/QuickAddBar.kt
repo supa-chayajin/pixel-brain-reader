@@ -65,7 +65,12 @@ fun QuickAddBar(
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         OutlinedTextField(
             value = text,
-            onValueChange = { text = it },
+            onValueChange = { new ->
+                // A correction holds while the line keeps meaning the same thing; once the
+                // router reads it differently (or it is emptied), the chip follows the line again.
+                if (new.isBlank() || CaptureRouter.guess(new).kind != guess.kind) override = null
+                text = new
+            },
             modifier = Modifier.fillMaxWidth(),
             placeholder = { Text("Add a task, moment, idea, thanks…") },
             singleLine = true,

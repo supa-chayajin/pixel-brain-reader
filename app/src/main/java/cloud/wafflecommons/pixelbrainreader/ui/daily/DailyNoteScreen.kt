@@ -273,7 +273,8 @@ fun DailyNoteScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(horizontal = 16.dp),
-                    contentPadding = PaddingValues(top = 16.dp, bottom = NavBarClearance),
+                    // Room under the last block for the floating + button, so "More today" never sits beneath it.
+                    contentPadding = PaddingValues(top = 16.dp, bottom = NavBarClearance + 88.dp),
                     verticalArrangement = Arrangement.spacedBy(24.dp)
                 ) {
                     // Mode (Work / Personal / Off, under the user's names) and the tools hub
