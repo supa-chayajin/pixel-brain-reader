@@ -19,6 +19,10 @@ interface LinkDao {
     @Query("SELECT * FROM links WHERE source = :source ORDER BY line")
     suspend fun linksFrom(source: String): List<LinkEntity>
 
+    /** Changes whenever links are re-indexed (ids only grow): a cheap cache key. */
+    @Query("SELECT COUNT(*) || ':' || COALESCE(MAX(id), 0) FROM links")
+    suspend fun signature(): String
+
     @Query("SELECT * FROM links WHERE kind != 'embed'")
     suspend fun allNoteLinks(): List<LinkEntity>
 

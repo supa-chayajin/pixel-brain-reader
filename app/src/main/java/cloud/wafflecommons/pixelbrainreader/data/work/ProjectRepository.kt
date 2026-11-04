@@ -4,6 +4,8 @@ import cloud.wafflecommons.pixelbrainreader.data.local.dao.FileContentDao
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.LinkDao
 import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import javax.inject.Inject
@@ -13,6 +15,9 @@ import javax.inject.Singleton
  * Project dashboard (C11): one summary per `20_Projects/<folder>`, read from the vault mirror
  * (`file_contents`) and the links index — never the disk, never written. Projects in a work folder
  * are left out while work is hidden (Modes).
+ *
+ * Summaries are cached and rebuilt only when the project notes, the links or the day change: the
+ * screen and the Projects widget (re-rendered after every mood log or habit tick) share the cache.
  */
 @Singleton
 class ProjectRepository @Inject constructor(
@@ -20,20 +25,40 @@ class ProjectRepository @Inject constructor(
     private val linkDao: LinkDao,
     private val modesRepository: ModesRepository
 ) {
+    private val mutex = Mutex()
+    private var cacheKey: String? = null
+    private var cache: List<ProjectSummary> = emptyList()
 
     /** Every visible project, the most recently active first. */
     suspend fun projects(today: LocalDate = LocalDate.now()): List<ProjectSummary> = withContext(Dispatchers.IO) {
         val visibility = modesRepository.visibility.value
-        val byRoot = fileContentDao.contentsUnder("${ProjectFormat.PROJECTS_FOLDER}/")
-            .mapNotNull { pc -> ProjectFormat.rootOf(pc.path)?.let { it to pc } }
-            .filter { (root, _) -> visibility.isVisible(root) }
-            .groupBy({ it.first }, { it.second.path to it.second.content })
-        if (byRoot.isEmpty()) return@withContext emptyList()
-        val links = linkDao.allNoteLinks().map { it.source to it.targetKey }
-        byRoot.map { (root, notes) -> ProjectFormat.summarize(root, notes.toMap(), links, today) }
-            .sortedWith(compareByDescending<ProjectSummary> { it.lastActivity }.thenBy { it.root })
+        all(today).filter { visibility.isVisible(it.root) }
     }
 
+    /** One visible project, or null when it is hidden or gone. */
     suspend fun project(root: String, today: LocalDate = LocalDate.now()): ProjectSummary? =
         projects(today).firstOrNull { it.root == root }
+
+    /** Every project, visible or not, from the cache when nothing changed. */
+    private suspend fun all(today: LocalDate): List<ProjectSummary> = mutex.withLock {
+        val key = listOf(
+            fileContentDao.signatureUnder(PREFIX),
+            linkDao.signature(),
+            today.toString()
+        ).joinToString("|")
+        if (key == cacheKey) return@withLock cache
+
+        val byRoot = fileContentDao.contentsUnder(PREFIX)
+            .mapNotNull { pc -> ProjectFormat.rootOf(pc.path)?.let { it to (pc.path to pc.content) } }
+            .groupBy({ it.first }, { it.second })
+        val links = if (byRoot.isEmpty()) emptyList() else linkDao.allNoteLinks().map { it.source to it.targetKey }
+        cache = byRoot.map { (root, notes) -> ProjectFormat.summarize(root, notes.toMap(), links, today) }
+            .sortedWith(compareByDescending<ProjectSummary> { it.lastActivity }.thenBy { it.root })
+        cacheKey = key
+        cache
+    }
+
+    private companion object {
+        const val PREFIX = "${ProjectFormat.PROJECTS_FOLDER}/"
+    }
 }

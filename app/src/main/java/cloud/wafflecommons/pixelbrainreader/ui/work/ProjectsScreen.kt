@@ -62,6 +62,29 @@ class ProjectsViewModel @Inject constructor(
     val message: StateFlow<String?> = _message.asStateFlow()
     fun clearMessage() { _message.value = null }
 
+    /** The project shown by [ProjectScreen]: Loading until read, then the summary or Missing. */
+    sealed interface ProjectState {
+        data object Loading : ProjectState
+        data object Missing : ProjectState
+        data class Loaded(val summary: ProjectSummary) : ProjectState
+    }
+
+    private val _project = MutableStateFlow<ProjectState>(ProjectState.Loading)
+    val project: StateFlow<ProjectState> = _project.asStateFlow()
+
+    fun loadProject(root: String) {
+        viewModelScope.launch {
+            val p = try {
+                repository.project(root)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                null
+            }
+            _project.value = p?.let { ProjectState.Loaded(it) } ?: ProjectState.Missing
+        }
+    }
+
     fun loadHandoffs(root: String) {
         viewModelScope.launch { _handoffs.value = safeHandoffs(root) }
     }
@@ -164,10 +187,10 @@ fun ProjectScreen(
     onOpenNote: (String) -> Unit,
     viewModel: ProjectsViewModel = hiltViewModel()
 ) {
-    val projects by viewModel.projects.collectAsStateWithLifecycle()
+    val state by viewModel.project.collectAsStateWithLifecycle()
     val visibility by viewModel.visibility.collectAsStateWithLifecycle()
-    LaunchedEffect(visibility) { viewModel.load() }
-    val p = projects?.firstOrNull { it.root == root }
+    LaunchedEffect(root, visibility) { viewModel.loadProject(root) }
+    val p = (state as? ProjectsViewModel.ProjectState.Loaded)?.summary
     val handoffs by viewModel.handoffs.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
     LaunchedEffect(root) { viewModel.loadHandoffs(root) }
@@ -179,7 +202,7 @@ fun ProjectScreen(
     FormScaffold(title = p?.title ?: root.substringAfterLast('/'), onBack = onBack, snackbarHostState = snackbar) {
         if (p == null) {
             Text(
-                if (projects == null) "Loading…" else "This project is hidden or no longer exists.",
+                if (state == ProjectsViewModel.ProjectState.Loading) "Loading…" else "This project is hidden or no longer exists.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             return@FormScaffold

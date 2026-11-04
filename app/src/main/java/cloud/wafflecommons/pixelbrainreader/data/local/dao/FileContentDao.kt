@@ -15,6 +15,13 @@ interface FileContentDao {
     @Query("SELECT path, content FROM file_contents WHERE substr(path, 1, length(:prefix)) = :prefix")
     suspend fun contentsUnder(prefix: String): List<PathContent>
 
+    /** Changes whenever a row under [prefix] is added, removed or rewritten: a cheap cache key. */
+    @Query(
+        "SELECT COUNT(*) || ':' || COALESCE(MAX(lastSyncedAt), 0) || ':' || COALESCE(SUM(LENGTH(content)), 0) " +
+            "FROM file_contents WHERE substr(path, 1, length(:prefix)) = :prefix"
+    )
+    suspend fun signatureUnder(prefix: String): String
+
     @Query("SELECT content FROM file_contents WHERE path = :path")
     fun getContentFlow(path: String): Flow<String?>
 
