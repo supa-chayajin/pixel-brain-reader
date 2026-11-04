@@ -87,9 +87,9 @@ C7–C15 move to 11.x: 11.0.0 shipped early for dogfooding (2026-10-18, owner's 
 - [ ] **C8** Explain this error (N3): shared stack trace → past occurrences, explanation, bug note.
 - [ ] **C9** Decision records (N4).
 - [ ] **C10** People & 1:1s (N5), encrypted; pre-meeting reminders.
-- [ ] **C11** Project dashboard + next actions + widget (N6).
+- [x] **C11** Project dashboard + next actions + widget (N6). — shipped in 12.1.0.
 - [ ] **C12** Security watch (N7): public feeds, matched on the device.
-- [ ] **C13** Hand-off to desktop sessions (N8) + the desktop hook how-to.
+- [x] **C13** Hand-off to desktop sessions (N8) + the desktop hook how-to. — shipped in 12.1.0 (desktop side in the vault: `scripts/handoff.sh`, per-machine allow-list).
 - [ ] **C14** Workshop kit (N10).
 - [ ] **C15** Authorship timeline (N11).
 
