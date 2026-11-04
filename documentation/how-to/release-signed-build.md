@@ -33,6 +33,11 @@ adb -s emulator-5554 shell monkey -p cloud.wafflecommons.pixelbrainreader 1
 adb -s emulator-5554 logcat -b crash -d               # must stay empty
 ```
 
+**`connectedDebugAndroidTest` uninstalls the app when it finishes**, which wipes the
+emulator's login and vault copy: the release candidate then installs onto an empty slot and opens
+on the login screen. Log in on the emulator again (or run the device tests last) before checking
+screens — a crash-free start on the login screen proves only that the app starts.
+
 Then open Daily, a note, Chat, Settings and the widgets on the emulator. Since
 v10.0.0 the daily-driver device runs **release-signed** builds, so this
 debug-signed candidate can no longer go on it (signature mismatch → forced
