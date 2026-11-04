@@ -58,7 +58,7 @@ object CaptureRouter {
         "acheter", "appeler", "rappeler", "envoyer", "payer", "réserver", "reserver", "prendre rdv",
         "prendre rendez-vous", "penser à", "penser a", "ne pas oublier", "faire ", "finir", "terminer",
         "préparer", "preparer", "écrire", "ecrire", "répondre", "repondre", "récupérer", "recuperer",
-        "ranger", "nettoyer", "laver", "réparer", "reparer", "commander", "imprimer", "vérifier",
+        "ranger", "réviser", "reviser", "nettoyer", "laver", "réparer", "reparer", "commander", "imprimer", "vérifier",
         "verifier", "relancer", "contacter", "planifier", "à faire", "a faire", "todo", "to do",
         // English
         "buy ", "call ", "send ", "pay ", "book ", "remember to", "don't forget", "fix ", "finish ",
@@ -139,30 +139,56 @@ object CaptureRouter {
         return !next.isLetterOrDigit()
     }
 
-    /** A time at the start of [line] (`14h`, `14h30`, `14:30`, `9h05`) and the text after it. */
+    /** A time at the start of [line] (`14h`, `14h30`, `14:30`, `9h05`) and the text after it. A duration ("2h de sport") is not a time. */
     internal fun leadingTime(line: String): Pair<LocalTime, String>? {
         val parsed = parseTimeAt(line, 0) ?: return null
-        val rest = line.substring(parsed.second).trimStart(' ', ':', '-', '—', '–', ',')
-        return parsed.first to rest
+        if (isDuration(line, parsed.end)) return null
+        val rest = line.substring(parsed.end).trimStart(' ', ':', '-', '—', '–', ',')
+        return parsed.time to rest
     }
 
     /** The first time written anywhere in [text], as a word of its own. */
     internal fun findTime(text: String): LocalTime? = findTimeRange(text)?.first
 
-    /** The first time in [text] and the character range it covers. */
+    /**
+     * The first time in [text] and the character range it covers. Mid-line, a bare hour needs a
+     * preposition before it ("à 18h", "at 9h"); one with minutes ("16:30", "14h30") stands alone.
+     * "réviser 1h" or "2h de sport" are durations, not times.
+     */
     private fun findTimeRange(text: String): Pair<LocalTime, IntRange>? {
         var i = 0
         while (i < text.length) {
             if (text[i].isDigit() && (i == 0 || !text[i - 1].isLetterOrDigit())) {
-                parseTimeAt(text, i)?.let { return it.first to (i until it.second) }
+                val parsed = parseTimeAt(text, i)
+                if (parsed != null && !isDuration(text, parsed.end) &&
+                    (parsed.hasMinutes || precededByPreposition(text, i))
+                ) {
+                    return parsed.time to (i until parsed.end)
+                }
             }
             i++
         }
         return null
     }
 
-    /** Parses `H[H](h|:)[MM]` at [start]; returns the time and the index just after it. */
-    private fun parseTimeAt(s: String, start: Int): Pair<LocalTime, Int>? {
+    private val timePrepositions = listOf("à", "a", "at", "vers", "@", "dès", "avant", "après", "before", "after", "by")
+    private val durationWords = listOf("de ", "d'", "d’", "of ", "min", "mn", "heure", "hour", "hr")
+
+    private fun precededByPreposition(text: String, timeStart: Int): Boolean {
+        val before = text.substring(0, timeStart).trimEnd().lowercase()
+        return timePrepositions.any { p -> before == p || before.endsWith(" $p") }
+    }
+
+    /** The words right after a time say it is a length of time: "2h de sport", "1h30 of work". */
+    private fun isDuration(text: String, end: Int): Boolean {
+        val after = text.substring(end).trimStart().lowercase()
+        return durationWords.any { after.startsWith(it) }
+    }
+
+    private data class ParsedTime(val time: LocalTime, val end: Int, val hasMinutes: Boolean)
+
+    /** Parses `H[H](h|:)[MM]` at [start]. */
+    private fun parseTimeAt(s: String, start: Int): ParsedTime? {
         var i = start
         val hourStart = i
         while (i < s.length && s[i].isDigit() && i - hourStart < 2) i++
@@ -180,6 +206,6 @@ object CaptureRouter {
         // The time must end the word: "14h30" yes, "14hrs" / "3h2x" no.
         if (i < s.length && s[i].isLetterOrDigit()) return null
         if (hour > 23 || minute > 59) return null
-        return LocalTime.of(hour, minute) to i
+        return ParsedTime(LocalTime.of(hour, minute), i, minuteText.isNotEmpty())
     }
 }

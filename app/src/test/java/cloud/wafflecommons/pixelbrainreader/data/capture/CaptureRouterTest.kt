@@ -75,7 +75,9 @@ class CaptureRouterTest {
         assertNull(CaptureRouter.findTime("25h00"))
         assertNull(CaptureRouter.findTime("a12h"))
         assertNull(CaptureRouter.findTime("9:5"))
-        assertEquals(LocalTime.of(7, 0), CaptureRouter.findTime("lever 7h demain"))
+        assertEquals(LocalTime.of(7, 0), CaptureRouter.findTime("lever à 7h demain"))
+        // Mid-line, a bare hour without a preposition is ambiguous: no time.
+        assertNull(CaptureRouter.findTime("lever 7h demain"))
     }
 
     @Test
@@ -91,5 +93,18 @@ class CaptureRouterTest {
         repeat(CaptureKind.entries.size) { seen += k; k = k.next() }
         assertEquals(CaptureKind.entries.toSet(), seen)
         assertEquals(CaptureKind.TASK, k)
+    }
+
+    @Test
+    fun `durations are not clock times`() {
+        // A leading duration is not a moment.
+        assertEquals(CaptureKind.SCRAP, kind("2h de sport ce matin"))
+        assertEquals(CaptureKind.SCRAP, kind("1h30 of focus, good"))
+        // A task with a duration keeps its words and gets no time.
+        assertEquals(CaptureGuess(CaptureKind.TASK, "réviser 1h"), CaptureRouter.guess("réviser 1h"))
+        assertEquals(CaptureGuess(CaptureKind.TASK, "finir le rapport 2h de travail"), CaptureRouter.guess("finir le rapport 2h de travail"))
+        // Times still work.
+        assertEquals(LocalTime.of(14, 0), CaptureRouter.guess("14h appel avec la banque").time)
+        assertEquals(LocalTime.of(9, 30), CaptureRouter.guess("appeler Sam 9h30").time)
     }
 }
