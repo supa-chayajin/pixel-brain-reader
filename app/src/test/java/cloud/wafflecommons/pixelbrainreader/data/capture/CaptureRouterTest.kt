@@ -47,10 +47,12 @@ class CaptureRouterTest {
     fun `to-do verbs make tasks, with a time when written`() {
         assertEquals(CaptureGuess(CaptureKind.TASK, "Acheter du pain"), CaptureRouter.guess("Acheter du pain"))
         assertEquals(
-            CaptureGuess(CaptureKind.TASK, "appeler la banque à 14h", LocalTime.of(14, 0)),
+            CaptureGuess(CaptureKind.TASK, "appeler la banque", LocalTime.of(14, 0)),
             CaptureRouter.guess("appeler la banque à 14h")
         )
-        assertEquals(LocalTime.of(16, 30), CaptureRouter.guess("buy milk 16:30").time)
+        assertEquals(CaptureGuess(CaptureKind.TASK, "buy milk", LocalTime.of(16, 30)), CaptureRouter.guess("buy milk 16:30"))
+        assertEquals(CaptureGuess(CaptureKind.TASK, "acheter du pain", LocalTime.of(18, 0)), CaptureRouter.guess("acheter du pain a 18h"))
+        assertEquals(CaptureGuess(CaptureKind.TASK, "appeler Sam pour le dîner", LocalTime.of(9, 0)), CaptureRouter.guess("t: appeler Sam à 9h pour le dîner"))
         assertEquals(CaptureKind.TASK, kind("Penser à arroser les plantes"))
         // "fixer" is not "fix ".
         assertEquals(CaptureKind.SCRAP, kind("fixer le cadre plus tard"))

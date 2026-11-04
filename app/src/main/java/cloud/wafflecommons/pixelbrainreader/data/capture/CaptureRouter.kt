@@ -84,9 +84,7 @@ object CaptureRouter {
         // 2–4. Keyword openers.
         if (gratitudeStarts.any { startsWithWord(lower, it) }) return CaptureGuess(CaptureKind.GRATITUDE, line)
         if (ideaStarts.any { startsWithWord(lower, it) }) return CaptureGuess(CaptureKind.IDEA, stripIdeaLabel(line))
-        if (taskStarts.any { startsWithWord(lower, it) }) {
-            return CaptureGuess(CaptureKind.TASK, line, findTime(lower))
-        }
+        if (taskStarts.any { startsWithWord(lower, it) }) return taskGuess(line)
 
         // 5. A leading time is a moment.
         leadingTime(line)?.let { (time, rest) ->
@@ -103,8 +101,21 @@ object CaptureRouter {
     private fun withTime(kind: CaptureKind, text: String): CaptureGuess = when (kind) {
         CaptureKind.MOMENT -> leadingTime(text)?.let { (t, rest) -> CaptureGuess(kind, rest, t) }
             ?: CaptureGuess(kind, text)
-        CaptureKind.TASK -> CaptureGuess(kind, text, findTime(text.lowercase()))
+        CaptureKind.TASK -> taskGuess(text)
         else -> CaptureGuess(kind, text)
+    }
+
+    /** A task with its time read out of the label: "appeler la banque à 14h" → "appeler la banque" at 14:00. */
+    private fun taskGuess(text: String): CaptureGuess {
+        val found = findTimeRange(text) ?: return CaptureGuess(CaptureKind.TASK, text)
+        var before = text.substring(0, found.second.first).trimEnd()
+        val lowerBefore = before.lowercase()
+        for (prep in listOf(" à", " a", " at", " vers", " @")) {
+            if (lowerBefore.endsWith(prep)) { before = before.dropLast(prep.length).trimEnd(); break }
+        }
+        val after = text.substring(found.second.last + 1).trim()
+        val label = listOf(before, after).filter { it.isNotEmpty() }.joinToString(" ")
+        return CaptureGuess(CaptureKind.TASK, label.ifBlank { text }, found.first)
     }
 
     /** `idée : xyz` → `xyz`; `et si…` stays as written (it IS the idea). */
@@ -136,11 +147,14 @@ object CaptureRouter {
     }
 
     /** The first time written anywhere in [text], as a word of its own. */
-    internal fun findTime(text: String): LocalTime? {
+    internal fun findTime(text: String): LocalTime? = findTimeRange(text)?.first
+
+    /** The first time in [text] and the character range it covers. */
+    private fun findTimeRange(text: String): Pair<LocalTime, IntRange>? {
         var i = 0
         while (i < text.length) {
             if (text[i].isDigit() && (i == 0 || !text[i - 1].isLetterOrDigit())) {
-                parseTimeAt(text, i)?.let { return it.first }
+                parseTimeAt(text, i)?.let { return it.first to (i until it.second) }
             }
             i++
         }
