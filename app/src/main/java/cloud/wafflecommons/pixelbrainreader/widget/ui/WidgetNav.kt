@@ -38,6 +38,7 @@ object WidgetNav {
     const val SCREEN_WORK = "work"
     const val SCREEN_LOG = "log"
     const val SCREEN_OBJECTIVES = "objectives"
+    const val SCREEN_PROJECTS = "projects"
 
     /** Maps a public screen key to the internal NavHost route, or null if unknown (→ reject). */
     fun screenToRoute(screen: String?): String? = when (screen?.lowercase()?.trim()) {
@@ -54,6 +55,7 @@ object WidgetNav {
         SCREEN_WORK -> "work_hub"
         SCREEN_LOG -> "mission_log?add=true"
         SCREEN_OBJECTIVES -> "objectives"
+        SCREEN_PROJECTS -> "projects"
         else -> null
     }
 

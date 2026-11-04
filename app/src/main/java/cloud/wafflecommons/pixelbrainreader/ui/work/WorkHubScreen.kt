@@ -15,6 +15,7 @@ import androidx.compose.material.icons.rounded.MoveToInbox
 import androidx.compose.material.icons.rounded.Summarize
 import androidx.compose.material.icons.rounded.ViewKanban
 import androidx.compose.material.icons.rounded.PushPin
+import androidx.compose.material.icons.rounded.RocketLaunch
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
@@ -175,6 +176,9 @@ enum class HubTool(
     val subtitle: String,
     val route: String
 ) {
+    PROJECTS("projects", "Projects", Icons.Rounded.RocketLaunch,
+        "Each project's last two weeks from the worklogs, where you left off, next actions, key notes and what links to it.",
+        cloud.wafflecommons.pixelbrainreader.ui.main.V11Routes.PROJECTS),
     BOARDS("boards", "Boards", Icons.Rounded.ViewKanban,
         "Any folder as a board on the vault's statuses, with next steps, blockers and target dates.",
         cloud.wafflecommons.pixelbrainreader.ui.main.V11Routes.BOARDS),
@@ -205,7 +209,7 @@ enum class HubTool(
 
     companion object {
         /** Pinned until the user chooses: the everyday ones. */
-        val DEFAULT_PINNED: Set<String> = setOf(BOARDS.id, MEETINGS.id, INBOX.id)
+        val DEFAULT_PINNED: Set<String> = setOf(PROJECTS.id, BOARDS.id, MEETINGS.id, INBOX.id)
     }
 }
 

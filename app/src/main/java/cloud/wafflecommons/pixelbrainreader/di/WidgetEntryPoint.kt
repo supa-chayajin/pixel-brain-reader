@@ -43,4 +43,5 @@ interface WidgetEntryPoint {
     fun widgetSnapshotManager(): WidgetSnapshotManager
     fun widgetUpdateManager(): WidgetUpdateManager
     fun modesRepository(): ModesRepository
+    fun projectRepository(): cloud.wafflecommons.pixelbrainreader.data.work.ProjectRepository
 }

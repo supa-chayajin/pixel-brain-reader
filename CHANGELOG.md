@@ -7,9 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Still planned for 11.x (`documentation/plans/2026-10-18-v11-work-and-dev-toolkit.md`): the
-AI-pairing dashboard, "explain this error", decision records, people & 1:1s, the project
-dashboard, security watch, desktop hand-off, the workshop kit and the authorship timeline.
+### Added
+
+- **Projects (C11).** A page per `20_Projects/` folder, built from what the vault already holds:
+  the last 14 days from the desktop worklogs (commits, AI sessions), "where you left off" (the
+  newest worklog's commits), next actions (open checkboxes in the project's notes, yours first),
+  the key notes (README, roadmaps, RFCs, the mirrored TODO), recent notes and every note outside
+  the project that links into it. Pinned in the toolkit by default; work projects hide outside
+  Work mode. A **Projects widget** shows the three most active projects and their next action.
+
+Still planned for 11.x/12.x (`documentation/plans/2026-10-18-v11-work-and-dev-toolkit.md`): the
+AI-pairing dashboard, "explain this error", decision records, people & 1:1s, security watch,
+desktop hand-off (next), the workshop kit and the authorship timeline.
 
 ## [12.0.0] — 2026-11-04
 

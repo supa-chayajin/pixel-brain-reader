@@ -64,6 +64,19 @@ object WidgetLiveData {
     }
 
     /** Chores that are due today (lastDone + frequency ≤ today), non-archived, by sortOrder. */
+    data class WidgetProject(val title: String, val line: String, val next: String?)
+
+    /** The three most recently active visible projects (C11), for the Projects widget. */
+    suspend fun activeProjects(context: Context): List<WidgetProject> = try {
+        entryPoint(context).projectRepository().projects().take(3).map { p ->
+            val activity = buildList {
+                if (p.commits > 0) add("${p.commits} commit${if (p.commits == 1) "" else "s"}")
+                if (p.sessions > 0) add("${p.sessions} AI")
+            }.joinToString(" · ").ifEmpty { "quiet" } + " · 14 d"
+            WidgetProject(p.title, activity, p.nextAction?.text)
+        }
+    } catch (e: CancellationException) { throw e } catch (e: Exception) { emptyList() }
+
     suspend fun choresDue(context: Context): List<WidgetChore> {
         return try {
             val ep = entryPoint(context)

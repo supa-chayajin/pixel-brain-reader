@@ -45,6 +45,10 @@ object V11Routes {
     const val BOARD = "board?folder={folder}"
 
     fun board(folder: String) = "board?folder=" + android.net.Uri.encode(folder)
+    const val PROJECTS = "projects"
+    const val PROJECT = "project?root={root}"
+
+    fun project(root: String) = "project?root=" + android.net.Uri.encode(root)
     const val MISSION_LOG = "mission_log?add={add}"
 
     fun missionLog(add: Boolean = false) = "mission_log?add=$add"
@@ -63,6 +67,19 @@ fun NavGraphBuilder.v11Destinations(navController: NavHostController, openNote: 
             onBack = { navController.popBackStack() },
             onOpenLog = { add -> navController.navigate(V11Routes.missionLog(add)) },
             onOpen = { route -> navController.navigate(route) }
+        )
+    }
+    composable(V11Routes.PROJECTS) {
+        cloud.wafflecommons.pixelbrainreader.ui.work.ProjectsScreen(
+            onBack = { navController.popBackStack() },
+            onOpenProject = { navController.navigate(V11Routes.project(it)) }
+        )
+    }
+    composable(V11Routes.PROJECT, arguments = listOf(navArgument("root") { type = NavType.StringType; defaultValue = "" })) { entry ->
+        cloud.wafflecommons.pixelbrainreader.ui.work.ProjectScreen(
+            root = entry.arguments?.getString("root").orEmpty(),
+            onBack = { navController.popBackStack() },
+            onOpenNote = openNote
         )
     }
     composable(V11Routes.BOARDS) {

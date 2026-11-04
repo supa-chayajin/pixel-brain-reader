@@ -190,6 +190,19 @@
                 android:resource="@xml/today_widget_info" />
         </receiver>
 
+        <!-- Projects: the most active projects and their next action -->
+        <receiver
+            android:name=".widget.ui.ProjectsWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_projects_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/projects_widget_info" />
+        </receiver>
+
         <!-- Chores Due: mark done + earn XP -->
         <receiver
             android:name=".widget.ui.ChoresWidgetReceiver"
