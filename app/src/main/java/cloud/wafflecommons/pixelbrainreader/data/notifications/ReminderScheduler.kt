@@ -10,6 +10,7 @@ import cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepos
 import cloud.wafflecommons.pixelbrainreader.data.workers.ChoresHabitsReminderWorker
 import cloud.wafflecommons.pixelbrainreader.data.workers.DailySchedule
 import cloud.wafflecommons.pixelbrainreader.data.workers.DailyWorkScheduler
+import cloud.wafflecommons.pixelbrainreader.data.workers.EveningCheckInWorker
 import cloud.wafflecommons.pixelbrainreader.data.workers.VaultReminderWorker
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.first
@@ -52,6 +53,18 @@ class ReminderScheduler @Inject constructor(
             wm.cancelUniqueWork(VAULT_WORK)
         }
 
+        // Evening check-in — single daily work.
+        if (userPrefs.eveningCheckInEnabled.first()) {
+            val time = DailySchedule.parseTime(userPrefs.eveningCheckInTime.first())
+            if (force) {
+                wm.enqueueUniquePeriodicWork(CHECKIN_WORK, ExistingPeriodicWorkPolicy.UPDATE, checkInRequest(time))
+            } else {
+                DailyWorkScheduler.ensureScheduled(wm, CHECKIN_WORK, time) { checkInRequest(time) }
+            }
+        } else {
+            wm.cancelUniqueWork(CHECKIN_WORK)
+        }
+
         // Chores/habits — one daily work per configured window.
         if (userPrefs.choresReminderEnabled.first()) {
             // Only on a genuine change do we clear the tagged group, so a removed window's stale
@@ -86,6 +99,18 @@ class ReminderScheduler @Inject constructor(
         DailyWorkScheduler.repin(WorkManager.getInstance(context), choresWorkName(hhmm)) { choresRequest(hhmm, time) }
     }
 
+    /** Called by [EveningCheckInWorker] after it ran: pins its next run back to the chosen time. */
+    suspend fun repinEveningCheckIn() {
+        if (!userPrefs.eveningCheckInEnabled.first()) return
+        val time = DailySchedule.parseTime(userPrefs.eveningCheckInTime.first())
+        DailyWorkScheduler.repin(WorkManager.getInstance(context), CHECKIN_WORK) { checkInRequest(time) }
+    }
+
+    private fun checkInRequest(time: LocalTime): PeriodicWorkRequest =
+        PeriodicWorkRequestBuilder<EveningCheckInWorker>(24, TimeUnit.HOURS)
+            .setNextScheduleTimeOverride(DailySchedule.nextOccurrenceMillis(time))
+            .build()
+
     private fun vaultRequest(time: LocalTime): PeriodicWorkRequest =
         PeriodicWorkRequestBuilder<VaultReminderWorker>(24, TimeUnit.HOURS)
             .setNextScheduleTimeOverride(DailySchedule.nextOccurrenceMillis(time))
@@ -102,6 +127,7 @@ class ReminderScheduler @Inject constructor(
 
     private companion object {
         const val VAULT_WORK = "VaultReminder"
+        const val CHECKIN_WORK = "EveningCheckIn"
         const val CHORES_WORK_PREFIX = "ChoresHabitsReminder_"
         const val CHORES_TAG = "chores_habits_reminder"
     }

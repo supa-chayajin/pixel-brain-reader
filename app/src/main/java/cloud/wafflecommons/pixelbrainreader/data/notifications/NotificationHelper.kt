@@ -28,6 +28,7 @@ object NotificationHelper {
     const val CHANNEL_CHORES = "reminder_chores_habits"
     const val CHANNEL_SYNC = "sync_alerts"
     const val CHANNEL_WORK = "work_nudges"
+    const val CHANNEL_CHECKIN = "evening_checkin"
 
     // Groups both reminder channels under one "Reminders" category in system settings.
     private const val GROUP_REMINDERS = "reminders"
@@ -36,6 +37,7 @@ object NotificationHelper {
     private const val NOTIF_CHORES = 2002
     private const val NOTIF_GUARD = 2003
     private const val NOTIF_OBJECTIVES = 2004
+    private const val NOTIF_CHECKIN = 2005
 
     fun ensureChannels(context: Context) {
         val nm = context.getSystemService(NotificationManager::class.java) ?: return
@@ -78,6 +80,16 @@ object NotificationHelper {
                 NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
                 description = "Your weekly objectives slot. Muted outside Work mode."
+                group = GROUP_REMINDERS
+            }
+        )
+        nm.createNotificationChannel(
+            NotificationChannel(
+                CHANNEL_CHECKIN,
+                "Evening check-in",
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = "One minute at night: your mood, one line, one thing you're thankful for"
                 group = GROUP_REMINDERS
             }
         )
@@ -143,6 +155,63 @@ object NotificationHelper {
             .setStyle(NotificationCompat.BigTextStyle().bigText(parts.joinToString("\n")))
             .setContentIntent(activityPending(context, 3, intent))
         notify(context, NOTIF_OBJECTIVES, builder)
+    }
+
+    /** Evening check-in, step 1: three one-tap moods. Tapping the body opens the Daily screen. */
+    fun postCheckInMood(context: Context) {
+        ensureChannels(context)
+        val builder = baseBuilder(context, CHANNEL_CHECKIN, title = "How was today?", text = "One tap for your mood, then one line if you like.")
+            .setContentIntent(activityPending(context, 4, WidgetNav.openIntent(context, WidgetNav.SCREEN_DAILY)))
+        cloud.wafflecommons.pixelbrainreader.data.capture.CheckInRouting.MOODS.forEachIndexed { i, (score, _, label) ->
+            val intent = checkInIntent(context, CheckInReceiver.ACTION_MOOD).putExtra(CheckInReceiver.EXTRA_SCORE, score)
+            builder.addAction(0, label, broadcastPending(context, 10 + i, intent, mutable = false))
+        }
+        notify(context, NOTIF_CHECKIN, builder)
+    }
+
+    /** Step 2: one line about the day (filed by CheckInRouting) or one thing to be thankful for. */
+    fun postCheckInLine(context: Context, moodLabel: String) {
+        ensureChannels(context)
+        val builder = baseBuilder(context, CHANNEL_CHECKIN, title = "$moodLabel — saved", text = "One line about today? Or something you're thankful for?")
+            .setContentIntent(activityPending(context, 4, WidgetNav.openIntent(context, WidgetNav.SCREEN_DAILY)))
+            .setOnlyAlertOnce(true)
+            .setAutoCancel(false)
+            .addAction(replyAction(context, CheckInReceiver.ACTION_REPLY, 20, "One line", "What happened today?"))
+            .addAction(replyAction(context, CheckInReceiver.ACTION_GRATITUDE, 21, "Thankful for…", "Thankful for…"))
+            .addAction(0, "Done", broadcastPending(context, 22, checkInIntent(context, CheckInReceiver.ACTION_DONE), mutable = false))
+        notify(context, NOTIF_CHECKIN, builder)
+    }
+
+    /** Step 3: what was saved; it clears itself after a few seconds. */
+    fun postCheckInDone(context: Context, message: String) {
+        ensureChannels(context)
+        val builder = baseBuilder(context, CHANNEL_CHECKIN, title = "Check-in", text = message)
+            .setOnlyAlertOnce(true)
+            .setTimeoutAfter(5_000)
+        notify(context, NOTIF_CHECKIN, builder)
+    }
+
+    fun cancelCheckIn(context: Context) {
+        NotificationManagerCompat.from(context).cancel(NOTIF_CHECKIN)
+    }
+
+    private fun checkInIntent(context: Context, action: String) =
+        Intent(context, CheckInReceiver::class.java).setAction(action)
+
+    private fun replyAction(context: Context, action: String, requestCode: Int, label: String, hint: String): NotificationCompat.Action {
+        val input = androidx.core.app.RemoteInput.Builder(CheckInReceiver.KEY_TEXT).setLabel(hint).build()
+        // A RemoteInput needs a MUTABLE PendingIntent (the system adds the typed text to it); the
+        // explicit component keeps it safe.
+        return NotificationCompat.Action.Builder(0, label, broadcastPending(context, requestCode, checkInIntent(context, action), mutable = true))
+            .addRemoteInput(input)
+            .setAllowGeneratedReplies(false)
+            .build()
+    }
+
+    private fun broadcastPending(context: Context, requestCode: Int, intent: Intent, mutable: Boolean): PendingIntent {
+        val flags = PendingIntent.FLAG_UPDATE_CURRENT or
+            if (mutable) PendingIntent.FLAG_MUTABLE else PendingIntent.FLAG_IMMUTABLE
+        return PendingIntent.getBroadcast(context, requestCode, intent, flags)
     }
 
     fun cancelGuardHold(context: Context) {

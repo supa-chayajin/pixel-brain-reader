@@ -29,6 +29,14 @@ class RemindersViewModel @Inject constructor(
             viewModelScope, SharingStarted.WhileSubscribed(5000), listOf("09:00", "14:00", "20:00")
         )
 
+    val checkInEnabled: StateFlow<Boolean> =
+        userPrefs.eveningCheckInEnabled.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+    val checkInTime: StateFlow<String> =
+        userPrefs.eveningCheckInTime.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "21:00")
+
+    fun setCheckInEnabled(enabled: Boolean) = update { userPrefs.setEveningCheckInEnabled(enabled) }
+    fun setCheckInTime(hhmm: String) = update { userPrefs.setEveningCheckInTime(hhmm) }
+
     fun setVaultEnabled(enabled: Boolean) = update { userPrefs.setVaultReminderEnabled(enabled) }
     fun setVaultTime(hhmm: String) = update { userPrefs.setVaultReminderTime(hhmm) }
     fun setChoresEnabled(enabled: Boolean) = update { userPrefs.setChoresReminderEnabled(enabled) }

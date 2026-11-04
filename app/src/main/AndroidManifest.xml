@@ -117,6 +117,12 @@
                 tools:node="remove" />
         </provider>
 
+        <!-- Evening check-in: answers the notification's mood taps and replies. Only our own
+             explicit PendingIntents reach it. -->
+        <receiver
+            android:name=".data.notifications.CheckInReceiver"
+            android:exported="false" />
+
         <!-- ============================ Home-screen widget suite ============================ -->
 
         <!-- Companion (Pixel Dashboard): hero + XP + rings + vitality -->

@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.rounded.CleaningServices
 import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Mood
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.CardDefaults
@@ -75,6 +76,8 @@ fun RemindersScreen(
     val vaultTime by viewModel.vaultTime.collectAsStateWithLifecycle()
     val choresEnabled by viewModel.choresEnabled.collectAsStateWithLifecycle()
     val choresWindows by viewModel.choresWindows.collectAsStateWithLifecycle()
+    val checkInEnabled by viewModel.checkInEnabled.collectAsStateWithLifecycle()
+    val checkInTime by viewModel.checkInTime.collectAsStateWithLifecycle()
     val haptic = LocalHapticFeedback.current
 
     // When set, holds the initial "HH:mm" and the callback to run on confirm.
@@ -100,6 +103,25 @@ fun RemindersScreen(
                 .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = NavBarClearance),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
+            // --- Evening check-in ---
+            ReminderSection(
+                icon = Icons.Rounded.Mood,
+                iconTint = MaterialTheme.colorScheme.secondary,
+                title = "Evening check-in",
+                subtitle = "One minute from the notification: tap your mood, then type one line or something you're thankful for. No need to open the app.",
+                checked = checkInEnabled,
+                onCheckedChange = viewModel::setCheckInEnabled
+            ) {
+                TimeRow(
+                    label = "Check-in time",
+                    time = checkInTime,
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        timePicker = checkInTime to { hhmm -> viewModel.setCheckInTime(hhmm) }
+                    }
+                )
+            }
+
             // --- Private vault reminder ---
             ReminderSection(
                 icon = Icons.Rounded.Lock,

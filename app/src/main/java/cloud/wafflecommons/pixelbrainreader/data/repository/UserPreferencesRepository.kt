@@ -233,6 +233,22 @@ class UserPreferencesRepository @Inject constructor(
         context.dataStore.edit { it[KEY_SOUND_EFFECTS] = enabled }
     }
 
+    // --- Evening check-in (v12): mood + one line + gratitude, answered from the notification ---
+    private val KEY_CHECKIN_ENABLED = booleanPreferencesKey("evening_checkin_enabled")
+    private val KEY_CHECKIN_TIME = stringPreferencesKey("evening_checkin_time")
+
+    /** On by default: the owner asked for it; one notification a day, switched off in Reminders. */
+    val eveningCheckInEnabled: Flow<Boolean> = setting { it[KEY_CHECKIN_ENABLED] ?: true }
+    val eveningCheckInTime: Flow<String> = setting { it[KEY_CHECKIN_TIME] ?: "21:00" }
+
+    suspend fun setEveningCheckInEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_CHECKIN_ENABLED] = enabled }
+    }
+
+    suspend fun setEveningCheckInTime(hhmm: String) {
+        context.dataStore.edit { it[KEY_CHECKIN_TIME] = hhmm }
+    }
+
     // --- Simpler screens (v12): what the Daily screen shows, the fold, pinned tools ---
     private val KEY_DAILY_SHOWN = androidx.datastore.preferences.core.stringSetPreferencesKey("daily_shown_sections")
     private val KEY_DAILY_MORE_EXPANDED = booleanPreferencesKey("daily_more_expanded")
