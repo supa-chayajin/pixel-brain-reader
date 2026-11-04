@@ -225,7 +225,8 @@ fun SettingsScreen(
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         onNavigateToHabitConfig()
                     },
-                    leadingContent = { Icon(Icons.Rounded.DateRange, contentDescription = null) }
+                    leadingContent = { Icon(Icons.Rounded.DateRange, contentDescription = null) },
+                    supportingContent = { Text("Add and edit habits; some tick themselves from Health Connect") }
                 ) {
                     Text("Manage Habits & Automations")
                 }
@@ -235,7 +236,8 @@ fun SettingsScreen(
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         onNavigateToHomeConfig()
                     },
-                    leadingContent = { Icon(Icons.Rounded.CleaningServices, contentDescription = null) }
+                    leadingContent = { Icon(Icons.Rounded.CleaningServices, contentDescription = null) },
+                    supportingContent = { Text("Rooms and chores, and how often each one comes back") }
                 ) {
                     Text("Manage House & Chores")
                 }
@@ -245,7 +247,8 @@ fun SettingsScreen(
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         onNavigateToReminders()
                     },
-                    leadingContent = { Icon(Icons.Filled.Notifications, contentDescription = null) }
+                    leadingContent = { Icon(Icons.Filled.Notifications, contentDescription = null) },
+                    supportingContent = { Text("Evening check-in, private vault reminder, chores & habits reminders") }
                 ) {
                     Text("Reminders & Notifications")
                 }
@@ -255,7 +258,8 @@ fun SettingsScreen(
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         onNavigateToModes()
                     },
-                    leadingContent = { Icon(Icons.Rounded.Work, contentDescription = null) }
+                    leadingContent = { Icon(Icons.Rounded.Work, contentDescription = null) },
+                    supportingContent = { Text("Names and icons, work folders and hours, leave, key dates, screen-share safe") }
                 ) {
                     Text("Modes: work, personal, off")
                 }
@@ -265,7 +269,8 @@ fun SettingsScreen(
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         onNavigateToMoodTags()
                     },
-                    leadingContent = { Icon(Icons.Rounded.Mood, contentDescription = null) }
+                    leadingContent = { Icon(Icons.Rounded.Mood, contentDescription = null) },
+                    supportingContent = { Text("The tags you can add when you log a mood") }
                 ) {
                     Text("Manage Mood Tags")
                 }
@@ -283,13 +288,15 @@ fun SettingsScreen(
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         onNavigateToNavBarReorder()
                     },
-                    leadingContent = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) }
+                    leadingContent = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) },
+                    supportingContent = { Text("Reorder the tabs at the bottom; the Daily button stays put") }
                 ) {
                     Text("Navigation bar order")
                 }
 
                 ListItem(
                     leadingContent = { Icon(Icons.Filled.VolumeUp, contentDescription = null) },
+                    supportingContent = { Text("A short sound when you complete a habit or a task") },
                     trailingContent = {
                         Switch(
                             checked = uiState.soundEffectsEnabled,
@@ -572,7 +579,8 @@ fun SettingsScreen(
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         onNavigateToConfidentiality()
                     },
-                    leadingContent = { Icon(Icons.Rounded.Shield, contentDescription = null) }
+                    leadingContent = { Icon(Icons.Rounded.Shield, contentDescription = null) },
+                    supportingContent = { Text("Protected names and secrets: a commit holding one waits for your review") }
                 ) {
                     Text("Confidentiality guard")
                 }
@@ -582,7 +590,8 @@ fun SettingsScreen(
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         onNavigateToGamificationSettings()
                     },
-                    leadingContent = { Icon(Icons.Filled.Tune, contentDescription = null) }
+                    leadingContent = { Icon(Icons.Filled.Tune, contentDescription = null) },
+                    supportingContent = { Text("Health goals, mood emojis, and which tags feed which stat") }
                 ) {
                     Text("RPG & Gamification Rules")
                 }

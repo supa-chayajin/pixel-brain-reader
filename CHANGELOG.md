@@ -26,6 +26,9 @@ The Daily screen, in your order.
 
 - The ten Daily switches no longer fill the top of Settings: "Your day" opens with one
   **Daily screen** row. Nothing else in Settings moved.
+- **Every Settings entry says what it opens,** in one line under its name: habits, house &
+  chores, reminders, modes, mood tags, navigation bar, sound effects, the confidentiality guard
+  and the RPG rules.
 
 ## [12.1.0] — 2026-11-04
 
