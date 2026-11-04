@@ -294,6 +294,13 @@ fun DailyNoteScreen(
                         }
                     }
 
+                    // One input for the whole day: it files the line itself.
+                    item(key = "quick-add") {
+                        QuickAddBar(
+                            onCapture = viewModel::capture,
+                            onVoice = { dictation.start() }
+                        )
+                    }
                     // Changes held back by the confidentiality guard
                     if (guardHeld.isNotEmpty()) {
                         item(key = "guard") {

@@ -414,6 +414,40 @@ class DailyNoteViewModel @Inject constructor(
         viewModelScope.launch { scratchRepository.saveScrap(content, color) }
     }
 
+    /** Appends one line to the day's Ideas (Second Brain), saved like a typed edit. */
+    fun addIdea(text: String) {
+        val date = _selectedDate.value
+        val newIdeas = if (ideasText.isBlank()) "- $text" else "${ideasText.trimEnd()}\n- $text"
+        ideasText = newIdeas
+        val edit = PendingEdit(date, newIdeas)
+        _ideasEdits.value = edit
+        viewModelScope.launch { persistSecondBrain(edit, "IDEAS", _ideasEdits) }
+    }
+
+    /**
+     * The Daily "Add…" box: one line, filed where [CaptureRouter] (or the user's correction) says.
+     * A moment without a written time is stamped now.
+     */
+    fun capture(guess: cloud.wafflecommons.pixelbrainreader.data.capture.CaptureGuess) {
+        val text = guess.text.trim()
+        if (text.isEmpty()) return
+        when (guess.kind) {
+            cloud.wafflecommons.pixelbrainreader.data.capture.CaptureKind.TASK -> addTask(text, scheduledTime = guess.time)
+            cloud.wafflecommons.pixelbrainreader.data.capture.CaptureKind.MOMENT ->
+                addTimelineEntry(text, guess.time ?: LocalTime.now().withSecond(0).withNano(0))
+            cloud.wafflecommons.pixelbrainreader.data.capture.CaptureKind.GRATITUDE -> addGratitude(text)
+            cloud.wafflecommons.pixelbrainreader.data.capture.CaptureKind.IDEA -> addIdea(text)
+            cloud.wafflecommons.pixelbrainreader.data.capture.CaptureKind.SCRAP -> saveScrap(text)
+        }
+        _userMessage.value = when (guess.kind) {
+            cloud.wafflecommons.pixelbrainreader.data.capture.CaptureKind.TASK -> "Added to today's tasks"
+            cloud.wafflecommons.pixelbrainreader.data.capture.CaptureKind.MOMENT -> "Added to the timeline"
+            cloud.wafflecommons.pixelbrainreader.data.capture.CaptureKind.GRATITUDE -> "Added to gratitude"
+            cloud.wafflecommons.pixelbrainreader.data.capture.CaptureKind.IDEA -> "Added to ideas"
+            cloud.wafflecommons.pixelbrainreader.data.capture.CaptureKind.SCRAP -> "Added to the scratchpad"
+        }
+    }
+
     /**
      * Voice capture: the to-dos go to the day's tasks, the rest becomes an `00_Inbox/` note, and
      * the timeline gets ONE line linking to it — a multi-line body in the timeline used to be cut
