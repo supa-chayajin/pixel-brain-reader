@@ -11,6 +11,34 @@ Still planned for 11.x (`documentation/plans/2026-10-18-v11-work-and-dev-toolkit
 AI-pairing dashboard, "explain this error", decision records, people & 1:1s, the project
 dashboard, security watch, desktop hand-off, the workshop kit and the authorship timeline.
 
+## [12.0.0] — 2026-11-04
+
+"Simpler." The app had grown more surfaces than a busy day leaves time to learn. Nothing is
+removed: everything is still one tap away, but the everyday path is short.
+
+### Added
+
+- **One "Add…" box on the Daily screen.** Type one line (or tap the mic) and it files itself:
+  "acheter du pain" becomes a task, "14h appel banque" a moment at 14:00, "merci à…" a
+  gratitude, "idée : …" an idea, anything else a scrap. A chip shows the guess; tap it to send
+  the line somewhere else. Prefixes `t:` `m:` `g:` `i:` `s:` force a destination.
+- **Evening check-in from the notification.** At 21:00 (Reminders; on by default) "How was
+  today?" offers three one-tap moods; then type one line or something you're thankful for right
+  in the notification. A line becomes a timeline moment, a to-do goes to tomorrow, an idea to the
+  scratchpad. No need to open the app.
+
+### Changed
+
+- **A calm Daily screen.** Weather, mood & health, tasks and the timeline are shown; gratitude,
+  countdowns, mantra, memory echoes, ideas & notes and the scratchpad wait in a **"More today"**
+  fold whose summary counts what it holds. Settings → Your day → "Daily screen" chooses what is
+  always shown.
+- **Settings open on "Your day"** (Daily screen, habits, chores, reminders, modes, mood tags).
+  Health Connect, Google, on-device AI, the notes index, the guard, RPG rules and import/export
+  are under a folded **"Advanced"** section.
+- **The toolkit shows the tools you pin.** The mission log, then your pinned tools (Boards,
+  Meetings, Inbox by default), then "All tools"; the pin on each card moves it.
+
 ## [11.1.0] — 2026-10-19
 
 Dogfooding feedback on 11.0.0.
