@@ -11,6 +11,22 @@ Still planned (`documentation/plans/2026-10-18-v11-work-and-dev-toolkit.md`): th
 dashboard, "explain this error", decision records, people & 1:1s, security watch, the workshop
 kit and the authorship timeline.
 
+## [12.2.0] — 2026-11-04
+
+The Daily screen, in your order.
+
+### Added
+
+- **Settings → Your day → Daily screen** is a page of its own: move each block up or down, and
+  switch it on to keep it on the Daily screen or off to leave it in "More today". The Daily
+  screen follows that order, on screen and inside the fold. On a wide screen, Timeline and
+  Tasks still sit side by side when they follow each other.
+
+### Changed
+
+- The ten Daily switches no longer fill the top of Settings: "Your day" opens with one
+  **Daily screen** row. Nothing else in Settings moved.
+
 ## [12.1.0] — 2026-11-04
 
 Linking the phone with the desktops.
