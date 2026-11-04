@@ -14,12 +14,15 @@ import androidx.compose.material.icons.rounded.MonitorHeart
 import androidx.compose.material.icons.rounded.MoveToInbox
 import androidx.compose.material.icons.rounded.Summarize
 import androidx.compose.material.icons.rounded.ViewKanban
+import androidx.compose.material.icons.rounded.PushPin
+import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -36,6 +39,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -50,8 +54,18 @@ data class LogSummary(val entries: Int, val decisions: Int, val offTicketMinutes
 class WorkHubViewModel @Inject constructor(
     missionLogRepository: MissionLogRepository,
     modesRepository: ModesRepository,
-    private val loadRecoveryRepository: cloud.wafflecommons.pixelbrainreader.data.work.LoadRecoveryRepository
+    private val loadRecoveryRepository: cloud.wafflecommons.pixelbrainreader.data.work.LoadRecoveryRepository,
+    private val preferences: cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
 ) : ViewModel() {
+
+    /** The tools pinned to the top of the hub (the defaults until the user pins or unpins one). */
+    val pinned: StateFlow<Set<String>> = preferences.pinnedTools
+        .map { it ?: HubTool.DEFAULT_PINNED }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HubTool.DEFAULT_PINNED)
+
+    fun setPinned(tool: HubTool, pinned: Boolean) {
+        viewModelScope.launch { preferences.setToolPinned(tool.id, pinned, HubTool.DEFAULT_PINNED) }
+    }
 
     val visibility: StateFlow<Visibility> = modesRepository.visibility
 
@@ -101,6 +115,8 @@ fun WorkHubScreen(
     val visibility by viewModel.visibility.collectAsStateWithLifecycle()
     val summary by viewModel.logSummary.collectAsStateWithLifecycle()
     val overload by viewModel.overload.collectAsStateWithLifecycle()
+    val pinned by viewModel.pinned.collectAsStateWithLifecycle()
+    var showAll by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
 
     FormScaffold(title = visibility.appearance.toolkitName, onBack = onBack) {
         if (visibility.hideWork) {
@@ -128,70 +144,86 @@ fun WorkHubScreen(
                 OutlinedButton(onClick = { onOpenLog(false) }) { Text("Open") }
             }
         }
-        HubCard(
-            title = "Boards",
-            icon = Icons.Rounded.ViewKanban,
-            subtitle = "Any folder as a board on the vault's statuses, with next steps, blockers and target dates.",
-            onClick = { onOpen(cloud.wafflecommons.pixelbrainreader.ui.main.V11Routes.BOARDS) }
-        )
-        HubCard(
-            title = "Meetings & next actions",
-            icon = Icons.Rounded.Groups,
-            subtitle = "Meeting notes with decisions and actions; your @moi actions from every note; the weekly load.",
-            onClick = { onOpen(cloud.wafflecommons.pixelbrainreader.ui.main.V11Routes.MEETINGS) }
-        )
-        HubCard(
-            title = "Objectives",
-            icon = Icons.Rounded.Flag,
-            subtitle = "Notes tagged #objectif: milestones, the log entries that serve them, a weekly slot.",
-            onClick = { onOpen(cloud.wafflecommons.pixelbrainreader.ui.main.V11Routes.OBJECTIVES) }
-        )
-        HubCard(
-            title = "Evidence report",
-            icon = Icons.Rounded.Summarize,
-            subtitle = "A month or a quarter of the log as a draft for your reviews: every number from the data.",
-            onClick = { onOpen(cloud.wafflecommons.pixelbrainreader.ui.main.V11Routes.EVIDENCE) }
-        )
-        HubCard(
-            title = "Inbox filing",
-            icon = Icons.Rounded.MoveToInbox,
-            subtitle = "Each inbox note with the folder and tags its closest notes suggest; filing keeps the vault's rules.",
-            onClick = { onOpen(cloud.wafflecommons.pixelbrainreader.ui.main.V11Routes.INBOX) }
-        )
-        HubCard(
-            title = "Vault activity",
-            icon = Icons.Rounded.BarChart,
-            subtitle = "What the last sync brought, commits per day, the notes that changed most and the new ones.",
-            onClick = { onOpen(cloud.wafflecommons.pixelbrainreader.ui.main.V11Routes.ACTIVITY) }
-        )
-        HubCard(
-            title = "Snippets & runbooks",
-            icon = Icons.Rounded.Code,
-            subtitle = "Every code block of the vault, ready to copy; runbooks played step by step, with an incident log.",
-            onClick = { onOpen(cloud.wafflecommons.pixelbrainreader.ui.main.V11Routes.SNIPPETS) }
-        )
-        HubCard(
-            title = "Load vs recovery",
-            icon = Icons.Rounded.MonitorHeart,
-            subtitle = "Meetings and off-ticket time against sleep, HRV, resting heart rate and mood, with sample sizes.",
-            onClick = { onOpen(cloud.wafflecommons.pixelbrainreader.ui.main.V11Routes.LOAD) }
-        )
-        HubCard(
-            title = "Leave & handover",
-            icon = Icons.Rounded.BeachAccess,
-            subtitle = "A handover draft before you leave, a briefing of what changed when you're back.",
-            onClick = { onOpen(cloud.wafflecommons.pixelbrainreader.ui.main.V11Routes.LEAVE) }
-        )
+        val pinnedTools = HubTool.entries.filter { it.id in pinned }
+        val otherTools = HubTool.entries.filter { it.id !in pinned }
+        pinnedTools.forEach { tool ->
+            HubCard(tool, pinned = true, onPin = { viewModel.setPinned(tool, it) }, onClick = { onOpen(tool.route) })
+        }
+        if (otherTools.isNotEmpty()) {
+            androidx.compose.material3.TextButton(onClick = { showAll = !showAll }) {
+                Text(if (showAll) "Hide other tools" else "All tools (${otherTools.size} more)")
+            }
+            if (showAll) {
+                Text(
+                    "Tap the pin to keep a tool at the top.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                otherTools.forEach { tool ->
+                    HubCard(tool, pinned = false, onPin = { viewModel.setPinned(tool, it) }, onClick = { onOpen(tool.route) })
+                }
+            }
+        }
     }
 }
 
-/** A hub entry that opens a tool. */
+/** The toolkit's tools, in hub order. Ids are stored in preferences: never rename one. */
+enum class HubTool(
+    val id: String,
+    val title: String,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector,
+    val subtitle: String,
+    val route: String
+) {
+    BOARDS("boards", "Boards", Icons.Rounded.ViewKanban,
+        "Any folder as a board on the vault's statuses, with next steps, blockers and target dates.",
+        cloud.wafflecommons.pixelbrainreader.ui.main.V11Routes.BOARDS),
+    MEETINGS("meetings", "Meetings & next actions", Icons.Rounded.Groups,
+        "Meeting notes with decisions and actions; your @moi actions from every note; the weekly load.",
+        cloud.wafflecommons.pixelbrainreader.ui.main.V11Routes.MEETINGS),
+    OBJECTIVES("objectives", "Objectives", Icons.Rounded.Flag,
+        "Notes tagged #objectif: milestones, the log entries that serve them, a weekly slot.",
+        cloud.wafflecommons.pixelbrainreader.ui.main.V11Routes.OBJECTIVES),
+    EVIDENCE("evidence", "Evidence report", Icons.Rounded.Summarize,
+        "A month or a quarter of the log as a draft for your reviews: every number from the data.",
+        cloud.wafflecommons.pixelbrainreader.ui.main.V11Routes.EVIDENCE),
+    INBOX("inbox", "Inbox filing", Icons.Rounded.MoveToInbox,
+        "Each inbox note with the folder and tags its closest notes suggest; filing keeps the vault's rules.",
+        cloud.wafflecommons.pixelbrainreader.ui.main.V11Routes.INBOX),
+    ACTIVITY("activity", "Vault activity", Icons.Rounded.BarChart,
+        "What the last sync brought, commits per day, the notes that changed most and the new ones.",
+        cloud.wafflecommons.pixelbrainreader.ui.main.V11Routes.ACTIVITY),
+    SNIPPETS("snippets", "Snippets & runbooks", Icons.Rounded.Code,
+        "Every code block of the vault, ready to copy; runbooks played step by step, with an incident log.",
+        cloud.wafflecommons.pixelbrainreader.ui.main.V11Routes.SNIPPETS),
+    LOAD("load", "Load vs recovery", Icons.Rounded.MonitorHeart,
+        "Meetings and off-ticket time against sleep, HRV, resting heart rate and mood, with sample sizes.",
+        cloud.wafflecommons.pixelbrainreader.ui.main.V11Routes.LOAD),
+    LEAVE("leave", "Leave & handover", Icons.Rounded.BeachAccess,
+        "A handover draft before you leave, a briefing of what changed when you're back.",
+        cloud.wafflecommons.pixelbrainreader.ui.main.V11Routes.LEAVE);
+
+    companion object {
+        /** Pinned until the user chooses: the everyday ones. */
+        val DEFAULT_PINNED: Set<String> = setOf(BOARDS.id, MEETINGS.id, INBOX.id)
+    }
+}
+
+/** A hub entry that opens a tool, with a pin to keep it at the top. */
 @Composable
-internal fun HubCard(title: String, icon: androidx.compose.ui.graphics.vector.ImageVector, subtitle: String, onClick: () -> Unit) {
+internal fun HubCard(tool: HubTool, pinned: Boolean, onPin: (Boolean) -> Unit, onClick: () -> Unit) {
     SectionCard(
-        title = title,
-        icon = icon,
-        subtitle = subtitle,
-        modifier = androidx.compose.ui.Modifier.clickable(onClick = onClick)
+        title = tool.title,
+        icon = tool.icon,
+        subtitle = tool.subtitle,
+        modifier = androidx.compose.ui.Modifier.clickable(onClick = onClick),
+        trailing = {
+            androidx.compose.material3.IconToggleButton(checked = pinned, onCheckedChange = onPin) {
+                androidx.compose.material3.Icon(
+                    if (pinned) Icons.Rounded.PushPin else Icons.Outlined.PushPin,
+                    contentDescription = if (pinned) "Unpin ${tool.title}" else "Pin ${tool.title}"
+                )
+            }
+        }
     )
 }
