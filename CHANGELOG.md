@@ -13,19 +13,21 @@ kit and the authorship timeline.
 
 ## [12.2.0] — 2026-11-04
 
-The Daily screen, in your order.
+The Daily screen in your order, and Settings back the way it was.
 
 ### Added
 
-- **Settings → Your day → Daily screen** is a page of its own: move each block up or down, and
-  switch it on to keep it on the Daily screen or off to leave it in "More today". The Daily
-  screen follows that order, on screen and inside the fold. On a wide screen, Timeline and
-  Tasks still sit side by side when they follow each other.
+- **Settings → Interface & Sound → Daily screen** is a page of its own: move each block up or
+  down, and switch it on to keep it on the Daily screen or off to leave it in "More today". The
+  Daily screen follows that order, on screen and inside the fold. On a wide screen, Timeline
+  and Tasks still sit side by side when they follow each other.
 
 ### Changed
 
-- The ten Daily switches no longer fill the top of Settings: "Your day" opens with one
-  **Daily screen** row. Nothing else in Settings moved.
+- **Settings is back in its 11.x order, with nothing folded away:** Integrations, Google
+  Ecosystem, Intelligence, Knowledge Vault, Life OS Automations, Interface & Sound, About.
+  12.0's "Your day" section and "Advanced" fold are gone, and the ten Daily switches that
+  filled the top of the page became the **Daily screen** row.
 - **Every Settings entry says what it opens,** in one line under its name: habits, house &
   chores, reminders, modes, mood tags, navigation bar, sound effects, the confidentiality guard
   and the RPG rules.

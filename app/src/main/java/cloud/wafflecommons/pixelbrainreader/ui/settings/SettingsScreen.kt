@@ -169,7 +169,6 @@ fun SettingsScreen(
         }
     }
     
-    var advancedExpanded by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
 
     Scaffold(
         snackbarHost = {
@@ -203,118 +202,6 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             
-            // Your day — what a normal week needs
-            StaggeredEntry(index = 0) {
-            SettingsSection(
-                title = "Your day",
-                icon = Icons.Rounded.DateRange
-            ) {
-                ListItem(
-                    modifier = Modifier.clickable {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onNavigateToDailyLayout()
-                    },
-                    leadingContent = { Icon(Icons.Rounded.ViewAgenda, contentDescription = null) },
-                    supportingContent = { Text("Order the blocks and choose which stay on screen") }
-                ) {
-                    Text("Daily screen")
-                }
-
-                ListItem(
-                    modifier = Modifier.clickable {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onNavigateToHabitConfig()
-                    },
-                    leadingContent = { Icon(Icons.Rounded.DateRange, contentDescription = null) },
-                    supportingContent = { Text("Add and edit habits; some tick themselves from Health Connect") }
-                ) {
-                    Text("Manage Habits & Automations")
-                }
-
-                ListItem(
-                    modifier = Modifier.clickable {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onNavigateToHomeConfig()
-                    },
-                    leadingContent = { Icon(Icons.Rounded.CleaningServices, contentDescription = null) },
-                    supportingContent = { Text("Rooms and chores, and how often each one comes back") }
-                ) {
-                    Text("Manage House & Chores")
-                }
-
-                ListItem(
-                    modifier = Modifier.clickable {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onNavigateToReminders()
-                    },
-                    leadingContent = { Icon(Icons.Filled.Notifications, contentDescription = null) },
-                    supportingContent = { Text("Evening check-in, private vault reminder, chores & habits reminders") }
-                ) {
-                    Text("Reminders & Notifications")
-                }
-
-                ListItem(
-                    modifier = Modifier.clickable {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onNavigateToModes()
-                    },
-                    leadingContent = { Icon(Icons.Rounded.Work, contentDescription = null) },
-                    supportingContent = { Text("Names and icons, work folders and hours, leave, key dates, screen-share safe") }
-                ) {
-                    Text("Modes: work, personal, off")
-                }
-
-                ListItem(
-                    modifier = Modifier.clickable {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onNavigateToMoodTags()
-                    },
-                    leadingContent = { Icon(Icons.Rounded.Mood, contentDescription = null) },
-                    supportingContent = { Text("The tags you can add when you log a mood") }
-                ) {
-                    Text("Manage Mood Tags")
-                }
-            }
-            }
-
-            // 5. Interface & Sound — app-level UI preferences
-            StaggeredEntry(index = 5) {
-            SettingsSection(
-                title = "Interface & Sound",
-                icon = Icons.Default.Tune
-            ) {
-                ListItem(
-                    modifier = Modifier.clickable {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onNavigateToNavBarReorder()
-                    },
-                    leadingContent = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) },
-                    supportingContent = { Text("Reorder the tabs at the bottom; the Daily button stays put") }
-                ) {
-                    Text("Navigation bar order")
-                }
-
-                ListItem(
-                    leadingContent = { Icon(Icons.Filled.VolumeUp, contentDescription = null) },
-                    supportingContent = { Text("A short sound when you complete a habit or a task") },
-                    trailingContent = {
-                        Switch(
-                            checked = uiState.soundEffectsEnabled,
-                            onCheckedChange = {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                viewModel.setSoundEffects(it)
-                            }
-                        )
-                    }
-                ) {
-                    Text("Sound effects")
-                }
-            }
-            }
-
-            // Advanced — set once, then forgotten: integrations, AI, RAG, vault tools
-            AdvancedSettingsHeader(expanded = advancedExpanded, onToggle = { advancedExpanded = !advancedExpanded })
-            if (advancedExpanded) {
             // 0. Integrations (Health Connect)
             StaggeredEntry(index = 0) {
             SettingsSection(
@@ -568,12 +455,56 @@ fun SettingsScreen(
             }
             }
 
-            // Vault & automations (guard, RPG rules, config import/export)
+            // 4. Life OS Automations
             StaggeredEntry(index = 4) {
             SettingsSection(
-                title = "Vault & automations",
+                title = "Life OS Automations",
                 icon = Icons.AutoMirrored.Filled.List
             ) {
+                ListItem(
+                    modifier = Modifier.clickable {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onNavigateToHabitConfig()
+                    },
+                    leadingContent = { Icon(Icons.Rounded.DateRange, contentDescription = null) },
+                    supportingContent = { Text("Add and edit habits; some tick themselves from Health Connect") }
+                ) {
+                    Text("Manage Habits & Automations")
+                }
+
+                ListItem(
+                    modifier = Modifier.clickable {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onNavigateToHomeConfig()
+                    },
+                    leadingContent = { Icon(Icons.Rounded.CleaningServices, contentDescription = null) },
+                    supportingContent = { Text("Rooms and chores, and how often each one comes back") }
+                ) {
+                    Text("Manage House & Chores")
+                }
+
+                ListItem(
+                    modifier = Modifier.clickable {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onNavigateToReminders()
+                    },
+                    leadingContent = { Icon(Icons.Filled.Notifications, contentDescription = null) },
+                    supportingContent = { Text("Evening check-in, private vault reminder, chores & habits reminders") }
+                ) {
+                    Text("Reminders & Notifications")
+                }
+
+                ListItem(
+                    modifier = Modifier.clickable {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onNavigateToModes()
+                    },
+                    leadingContent = { Icon(Icons.Rounded.Work, contentDescription = null) },
+                    supportingContent = { Text("Names and icons, work folders and hours, leave, key dates, screen-share safe") }
+                ) {
+                    Text("Modes: work, personal, off")
+                }
+
                 ListItem(
                     modifier = Modifier.clickable {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -583,6 +514,17 @@ fun SettingsScreen(
                     supportingContent = { Text("Protected names and secrets: a commit holding one waits for your review") }
                 ) {
                     Text("Confidentiality guard")
+                }
+
+                ListItem(
+                    modifier = Modifier.clickable {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onNavigateToMoodTags()
+                    },
+                    leadingContent = { Icon(Icons.Rounded.Mood, contentDescription = null) },
+                    supportingContent = { Text("The tags you can add when you log a mood") }
+                ) {
+                    Text("Manage Mood Tags")
                 }
 
                 ListItem(
@@ -659,6 +601,50 @@ fun SettingsScreen(
             }
             }
 
+            // 5. Interface & Sound — app-level UI preferences
+            StaggeredEntry(index = 5) {
+            SettingsSection(
+                title = "Interface & Sound",
+                icon = Icons.Default.Tune
+            ) {
+                ListItem(
+                    modifier = Modifier.clickable {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onNavigateToDailyLayout()
+                    },
+                    leadingContent = { Icon(Icons.Rounded.ViewAgenda, contentDescription = null) },
+                    supportingContent = { Text("Order the blocks and choose which stay on screen") }
+                ) {
+                    Text("Daily screen")
+                }
+
+                ListItem(
+                    modifier = Modifier.clickable {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onNavigateToNavBarReorder()
+                    },
+                    leadingContent = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) },
+                    supportingContent = { Text("Reorder the tabs at the bottom; the Daily button stays put") }
+                ) {
+                    Text("Navigation bar order")
+                }
+
+                ListItem(
+                    leadingContent = { Icon(Icons.Filled.VolumeUp, contentDescription = null) },
+                    supportingContent = { Text("A short sound when you complete a habit or a task") },
+                    trailingContent = {
+                        Switch(
+                            checked = uiState.soundEffectsEnabled,
+                            onCheckedChange = {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                viewModel.setSoundEffects(it)
+                            }
+                        )
+                    }
+                ) {
+                    Text("Sound effects")
+                }
+            }
             }
 
             // 6. About
