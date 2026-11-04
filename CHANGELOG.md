@@ -29,6 +29,21 @@ Linking the phone with the desktops.
   folders by a local allow-list). Tick a line on either side to close it. Setup:
   `documentation/how-to/desktop-handoff.md`.
 
+### Fixed
+
+- **Durations in the Add box were read as clock times:** "2h de sport ce matin" became a moment
+  at 02:00 and "réviser 1h" a task at 01:00. A time followed by "de / of / min / heure…" is a
+  duration now, and mid-line a bare hour needs "à / at / vers…" to count ("16:30" and "14h30"
+  still stand alone).
+- A destination picked on the Add box's chip no longer sticks once the line changes meaning, and
+  the floating **+** button no longer covers the "More today" header.
+
+### Changed
+
+- **The Projects page and widget are quick:** project summaries are cached and rebuilt only when
+  a project note, the links or the day change (the page took ~10 s on the emulator, and the
+  widget redid that work after every mood log or habit tick).
+
 ## [12.0.0] — 2026-11-04
 
 "Simpler." The app had grown more surfaces than a busy day leaves time to learn. Nothing is
