@@ -233,6 +233,38 @@ class UserPreferencesRepository @Inject constructor(
         context.dataStore.edit { it[KEY_SOUND_EFFECTS] = enabled }
     }
 
+    // --- Simpler screens (v12): what the Daily screen shows, the fold, pinned tools ---
+    private val KEY_DAILY_SHOWN = androidx.datastore.preferences.core.stringSetPreferencesKey("daily_shown_sections")
+    private val KEY_DAILY_MORE_EXPANDED = booleanPreferencesKey("daily_more_expanded")
+    private val KEY_PINNED_TOOLS = androidx.datastore.preferences.core.stringSetPreferencesKey("toolkit_pinned_tools")
+
+    val dailyShownSections: Flow<Set<cloud.wafflecommons.pixelbrainreader.data.model.DailySection>> =
+        setting { cloud.wafflecommons.pixelbrainreader.data.model.DailySection.fromKeys(it[KEY_DAILY_SHOWN]) }
+
+    val dailyMoreExpanded: Flow<Boolean> = setting { it[KEY_DAILY_MORE_EXPANDED] ?: false }
+
+    /** Toolkit tool ids pinned to the top of the hub; null = never chosen (the hub shows its defaults). */
+    val pinnedTools: Flow<Set<String>?> = setting { it[KEY_PINNED_TOOLS] }
+
+    suspend fun setDailySectionShown(section: cloud.wafflecommons.pixelbrainreader.data.model.DailySection, shown: Boolean) {
+        context.dataStore.edit { prefs ->
+            val current = cloud.wafflecommons.pixelbrainreader.data.model.DailySection.fromKeys(prefs[KEY_DAILY_SHOWN])
+            val next = if (shown) current + section else current - section
+            prefs[KEY_DAILY_SHOWN] = next.map { it.key }.toSet()
+        }
+    }
+
+    suspend fun setDailyMoreExpanded(expanded: Boolean) {
+        context.dataStore.edit { it[KEY_DAILY_MORE_EXPANDED] = expanded }
+    }
+
+    suspend fun setToolPinned(id: String, pinned: Boolean, defaults: Set<String>) {
+        context.dataStore.edit { prefs ->
+            val current = prefs[KEY_PINNED_TOOLS] ?: defaults
+            prefs[KEY_PINNED_TOOLS] = if (pinned) current + id else current - id
+        }
+    }
+
     companion object {
         /** Canonical order + membership of the reorderable regular nav destinations. */
         val DEFAULT_NAVBAR_ORDER = listOf("home", "habits", "home_os", "chat", "mood", "stats")

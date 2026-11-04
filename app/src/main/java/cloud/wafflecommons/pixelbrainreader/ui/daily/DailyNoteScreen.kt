@@ -46,6 +46,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.ScratchNoteEntity
 import cloud.wafflecommons.pixelbrainreader.data.sync.SyncState
+import cloud.wafflecommons.pixelbrainreader.data.model.DailySection
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import androidx.compose.ui.unit.sp
@@ -81,9 +82,12 @@ fun DailyNoteScreen(
     modesViewModel: cloud.wafflecommons.pixelbrainreader.ui.modes.ModesViewModel = hiltViewModel(),
     guardStatus: cloud.wafflecommons.pixelbrainreader.ui.guard.GuardStatusViewModel = hiltViewModel(),
     leaveViewModel: cloud.wafflecommons.pixelbrainreader.ui.work.LeaveViewModel = hiltViewModel(),
-    activityViewModel: cloud.wafflecommons.pixelbrainreader.ui.work.ActivityViewModel = hiltViewModel()
+    activityViewModel: cloud.wafflecommons.pixelbrainreader.ui.work.ActivityViewModel = hiltViewModel(),
+    layoutViewModel: DailyLayoutViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val shownSections by layoutViewModel.shown.collectAsStateWithLifecycle()
+    val moreExpanded by layoutViewModel.moreExpanded.collectAsStateWithLifecycle()
     val guardHeld by guardStatus.held.collectAsStateWithLifecycle()
     val leaveReturn by leaveViewModel.returning.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { leaveViewModel.loadReturn() }
@@ -325,89 +329,77 @@ fun DailyNoteScreen(
                         }
                     }
 
-                    // 0. Weather Dashboard
-                    item {
-                        cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 0) {
-                            PremiumWeatherCard(weather = state.weather)
+                    // The day's blocks: the ones the user shows first, then the "More today" fold.
+                    val hasContent: (DailySection) -> Boolean = { s ->
+                        when (s) {
+                            DailySection.COUNTDOWNS -> countdowns.isNotEmpty()
+                            DailySection.ECHOES -> memoryEchoes.isNotEmpty()
+                            DailySection.SCRATCHPAD -> state.scratchNotes.isNotEmpty()
+                            else -> true
                         }
                     }
-
-                    if (countdowns.isNotEmpty()) {
-                        item(key = "countdowns") {
-                            cloud.wafflecommons.pixelbrainreader.ui.modes.CountdownCard(countdowns)
-                        }
-                    }
-
-                    // 1. Header & Stats
-                    item {
-                        cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 2) {
-                            val moodData = state.moodData
-                            val lastUpdate = remember(moodData) { moodData?.entries?.firstOrNull()?.time }
-                            // Screen-share safe: no mood or health figures on screen.
-                            val hideHealth = visibility.hideHealth
-                            DailyNoteHeader(
-                                emoji = if (hideHealth) null else moodData?.summary?.mainEmoji,
-                                lastUpdate = if (hideHealth) null else lastUpdate,
-                                topDailyTags = if (hideHealth) emptyList() else state.topDailyTags,
-                                healthMetrics = if (hideHealth) null else state.healthMetrics,
-                                moodTrend = if (hideHealth) emptyList() else state.moodTrend
-                            )
-                        }
-                    }
-
-                    // 3. Mantra
-                    item {
-                        cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 4) {
-                            Text(
-                                text = state.mantra,
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Medium,
-                                fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 8.dp),
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                                color = MaterialTheme.colorScheme.secondary
-                            )
-                        }
-                    }
-
-                    // 4. Gratitude Express (RFC-009)
-                    item {
-                        cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 5) {
-                            GratitudeSection(
-                                gratitudes = gratitudes,
-                                onAddGratitude = viewModel::addGratitude,
-                                modifier = Modifier.padding(bottom = 16.dp)
-                            )
-                        }
-                    }
-
-                    // 4b. Memory Echoes (Spaced-repetition & architecture retention)
-                    if (memoryEchoes.isNotEmpty()) {
-                        item {
-                            cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 6) {
-                                cloud.wafflecommons.pixelbrainreader.ui.components.MemoryEchoSection(
-                                    echoes = memoryEchoes,
-                                    onOpenNote = onOpenNote,
-                                    onMarkReviewed = viewModel::markEchoReviewed,
-                                    modifier = Modifier.padding(bottom = 16.dp)
-                                )
+                    val renderSection: androidx.compose.foundation.lazy.LazyListScope.(DailySection, Int) -> Unit = { s, index ->
+                        when (s) {
+                            DailySection.WEATHER -> item(key = "weather") {
+                                cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = index) {
+                                    PremiumWeatherCard(weather = state.weather)
+                                }
                             }
-                        }
-                    }
-
-                    // 5. Adaptive Content (Two Columns vs Single Column)
-                    if (isWide) {
-                        item {
-                            cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 6) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(24.dp),
-                                    verticalAlignment = Alignment.Top
-                                ) {
-                                    // Left Column: Timeline
-                                    Column(modifier = Modifier.weight(0.4f)) {
+                            DailySection.COUNTDOWNS -> item(key = "countdowns") {
+                                cloud.wafflecommons.pixelbrainreader.ui.modes.CountdownCard(countdowns)
+                            }
+                            DailySection.VITALS -> item(key = "vitals") {
+                                cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = index) {
+                                    val moodData = state.moodData
+                                    val lastUpdate = remember(moodData) { moodData?.entries?.firstOrNull()?.time }
+                                    // Screen-share safe: no mood or health figures on screen.
+                                    val hideHealth = visibility.hideHealth
+                                    DailyNoteHeader(
+                                        emoji = if (hideHealth) null else moodData?.summary?.mainEmoji,
+                                        lastUpdate = if (hideHealth) null else lastUpdate,
+                                        topDailyTags = if (hideHealth) emptyList() else state.topDailyTags,
+                                        healthMetrics = if (hideHealth) null else state.healthMetrics,
+                                        moodTrend = if (hideHealth) emptyList() else state.moodTrend
+                                    )
+                                }
+                            }
+                            DailySection.MANTRA -> item(key = "mantra") {
+                                cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = index) {
+                                    Text(
+                                        text = state.mantra,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Medium,
+                                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 8.dp),
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                        color = MaterialTheme.colorScheme.secondary
+                                    )
+                                }
+                            }
+                            DailySection.GRATITUDE -> item(key = "gratitude") {
+                                cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = index) {
+                                    GratitudeSection(
+                                        gratitudes = gratitudes,
+                                        onAddGratitude = viewModel::addGratitude,
+                                        modifier = Modifier.padding(bottom = 16.dp)
+                                    )
+                                }
+                            }
+                            DailySection.ECHOES -> item(key = "echoes") {
+                                cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = index) {
+                                    cloud.wafflecommons.pixelbrainreader.ui.components.MemoryEchoSection(
+                                        echoes = memoryEchoes,
+                                        onOpenNote = onOpenNote,
+                                        onMarkReviewed = viewModel::markEchoReviewed,
+                                        modifier = Modifier.padding(bottom = 16.dp)
+                                    )
+                                }
+                            }
+                            DailySection.TIMELINE -> item(key = "timeline") {
+                                cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = index) {
+                                    Column {
                                         TimelineHeader()
                                         Spacer(Modifier.height(8.dp))
                                         TimelineList(
@@ -415,78 +407,98 @@ fun DailyNoteScreen(
                                             onEdit = { editTimelineEntry = it }
                                         )
                                     }
-
-                                    // Right Column: Journal + Second Brain
-                                    Column(modifier = Modifier.weight(0.6f)) {
+                                }
+                            }
+                            DailySection.TASKS -> item(key = "tasks") {
+                                cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = index) {
+                                    Column {
                                         JournalHeader()
                                         Spacer(Modifier.height(8.dp))
                                         TaskList(
-                                            tasks = state.dailyTasks, 
+                                            tasks = state.dailyTasks,
                                             onToggle = { id, done -> viewModel.toggleTask(id, done) },
                                             onEdit = { editTaskEntry = it }
                                         )
                                     }
                                 }
                             }
-                        }
-                    } else {
-                        // 5. Timeline Header (Static)
-                        item {
-                            TimelineHeader()
-                            Spacer(Modifier.height(8.dp))
-                        }
-                        
-                        // 5b. Timeline List (Animated)
-                        item {
-                            cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 6) {
-                                TimelineList(
-                                    events = state.timelineEvents,
-                                    onEdit = { editTimelineEntry = it }
-                                )
+                            DailySection.SECOND_BRAIN -> item(key = "second-brain") {
+                                cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = index) {
+                                    SecondBrainSection(
+                                        ideas = viewModel.ideasText,
+                                        notes = viewModel.notesText,
+                                        onIdeasChange = viewModel::onIdeasChanged,
+                                        onNotesChange = viewModel::onNotesChanged
+                                    )
+                                }
                             }
-                        }
-
-                        // 6. Journal Header (Static)
-                        item {
-                            JournalHeader()
-                            Spacer(Modifier.height(8.dp))
-                        }
-
-                        // 6b. Journal List (Animated)
-                        item {
-                            cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 7) {
-                                TaskList(
-                                    tasks = state.dailyTasks, 
-                                    onToggle = { id, done -> viewModel.toggleTask(id, done) },
-                                    onEdit = { editTaskEntry = it }
-                                )
+                            DailySection.SCRATCHPAD -> item(key = "scratchpad") {
+                                cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = index) {
+                                    ScratchpadWidget(
+                                        scraps = state.scratchNotes,
+                                        onDelete = { viewModel.deleteScrap(it) },
+                                        onPromote = { viewModel.promoteScrapToIdeas(it) }
+                                    )
+                                }
                             }
                         }
                     }
-
-                    // 6. Second Brain Section
-                    item {
-                        cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 8) {
-                            SecondBrainSection(
-                                ideas = viewModel.ideasText,
-                                notes = viewModel.notesText,
-                                onIdeasChange = viewModel::onIdeasChanged,
-                                onNotesChange = viewModel::onNotesChanged
+                    // On a wide screen, Timeline and Tasks sit side by side when they are in the same group.
+                    val renderGroup: androidx.compose.foundation.lazy.LazyListScope.(List<DailySection>) -> Unit = { group ->
+                        val sideBySide = isWide && DailySection.TIMELINE in group && DailySection.TASKS in group
+                        group.filter(hasContent).forEachIndexed { index, s ->
+                            if (sideBySide && s == DailySection.TASKS) return@forEachIndexed
+                            if (sideBySide && s == DailySection.TIMELINE) {
+                                item(key = "timeline-tasks") {
+                                    cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = index) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(24.dp),
+                                            verticalAlignment = Alignment.Top
+                                        ) {
+                                            Column(modifier = Modifier.weight(0.4f)) {
+                                                TimelineHeader()
+                                                Spacer(Modifier.height(8.dp))
+                                                TimelineList(events = state.timelineEvents, onEdit = { editTimelineEntry = it })
+                                            }
+                                            Column(modifier = Modifier.weight(0.6f)) {
+                                                JournalHeader()
+                                                Spacer(Modifier.height(8.dp))
+                                                TaskList(
+                                                    tasks = state.dailyTasks,
+                                                    onToggle = { id, done -> viewModel.toggleTask(id, done) },
+                                                    onEdit = { editTaskEntry = it }
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            } else {
+                                renderSection(s, index)
+                            }
+                        }
+                    }
+                    val shownGroup = DailySection.entries.filter { it in shownSections }
+                    val foldGroup = DailySection.entries.filter { it !in shownSections }
+                    renderGroup(shownGroup)
+                    if (foldGroup.any(hasContent)) {
+                        item(key = "more-today") {
+                            MoreTodayHeader(
+                                summary = moreTodaySummary(
+                                    fold = foldGroup.toSet(),
+                                    moments = state.timelineEvents.size,
+                                    tasks = state.dailyTasks.count { !it.isDone },
+                                    gratitude = gratitudes.size,
+                                    echoes = memoryEchoes.size,
+                                    scraps = state.scratchNotes.size,
+                                    hasIdeas = viewModel.ideasText.isNotBlank() || viewModel.notesText.isNotBlank(),
+                                    countdowns = countdowns.size
+                                ),
+                                expanded = moreExpanded,
+                                onToggle = { layoutViewModel.setMoreExpanded(!moreExpanded) }
                             )
                         }
-                    }
-
-                    // 7. Scratchpad (New Module)
-                    if (state.scratchNotes.isNotEmpty()) {
-                        item {
-                            cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = 9) {
-                                ScratchpadWidget(
-                                    scraps = state.scratchNotes,
-                                    onDelete = { viewModel.deleteScrap(it) },
-                                    onPromote = { viewModel.promoteScrapToIdeas(it) }
-                                )
-                            }
-                        }
+                        if (moreExpanded) renderGroup(foldGroup)
                     }
                 }
             }
