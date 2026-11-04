@@ -10,7 +10,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Article
 import androidx.compose.material.icons.rounded.Link
+import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.rounded.Checklist
+import androidx.compose.material.icons.rounded.Computer
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Insights
 import androidx.compose.material.icons.rounded.RocketLaunch
@@ -20,6 +22,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -47,8 +50,51 @@ import javax.inject.Inject
 @HiltViewModel
 class ProjectsViewModel @Inject constructor(
     private val repository: ProjectRepository,
+    private val handoffRepository: cloud.wafflecommons.pixelbrainreader.data.work.DeskHandoffRepository,
     modesRepository: ModesRepository
 ) : ViewModel() {
+
+    private val _handoffs = MutableStateFlow<List<cloud.wafflecommons.pixelbrainreader.data.work.DeskHandoffItem>>(emptyList())
+    /** The open hand-offs of the project shown by [ProjectScreen]. */
+    val handoffs: StateFlow<List<cloud.wafflecommons.pixelbrainreader.data.work.DeskHandoffItem>> = _handoffs.asStateFlow()
+
+    private val _message = MutableStateFlow<String?>(null)
+    val message: StateFlow<String?> = _message.asStateFlow()
+    fun clearMessage() { _message.value = null }
+
+    fun loadHandoffs(root: String) {
+        viewModelScope.launch { _handoffs.value = safeHandoffs(root) }
+    }
+
+    fun addHandoff(root: String, title: String, text: String) {
+        viewModelScope.launch {
+            try {
+                handoffRepository.add(root, title, text)
+                _message.value = "Handed off — your desktop sees it after the next sync"
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _message.value = "Couldn't save the hand-off"
+            }
+            _handoffs.value = safeHandoffs(root)
+        }
+    }
+
+    fun completeHandoff(root: String, item: cloud.wafflecommons.pixelbrainreader.data.work.DeskHandoffItem) {
+        viewModelScope.launch {
+            val ok = try { handoffRepository.complete(root, item) } catch (e: CancellationException) { throw e } catch (e: Exception) { false }
+            if (!ok) _message.value = "That hand-off changed meanwhile — refreshed"
+            _handoffs.value = safeHandoffs(root)
+        }
+    }
+
+    private suspend fun safeHandoffs(root: String) = try {
+        handoffRepository.items(root).filter { !it.done }
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        emptyList()
+    }
 
     val visibility: StateFlow<Visibility> = modesRepository.visibility
 
@@ -122,8 +168,15 @@ fun ProjectScreen(
     val visibility by viewModel.visibility.collectAsStateWithLifecycle()
     LaunchedEffect(visibility) { viewModel.load() }
     val p = projects?.firstOrNull { it.root == root }
+    val handoffs by viewModel.handoffs.collectAsStateWithLifecycle()
+    val message by viewModel.message.collectAsStateWithLifecycle()
+    LaunchedEffect(root) { viewModel.loadHandoffs(root) }
+    val snackbar = androidx.compose.runtime.remember { androidx.compose.material3.SnackbarHostState() }
+    LaunchedEffect(message) {
+        message?.let { snackbar.showSnackbar(it); viewModel.clearMessage() }
+    }
 
-    FormScaffold(title = p?.title ?: root.substringAfterLast('/'), onBack = onBack) {
+    FormScaffold(title = p?.title ?: root.substringAfterLast('/'), onBack = onBack, snackbarHostState = snackbar) {
         if (p == null) {
             Text(
                 if (projects == null) "Loading…" else "This project is hidden or no longer exists.",
@@ -149,6 +202,11 @@ fun ProjectScreen(
                 day.subjects.take(5).forEach { Text("• $it", style = MaterialTheme.typography.bodySmall) }
             }
         }
+        HandoffCard(
+            handoffs = handoffs,
+            onSend = { text -> viewModel.addHandoff(p.root, p.title, text) },
+            onDone = { viewModel.completeHandoff(p.root, it) }
+        )
         SectionCard(
             title = "Next actions",
             icon = Icons.Rounded.Checklist,
@@ -188,6 +246,59 @@ fun ProjectScreen(
                     NoteRow(path.substringAfterLast('/').removeSuffix(".md"), path.substringBeforeLast('/')) { onOpenNote(path) }
                 }
             }
+        }
+    }
+}
+
+/** Hand-off to desktop (C13): a note for your next desktop session on this project. */
+@Composable
+private fun HandoffCard(
+    handoffs: List<cloud.wafflecommons.pixelbrainreader.data.work.DeskHandoffItem>,
+    onSend: (String) -> Unit,
+    onDone: (cloud.wafflecommons.pixelbrainreader.data.work.DeskHandoffItem) -> Unit
+) {
+    var text by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf("") }
+    SectionCard(
+        title = "Hand off to desktop",
+        icon = Icons.Rounded.Computer,
+        subtitle = "Shown when your next desktop session on this project starts."
+    ) {
+        androidx.compose.material3.OutlinedTextField(
+            value = text,
+            onValueChange = { text = it },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("Next: …") },
+            singleLine = true,
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Send),
+            keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSend = {
+                if (text.isNotBlank()) { onSend(text); text = "" }
+            }),
+            trailingIcon = {
+                androidx.compose.material3.IconButton(
+                    onClick = { if (text.isNotBlank()) { onSend(text); text = "" } },
+                    enabled = text.isNotBlank()
+                ) {
+                    androidx.compose.material3.Icon(Icons.AutoMirrored.Rounded.Send, contentDescription = "Hand off")
+                }
+            }
+        )
+        handoffs.forEach { h ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(role = androidx.compose.ui.semantics.Role.Checkbox) { onDone(h) }
+                    .padding(vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("☐", color = MaterialTheme.colorScheme.primary)
+                Text(h.text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                h.at?.let {
+                    Text(it.format(DateTimeFormatter.ofPattern("d MMM HH:mm")), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+        if (handoffs.isNotEmpty()) {
+            Text("Tap one when it's done.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

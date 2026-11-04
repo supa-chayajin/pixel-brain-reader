@@ -135,7 +135,8 @@ object ProjectFormat {
         }
         val allDays = mergeDays(worklogs)
         val days = allDays.filter { !it.date.isBefore(from) && !it.date.isAfter(today) }
-        val handNotes = notes.filterKeys { !isWorklog(it) }.map { (p, c) -> WorkNote.from(p, c) }
+        // Hand-offs have their own card (C13): not a generic note or next action.
+        val handNotes = notes.filterKeys { !isWorklog(it) && !DeskHandoffFormat.isHandoff(it) }.map { (p, c) -> WorkNote.from(p, c) }
         val readme = handNotes.firstOrNull { it.path.equals("$root/README.md", ignoreCase = true) }
         val todo = handNotes.firstOrNull { it.path.equals("$root/TODO.md", ignoreCase = true) }
 

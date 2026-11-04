@@ -15,10 +15,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the key notes (README, roadmaps, RFCs, the mirrored TODO), recent notes and every note outside
   the project that links into it. Pinned in the toolkit by default; work projects hide outside
   Work mode. A **Projects widget** shows the three most active projects and their next action.
+- **Hand off to desktop (C13).** On a project's page, "Next: …" goes to the project's
+  `Handoff.md`; a Claude Code `SessionStart` hook on the desktop that owns the project prints the
+  open ones (`second-brain/scripts/handoff.sh`, read-only, each machine limited to its own vault
+  folders by a local allow-list). Tick a line on either side to close it. Setup:
+  `documentation/how-to/desktop-handoff.md`.
 
 Still planned for 11.x/12.x (`documentation/plans/2026-10-18-v11-work-and-dev-toolkit.md`): the
 AI-pairing dashboard, "explain this error", decision records, people & 1:1s, security watch,
-desktop hand-off (next), the workshop kit and the authorship timeline.
+the workshop kit and the authorship timeline.
 
 ## [12.0.0] — 2026-11-04
 
