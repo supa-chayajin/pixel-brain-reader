@@ -77,6 +77,16 @@ class WhatsNewTest {
     }
 
     @Test
+    fun `a Next_Actions live list is news too`() {
+        val nextActions = "20_Projects/22_Demo/Next_Actions.md"
+        assertTrue(WhatsNew.needsContent(nextActions))
+        assertTrue(!WhatsNew.needsContent("20_Projects/22_Demo/Notes/Next_Actions.md"))
+        val news = WhatsNew.of(listOf(ChangedPath(nextActions, "modify")), mapOf(nextActions to ""), mapOf(nextActions to "- [ ] @moi Answer the e-mail\n")).single()
+        assertEquals("20_Projects/22_Demo", news.root)
+        assertEquals(listOf("Answer the e-mail"), news.myLines)
+    }
+
+    @Test
     fun `only the projects' TODO and hand-off files need their contents`() {
         assertTrue(WhatsNew.needsContent(todo))
         assertTrue(WhatsNew.needsContent(handoff))

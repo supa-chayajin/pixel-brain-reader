@@ -216,9 +216,19 @@ object ProjectFormat {
 
     fun isKeyNote(path: String): Boolean {
         val name = path.substringAfterLast('/').lowercase()
-        return name == "readme.md" || name == "todo.md" || name.startsWith("_portfolio") ||
+        return name == "readme.md" || name == "todo.md" || name == "next_actions.md" || name.startsWith("_portfolio") ||
             name.contains("roadmap") || name.startsWith("rfc") || path.lowercase().contains("/rfcs/")
     }
+
+    /**
+     * A project's live list among its [notes]: its `TODO.md` when the vault keeps it, else its
+     * `Next_Actions.md` — the name a project takes when worktrace copies the repo's own `TODO.md`
+     * over the vault's. A mirror is never the live list.
+     */
+    fun liveList(root: String, notes: List<WorkNote>): WorkNote? =
+        listOf("TODO.md", "Next_Actions.md").firstNotNullOfOrNull { name ->
+            notes.firstOrNull { it.path.equals("$root/$name", ignoreCase = true) && !it.isMirror }
+        }
 
     /**
      * Builds one project's page from its notes ([notes]: path → content, all under [root]),
@@ -247,15 +257,15 @@ object ProjectFormat {
         val latestReport = ownNotes
             .filter { it.path.startsWith("$root/Claude/Reports/") }
             .maxWithOrNull(compareBy<WorkNote>({ reportDate(it) }, { it.path }))
-        // The live TODO splits in two: `@moi` lines are yours, the others are Claude's queue. A
-        // mirrored TODO is a repository's punch list: linked, never parsed (settled decision #15).
-        val (todoMine, claudeQueue) = todo?.takeIf { !it.isMirror }
-            ?.let { todoActions(it.path, it.content) }.orEmpty()
-            .partition { it.mine }
+        // The live list splits in two: `@moi` lines are yours, the others are Claude's queue. A
+        // mirrored TODO is a repository's punch list: linked, never parsed (settled decision #15);
+        // the project's live list is then its Next_Actions.md.
+        val live = liveList(root, handNotes)
+        val (todoMine, claudeQueue) = live?.let { todoActions(it.path, it.content) }.orEmpty().partition { it.mine }
 
         val actions = (
             ownNotes
-                .filter { it != todo }
+                .filter { it != todo && it != live }
                 .flatMap { note ->
                     MeetingFormat.actions(note.path, note.content).filter { !it.done }.map {
                         ProjectAction(note.path, plainText(it.text), it.due, it.mine)

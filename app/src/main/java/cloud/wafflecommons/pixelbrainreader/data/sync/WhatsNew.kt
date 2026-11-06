@@ -31,10 +31,16 @@ object WhatsNew {
 
     private const val REPORTS = "/Claude/Reports/"
 
-    /** The changed files whose before/after contents [of] needs: each project's TODO and hand-offs. */
+    /** A project's live list: its `TODO.md`, or its `Next_Actions.md` when the TODO is a repository's copy. */
+    private val LIVE_LISTS = setOf("todo.md", "next_actions.md")
+
+    private fun isLiveList(path: String, root: String) =
+        path.substringBeforeLast('/') == root && path.substringAfterLast('/').lowercase() in LIVE_LISTS
+
+    /** The changed files whose before/after contents [of] needs: each project's live list and hand-offs. */
     fun needsContent(path: String): Boolean {
         val root = ProjectFormat.rootOf(path) ?: return false
-        return path.equals("$root/TODO.md", ignoreCase = true) || path == DeskHandoffFormat.path(root)
+        return isLiveList(path, root) || path == DeskHandoffFormat.path(root)
     }
 
     fun isReport(path: String): Boolean = ProjectFormat.rootOf(path) != null && path.contains(REPORTS) && path.endsWith(".md")
@@ -50,7 +56,7 @@ object WhatsNew {
                 isReport(c.path) && (c.change == "add" || c.change == "rename") ->
                     update(root) { it.copy(reports = it.reports + c.path) }
 
-                c.path.equals("$root/TODO.md", ignoreCase = true) && c.change != "delete" -> {
+                isLiveList(c.path, root) && c.change != "delete" -> {
                     val now = after[c.path]?.takeIf { !MirrorNotes.isMirror(it) } ?: continue
                     val known = before[c.path]?.takeIf { !MirrorNotes.isMirror(it) }
                         ?.let { ProjectFormat.todoActions(c.path, it) }.orEmpty()

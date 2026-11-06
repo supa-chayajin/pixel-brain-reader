@@ -286,6 +286,27 @@ class ProjectsTest {
     }
 
     @Test
+    fun `when the TODO is a repository's copy, Next_Actions is the live list`() {
+        val root = "20_Projects/22_Demo"
+        val notes = mapOf(
+            "$root/README.md" to "---\ntitle: Demo\n---\n",
+            "$root/TODO.md" to "---\ntitle: \"TODO\"\n---\n\n> Mirrored automatically from `demo/TODO.md` — edit the source.\n\n- [ ] a repository line\n",
+            "$root/Next_Actions.md" to "---\ntitle: \"Next actions\"\ndate_updated: '2026-11-06'\n---\n# Next actions\n\n## Today\n\n- [ ] @moi Answer the e-mail 📅 2026-11-06\n\n## Claude\n\n- [ ] Draft the ADR\n"
+        )
+        val s = ProjectFormat.summarize(root, notes, emptyList(), today)
+        assertEquals(listOf("Answer the e-mail"), s.actions.map { it.text })
+        assertEquals(listOf("Draft the ADR"), s.claudeQueue.map { it.text })
+        assertEquals("$root/Next_Actions.md", s.claudeQueue.single().path)
+        // The mirrored TODO stays the link; the live list is a key note, never a recent one.
+        assertEquals("$root/TODO.md", s.todoNote?.path)
+        assertTrue(s.keyNotes.any { it.path == "$root/Next_Actions.md" })
+        assertTrue(s.recentNotes.none { it.path == "$root/Next_Actions.md" })
+        // A vault-kept TODO.md wins over a Next_Actions.md.
+        val both = notes + ("$root/TODO.md" to "---\ntitle: \"TODO\"\n---\n- [ ] @moi from the TODO\n")
+        assertEquals("$root/TODO.md", ProjectFormat.liveList(root, both.map { (p, c) -> WorkNote.from(p, c) })?.path)
+    }
+
+    @Test
     fun `the newest Claude report is a key note and the page's latest report`() {
         val root = "20_Projects/21_Demo"
         val notes = mapOf(
