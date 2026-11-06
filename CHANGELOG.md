@@ -26,6 +26,9 @@ kit and the authorship timeline.
 - **Answer Claude's open questions from the phone.** In Claude's queue, the TODO's questions
   (under a ❓ heading, typed `question:` or ending with "?") get an Answer button: one nested
   `  - 💬 yyyy-MM-dd — …` line under the question, which the next desktop session reads.
+- **The latest Claude report on the project page.** The newest note under a project's
+  `Claude/Reports/` opens the page in one line (its title and date, a tap opens it) and joins
+  the key notes.
 
 ## [12.3.0] — 2026-11-06
 

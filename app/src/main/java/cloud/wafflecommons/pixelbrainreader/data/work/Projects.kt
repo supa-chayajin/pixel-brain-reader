@@ -84,8 +84,13 @@ data class ProjectSummary(
      */
     val todoNote: WorkNote?,
     /** The README's tags: what objectives sharing one of them are linked by. */
-    val tags: List<String> = emptyList()
+    val tags: List<String> = emptyList(),
+    /** The newest note under `Claude/Reports/` (one dated report per piece of desktop work). */
+    val latestReport: WorkNote? = null
 ) {
+    /** The latest report's date: its file name's `yyyy-MM-dd_` prefix, else its frontmatter. */
+    val latestReportDate: LocalDate? get() = latestReport?.let(ProjectFormat::reportDate)
+
     val name: String get() = root.substringAfterLast('/')
     val commits: Int get() = days.sumOf { it.commits }
     val sessions: Int get() = days.sumOf { it.sessions }
@@ -239,6 +244,9 @@ object ProjectFormat {
         // repository's, not your actions, and their dozens of roadmaps and RFCs would bury the
         // notes you wrote. Only the mirror's index stays, as one key note.
         val (mirrors, ownNotes) = handNotes.partition { it.isMirror }
+        val latestReport = ownNotes
+            .filter { it.path.startsWith("$root/Claude/Reports/") }
+            .maxWithOrNull(compareBy<WorkNote>({ reportDate(it) }, { it.path }))
         // The live TODO splits in two: `@moi` lines are yours, the others are Claude's queue. A
         // mirrored TODO is a repository's punch list: linked, never parsed (settled decision #15).
         val (todoMine, claudeQueue) = todo?.takeIf { !it.isMirror }
@@ -274,15 +282,18 @@ object ProjectFormat {
             days = days,
             actions = actions,
             claudeQueue = claudeQueue,
-            keyNotes = (ownNotes.filter { isKeyNote(it.path) && it != readme } + mirrors.filter { MirrorNotes.isMirrorIndex(it.content) })
+            keyNotes = (ownNotes.filter { isKeyNote(it.path) && it != readme } + listOfNotNull(latestReport) +
+                mirrors.filter { MirrorNotes.isMirrorIndex(it.content) })
+                .distinct()
                 .sortedBy { it.path },
             recentNotes = ownNotes
-                .filter { !isKeyNote(it.path) && it.updated != null }
+                .filter { !isKeyNote(it.path) && it != latestReport && it.updated != null }
                 .sortedByDescending { it.updated }
                 .take(6),
             linkedFrom = linkedFrom,
             todoNote = todo,
-            tags = readme?.tags.orEmpty()
+            tags = readme?.tags.orEmpty(),
+            latestReport = latestReport
         )
     }
 
@@ -336,6 +347,13 @@ object ProjectFormat {
         }
         return result
     }
+
+    private val reportName = Regex("""^(\d{4}-\d{2}-\d{2})""")
+
+    /** A report's date: `2026-11-06_Topic.md` → 2026-11-06, else the note's own dates. */
+    fun reportDate(note: WorkNote): LocalDate? =
+        reportName.find(note.path.substringAfterLast('/'))?.let { runCatching { LocalDate.parse(it.groupValues[1]) }.getOrNull() }
+            ?: note.updated ?: note.created
 
     /** "📌 21_X — Project Log (read me)" → "21_X". */
     internal fun cleanTitle(title: String): String =

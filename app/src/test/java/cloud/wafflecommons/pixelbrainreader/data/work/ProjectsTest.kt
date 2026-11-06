@@ -286,6 +286,24 @@ class ProjectsTest {
     }
 
     @Test
+    fun `the newest Claude report is a key note and the page's latest report`() {
+        val root = "20_Projects/21_Demo"
+        val notes = mapOf(
+            "$root/README.md" to "---\ntitle: Demo\n---\n",
+            "$root/Claude/Reports/2026-11-02_Release.md" to "---\ntitle: \"Release beta7\"\ndate_updated: '2026-11-05'\n---\n",
+            "$root/Claude/Reports/2026-11-06_Audit.md" to "---\ntitle: \"Audit pilot\"\ndate_updated: '2026-11-06'\n---\n",
+            "$root/Notes/Plan.md" to "---\ntitle: Plan\ndate_updated: '2026-11-03'\n---\n"
+        )
+        val s = ProjectFormat.summarize(root, notes, emptyList(), today)
+        assertEquals("$root/Claude/Reports/2026-11-06_Audit.md", s.latestReport?.path)
+        assertEquals(LocalDate.of(2026, 11, 6), s.latestReportDate)
+        assertTrue(s.keyNotes.any { it.path == "$root/Claude/Reports/2026-11-06_Audit.md" })
+        // The older report stays a recent note; the latest isn't listed twice.
+        assertEquals(listOf("$root/Claude/Reports/2026-11-02_Release.md", "$root/Notes/Plan.md"), s.recentNotes.map { it.path })
+        assertNull(ProjectFormat.summarize(root, mapOf("$root/README.md" to "---\ntitle: Demo\n---\n"), emptyList(), today).latestReport)
+    }
+
+    @Test
     fun `actions are shown without markdown`() {
         assertEquals("Fix the kernel: refactor AbstractKernel", ProjectFormat.plainText("**Fix the kernel**: refactor `AbstractKernel`"))
         assertEquals("see the plan and Roadmap", ProjectFormat.plainText("see [[Notes/Plan|the plan]] and [[20_Projects/x/Roadmap]]"))

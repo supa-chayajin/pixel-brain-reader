@@ -244,6 +244,10 @@ fun ProjectScreen(
             )
             return@FormScaffold
         }
+        // The desktop's latest report on this project, one line (Step 5): what was done, decided, left.
+        p.latestReport?.let { report ->
+            NoteRow("📄 Latest Claude report: ${report.title}", p.latestReportDate?.format(DAY)) { onOpenNote(report.path) }
+        }
         SectionCard(title = "Last ${ACTIVITY_DAYS} days", icon = Icons.Rounded.Insights, subtitle = projectLine(p)) {
             if (p.days.isEmpty()) {
                 Text("No worklog in this window.", color = MaterialTheme.colorScheme.onSurfaceVariant)
