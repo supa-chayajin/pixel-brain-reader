@@ -11,6 +11,12 @@ Still planned (`documentation/plans/2026-10-18-v11-work-and-dev-toolkit.md`): th
 dashboard, "explain this error", decision records, people & 1:1s, security watch, the workshop
 kit and the authorship timeline.
 
+## [12.4.0] — 2026-11-06
+
+The phone side of the desktop's Claude sessions, the rest of it: what the pull brought you,
+hand-offs from anywhere, answers to Claude's questions, the latest report, and long technical
+notes (outline, wide tables, Mermaid) that read well on the Fold.
+
 ### Added
 
 - **What's new for you after a sync.** The sync digest now picks out, per project, what the
