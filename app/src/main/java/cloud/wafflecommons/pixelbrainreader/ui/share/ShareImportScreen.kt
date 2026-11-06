@@ -168,7 +168,7 @@ class ShareImportViewModel @Inject constructor(
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun ShareImportScreen(viewModel: ShareImportViewModel, onClose: () -> Unit, onSaved: (String) -> Unit) {
+fun ShareImportScreen(viewModel: ShareImportViewModel, onClose: () -> Unit, onSaved: (String) -> Unit, onHandOff: (String) -> Unit = {}) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val saving by viewModel.saving.collectAsStateWithLifecycle()
     val canSummarize by viewModel.canSummarize.collectAsStateWithLifecycle()
@@ -261,6 +261,14 @@ fun ShareImportScreen(viewModel: ShareImportViewModel, onClose: () -> Unit, onSa
                     edited = true
                 }
             }
+        }
+        // Or hand it to a desktop session instead of keeping it as a note (C13).
+        if (current != null && current !is ShareImport.Loading && !saving) {
+            OutlinedButton(onClick = {
+                val text = current.handoffText()
+                viewModel.dismiss()
+                onHandOff(text)
+            }) { Text("Hand off to desktop instead") }
         }
     }
     if (pickingFolder) {
@@ -517,6 +525,16 @@ private fun <T : Any> rememberLastNonNull(value: T?): T? {
 private class LastValue<T : Any> {
     var value: T? = null
 }
+
+/** What a hand-off of the shared item says: the page's title and address, or the text itself. */
+private fun ShareImport.handoffText(): String = when (this) {
+    is ShareImport.Article -> "${clip.title} ${clip.url}"
+    is ShareImport.LinkOnly -> listOfNotNull(titleHint, url).joinToString(" ")
+    is ShareImport.Text -> listOfNotNull(titleHint, markdown.take(HANDOFF_TEXT_CHARS)).joinToString(": ")
+    is ShareImport.Loading -> url.orEmpty()
+}
+
+private const val HANDOFF_TEXT_CHARS = 500
 
 private fun ShareImport.body(): String = when (this) {
     is ShareImport.Article -> clip.markdown

@@ -50,12 +50,34 @@ object V11Routes {
 
     fun project(root: String) = "project?root=" + android.net.Uri.encode(root)
     const val MISSION_LOG = "mission_log?add={add}"
+    const val HANDOFF = "handoff?root={root}&text={text}"
+
+    /** The hand-off composer, optionally on [root] with [text] already typed (a note's link, a shared page). */
+    fun handoff(root: String? = null, text: String = "") =
+        "handoff?root=" + android.net.Uri.encode(root.orEmpty()) + "&text=" + android.net.Uri.encode(text)
 
     fun missionLog(add: Boolean = false) = "mission_log?add=$add"
 }
 
-/** The v11 destinations; [openNote] opens a vault note in the Repo pane. */
-fun NavGraphBuilder.v11Destinations(navController: NavHostController, openNote: (String) -> Unit) {
+/**
+ * The v11 destinations; [openNote] opens a vault note in the Repo pane, [onHandoffSent] leaves the
+ * hand-off composer (back, or out of the app when it came from another app's share sheet).
+ */
+fun NavGraphBuilder.v11Destinations(navController: NavHostController, openNote: (String) -> Unit, onHandoffSent: () -> Unit) {
+    composable(
+        V11Routes.HANDOFF,
+        arguments = listOf(
+            navArgument("root") { type = NavType.StringType; defaultValue = "" },
+            navArgument("text") { type = NavType.StringType; defaultValue = "" }
+        )
+    ) { entry ->
+        cloud.wafflecommons.pixelbrainreader.ui.work.HandoffScreen(
+            initialRoot = entry.arguments?.getString("root"),
+            initialText = entry.arguments?.getString("text").orEmpty(),
+            onBack = { navController.popBackStack() },
+            onSent = onHandoffSent
+        )
+    }
     composable(V11Routes.MODES_SETTINGS) {
         ModesSettingsScreen(onBack = { navController.popBackStack() })
     }

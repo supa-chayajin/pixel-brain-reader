@@ -46,13 +46,17 @@ data class PairingStats(
     val commitsPerSession: Double? get() = if (sessions > 0) commits.toDouble() / sessions else null
 }
 
-/** An open checkbox found in one of the project's notes; [section] is its `##` heading in the project TODO. */
+/**
+ * An open checkbox found in one of the project's notes; [section] is its `##` heading in the
+ * project TODO and [sourceLine] the TODO line as written (what an answer is attached under).
+ */
 data class ProjectAction(
     val path: String,
     val text: String,
     val due: LocalDate?,
     val mine: Boolean,
-    val section: String? = null
+    val section: String? = null,
+    val sourceLine: String? = null
 )
 
 /** Everything the project page shows, computed from the vault mirror only. */
@@ -326,7 +330,7 @@ object ProjectFormat {
                 else -> MeetingFormat.actions(path, line).firstOrNull()?.takeIf { !it.done }?.let { action ->
                     // Yours drop the @moi marker; Claude's keep any @name they mention.
                     val text = if (action.mine) action.text else ObjectiveFormat.milestones(line).first().text
-                    result += ProjectAction(path, plainText(text), action.due, action.mine, section)
+                    result += ProjectAction(path, plainText(text), action.due, action.mine, section, sourceLine = line)
                 }
             }
         }

@@ -17,13 +17,19 @@ import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Insights
 import androidx.compose.material.icons.rounded.RocketLaunch
 import androidx.compose.material.icons.rounded.SmartToy
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -38,6 +44,7 @@ import cloud.wafflecommons.pixelbrainreader.data.work.ProjectAction
 import cloud.wafflecommons.pixelbrainreader.data.work.ProjectFormat
 import cloud.wafflecommons.pixelbrainreader.data.work.ProjectRepository
 import cloud.wafflecommons.pixelbrainreader.data.work.ProjectSummary
+import cloud.wafflecommons.pixelbrainreader.data.work.TodoAnswers
 import cloud.wafflecommons.pixelbrainreader.ui.components.FormScaffold
 import cloud.wafflecommons.pixelbrainreader.ui.components.SectionCard
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -56,6 +63,7 @@ import kotlin.math.roundToInt
 class ProjectsViewModel @Inject constructor(
     private val repository: ProjectRepository,
     private val handoffRepository: cloud.wafflecommons.pixelbrainreader.data.work.DeskHandoffRepository,
+    private val todoRepository: cloud.wafflecommons.pixelbrainreader.data.work.ProjectTodoRepository,
     modesRepository: ModesRepository
 ) : ViewModel() {
 
@@ -105,6 +113,15 @@ class ProjectsViewModel @Inject constructor(
                 _message.value = "Couldn't save the hand-off"
             }
             _handoffs.value = safeHandoffs(root)
+        }
+    }
+
+    /** Writes [text] under [question] in the project TODO (read from disk first), then reloads the page. */
+    fun answer(root: String, question: ProjectAction, text: String) {
+        viewModelScope.launch {
+            val ok = try { todoRepository.answer(question, text) } catch (e: CancellationException) { throw e } catch (e: Exception) { false }
+            _message.value = if (ok) "Answered: your next desktop session reads it in the TODO" else "That question changed meanwhile — refreshed"
+            loadProject(root)
         }
     }
 
@@ -275,7 +292,11 @@ fun ProjectScreen(
             }
         }
         if (p.claudeQueue.isNotEmpty()) {
-            ClaudeQueueCard(p.claudeQueue) { onOpenNote(p.claudeQueue.first().path) }
+            ClaudeQueueCard(
+                queue = p.claudeQueue,
+                onOpenTodo = { onOpenNote(p.claudeQueue.first().path) },
+                onAnswer = { question, text -> viewModel.answer(p.root, question, text) }
+            )
         }
         if (p.keyNotes.isNotEmpty() || p.recentNotes.isNotEmpty()) {
             SectionCard(title = "Notes", icon = Icons.AutoMirrored.Rounded.Article) {
@@ -356,15 +377,19 @@ private fun HandoffCard(
  * The first few, each group under its `##` heading; the whole card opens the TODO.
  */
 @Composable
-private fun ClaudeQueueCard(queue: List<ProjectAction>, onOpenTodo: () -> Unit) {
+private fun ClaudeQueueCard(queue: List<ProjectAction>, onOpenTodo: () -> Unit, onAnswer: (ProjectAction, String) -> Unit) {
+    // Questions get their own list with an Answer button; the preview shows the rest.
+    val questions = queue.filter(TodoAnswers::isQuestion)
+    val tasks = queue - questions.toSet()
+    var answering by remember { mutableStateOf<ProjectAction?>(null) }
     SectionCard(
         title = "Claude's queue",
         icon = Icons.Rounded.SmartToy,
         subtitle = "${queue.size} open in the TODO, done on your go",
         modifier = Modifier.clickable(onClickLabel = "Open the TODO", onClick = onOpenTodo)
     ) {
-        queue.take(QUEUE_PREVIEW).forEachIndexed { i, a ->
-            if (a.section != null && a.section != queue.getOrNull(i - 1)?.section) {
+        tasks.take(QUEUE_PREVIEW).forEachIndexed { i, a ->
+            if (a.section != null && a.section != tasks.getOrNull(i - 1)?.section) {
                 Text(
                     a.section,
                     style = MaterialTheme.typography.labelMedium,
@@ -384,14 +409,50 @@ private fun ClaudeQueueCard(queue: List<ProjectAction>, onOpenTodo: () -> Unit) 
                 Text(a.text, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
             }
         }
-        if (queue.size > QUEUE_PREVIEW) {
+        if (tasks.size > QUEUE_PREVIEW) {
             Text(
-                "+ ${queue.size - QUEUE_PREVIEW} more, tap to open the TODO",
+                "+ ${tasks.size - QUEUE_PREVIEW} more, tap to open the TODO",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+        if (questions.isNotEmpty()) {
+            HorizontalDivider(Modifier.padding(vertical = 6.dp))
+            Text("Open questions", style = MaterialTheme.typography.labelLarge)
+            questions.take(QUESTIONS_SHOWN).forEach { q ->
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Text("❓ ${q.text}", style = MaterialTheme.typography.bodyMedium, maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { answering = q }) { Text("Answer") }
+                }
+            }
+        }
     }
+    answering?.let { q ->
+        AnswerDialog(question = q.text, onAnswer = { text -> onAnswer(q, text); answering = null }, onDismiss = { answering = null })
+    }
+}
+
+/** One answer under a TODO question, for the next desktop session to read. */
+@Composable
+private fun AnswerDialog(question: String, onAnswer: (String) -> Unit, onDismiss: () -> Unit) {
+    var text by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Answer") },
+        text = {
+            androidx.compose.foundation.layout.Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(question, style = MaterialTheme.typography.bodyMedium)
+                OutlinedTextField(value = text, onValueChange = { text = it }, modifier = Modifier.fillMaxWidth(), minLines = 2, label = { Text("Your answer") })
+                Text(
+                    "Written under the question in the TODO; the desktop session reads it there.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        confirmButton = { TextButton(enabled = text.isNotBlank(), onClick = { onAnswer(text) }) { Text("Answer") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
 }
 
 /**
@@ -447,6 +508,7 @@ private fun NoteRow(title: String, detail: String?, onClick: () -> Unit) {
 
 private const val ACTIVITY_DAYS = 14
 private const val QUEUE_PREVIEW = 3
+private const val QUESTIONS_SHOWN = 5
 private val DAY: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d MMM")
 
 private fun plural(n: Int, one: String) = "$n $one${if (n == 1) "" else "s"}"

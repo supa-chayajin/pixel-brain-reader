@@ -1071,7 +1071,19 @@ fun MainScreen(
                                             onFetchRevisionContent = { commitId -> viewModel.getFileContentAtCommit(commitId = commitId) },
                                             onRestoreRevision = { restored -> viewModel.restoreRevision(restored) },
                                             filePath = uiState.selectedFilePath,
-                                            onOpenNote = { path -> viewModel.openVaultFile(path) }
+                                            onOpenNote = { path -> viewModel.openVaultFile(path) },
+                                            // Hand off this note (C13): a link to it, on its own project when it has one.
+                                            // Never a private note: its name would land in a plain file.
+                                            onHandOff = uiState.selectedFilePath
+                                                ?.takeIf { it.endsWith(".md") && !it.startsWith("99_Private/") }
+                                                ?.let { path ->
+                                                    {
+                                                        val link = "[[" + path.substringAfterLast('/').removeSuffix(".md") + "]] "
+                                                        navController.navigate(
+                                                            V11Routes.handoff(cloud.wafflecommons.pixelbrainreader.data.work.ProjectFormat.rootOf(path), link)
+                                                        )
+                                                    }
+                                                }
                                         )
                                     } else {
                                         cloud.wafflecommons.pixelbrainreader.ui.components.WelcomeScreen()
@@ -1206,6 +1218,7 @@ fun MainScreen(
                     onClose = {
                         if (launchedForShare) (context as? android.app.Activity)?.finish() else navController.popBackStack()
                     },
+                    onHandOff = { text -> navController.navigate(V11Routes.handoff(text = text)) },
                     onSaved = { path ->
                         android.widget.Toast.makeText(context, "Saved to $path", android.widget.Toast.LENGTH_SHORT).show()
                         if (launchedForShare) {
@@ -1267,7 +1280,14 @@ fun MainScreen(
                 )
             }
 
-            v11Destinations(navController, openNote = { path -> viewModel.openVaultFile(path) })
+            v11Destinations(
+                navController,
+                openNote = { path -> viewModel.openVaultFile(path) },
+                onHandoffSent = {
+                    android.widget.Toast.makeText(context, "Handed off: your desktop sees it after the next sync", android.widget.Toast.LENGTH_SHORT).show()
+                    if (launchedForShare) (context as? android.app.Activity)?.finish() else navController.popBackStack()
+                }
+            )
         }
 
         // --- Global Effects Overlay ---

@@ -42,9 +42,18 @@ class ProjectsWidget : GlanceAppWidget() {
     @Composable
     private fun Content(context: Context, projects: List<WidgetLiveData.WidgetProject>) {
         val open = actionStartActivity(WidgetNav.openIntent(context, WidgetNav.SCREEN_PROJECTS))
+        // C13: hand off to a desktop session straight from the home screen.
+        val handOff = actionStartActivity(WidgetNav.openIntent(context, WidgetNav.SCREEN_HANDOFF))
         WidgetSurface {
             Column(modifier = GlanceModifier.fillMaxSize()) {
-                WidgetHeader(emoji = "🚀", title = "Projects", subtitle = "Last 14 days", onTitleClick = open)
+                WidgetHeader(
+                    emoji = "🚀",
+                    title = "Projects",
+                    subtitle = "Last 14 days",
+                    onTitleClick = open,
+                    trailingEmoji = "🤝",
+                    onTrailingClick = handOff
+                )
                 Spacer(GlanceModifier.height(10.dp))
                 if (projects.isEmpty()) {
                     WidgetEmpty("🗂️", "No project to show")

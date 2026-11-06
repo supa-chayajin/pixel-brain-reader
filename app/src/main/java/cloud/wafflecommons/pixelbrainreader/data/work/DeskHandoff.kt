@@ -40,6 +40,15 @@ object DeskHandoffFormat {
         append("Tick a line when it's done.\n\n")
     }
 
+    /**
+     * The typed prefixes a desktop session can read (French, like the vault): what kind of note a
+     * hand-off is. The desktop side may group by them; documented in `how-to/desktop-handoff.md`.
+     */
+    val KINDS = listOf("tâche", "question", "décision")
+
+    /** "question: Should we…" for a typed hand-off, the text alone otherwise. */
+    fun typed(kind: String?, text: String): String = kind?.takeIf { it in KINDS }?.let { "$it: ${text.trim()}" } ?: text.trim()
+
     /** One line, whatever was typed: line breaks would split the item. */
     fun line(at: LocalDateTime, text: String): String =
         "- [ ] ${at.format(stamp)} — ${text.replace(Regex("""\s*[\r\n]+\s*"""), " ").trim()}"

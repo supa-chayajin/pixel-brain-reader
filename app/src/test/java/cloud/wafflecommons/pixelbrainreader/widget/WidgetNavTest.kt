@@ -11,6 +11,8 @@ class WidgetNavTest {
     @Test
     fun `the projects screen key is whitelisted, unknown keys are not`() {
         assertEquals(V11Routes.PROJECTS, WidgetNav.screenToRoute(WidgetNav.SCREEN_PROJECTS))
+        // The Projects widget's hand-off action opens the composer with no project chosen yet.
+        assertEquals("handoff", WidgetNav.screenToRoute(WidgetNav.SCREEN_HANDOFF))
         assertEquals(V11Routes.PROJECTS, WidgetNav.screenToRoute(" Projects "))
         assertNull(WidgetNav.screenToRoute("project?root=20_Projects/x"))
         assertNull(WidgetNav.screenToRoute(null))

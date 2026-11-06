@@ -18,6 +18,14 @@ kit and the authorship timeline.
   reports, and hand-offs your desktop ticked ("picked up"). The Daily screen's "From your last
   sync" card names them in a line per project; Vault activity lists them (tap a report to open
   it). Your own phone edits are never news, a mirrored TODO is never read, and sync stays manual.
+- **Hand off from anywhere, typed.** Besides a project's page: from any open note (the 🖥
+  button in its header links the note, on its own project), from the share sheet ("Hand off to
+  desktop instead") and from the 🤝 on the Projects widget, all into one composer. A hand-off can
+  be typed Task, Question or Decision, written as the `tâche:`, `question:` or `décision:` prefix
+  the desktop can group by (`documentation/how-to/desktop-handoff.md`).
+- **Answer Claude's open questions from the phone.** In Claude's queue, the TODO's questions
+  (under a ❓ heading, typed `question:` or ending with "?") get an Answer button: one nested
+  `  - 💬 yyyy-MM-dd — …` line under the question, which the next desktop session reads.
 
 ## [12.3.0] — 2026-11-06
 

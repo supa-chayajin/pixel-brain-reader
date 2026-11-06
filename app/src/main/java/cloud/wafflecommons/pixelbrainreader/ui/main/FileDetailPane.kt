@@ -122,7 +122,9 @@ fun FileDetailPane(
     onFetchRevisionContent: (suspend (String) -> String?)? = null,
     onRestoreRevision: ((String) -> Unit)? = null,
     filePath: String? = null,
-    onOpenNote: (String) -> Unit = {}
+    onOpenNote: (String) -> Unit = {},
+    /** Hands the note off to a desktop session (a link to it); null when it can't be. */
+    onHandOff: (() -> Unit)? = null
 ) {
     var showTimeMachine by rememberSaveable { mutableStateOf(false) }
     var showConnections by rememberSaveable { mutableStateOf(false) }
@@ -220,6 +222,15 @@ fun FileDetailPane(
                         Spacer(Modifier.weight(1f))
                         if (filePath != null && content != null) {
                             VaultRulesBadge(path = filePath, content = content, onFix = onContentChange)
+                        }
+                        if (onHandOff != null) {
+                            IconButton(onClick = onHandOff, modifier = Modifier.size(36.dp)) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Computer,
+                                    contentDescription = "Hand off to desktop",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                         if (filePath != null && filePath.endsWith(".md")) {
                             IconButton(

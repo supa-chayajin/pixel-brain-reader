@@ -95,6 +95,47 @@ you prefer to pull the vault yourself.
    lines read `📱 Hand-offs from the phone for this project (1 open, …)`.
 3. Tick it in `Handoff.md` (or tap it on the phone) — it disappears from both after the next sync.
 
+## 4. Hand off from anywhere, typed
+
+A hand-off no longer starts only on a project's page:
+
+- **From an open note**: the 🖥 button in the note's header hands it off with a link to it
+  (`[[Note]]`), on its own project when the note sits in one (private notes can't be handed off:
+  their name would land in a plain file).
+- **From the share sheet**: "Hand off to desktop instead" on the share screen sends the page's
+  title and address, or the shared text, instead of saving a note.
+- **From the home screen**: the 🤝 at the top right of the Projects widget opens the hand-off
+  composer.
+
+The composer can type a hand-off. The prefix is written in French, like the rest of the vault,
+and starts the line's text:
+
+| Kind | Line written in `Handoff.md` |
+|---|---|
+| Note | `- [ ] 2026-11-06 10:15 — Relire [[Plan]]` |
+| Task | `- [ ] 2026-11-06 10:15 — tâche: Relire [[Plan]]` |
+| Question | `- [ ] 2026-11-06 10:15 — question: Faut-il garder Predis ?` |
+| Decision | `- [ ] 2026-11-06 10:15 — décision: On garde PHPUnit 12 jusqu'au gel` |
+
+Needs the desktop side: `worktrace.py handoff` prints the lines as they are; it may group them by
+prefix (`tâche:`, `question:`, `décision:`). That change lives in the vault's `scripts/`, not in
+this app.
+
+## 5. Answer a question from the phone
+
+When the project's `TODO.md` is the live list, its open questions show under **Open questions**
+in Claude's queue on the project page: the lines under a `❓` heading, the ones typed
+`question:`, and the ones ending with `?`. **Answer** writes one nested line under the question,
+read from the file on the phone first:
+
+```markdown
+- [ ] The RetryPolicy ceiling?
+  - 💬 2026-11-06 — 5 retries, then the dead-letter queue.
+```
+
+It is not a checkbox, so it never becomes an action. The next desktop session reads it with the
+TODO and ticks the question once it has acted on the answer.
+
 ## Troubleshooting
 
 - **Nothing shows up.** The project's map has no `vault_folder`, the folder is not in this
