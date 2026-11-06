@@ -29,6 +29,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.List
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
+import androidx.compose.material3.SmallFloatingActionButton
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.rememberCoroutineScope
+import cloud.wafflecommons.pixelbrainreader.data.editor.NoteSegments
+import kotlinx.coroutines.launch
 import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.rounded.Computer
@@ -97,6 +105,12 @@ private val DAILY_NOTE_FILE_NAME = Regex("\\d{4}-\\d{2}-\\d{2}\\.md")
 
 /** How many recent editor emissions are remembered to recognize their delayed echo. */
 private const val MAX_TRACKED_EDITS = 32
+
+/** The outline shows from this many `#`–`###` headings. */
+private const val OUTLINE_MIN_HEADINGS = 3
+
+/** Scrolled this far (px), the note offers a way back to the top. */
+private const val BACK_TO_TOP_PX = 1_500
 
 @OptIn(ExperimentalLayoutApi::class, androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -358,6 +372,14 @@ fun FileDetailPane(
                                 val scrollState = rememberSaveable(saver = ScrollState.Saver) {
                                     ScrollState(initial = 0)
                                 }
+                                // Long notes (RFCs, roadmaps on the Fold): sections the outline can
+                                // jump to, wide tables scrolling sideways, a way back to the top.
+                                val segments = remember(displayContent) { NoteSegments.split(displayContent) }
+                                val outline = remember(segments) { NoteSegments.outline(segments) }
+                                val sectionTops = remember(displayContent) { mutableStateMapOf<Int, Int>() }
+                                var showOutline by remember { mutableStateOf(false) }
+                                val readerScope = rememberCoroutineScope()
+                                val farFromTop by remember { derivedStateOf { scrollState.value > BACK_TO_TOP_PX } }
 
                                 // View Mode also benefits from the clean slate structure for consistency.
                                 // Dropping text or an image here appends it to the note (E6), except
@@ -413,7 +435,7 @@ fun FileDetailPane(
 
                                         Spacer(Modifier.height(8.dp))
 
-                                        MarkwonContent(content = displayContent, onWikiLinkClick = onWikiLinkClick)
+                                        NoteReader(segments = segments, onWikiLinkClick = onWikiLinkClick, sectionTops = sectionTops)
 
                                         // Copy buttons for the note's code (E4): rendered code is plain text.
                                         CodeBlocksFooter(path = filePath ?: fileName.orEmpty(), content = content)
@@ -423,6 +445,35 @@ fun FileDetailPane(
                                         // the last markdown lines scroll under the bar and are unreadable.
                                         Spacer(Modifier.height(ExpressiveNavBarClearance))
                                     }
+                                    // Above the floating nav bar: the outline (three headings or more)
+                                    // and, once scrolled far, back to the top.
+                                    Column(
+                                        modifier = Modifier
+                                            .align(Alignment.BottomEnd)
+                                            .padding(end = 16.dp, bottom = ExpressiveNavBarClearance + 12.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        if (outline.size >= OUTLINE_MIN_HEADINGS) {
+                                            SmallFloatingActionButton(onClick = { showOutline = true }) {
+                                                Icon(Icons.AutoMirrored.Rounded.List, contentDescription = "Outline")
+                                            }
+                                        }
+                                        if (farFromTop) {
+                                            SmallFloatingActionButton(onClick = { readerScope.launch { scrollState.animateScrollTo(0) } }) {
+                                                Icon(Icons.Rounded.KeyboardArrowUp, contentDescription = "Back to top")
+                                            }
+                                        }
+                                    }
+                                }
+                                if (showOutline) {
+                                    NoteOutlineSheet(
+                                        outline = outline,
+                                        onPick = { index ->
+                                            showOutline = false
+                                            sectionTops[index]?.let { top -> readerScope.launch { scrollState.animateScrollTo(top) } }
+                                        },
+                                        onDismiss = { showOutline = false }
+                                    )
                                 }
                             }
                         }
@@ -774,7 +825,7 @@ fun rememberMarkwon(onWikiLinkClick: (String) -> Unit): Markwon {
 }
 
 @Composable
-fun MarkwonContent(content: String, onWikiLinkClick: (String) -> Unit) {
+fun MarkwonContent(content: String, onWikiLinkClick: (String) -> Unit, modifier: Modifier = Modifier) {
     val markwon = rememberMarkwon(onWikiLinkClick)
     val textColor = MaterialTheme.colorScheme.onSurface.toArgb()
     val attachments = LocalVaultAttachments.current
@@ -811,7 +862,8 @@ fun MarkwonContent(content: String, onWikiLinkClick: (String) -> Unit) {
                 markwon.setParsedMarkdown(tv, spanned)
                 tv.tag = spanned
             }
-        }
+        },
+        modifier = modifier
     )
 }
 

@@ -29,6 +29,10 @@ kit and the authorship timeline.
 - **The latest Claude report on the project page.** The newest note under a project's
   `Claude/Reports/` opens the page in one line (its title and date, a tap opens it) and joins
   the key notes.
+- **Long notes read better, on the Fold and everywhere.** A note with three headings or more
+  gets an outline button (bottom right) that jumps to any `#`–`###` section; a table wider than
+  the screen scrolls sideways instead of squeezing its columns; once you've scrolled far, a
+  button brings you back to the top. Fenced code is never split or mistaken for a heading.
 
 ## [12.3.0] — 2026-11-06
 
