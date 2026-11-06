@@ -24,7 +24,9 @@ data class SyncDigest(
     val added: List<String>,
     val modified: List<String>,
     val deleted: List<String>,
-    val dismissed: Boolean = false
+    val dismissed: Boolean = false,
+    /** What concerns you, per project (C4): your TODO lines, Claude's reports, hand-offs picked up. */
+    val forYou: List<ProjectNews> = emptyList()
 ) {
     val total: Int get() = added.size + modified.size + deleted.size
 
@@ -79,14 +81,30 @@ class SyncDigestRepository @Inject constructor(
         try {
             val after = jGitProvider.headId() ?: return
             if (after == beforeHead) return
-            val digest = SyncDigest.of(jGitProvider.changesBetween(beforeHead, after), System.currentTimeMillis())
+            val changes = jGitProvider.changesBetween(beforeHead, after)
+            val digest = SyncDigest.of(changes, System.currentTimeMillis())
             if (digest.total == 0) return
-            save(digest)
+            save(digest.copy(forYou = forYou(changes, beforeHead, after)))
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             Log.w(TAG, "Sync digest skipped: ${e.message}")
         }
+    }
+
+    /** Reads the projects' TODO and hand-off files at both ends of the pull; a failure only loses the "for you" part. */
+    private suspend fun forYou(changes: List<ChangedPath>, beforeHead: String, afterHead: String): List<ProjectNews> = try {
+        val wanted = changes.filter { it.change != "delete" && WhatsNew.needsContent(it.path) }.map { it.path }
+        WhatsNew.of(
+            changes,
+            before = wanted.associateWith { jGitProvider.getFileContentAtCommit(it, beforeHead) },
+            after = wanted.associateWith { jGitProvider.getFileContentAtCommit(it, afterHead) }
+        )
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        Log.w(TAG, "What's new for you skipped: ${e.message}")
+        emptyList()
     }
 
     suspend fun dismiss() {

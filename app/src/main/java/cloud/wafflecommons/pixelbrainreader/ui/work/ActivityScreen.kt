@@ -38,6 +38,7 @@ import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
 import cloud.wafflecommons.pixelbrainreader.data.modes.Visibility
 import cloud.wafflecommons.pixelbrainreader.data.remote.GitFileAges
 import cloud.wafflecommons.pixelbrainreader.data.remote.JGitProvider
+import cloud.wafflecommons.pixelbrainreader.data.sync.ProjectNews
 import cloud.wafflecommons.pixelbrainreader.data.sync.SyncDigest
 import cloud.wafflecommons.pixelbrainreader.data.sync.SyncDigestRepository
 import cloud.wafflecommons.pixelbrainreader.ui.components.EmptyHint
@@ -136,7 +137,10 @@ fun ActivityScreen(onBack: () -> Unit, onOpenNote: (String) -> Unit, viewModel: 
                     "${it.added.size} new, ${it.modified.size} changed, ${it.deleted.size} removed."
             } ?: "Nothing pulled from the remote yet on this phone."
         ) {
-            d?.let { DigestLists(it, visibility, onOpenNote) }
+            d?.let {
+                ForYouLists(it, visibility, onOpenNote)
+                DigestLists(it, visibility, onOpenNote)
+            }
         }
         val a = activity
         if (a == null) {
@@ -162,6 +166,29 @@ fun ActivityScreen(onBack: () -> Unit, onOpenNote: (String) -> Unit, viewModel: 
         }
     }
 }
+
+/** C4: what the pull brought that concerns you, per project — before the full list of changes. */
+@Composable
+private fun ForYouLists(digest: SyncDigest, visibility: Visibility, onOpenNote: (String) -> Unit) {
+    val news = digest.forYou.filter { visibility.isVisible(it.root) }
+    if (news.isEmpty()) return
+    Text("For you", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 4.dp))
+    news.forEach { n ->
+        Text(n.name, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 4.dp))
+        n.myLines.forEach { Text("☐ $it", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.clickable { onOpenNote("${n.root}/TODO.md") }.padding(vertical = 3.dp)) }
+        n.reports.forEach { path ->
+            Text("📄 ${title(path)}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.clickable { onOpenNote(path) }.padding(vertical = 3.dp))
+        }
+        n.pickedUp.forEach { Text("✓ Picked up: $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 2.dp)) }
+    }
+}
+
+/** "2 lines for you · 1 report · 1 hand-off picked up". */
+internal fun ProjectNews.summary(): String = listOfNotNull(
+    myLines.size.takeIf { it > 0 }?.let { "$it line${if (it == 1) "" else "s"} for you" },
+    reports.size.takeIf { it > 0 }?.let { "$it report${if (it == 1) "" else "s"}" },
+    pickedUp.size.takeIf { it > 0 }?.let { "$it hand-off${if (it == 1) "" else "s"} picked up" }
+).joinToString(" · ")
 
 @Composable
 private fun DigestLists(digest: SyncDigest, visibility: Visibility, onOpenNote: (String) -> Unit) {
@@ -199,7 +226,9 @@ private fun CommitBars(days: List<Pair<LocalDate, Int>>) {
 @Composable
 fun SyncDigestCard(onOpen: () -> Unit, viewModel: ActivityViewModel = hiltViewModel()) {
     val digest by viewModel.digest.collectAsStateWithLifecycle()
+    val visibility by viewModel.visibility.collectAsStateWithLifecycle()
     val d = digest?.takeIf { !it.dismissed && it.total > 0 } ?: return
+    val news = d.forYou.filter { visibility.isVisible(it.root) }
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.large,
@@ -213,6 +242,14 @@ fun SyncDigestCard(onOpen: () -> Unit, viewModel: ActivityViewModel = hiltViewMo
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSecondaryContainer
             )
+            news.take(3).forEach { n ->
+                Text(
+                    "For you in ${n.name}: ${n.summary()}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+            }
             Row {
                 TextButton(onClick = onOpen) { Text("See what changed") }
                 TextButton(onClick = viewModel::dismiss) { Text("Dismiss") }

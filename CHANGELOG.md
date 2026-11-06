@@ -11,6 +11,14 @@ Still planned (`documentation/plans/2026-10-18-v11-work-and-dev-toolkit.md`): th
 dashboard, "explain this error", decision records, people & 1:1s, security watch, the workshop
 kit and the authorship timeline.
 
+### Added
+
+- **What's new for you after a sync.** The sync digest now picks out, per project, what the
+  pull brought that concerns you: `@moi` lines added or reworded in the live TODO, new Claude
+  reports, and hand-offs your desktop ticked ("picked up"). The Daily screen's "From your last
+  sync" card names them in a line per project; Vault activity lists them (tap a report to open
+  it). Your own phone edits are never news, a mirrored TODO is never read, and sync stays manual.
+
 ## [12.3.0] — 2026-11-06
 
 Closing the loop between projects, objectives, evidence and load: what you link, log and ship
