@@ -11,6 +11,11 @@ Still planned (`documentation/plans/2026-10-18-v11-work-and-dev-toolkit.md`): th
 dashboard, "explain this error", decision records, people & 1:1s, security watch, the workshop
 kit and the authorship timeline.
 
+## [12.2.1] — 2026-11-06
+
+The phone side of the desktop's Claude sessions: your TODO lines and Claude's queue on the
+project page, and the desktop's copies kept read-only.
+
 ### Added
 
 - **Your project TODO on the project page.** A project's live `TODO.md`, the list the desktop
