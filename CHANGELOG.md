@@ -11,6 +11,36 @@ Still planned (`documentation/plans/2026-10-18-v11-work-and-dev-toolkit.md`): th
 dashboard, "explain this error", decision records, people & 1:1s, security watch, the workshop
 kit and the authorship timeline.
 
+## [12.4.1] — 2026-11-06
+
+The phone reads two more project layouts the desktop now keeps in the vault.
+
+### Added
+
+- **Sub-projects.** A folder inside a project with its own `Handoff.md` (one app of a larger
+  workspace, whose desktop sessions start in that app's repository) is now a project of its
+  own, next to its parent: its own page (title from its hub, live TODO, Claude's queue,
+  hand-offs, latest report, worklog figures), its own row in the Projects roll-up and widget,
+  in the evidence report and in what's new after a sync. Its notes no longer count toward the
+  parent's. Inside a work folder, it is hidden outside Work mode like its parent.
+- **`Next_Actions.md` as the live list.** When the desktop copies a repository's own
+  `TODO.md` over the vault's, the project keeps its live list as `Next_Actions.md`: its
+  `@moi` lines join Next actions, the other open lines are Claude's queue (with Answer), and it
+  is a key note. The mirrored TODO stays a link, never parsed.
+
+### Changed
+
+- A hand-off from an open note goes to the deepest project holding the note: a sub-project
+  before its parent.
+- An objective linked through a sub-project's note links that sub-project, not its parent; on
+  a project page, a sub-project and its parent are "linked from" each other like any outside
+  note.
+
+### Fixed
+
+- What's new after a sync no longer took a `Claude/Reports/` folder inside a mirrored
+  repository for the project's own reports.
+
 ## [12.4.0] — 2026-11-06
 
 The phone side of the desktop's Claude sessions, the rest of it: what the pull brought you,
