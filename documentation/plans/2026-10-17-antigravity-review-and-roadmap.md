@@ -4,9 +4,9 @@
 
 | Commit | What |
 |---|---|
-| `1872c55` | Gradle wrapper 9.6.1 → 9.7.1 (fine) |
-| `866e0d5` | Antigravity / Gemini "Sprints 1–3": 93 files, +4,225 / −623 |
-| `6d80afd` | `-Djdk.lang.Process.launchMechanism=vfork` in `gradle.properties` |
+| `6d20330` | Gradle wrapper 9.6.1 → 9.7.1 (fine) |
+| `2e6d61b` | Antigravity / Gemini "Sprints 1–3": 93 files, +4,225 / −623 |
+| `53a68c1` | `-Djdk.lang.Process.launchMechanism=vfork` in `gradle.properties` |
 
 The rest of the app had a full review for v10.1.0 (2026-09-10), so this document covers the new code plus the roadmap.
 Unless a path starts with `app/` or `gradle`, it is relative to `app/src/main/java/cloud/wafflecommons/pixelbrainreader/`.
@@ -336,12 +336,12 @@ Order: data safety → main thread → AI → health → gamification → UI →
   - CLAUDE.md: Gradle 9.7.1, only `genai-prompt` from ML Kit, the new features.
   - Tag, then build the signed APK in Android Studio, then run the Fold checklist in §8.
 
-> **Phase 1 status (2026-10-17):** 1.1–1.13 done, one commit each, every fix with a test (unit tests: 142 before 866e0d5, 171 after it, 227 now).
+> **Phase 1 status (2026-10-17):** 1.1–1.13 done, one commit each, every fix with a test (unit tests: 142 before 2e6d61b, 171 after it, 227 now).
 > Findings while executing:
 > - D4 was moot: automatic habits never grant XP.
 > - The chrono-biometric card was removed outright rather than kept.
 > - The memory-echo rotation (hash of path + day) barely rotated; it is now a day-seeded shuffle.
-> - The 7 Kotlin deprecation warnings left predate 866e0d5 and move to Phase 4.
+> - The 7 Kotlin deprecation warnings left predate 2e6d61b and move to Phase 4.
 
 ### Phase 2 — v10.3.0 "Make the new features real"
 
@@ -518,7 +518,7 @@ Defaults applied on 2026-10-17 ("add everything to the plan and proceed"): every
 
 | # | Question | Recommendation |
 |---|---|---|
-| D1 | Fix forward on `866e0d5`, or revert it? | **Fix forward.** The small fixes are worth keeping, and nothing is pushed yet |
+| D1 | Fix forward on `2e6d61b`, or revert it? | **Fix forward.** The small fixes are worth keeping, and nothing is pushed yet |
 | D2 | Today's journal in RAG? | **Keep it excluded**, as documented. Revisit with the golden set |
 | D3 | Boardroom? | **Generalize into prompt presets** (2.7) |
 | D4 | Steps or sleep XP from both the auto-habit and the synergy? | **Moot:** automatic habits never grant XP, so the synergy bonus is the only source |

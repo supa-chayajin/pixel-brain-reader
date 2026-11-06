@@ -22,7 +22,7 @@ class RagRankingTest {
 
     @Test
     fun `the relevance floor is the calibrated 0_35 - settled decision`() {
-        // Lowering it (0.22 + a path boost, in 866e0d5) fed unrelated notes to the model as context.
+        // Lowering it (0.22 + a path boost, in 2e6d61b) fed unrelated notes to the model as context.
         assertEquals(0.35f, RagRanking.MIN_SIMILARITY)
     }
 

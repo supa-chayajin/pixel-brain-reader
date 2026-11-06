@@ -5,7 +5,7 @@ import org.junit.Test
 import java.io.File
 
 /**
- * Settled decision #5 (CLAUDE.md): UI copy is English; AI answers are French. 866e0d5 shipped
+ * Settled decision #5 (CLAUDE.md): UI copy is English; AI answers are French. 2e6d61b shipped
  * ~38 French UI strings at once — this guard fails the build on the next one instead.
  *
  * It scans the string literals of the UI layers (and of the data classes that produce UI labels)
