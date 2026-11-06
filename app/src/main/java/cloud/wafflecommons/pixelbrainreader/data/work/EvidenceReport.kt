@@ -38,10 +38,44 @@ sealed class ReportPeriod {
     }
 }
 
-/** The figures of a period, all counted from the log: nothing is estimated. */
+/**
+ * Whose activity a report covers: [WORK] is the mission log and what sits in the work folders;
+ * [PERSONAL] is everything outside them (no mission log). Without work folders, there is no
+ * split: both include everything.
+ */
+enum class EvidenceScope {
+    WORK, PERSONAL;
+
+    fun includes(path: String, workFolders: List<String>): Boolean {
+        if (workFolders.isEmpty()) return true
+        val work = workFolders.any { path == it || path.startsWith("$it/") }
+        return if (this == WORK) work else !work
+    }
+}
+
+/** One project's activity in a period, from its worklogs and notes: nothing is estimated. */
+data class ProjectPeriodActivity(
+    val root: String,
+    val title: String,
+    val commits: Int,
+    val sessions: Int,
+    /** Its key notes (README, roadmap, RFC…) moved to done during the period. */
+    val doneNotes: List<WorkNote>
+) {
+    val name: String get() = root.substringAfterLast('/')
+}
+
+/** An objective that moved in the period: log material dated in it, or its note updated in it. */
+data class ObjectivePeriodProgress(val title: String, val linkName: String, val done: Int, val total: Int, val material: Int)
+
+/** The figures of a period, all counted from the vault and the log: nothing is estimated. */
 data class EvidenceFigures(
     val entries: List<LogEntry>,
-    val completed: List<WorkNote>
+    val completed: List<WorkNote>,
+    val meetings: List<Meeting> = emptyList(),
+    val projectActivity: List<ProjectPeriodActivity> = emptyList(),
+    val objectivesProgress: List<ObjectivePeriodProgress> = emptyList(),
+    val scope: EvidenceScope = EvidenceScope.WORK
 ) {
     fun count(kind: LogKind) = entries.count { it.kind == kind }
     val openRequests: Int get() = entries.count(LeaveDocuments::isOpenRequest)
@@ -50,34 +84,61 @@ data class EvidenceFigures(
     /** Total minutes of the entries that recorded minutes; null when none did ("non mesuré"). */
     val offTicketMinutes: Int? get() = offTicket.mapNotNull { it.minutes }.takeIf { it.isNotEmpty() }?.sum()
     val byRole: Map<String, List<LogEntry>> get() = entries.filter { it.role != null }.groupBy { it.role!! }
+
+    /** Entries by requester (`[demandeur:: …]`, a role, never a name). */
+    val byRequester: Map<String, List<LogEntry>> get() = entries.filter { it.requester != null }.groupBy { it.requester!! }
     val byTag: Map<String, Int> get() = entries.flatMap { it.tags }.groupingBy { it }.eachCount()
+
+    /** Minutes of the meetings that recorded a duration; null when none did ("non mesuré"). */
+    val meetingMinutes: Int? get() = meetings.mapNotNull { it.durationMinutes }.takeIf { it.isNotEmpty() }?.sum()
+    val projectCommits: Int get() = projectActivity.sumOf { it.commits }
 }
 
 /**
- * The evidence report (#2): what a month or a quarter of the mission log shows, as a French
- * draft for an annual review or a status meeting. Counts come from the log; work completed comes
- * from the notes moved to done in the work folders during the period.
+ * The evidence report (#2): what a month or a quarter shows, as a French draft for an annual
+ * review or a status meeting. The work report counts the mission log, the meetings, the work
+ * projects' worklogs and the objectives; work completed comes from the notes moved to done in
+ * the work folders. The personal report does the same outside the work folders, without the log.
  */
 object EvidenceReport {
 
-    fun path(period: ReportPeriod): String = "${VaultSchema.INBOX_FOLDER}/Rapport d'activité ${period.key}.md"
+    fun path(period: ReportPeriod, scope: EvidenceScope = EvidenceScope.WORK): String =
+        "${VaultSchema.INBOX_FOLDER}/${name(scope)} ${period.key}.md"
+
+    private fun name(scope: EvidenceScope) = if (scope == EvidenceScope.PERSONAL) "Rapport d'activité personnel" else "Rapport d'activité"
 
     fun render(period: ReportPeriod, figures: EvidenceFigures, generated: LocalDate, summary: String? = null): String = buildString {
-        append(VaultSchema.frontmatter(title = "Rapport d'activité — ${period.frenchLabel}", path = path(period), date = generated, tags = listOf("rapport-activite")))
-        append("# Rapport d'activité — ").append(period.frenchLabel).append("\n\n")
-        append("> Brouillon généré le ").append(generated).append(" à partir du journal de mission (")
-            .append(plural(figures.entries.size, "entrée")).append(", du ").append(period.start).append(" au ").append(period.end)
+        val work = figures.scope == EvidenceScope.WORK
+        val title = "${name(figures.scope)} — ${period.frenchLabel}"
+        append(VaultSchema.frontmatter(title = title, path = path(period, figures.scope), date = generated, tags = listOf("rapport-activite")))
+        append("# ").append(title).append("\n\n")
+        append("> Brouillon généré le ").append(generated)
+        if (work) {
+            append(" à partir du journal de mission (").append(plural(figures.entries.size, "entrée")).append(", ")
+        } else {
+            append(" à partir des projets et des notes hors des dossiers de travail (")
+        }
+        append("du ").append(period.start).append(" au ").append(period.end)
             .append("). Tous les chiffres viennent des données ; rien n'est estimé.\n\n")
         summary?.let {
             append("## Synthèse\n\n> Rédigée sur l'appareil (Gemini Nano), à vérifier.\n\n").append(it.trim()).append("\n\n")
         }
         append("## En chiffres\n\n| | Nombre |\n|---|---|\n")
-        append("| Faits | ").append(figures.count(LogKind.FACT)).append(" |\n")
-        append("| Décisions | ").append(figures.count(LogKind.DECISION)).append(" |\n")
-        append("| Demandes | ").append(figures.count(LogKind.REQUEST)).append(" (dont ").append(plural(figures.openRequests, "ouverte")).append(") |\n")
-        append("| Refus | ").append(figures.count(LogKind.REFUSAL)).append(" |\n")
-        append("| Temps hors ticket | ").append(figures.offTicketMinutes?.let(::hours) ?: "non mesuré")
-            .append(" (").append(plural(figures.offTicket.size, "entrée")).append(") |\n")
+        if (work) {
+            append("| Faits | ").append(figures.count(LogKind.FACT)).append(" |\n")
+            append("| Décisions | ").append(figures.count(LogKind.DECISION)).append(" |\n")
+            append("| Demandes | ").append(figures.count(LogKind.REQUEST)).append(" (dont ").append(plural(figures.openRequests, "ouverte")).append(") |\n")
+            append("| Refus | ").append(figures.count(LogKind.REFUSAL)).append(" |\n")
+            append("| Temps hors ticket | ").append(figures.offTicketMinutes?.let(::hours) ?: "non mesuré")
+                .append(" (").append(plural(figures.offTicket.size, "entrée")).append(") |\n")
+        }
+        if (figures.meetings.isNotEmpty()) {
+            append("| Réunions | ").append(figures.meetings.size).append(" (").append(figures.meetingMinutes?.let(::hours) ?: "durée non mesurée").append(") |\n")
+        }
+        if (figures.projectCommits > 0) {
+            append("| Commits (projets) | ").append(figures.projectCommits).append(" sur ")
+                .append(plural(figures.projectActivity.count { it.commits > 0 }, "projet")).append(" |\n")
+        }
         append("| Travail terminé | ").append(plural(figures.completed.size, "note")).append(" |\n\n")
         if (figures.byRole.isNotEmpty()) {
             append("## Par rôle\n\n")
@@ -90,6 +151,21 @@ object EvidenceReport {
             }
             append('\n')
         }
+        if (figures.byRequester.isNotEmpty()) {
+            append("## Par demandeur\n\n")
+            figures.byRequester.entries.sortedWith(compareByDescending<Map.Entry<String, List<LogEntry>>> { it.value.size }.thenBy { it.key })
+                .forEach { (requester, entries) ->
+                    val requests = entries.filter { it.kind == LogKind.REQUEST }
+                    append("- ").append(requester).append(" : ").append(plural(requests.size, "demande"))
+                    val open = requests.count(LeaveDocuments::isOpenRequest)
+                    if (open > 0) append(" (dont ").append(plural(open, "ouverte")).append(')')
+                    entries.filter { it.kind == LogKind.OFF_TICKET }.mapNotNull { it.minutes }.takeIf { it.isNotEmpty() }?.let {
+                        append(" · ").append(hours(it.sum())).append(" hors ticket")
+                    }
+                    append('\n')
+                }
+            append('\n')
+        }
         if (figures.byTag.isNotEmpty()) {
             append("## Par thème\n\n")
             figures.byTag.entries.sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
@@ -100,9 +176,36 @@ object EvidenceReport {
         listing("Demandes", figures.entries.filter { it.kind == LogKind.REQUEST })
         listing("Refus", figures.entries.filter { it.kind == LogKind.REFUSAL })
         listing("Faits", figures.entries.filter { it.kind == LogKind.FACT })
+        if (figures.objectivesProgress.isNotEmpty()) {
+            append("## Objectifs\n\n")
+            figures.objectivesProgress.forEach { o ->
+                append("- [[").append(o.linkName).append("]] : ")
+                append(if (o.total == 0) "aucun jalon" else "${o.done} jalon${if (o.done > 1) "s" else ""} sur ${o.total}")
+                if (o.material > 0) append(" · ").append(plural(o.material, "entrée")).append(" du journal sur la période")
+                append('\n')
+            }
+            append('\n')
+        }
+        if (figures.projectActivity.isNotEmpty()) {
+            append("## Projets actifs\n\n")
+            figures.projectActivity.forEach { p ->
+                append("- [[").append(p.root).append("/README|").append(p.title).append("]] : ").append(plural(p.commits, "commit"))
+                if (p.sessions > 0) append(" · ").append(plural(p.sessions, "session")).append(" IA")
+                append('\n')
+                p.doneNotes.forEach { note ->
+                    append("  - [[").append(note.linkName).append("]]")
+                    note.updated?.let { append(" — terminé le ").append(it) }
+                    append('\n')
+                }
+            }
+            append('\n')
+        }
         append("## Travail terminé\n\n")
         if (figures.completed.isEmpty()) {
-            append("_Aucune note des dossiers de travail passée à terminé sur la période._\n")
+            append(
+                if (work) "_Aucune note des dossiers de travail passée à terminé sur la période._\n"
+                else "_Aucune note de projet personnel passée à terminé sur la période._\n"
+            )
         } else {
             figures.completed.forEach { note ->
                 append("- [[").append(note.linkName).append("]]")
@@ -112,8 +215,16 @@ object EvidenceReport {
         }
     }
 
+    /**
+     * The facts handed to Nano for the summary, most telling first (the prompt keeps what fits its
+     * budget): log entries prefixed with the role held, then objectives, projects and work done.
+     */
     fun facts(figures: EvidenceFigures): List<String> =
-        figures.entries.filter { it.kind != LogKind.OFF_TICKET }.map { "${it.kind.word} : ${it.text}" } +
+        figures.entries.filter { it.kind != LogKind.OFF_TICKET }.map { e -> (e.role?.let { "[$it] " } ?: "") + "${e.kind.word} : ${e.text}" } +
+            figures.objectivesProgress.map { o -> "Objectif « ${o.title} » : ${o.done} jalon${if (o.done > 1) "s" else ""} sur ${o.total}" } +
+            figures.projectActivity.filter { it.commits > 0 || it.sessions > 0 }.map { p ->
+                "Projet ${p.title} : ${plural(p.commits, "commit")}" + if (p.sessions > 0) ", ${plural(p.sessions, "session")} IA" else ""
+            } +
             figures.completed.map { "Terminé : ${it.title}" }
 
     private fun StringBuilder.listing(title: String, entries: List<LogEntry>) {

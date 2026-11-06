@@ -20,6 +20,18 @@ kit and the authorship timeline.
   board notes; journal entries aside). A tap opens the project or the note. A linked project's
   commits now count as progress, so an objective no longer reads "no progress for 3 weeks"
   while the work happens in its project.
+- **The evidence report covers more than the log.** It now counts the period's meetings (with
+  their recorded duration, or "durée non mesurée"), the commits and AI sessions of the projects'
+  worklogs, the objectives that moved (milestones done, log material in the period) and a
+  `## Par demandeur` breakdown (requests, open ones, off-ticket time per requester role). A
+  new switch picks the scope: your work mode (the mission log and the work folders) or your
+  personal mode (the projects outside the work folders, no log), each its own inbox draft.
+  The optional Nano summary is now grouped by the role held and the concrete outcomes.
+
+### Fixed
+
+- **Worklogs, hand-offs and desktop mirrors no longer count as "work completed"** in the
+  evidence report: a work project's auto-generated worklogs used to pass for finished notes.
 
 ## [12.2.1] — 2026-11-06
 

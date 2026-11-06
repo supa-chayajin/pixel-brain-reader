@@ -206,6 +206,28 @@ object ProjectFormat {
     }
 
     /**
+     * One project's activity between [start] and [end] (inclusive): the commits and AI sessions of
+     * its worklogs dated in the period, and its key notes moved to done in it (mirrors aside).
+     * Null when nothing happened.
+     */
+    fun periodActivity(root: String, notes: Map<String, String>, start: LocalDate, end: LocalDate): ProjectPeriodActivity? {
+        val days = mergeDays(notes.mapNotNull { (path, content) ->
+            worklogDate(path)?.takeIf { it in start..end }?.let { parseWorklog(it, content) }
+        })
+        val own = notes.filterKeys { !isWorklog(it) && !DeskHandoffFormat.isHandoff(it) }
+            .map { (p, c) -> WorkNote.from(p, c) }
+            .filter { !it.isMirror }
+        val readme = own.firstOrNull { it.path.equals("$root/README.md", ignoreCase = true) }
+        val done = own
+            .filter { isKeyNote(it.path) && it.column == StatusColumn.DONE && it.updated?.let { d -> d in start..end } == true }
+            .sortedBy { it.updated }
+        val commits = days.sumOf { it.commits }
+        val sessions = days.sumOf { it.sessions }
+        if (commits == 0 && sessions == 0 && done.isEmpty()) return null
+        return ProjectPeriodActivity(root, readme?.title?.let(::cleanTitle) ?: root.substringAfterLast('/'), commits, sessions, done)
+    }
+
+    /**
      * The open lines of a live project TODO (kept in the vault by the desktop sessions and you),
      * each with the `##` heading it sits under. `@moi` marks yours; the TODO's own rule is that
      * every other line is Claude's, done when you give the go. Fenced code is skipped.

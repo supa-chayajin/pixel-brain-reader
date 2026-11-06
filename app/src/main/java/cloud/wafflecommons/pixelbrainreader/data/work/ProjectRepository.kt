@@ -35,6 +35,17 @@ class ProjectRepository @Inject constructor(
         all(today).filter { visibility.isVisible(it.root) }
     }
 
+    /** What each visible project did between [start] and [end], most commits first (the evidence report). */
+    suspend fun periodActivity(start: LocalDate, end: LocalDate): List<ProjectPeriodActivity> = withContext(Dispatchers.IO) {
+        val visibility = modesRepository.visibility.value
+        fileContentDao.contentsUnder(PREFIX)
+            .mapNotNull { pc -> ProjectFormat.rootOf(pc.path)?.let { it to (pc.path to pc.content) } }
+            .groupBy({ it.first }, { it.second })
+            .filterKeys { visibility.isVisible(it) }
+            .mapNotNull { (root, notes) -> ProjectFormat.periodActivity(root, notes.toMap(), start, end) }
+            .sortedWith(compareByDescending<ProjectPeriodActivity> { it.commits }.thenBy { it.root })
+    }
+
     /** One visible project, or null when it is hidden or gone. */
     suspend fun project(root: String, today: LocalDate = LocalDate.now()): ProjectSummary? =
         projects(today).firstOrNull { it.root == root }

@@ -34,10 +34,12 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import cloud.wafflecommons.pixelbrainreader.data.modes.ContextMode
 import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
 import cloud.wafflecommons.pixelbrainreader.data.modes.Visibility
 import cloud.wafflecommons.pixelbrainreader.data.work.EvidenceFigures
 import cloud.wafflecommons.pixelbrainreader.data.work.EvidenceRepository
+import cloud.wafflecommons.pixelbrainreader.data.work.EvidenceScope
 import cloud.wafflecommons.pixelbrainreader.data.work.LogKind
 import cloud.wafflecommons.pixelbrainreader.data.work.ReportPeriod
 import cloud.wafflecommons.pixelbrainreader.ui.components.FormScaffold
@@ -51,6 +53,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
@@ -72,11 +75,14 @@ class EvidenceViewModel @Inject constructor(
     private val _period = MutableStateFlow<ReportPeriod>(ReportPeriod.Month(YearMonth.now()))
     val period: StateFlow<ReportPeriod> = _period.asStateFlow()
 
+    private val _scope = MutableStateFlow(EvidenceScope.WORK)
+    val scope: StateFlow<EvidenceScope> = _scope.asStateFlow()
+
     /** The period's figures; null while loading or when the log can't be read. */
-    val figures: StateFlow<EvidenceFigures?> = _period
-        .mapLatest { period ->
+    val figures: StateFlow<EvidenceFigures?> = combine(_period, _scope) { period, scope -> period to scope }
+        .mapLatest { (period, scope) ->
             try {
-                repository.figures(period)
+                repository.figures(period, scope)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -84,6 +90,10 @@ class EvidenceViewModel @Inject constructor(
             }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    fun setScope(scope: EvidenceScope) {
+        _scope.value = scope
+    }
 
     private val _working = MutableStateFlow(false)
     val working: StateFlow<Boolean> = _working.asStateFlow()
@@ -109,7 +119,7 @@ class EvidenceViewModel @Inject constructor(
         _working.value = true
         viewModelScope.launch {
             try {
-                open(repository.write(_period.value, withSummary))
+                open(repository.write(_period.value, withSummary, _scope.value))
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -130,14 +140,28 @@ private fun ReportPeriod.label(): String = when (this) {
 @Composable
 fun EvidenceScreen(onBack: () -> Unit, onOpenNote: (String) -> Unit, viewModel: EvidenceViewModel = hiltViewModel()) {
     val period by viewModel.period.collectAsStateWithLifecycle()
+    val scope by viewModel.scope.collectAsStateWithLifecycle()
     val figures by viewModel.figures.collectAsStateWithLifecycle()
     val working by viewModel.working.collectAsStateWithLifecycle()
     val visibility by viewModel.visibility.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     LaunchedEffect(Unit) { viewModel.messages.collect { snackbarHostState.showSnackbar(it) } }
     var withSummary by remember { mutableStateOf(false) }
+    val work = scope == EvidenceScope.WORK
 
     FormScaffold(title = "Evidence report", onBack = onBack, snackbarHostState = snackbarHostState) {
+        // Named after the user's own mode labels: the report follows the same work/personal split.
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            listOf(EvidenceScope.WORK to visibility.label(ContextMode.WORK), EvidenceScope.PERSONAL to visibility.label(ContextMode.PERSONAL))
+                .forEachIndexed { index, (option, label) ->
+                    SegmentedButton(
+                        selected = scope == option,
+                        onClick = { viewModel.setScope(option) },
+                        shape = SegmentedButtonDefaults.itemShape(index, 2),
+                        label = { Text(label) }
+                    )
+                }
+        }
         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
             listOf(false to "Month", true to "Quarter").forEachIndexed { index, (quarterly, label) ->
                 SegmentedButton(
@@ -156,21 +180,26 @@ fun EvidenceScreen(onBack: () -> Unit, onOpenNote: (String) -> Unit, viewModel: 
             }
         }
         SectionCard(
-            title = "What the log shows",
+            title = if (work) "What the log shows" else "What your projects show",
             icon = Icons.Rounded.Summarize,
             subtitle = "${period.start.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM))} – " +
                 period.end.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM))
         ) {
             val f = figures
             when {
-                visibility.hideWork -> Text("Hidden outside ${visibility.workLabel} mode.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                f == null -> Text("The mission log couldn't be read.", style = MaterialTheme.typography.bodyMedium)
+                work && visibility.hideWork -> Text("Hidden outside ${visibility.workLabel} mode.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                f == null -> Text(if (work) "The mission log couldn't be read." else "Your notes couldn't be read.", style = MaterialTheme.typography.bodyMedium)
                 else -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Figure("Facts", f.count(LogKind.FACT).toString())
-                    Figure("Decisions", f.count(LogKind.DECISION).toString())
-                    Figure("Requests", "${f.count(LogKind.REQUEST)} (${f.openRequests} open)")
-                    Figure("Refusals", f.count(LogKind.REFUSAL).toString())
-                    Figure("Off-ticket time", f.offTicketMinutes?.let(::durationLabel) ?: "not measured")
+                    if (work) {
+                        Figure("Facts", f.count(LogKind.FACT).toString())
+                        Figure("Decisions", f.count(LogKind.DECISION).toString())
+                        Figure("Requests", "${f.count(LogKind.REQUEST)} (${f.openRequests} open)")
+                        Figure("Refusals", f.count(LogKind.REFUSAL).toString())
+                        Figure("Off-ticket time", f.offTicketMinutes?.let(::durationLabel) ?: "not measured")
+                    }
+                    Figure("Meetings", if (f.meetings.isEmpty()) "0" else "${f.meetings.size} (${f.meetingMinutes?.let(::durationLabel) ?: "duration not measured"})")
+                    Figure("Project commits", "${f.projectCommits} in ${f.projectActivity.count { it.commits > 0 }} projects")
+                    Figure("Objectives that moved", f.objectivesProgress.size.toString())
                     Figure("Work completed", "${f.completed.size} notes")
                 }
             }
@@ -183,12 +212,21 @@ fun EvidenceScreen(onBack: () -> Unit, onOpenNote: (String) -> Unit, viewModel: 
             Switch(checked = withSummary, onCheckedChange = { withSummary = it })
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Button(enabled = !working && figures != null, onClick = { viewModel.write(withSummary, onOpenNote) }) { Text("Write the report") }
+            Button(
+                enabled = !working && figures != null && !(work && visibility.hideWork),
+                onClick = { viewModel.write(withSummary, onOpenNote) }
+            ) { Text("Write the report") }
             if (working) CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
         }
         Text(
-            "A French draft in your inbox: figures by kind, role and tag, the decisions, requests and refusals, and the notes " +
-                "moved to done in your work folders. Every number comes from the log.",
+            if (work) {
+                "A French draft in your inbox: figures by kind, role, requester and tag, the decisions, requests and refusals, " +
+                    "the meetings, the objectives that moved, the work projects' commits and the notes moved to done in your " +
+                    "work folders. Every number comes from your notes and the log."
+            } else {
+                "A French draft in your inbox: the meetings, the objectives that moved, the commits of your projects outside " +
+                    "the work folders and their notes moved to done. Every number comes from your notes."
+            },
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
