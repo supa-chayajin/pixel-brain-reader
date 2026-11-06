@@ -68,6 +68,19 @@ private fun WideTable(table: NoteSegment.Table, onWikiLinkClick: (String) -> Uni
     }
 }
 
+private val WIKI_ALIAS = Regex("""\[\[[^\]|]+\|([^\]]+)]]""")
+private val WIKI = Regex("""\[\[([^\]]+)]]""")
+private val MD_LINK = Regex("""\[([^\]]+)]\([^)]*\)""")
+
+/** A heading as read, not as written: no backticks, emphasis marks or link syntax. */
+internal fun plainHeading(text: String): String {
+    var t = text.replace("`", "").replace("**", "").replace("__", "")
+    t = WIKI_ALIAS.replace(t) { it.groupValues[1] }
+    t = WIKI.replace(t) { it.groupValues[1].substringAfterLast('/') }
+    t = MD_LINK.replace(t) { it.groupValues[1] }
+    return t.trim()
+}
+
 /** The note's `#`–`###` headings; picking one jumps to its section. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -83,7 +96,7 @@ fun NoteOutlineSheet(outline: List<Pair<Int, NoteHeading>>, onPick: (segmentInde
             Text("Outline", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
             outline.forEach { (index, heading) ->
                 Text(
-                    heading.text,
+                    plainHeading(heading.text),
                     style = if (heading.level == 1) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyLarge,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
