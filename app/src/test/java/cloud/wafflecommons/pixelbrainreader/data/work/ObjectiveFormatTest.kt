@@ -117,6 +117,22 @@ class ObjectiveFormatTest {
     }
 
     @Test
+    fun `a sub-project's note links the sub-project, not its parent`() {
+        val today = LocalDate.of(2026, 11, 6)
+        val goal = WorkNote.from("30_Areas/Objectifs/Goal.md", "---\ntitle: \"Goal\"\ntags:\n  - objectif\n---\n# Goal\n")
+        val plan = WorkNote.from("20_Projects/28_Work/app_one/Notes/Plan.md", "---\ntitle: \"Plan\"\n---\nServes [[Goal]].\n")
+        val parent = ProjectFormat.summarize("20_Projects/28_Work", mapOf("20_Projects/28_Work/README.md" to "# Work\n"), emptyList(), today)
+        val app = ProjectFormat.summarize("20_Projects/28_Work/app_one", mapOf(plan.path to plan.content), emptyList(), today)
+        val linked = ObjectiveFormat.withLinks(
+            ObjectiveFormat.objective(goal, emptyList()),
+            listOf(plan.path to "goal"),
+            listOf(goal, plan).groupBy { LinkExtractor.keyOfPath(it.path) },
+            listOf(parent, app)
+        )
+        assertEquals(listOf("20_Projects/28_Work/app_one"), linked.linkedProjects.map { it.root })
+    }
+
+    @Test
     fun `the weekly slot is the next start strictly after now`() {
         val settings = ObjectiveSettings(slotEnabled = true, slotDay = 5, slotStart = "14:00")
         assertEquals(LocalDateTime.of(2026, 10, 23, 14, 0), ObjectiveFormat.nextSlot(settings, LocalDateTime.of(2026, 10, 18, 9, 0)))

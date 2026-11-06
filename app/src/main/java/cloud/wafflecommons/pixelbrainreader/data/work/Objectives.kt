@@ -124,8 +124,10 @@ object ObjectiveFormat {
         val tags = materialTags(objective.note)
         val readmeTags = projects.associate { p -> p.root to p.tags.map { it.lowercase().removePrefix("#") }.toSet() }
         val tagUses = readmeTags.values.flatten().groupingBy { it }.eachCount()
+        // A note links the deepest project holding it: a sub-project's note is not its parent's.
+        val roots = projects.map { it.root }
         val linkedProjects = projects.filter { p ->
-            connected.any { ProjectFormat.rootOf(it) == p.root } ||
+            connected.any { ProjectFormat.projectFor(roots, it) == p.root } ||
                 readmeTags[p.root].orEmpty().any { it in tags && tagUses[it] == 1 }
         }
         val byPath = notesByKey.values.flatten().associateBy { it.path }

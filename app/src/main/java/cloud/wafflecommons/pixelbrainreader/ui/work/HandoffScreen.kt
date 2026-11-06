@@ -34,6 +34,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import cloud.wafflecommons.pixelbrainreader.data.work.DeskHandoffFormat
 import cloud.wafflecommons.pixelbrainreader.data.work.DeskHandoffRepository
+import cloud.wafflecommons.pixelbrainreader.data.work.ProjectFormat
 import cloud.wafflecommons.pixelbrainreader.data.work.ProjectRepository
 import cloud.wafflecommons.pixelbrainreader.data.work.ProjectSummary
 import cloud.wafflecommons.pixelbrainreader.ui.components.EmptyHint
@@ -122,8 +123,11 @@ fun HandoffScreen(
     var kind by rememberSaveable { mutableStateOf<String?>(null) }
     var text by rememberSaveable { mutableStateOf(initialText) }
     val list = projects
-    // No project given (or it is hidden): the most recently active one.
-    val chosen = list?.firstOrNull { it.root == root } ?: list?.firstOrNull()
+    // The project holding what was given (a note's folder: its sub-project before its parent), else
+    // the most recently active one.
+    val chosen = list?.let { projects ->
+        ProjectFormat.projectFor(projects.map { it.root }, root)?.let { r -> projects.firstOrNull { it.root == r } }
+    } ?: list?.firstOrNull()
 
     FormScaffold(title = "Hand off to desktop", onBack = onBack, snackbarHostState = snackbarHostState) {
         when {

@@ -38,11 +38,9 @@ class ProjectRepository @Inject constructor(
     /** What each visible project did between [start] and [end], most commits first (the evidence report). */
     suspend fun periodActivity(start: LocalDate, end: LocalDate): List<ProjectPeriodActivity> = withContext(Dispatchers.IO) {
         val visibility = modesRepository.visibility.value
-        fileContentDao.contentsUnder(PREFIX)
-            .mapNotNull { pc -> ProjectFormat.rootOf(pc.path)?.let { it to (pc.path to pc.content) } }
-            .groupBy({ it.first }, { it.second })
+        ProjectFormat.group(fileContentDao.contentsUnder(PREFIX).map { it.path to it.content })
             .filterKeys { visibility.isVisible(it) }
-            .mapNotNull { (root, notes) -> ProjectFormat.periodActivity(root, notes.toMap(), start, end) }
+            .mapNotNull { (root, notes) -> ProjectFormat.periodActivity(root, notes, start, end) }
             .sortedWith(compareByDescending<ProjectPeriodActivity> { it.commits }.thenBy { it.root })
     }
 
@@ -59,11 +57,10 @@ class ProjectRepository @Inject constructor(
         ).joinToString("|")
         if (key == cacheKey) return@withLock cache
 
-        val byRoot = fileContentDao.contentsUnder(PREFIX)
-            .mapNotNull { pc -> ProjectFormat.rootOf(pc.path)?.let { it to (pc.path to pc.content) } }
-            .groupBy({ it.first }, { it.second })
+        // Sub-projects (a folder with its own Handoff.md, e.g. an app of a workspace) are their own projects.
+        val byRoot = ProjectFormat.group(fileContentDao.contentsUnder(PREFIX).map { it.path to it.content })
         val links = if (byRoot.isEmpty()) emptyList() else linkDao.allNoteLinks().map { it.source to it.targetKey }
-        cache = byRoot.map { (root, notes) -> ProjectFormat.summarize(root, notes.toMap(), links, today) }
+        cache = byRoot.map { (root, notes) -> ProjectFormat.summarize(root, notes, links, today) }
             .sortedWith(compareByDescending<ProjectSummary> { it.lastActivity }.thenBy { it.root })
         cacheKey = key
         cache

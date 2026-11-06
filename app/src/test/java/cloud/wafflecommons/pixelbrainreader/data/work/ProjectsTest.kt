@@ -307,6 +307,49 @@ class ProjectsTest {
     }
 
     @Test
+    fun `a folder with its own Handoff is a sub-project, apart from its parent`() {
+        val parent = "20_Projects/28_Work"
+        val app = "$parent/app_one"
+        val notes = listOf(
+            "$parent/README.md" to "---\ntitle: \"Work\"\n---\n",
+            "$parent/Worklog/2026-11-04.md" to "## 🤖 AI sessions\n\n- 1 session(s) · 5 prompt(s)\n",
+            "$parent/app_two/Worklog/2026-11-04.md" to "## 🧬 Commits\n\n- feat: two\n",
+            "$app/README.md" to "---\ntitle: \"📌 App One — hub\"\n---\n",
+            "$app/Handoff.md" to "---\ntitle: \"Hand-offs\"\n---\n- [ ] 2026-11-06 09:00 — question: ok?\n",
+            "$app/TODO.md" to "---\ntitle: \"TODO\"\n---\n- [ ] @moi Sync the clone\n- [ ] Refresh the note\n",
+            "$app/Worklog/2026-11-04.md" to "## 🧬 Commits\n\n- feat: one\n- fix: one\n"
+        )
+        assertEquals(setOf(app), ProjectFormat.subProjectRoots(notes.map { it.first }))
+        val grouped = ProjectFormat.group(notes)
+        assertEquals(setOf(parent, app), grouped.keys)
+        assertTrue(grouped.getValue(parent).keys.none { it.startsWith("$app/") })
+
+        val sub = ProjectFormat.summarize(app, grouped.getValue(app), listOf("$parent/README.md" to "readme", "$app/TODO.md" to "readme"), today)
+        assertEquals("App One", sub.title)
+        assertEquals(2, sub.commits)
+        assertEquals(listOf("Sync the clone"), sub.actions.map { it.text })
+        assertEquals(listOf("Refresh the note"), sub.claudeQueue.map { it.text })
+        val top = ProjectFormat.summarize(parent, grouped.getValue(parent), emptyList(), today)
+        assertEquals(1, top.commits)
+        assertEquals(1, top.sessions)
+        // A sub-project and its parent are outside each other; a project's own links aren't "linked from".
+        val links = listOf(
+            "$parent/README.md" to LinkExtractor.keyOfPath("$app/TODO.md"),
+            "$app/README.md" to LinkExtractor.keyOfPath("$app/TODO.md"),
+            "$app/TODO.md" to LinkExtractor.keyOfPath("$parent/README.md")
+        )
+        assertEquals(listOf("$parent/README.md"), ProjectFormat.summarize(app, grouped.getValue(app), links, today).linkedFrom)
+        assertEquals(listOf("$app/TODO.md"), ProjectFormat.summarize(parent, grouped.getValue(parent), links, today).linkedFrom)
+
+        // The hand-off composer picks the deepest project holding a note.
+        val roots = listOf(parent, app, "20_Projects/21_Other")
+        assertEquals(app, ProjectFormat.projectFor(roots, "$app/Notes"))
+        assertEquals(parent, ProjectFormat.projectFor(roots, "$parent/app_two"))
+        assertEquals(app, ProjectFormat.projectFor(roots, app))
+        assertNull(ProjectFormat.projectFor(roots, "10_Journal"))
+    }
+
+    @Test
     fun `the newest Claude report is a key note and the page's latest report`() {
         val root = "20_Projects/21_Demo"
         val notes = mapOf(

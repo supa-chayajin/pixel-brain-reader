@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import cloud.wafflecommons.pixelbrainreader.data.remote.ChangedPath
 import cloud.wafflecommons.pixelbrainreader.data.remote.JGitProvider
+import cloud.wafflecommons.pixelbrainreader.data.work.DeskHandoffFormat
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -94,11 +95,18 @@ class SyncDigestRepository @Inject constructor(
 
     /** Reads the projects' TODO and hand-off files at both ends of the pull; a failure only loses the "for you" part. */
     private suspend fun forYou(changes: List<ChangedPath>, beforeHead: String, afterHead: String): List<ProjectNews> = try {
-        val wanted = changes.filter { it.change != "delete" && WhatsNew.needsContent(it.path) }.map { it.path }
+        // Sub-projects are the folders with their own Handoff.md, as the pull left them on disk.
+        val vault = File(context.filesDir, "vault")
+        val subRoots = withContext(Dispatchers.IO) {
+            changes.mapNotNull { WhatsNew.subProjectCandidate(it.path) }.distinct()
+                .filter { File(vault, "$it/${DeskHandoffFormat.FILE_NAME}").isFile }.toSet()
+        }
+        val wanted = changes.filter { it.change != "delete" && WhatsNew.needsContent(it.path, subRoots) }.map { it.path }
         WhatsNew.of(
             changes,
             before = wanted.associateWith { jGitProvider.getFileContentAtCommit(it, beforeHead) },
-            after = wanted.associateWith { jGitProvider.getFileContentAtCommit(it, afterHead) }
+            after = wanted.associateWith { jGitProvider.getFileContentAtCommit(it, afterHead) },
+            subRoots = subRoots
         )
     } catch (e: CancellationException) {
         throw e

@@ -126,6 +126,33 @@ object ProjectFormat {
         return "$PROJECTS_FOLDER/$folder"
     }
 
+    /**
+     * The sub-projects among [paths]: a folder directly inside a project that holds its own
+     * cockpit, marked by a `Handoff.md` of its own (`20_Projects/<workspace>/<app>`, whose
+     * sessions start in that app's repository). Each one is its own project, next to its parent.
+     */
+    fun subProjectRoots(paths: Collection<String>): Set<String> = paths.mapNotNullTo(mutableSetOf()) { path ->
+        val parts = path.split('/')
+        if (parts.size == 4 && parts[0] == PROJECTS_FOLDER && parts[3] == DeskHandoffFormat.FILE_NAME) parts.take(3).joinToString("/") else null
+    }
+
+    /** The project a path belongs to: its sub-project when it sits in one of [subRoots], else [rootOf]. */
+    fun rootOf(path: String, subRoots: Set<String>): String? =
+        subRoots.firstOrNull { path.startsWith("$it/") } ?: rootOf(path)
+
+    /** The vault's project notes ([notes]: path → content) grouped by project, sub-projects apart. */
+    fun group(notes: List<Pair<String, String>>): Map<String, Map<String, String>> {
+        val subRoots = subProjectRoots(notes.map { it.first })
+        return notes.mapNotNull { (path, content) -> rootOf(path, subRoots)?.let { it to (path to content) } }
+            .groupBy({ it.first }, { it.second })
+            .mapValues { (_, list) -> list.toMap() }
+    }
+
+    /** The project that holds [path] (a note, a folder): the deepest of [roots] containing it. */
+    fun projectFor(roots: Collection<String>, path: String?): String? = path?.let { p ->
+        roots.filter { p == it || p.startsWith("$it/") }.maxByOrNull { it.length }
+    }
+
     fun isWorklog(path: String): Boolean =
         path.contains("/Worklog/") && worklogName.matches(path.substringAfterLast('/'))
 
@@ -276,8 +303,10 @@ object ProjectFormat {
             .sortedWith(compareBy<ProjectAction>({ !it.mine }, { it.due == null }, { it.due }))
 
         val keys = handNotes.map { LinkExtractor.keyOfPath(it.path) }.toSet()
+        // From outside = from a note that isn't this project's own, so a sub-project and its
+        // parent are outside each other.
         val linkedFrom = links
-            .filter { (source, key) -> key in keys && rootOf(source) != root }
+            .filter { (source, key) -> key in keys && source !in notes }
             .map { it.first }
             .distinct()
             .sorted()

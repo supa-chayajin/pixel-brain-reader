@@ -1079,9 +1079,8 @@ fun MainScreen(
                                                 ?.let { path ->
                                                     {
                                                         val link = "[[" + path.substringAfterLast('/').removeSuffix(".md") + "]] "
-                                                        navController.navigate(
-                                                            V11Routes.handoff(cloud.wafflecommons.pixelbrainreader.data.work.ProjectFormat.rootOf(path), link)
-                                                        )
+                                                        // The note's folder: the composer picks the project holding it (a sub-project first).
+                                                        navController.navigate(V11Routes.handoff(path.substringBeforeLast('/'), link))
                                                     }
                                                 }
                                         )

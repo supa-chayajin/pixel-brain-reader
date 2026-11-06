@@ -77,13 +77,37 @@ class WhatsNewTest {
     }
 
     @Test
-    fun `a Next_Actions live list is news too`() {
+    fun `a sub-project's cockpit and a Next_Actions live list are news too`() {
+        val sub = "20_Projects/28_Work/app_one"
+        val subTodo = "$sub/TODO.md"
         val nextActions = "20_Projects/22_Demo/Next_Actions.md"
+        val changes = listOf(
+            ChangedPath(subTodo, "modify"),
+            ChangedPath("$sub/Claude/Reports/2026-11-06_Cockpit.md", "add"),
+            ChangedPath(nextActions, "modify"),
+            ChangedPath("20_Projects/28_Work/Notes/TODO.md", "modify"), // not a sub-project: no Handoff.md
+            ChangedPath("20_Projects/22_Demo/Repo/Claude/Reports/2026-11-06_Copied.md", "add") // inside a mirror
+        )
+        val before = mapOf(subTodo to "- [ ] @moi Old line\n", nextActions to "", "20_Projects/28_Work/Notes/TODO.md" to "")
+        val after = mapOf(
+            subTodo to "- [ ] @moi Old line\n- [ ] @moi Sync the clone\n",
+            nextActions to "- [ ] @moi Answer the e-mail\n",
+            "20_Projects/28_Work/Notes/TODO.md" to "- [ ] @moi a note's own list\n"
+        )
+        assertTrue(WhatsNew.needsContent(subTodo, setOf(sub)))
+        assertTrue(!WhatsNew.needsContent(subTodo))
         assertTrue(WhatsNew.needsContent(nextActions))
-        assertTrue(!WhatsNew.needsContent("20_Projects/22_Demo/Notes/Next_Actions.md"))
-        val news = WhatsNew.of(listOf(ChangedPath(nextActions, "modify")), mapOf(nextActions to ""), mapOf(nextActions to "- [ ] @moi Answer the e-mail\n")).single()
-        assertEquals("20_Projects/22_Demo", news.root)
-        assertEquals(listOf("Answer the e-mail"), news.myLines)
+        assertEquals(sub, WhatsNew.subProjectCandidate("$sub/Handoff.md"))
+        assertEquals(sub, WhatsNew.subProjectCandidate("$sub/Claude/Reports/2026-11-06_Cockpit.md"))
+        assertTrue(WhatsNew.isReport("$sub/Claude/Reports/2026-11-06_Cockpit.md", setOf(sub)))
+        assertTrue(!WhatsNew.isReport("$sub/Claude/Reports/2026-11-06_Cockpit.md"))
+
+        val news = WhatsNew.of(changes, before, after, subRoots = setOf(sub)).associateBy { it.root }
+        assertEquals(setOf("20_Projects/22_Demo", sub), news.keys)
+        assertEquals(listOf("Sync the clone"), news.getValue(sub).myLines)
+        assertEquals(listOf("$sub/Claude/Reports/2026-11-06_Cockpit.md"), news.getValue(sub).reports)
+        assertEquals(listOf("Answer the e-mail"), news.getValue("20_Projects/22_Demo").myLines)
+        assertTrue(news.getValue("20_Projects/22_Demo").reports.isEmpty())
     }
 
     @Test
@@ -94,5 +118,6 @@ class WhatsNewTest {
         assertTrue(!WhatsNew.needsContent("10_Journal/2026-11-06.md"))
         assertTrue(WhatsNew.isReport("$root/Claude/Reports/x.md"))
         assertTrue(!WhatsNew.isReport("30_Areas/Claude/Reports/x.md"))
+        assertTrue(!WhatsNew.isReport("$root/Repo/Claude/Reports/x.md"))
     }
 }
