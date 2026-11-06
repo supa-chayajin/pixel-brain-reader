@@ -112,7 +112,11 @@ fun NavGraphBuilder.v11Destinations(navController: NavHostController, openNote: 
         RunbookPlayerScreen(path = entry.arguments?.getString("path").orEmpty(), onBack = { navController.popBackStack() }, onOpenNote = openNote)
     }
     composable(V11Routes.LOAD) {
-        LoadRecoveryScreen(onBack = { navController.popBackStack() })
+        LoadRecoveryScreen(
+            onBack = { navController.popBackStack() },
+            onOpenLog = { navController.navigate(V11Routes.missionLog()) },
+            onOpenActions = { navController.navigate(V11Routes.NEXT_ACTIONS) }
+        )
     }
     composable(V11Routes.MEETINGS) {
         MeetingsScreen(

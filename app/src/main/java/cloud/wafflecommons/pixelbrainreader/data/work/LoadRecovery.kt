@@ -23,6 +23,28 @@ data class LoadComparison(
 /** A heavier week than usual meeting a recovery below the user's norm. */
 data class OverloadSignal(val loadIncreasePercent: Int, val weekMinutes: Int, val usualWeekMinutes: Int, val reasons: List<String>)
 
+/** One role's or one requester's share of the last seven days, counted from the log. */
+data class LoadShare(
+    val name: String,
+    /** Off-ticket minutes of the entries that recorded some; null when none did. */
+    val offTicketMinutes: Int?,
+    val requests: Int,
+    val openRequests: Int,
+    val refusals: Int
+)
+
+/** Where the week's load comes from: roles, requesters, the requests still open, your overdue actions. */
+data class LoadBreakdown(
+    val byRole: List<LoadShare>,
+    val byRequester: List<LoadShare>,
+    /** Open requests over the whole window, newest first. */
+    val openRequests: List<LogEntry>,
+    /** Your open `@moi` actions across the vault already past their due date. */
+    val overdueMyActions: Int
+) {
+    val isEmpty: Boolean get() = byRole.isEmpty() && byRequester.isEmpty() && openRequests.isEmpty() && overdueMyActions == 0
+}
+
 /**
  * Load vs recovery (#7). A work day's load (meetings and off-ticket minutes, from the meeting
  * notes and the mission log) is set against the next night's sleep, HRV and resting heart rate
@@ -103,6 +125,34 @@ object LoadRecovery {
         val usual = previousWeeks.takeIf { it.size >= 3 }?.average() ?: return null
         if (usual <= 0.0 || lastWeekMinutes < usual * OVERLOAD_RATIO || recoveryReasons.isEmpty()) return null
         return OverloadSignal(((lastWeekMinutes / usual - 1) * 100).toInt(), lastWeekMinutes, usual.toInt(), recoveryReasons)
+    }
+
+    /**
+     * The last seven days of [log] (today included) by role and by requester, the open requests
+     * of the whole [log], and how many of [myActions] are open, yours and overdue. Nothing is
+     * estimated: a share without recorded minutes says so (null).
+     */
+    fun breakdown(log: List<LogEntry>, myActions: List<ActionItem>, today: LocalDate): LoadBreakdown {
+        val week = log.filter { val d = it.at.toLocalDate(); d > today.minusDays(7) && !d.isAfter(today) }
+        fun shares(key: (LogEntry) -> String?): List<LoadShare> = week
+            .mapNotNull { entry -> key(entry)?.takeIf { it.isNotBlank() }?.let { it to entry } }
+            .groupBy({ it.first }, { it.second })
+            .map { (name, entries) ->
+                LoadShare(
+                    name = name,
+                    offTicketMinutes = entries.filter { it.kind == LogKind.OFF_TICKET }.mapNotNull { it.minutes }.takeIf { it.isNotEmpty() }?.sum(),
+                    requests = entries.count { it.kind == LogKind.REQUEST },
+                    openRequests = entries.count(LeaveDocuments::isOpenRequest),
+                    refusals = entries.count { it.kind == LogKind.REFUSAL }
+                )
+            }
+            .sortedWith(compareByDescending<LoadShare> { it.offTicketMinutes ?: 0 }.thenByDescending { it.requests }.thenBy { it.name })
+        return LoadBreakdown(
+            byRole = shares { it.role },
+            byRequester = shares { it.requester },
+            openRequests = log.filter(LeaveDocuments::isOpenRequest).sortedByDescending { it.at },
+            overdueMyActions = myActions.count { it.mine && !it.done && it.due?.isBefore(today) == true }
+        )
     }
 
     /** "weak", "moderate" or "strong", by |r|. */

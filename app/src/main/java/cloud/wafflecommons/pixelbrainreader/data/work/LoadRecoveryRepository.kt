@@ -19,7 +19,9 @@ data class LoadRecoveryReport(
     val workDays: Int,
     val loggedDays: Int,
     val overload: OverloadSignal?,
-    val needsHealthPermission: Boolean
+    val needsHealthPermission: Boolean,
+    /** Where this week's load comes from (roles, requesters, open requests, overdue actions). */
+    val breakdown: LoadBreakdown = LoadBreakdown(emptyList(), emptyList(), emptyList(), 0)
 )
 
 @Singleton
@@ -72,13 +74,21 @@ class LoadRecoveryRepository @Inject constructor(
             load.filter { it.date <= end && it.date > end.minusDays(7) }.sumOf { it.minutes }
         }.filter { it > 0 }
         val overload = LoadRecovery.overload(lastWeek, previousWeeks, recoveryReasons(history.nights, moods, today))
+        val myActions = try {
+            meetingRepository.myActions()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            emptyList()
+        }
 
         LoadRecoveryReport(
             comparisons = comparisons,
             workDays = finished.size,
             loggedDays = finished.count { it.minutes > 0 || it.requests > 0 || it.meetings > 0 },
             overload = overload,
-            needsHealthPermission = history.needsPermission
+            needsHealthPermission = history.needsPermission,
+            breakdown = LoadRecovery.breakdown(log, myActions, today)
         )
     }
 

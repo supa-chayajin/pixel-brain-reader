@@ -3,6 +3,7 @@ package cloud.wafflecommons.pixelbrainreader.ui.work
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Insights
 import androidx.compose.material.icons.rounded.MonitorHeart
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.MaterialTheme
@@ -18,8 +19,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
 import cloud.wafflecommons.pixelbrainreader.data.modes.Visibility
+import cloud.wafflecommons.pixelbrainreader.data.work.LoadBreakdown
 import cloud.wafflecommons.pixelbrainreader.data.work.LoadComparison
 import cloud.wafflecommons.pixelbrainreader.data.work.LoadRecovery
+import cloud.wafflecommons.pixelbrainreader.data.work.LoadShare
 import cloud.wafflecommons.pixelbrainreader.data.work.LoadRecoveryReport
 import cloud.wafflecommons.pixelbrainreader.data.work.LoadRecoveryRepository
 import cloud.wafflecommons.pixelbrainreader.data.work.OverloadSignal
@@ -79,7 +82,12 @@ private fun LoadComparison.format(value: Double): String = when (metric) {
 
 /** Load vs recovery (#7): eight weeks of work days against sleep, HRV, resting heart rate and mood. */
 @Composable
-fun LoadRecoveryScreen(onBack: () -> Unit, viewModel: LoadRecoveryViewModel = hiltViewModel()) {
+fun LoadRecoveryScreen(
+    onBack: () -> Unit,
+    onOpenLog: () -> Unit,
+    onOpenActions: () -> Unit,
+    viewModel: LoadRecoveryViewModel = hiltViewModel()
+) {
     val report by viewModel.report.collectAsStateWithLifecycle()
     val failed by viewModel.failed.collectAsStateWithLifecycle()
     val visibility by viewModel.visibility.collectAsStateWithLifecycle()
@@ -95,12 +103,13 @@ fun LoadRecoveryScreen(onBack: () -> Unit, viewModel: LoadRecoveryViewModel = hi
             failed -> EmptyHint("Couldn't read the data.")
             r == null -> EmptyHint("Reading eight weeks of work and recovery…")
             else -> {
-                r.overload?.let { OverloadCard(it) } ?: SectionCard(
+                r.overload?.let { OverloadCard(it, r.breakdown) } ?: SectionCard(
                     title = "No overload signal",
                     icon = Icons.Rounded.MonitorHeart,
                     subtitle = "A signal shows when the last seven days carry at least 30% more meetings and off-ticket time than your usual week " +
                         "and a recovery measure is below your own norm."
                 )
+                LoadSourcesCard(r.breakdown, onOpenLog, onOpenActions)
                 SectionCard(
                     title = "After heavy and light work days",
                     icon = Icons.Rounded.MonitorHeart,
@@ -130,7 +139,7 @@ fun LoadRecoveryScreen(onBack: () -> Unit, viewModel: LoadRecoveryViewModel = hi
 }
 
 @Composable
-internal fun OverloadCard(signal: OverloadSignal) {
+internal fun OverloadCard(signal: OverloadSignal, breakdown: LoadBreakdown? = null) {
     SectionCard(
         title = "Heavy week, low recovery",
         icon = Icons.Rounded.Warning,
@@ -139,8 +148,54 @@ internal fun OverloadCard(signal: OverloadSignal) {
             "+${signal.loadIncreasePercent}% on your usual ${durationLabel(signal.usualWeekMinutes)}."
     ) {
         signal.reasons.forEach { reason -> Text("• $reason", style = MaterialTheme.typography.bodyMedium) }
+        // Where it comes from, in one or two lines: the heaviest role and requester, what's still open.
+        breakdown?.byRole?.firstOrNull()?.let { Text("• Most of it as ${it.name}: ${it.line()}", style = MaterialTheme.typography.bodyMedium) }
+        breakdown?.byRequester?.firstOrNull()?.let { Text("• Most asked by ${it.name}: ${it.line()}", style = MaterialTheme.typography.bodyMedium) }
+        breakdown?.takeIf { it.openRequests.isNotEmpty() || it.overdueMyActions > 0 }?.let { b ->
+            Text("• ${openLine(b)}", style = MaterialTheme.typography.bodyMedium)
+        }
     }
 }
+
+/** Where this week's load comes from: roles, requesters, open requests and overdue actions, all from the log. */
+@Composable
+private fun LoadSourcesCard(breakdown: LoadBreakdown, onOpenLog: () -> Unit, onOpenActions: () -> Unit) {
+    SectionCard(
+        title = "Where this week's load comes from",
+        icon = Icons.Rounded.Insights,
+        subtitle = if (breakdown.isEmpty) "Nothing in the log for the last 7 days carries a role or a requester." else "The last 7 days of the mission log."
+    ) {
+        if (breakdown.byRole.isNotEmpty()) {
+            Text("By role", style = MaterialTheme.typography.labelLarge)
+            breakdown.byRole.forEach { Text("${it.name} · ${it.line()}", style = MaterialTheme.typography.bodyMedium) }
+        }
+        if (breakdown.byRequester.isNotEmpty()) {
+            Text("By requester", style = MaterialTheme.typography.labelLarge)
+            breakdown.byRequester.forEach { Text("${it.name} · ${it.line()}", style = MaterialTheme.typography.bodyMedium) }
+        }
+        if (breakdown.openRequests.isNotEmpty() || breakdown.overdueMyActions > 0) {
+            Text(openLine(breakdown), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Row {
+            TextButton(onClick = onOpenLog) { Text("Open the log") }
+            TextButton(onClick = onOpenActions) { Text("Your actions") }
+        }
+    }
+}
+
+private fun plural(n: Int, one: String) = "$n $one${if (n == 1) "" else "s"}"
+
+/** "1 h 30 off-ticket · 2 requests (1 open) · 1 refusal". */
+private fun LoadShare.line(): String = buildList {
+    offTicketMinutes?.let { add("${durationLabel(it)} off-ticket") }
+    if (requests > 0) add(plural(requests, "request") + if (openRequests > 0) " ($openRequests open)" else "")
+    if (refusals > 0) add(plural(refusals, "refusal"))
+}.joinToString(" · ").ifEmpty { "logged, without minutes or requests" }
+
+private fun openLine(b: LoadBreakdown): String = buildList {
+    if (b.openRequests.isNotEmpty()) add("${plural(b.openRequests.size, "request")} still open")
+    if (b.overdueMyActions > 0) add("${plural(b.overdueMyActions, "action")} of yours overdue")
+}.joinToString(", ")
 
 @Composable
 private fun ComparisonRow(comparison: LoadComparison) {

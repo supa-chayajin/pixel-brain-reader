@@ -66,4 +66,34 @@ class LoadRecoveryTest {
         assertNull(LoadRecovery.overload(900, listOf(600, 600), reasons)) // too little history
         assertTrue(LoadRecovery.strength(-0.6) == "strong" && LoadRecovery.strength(0.35) == "moderate" && LoadRecovery.strength(0.1) == "weak")
     }
+
+    @Test
+    fun `the week's load is broken down by role and requester, with what is still open`() {
+        val today = LocalDate.of(2026, 11, 6)
+        val log = listOf(
+            LogEntry(today.atTime(9, 0), LogKind.OFF_TICKET, "Support", role = "Lead", requester = "Support", minutes = 90),
+            LogEntry(today.minusDays(2).atTime(9, 0), LogKind.REQUEST, "Revue", role = "Lead", requester = "PO"),
+            LogEntry(today.minusDays(3).atTime(9, 0), LogKind.REQUEST, "Audit", role = "DevSecOps", requester = "PO", status = "fait"),
+            LogEntry(today.minusDays(4).atTime(9, 0), LogKind.REFUSAL, "Hors périmètre", role = "DevSecOps", requester = "PO"),
+            LogEntry(today.minusDays(5).atTime(9, 0), LogKind.OFF_TICKET, "Aide", role = "Lead"), // no minutes recorded
+            LogEntry(today.minusDays(9).atTime(9, 0), LogKind.REQUEST, "Ancienne", requester = "Direction") // before the week, still open
+        )
+        val actions = listOf(
+            ActionItem("a.md", "Relancer", "moi", done = false, due = today.minusDays(1), sourceLine = "- [ ] @moi Relancer"),
+            ActionItem("a.md", "Plus tard", "moi", done = false, due = today.plusDays(3), sourceLine = "- [ ] @moi Plus tard"),
+            ActionItem("a.md", "Fait", "moi", done = true, due = today.minusDays(4), sourceLine = "- [x] @moi Fait"),
+            ActionItem("a.md", "Pas à moi", "alex", done = false, due = today.minusDays(4), sourceLine = "- [ ] @alex Pas à moi")
+        )
+        val b = LoadRecovery.breakdown(log, actions, today)
+
+        assertEquals(listOf("Lead", "DevSecOps"), b.byRole.map { it.name })
+        assertEquals(LoadShare("Lead", offTicketMinutes = 90, requests = 1, openRequests = 1, refusals = 0), b.byRole[0])
+        assertEquals(LoadShare("DevSecOps", offTicketMinutes = null, requests = 1, openRequests = 0, refusals = 1), b.byRole[1])
+        // The off-ticket requester comes first; the older request stays out of the week.
+        assertEquals(listOf("Support", "PO"), b.byRequester.map { it.name })
+        assertEquals(LoadShare("PO", offTicketMinutes = null, requests = 2, openRequests = 1, refusals = 1), b.byRequester[1])
+        assertEquals(listOf("Revue", "Ancienne"), b.openRequests.map { it.text })
+        assertEquals(1, b.overdueMyActions)
+        assertTrue(LoadRecovery.breakdown(emptyList(), emptyList(), today).isEmpty)
+    }
 }

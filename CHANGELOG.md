@@ -27,6 +27,11 @@ kit and the authorship timeline.
   new switch picks the scope: your work mode (the mission log and the work folders) or your
   personal mode (the projects outside the work folders, no log), each its own inbox draft.
   The optional Nano summary is now grouped by the role held and the concrete outcomes.
+- **Load vs recovery shows where the week's load comes from.** A new card lists the last 7
+  days of the mission log by role and by requester (off-ticket time, requests and how many are
+  still open, refusals), the requests still open and your overdue `@moi` actions, with one tap
+  to the mission log or to your actions. When the overload signal shows, its card names the
+  heaviest role and requester too, on this screen and on the tools hub.
 
 ### Fixed
 

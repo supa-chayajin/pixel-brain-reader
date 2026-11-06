@@ -75,15 +75,22 @@ class WorkHubViewModel @Inject constructor(
     /** This week's overload signal, if any (the report is cached, so the hub stays quick). */
     val overload: StateFlow<cloud.wafflecommons.pixelbrainreader.data.work.OverloadSignal?> = _overload
 
+    private val _breakdown = kotlinx.coroutines.flow.MutableStateFlow<cloud.wafflecommons.pixelbrainreader.data.work.LoadBreakdown?>(null)
+
+    /** Where this week's load comes from, shown inside the overload card. */
+    val breakdown: StateFlow<cloud.wafflecommons.pixelbrainreader.data.work.LoadBreakdown?> = _breakdown
+
     init {
         viewModelScope.launch {
-            _overload.value = try {
-                loadRecoveryRepository.report().overload
+            val report = try {
+                loadRecoveryRepository.report()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 null
             }
+            _overload.value = report?.overload
+            _breakdown.value = report?.breakdown
         }
     }
 
@@ -116,6 +123,7 @@ fun WorkHubScreen(
     val visibility by viewModel.visibility.collectAsStateWithLifecycle()
     val summary by viewModel.logSummary.collectAsStateWithLifecycle()
     val overload by viewModel.overload.collectAsStateWithLifecycle()
+    val breakdown by viewModel.breakdown.collectAsStateWithLifecycle()
     val pinned by viewModel.pinned.collectAsStateWithLifecycle()
     var showAll by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
 
@@ -127,7 +135,7 @@ fun WorkHubScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        if (!visibility.hideWork && !visibility.hideHealth) overload?.let { OverloadCard(it) }
+        if (!visibility.hideWork && !visibility.hideHealth) overload?.let { OverloadCard(it, breakdown) }
         SectionCard(
             title = "Mission log",
             icon = Icons.AutoMirrored.Rounded.EventNote,
