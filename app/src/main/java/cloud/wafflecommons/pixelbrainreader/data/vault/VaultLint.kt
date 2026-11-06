@@ -26,9 +26,13 @@ object VaultLint {
             WORKLOG.containsMatchIn(path)
     }
 
-    /** [linkResolves] answers for a link key (`LinkExtractor` keys: lower-case file name, no `.md`). */
+    /**
+     * [linkResolves] answers for a link key (`LinkExtractor` keys: lower-case file name, no `.md`).
+     * A desktop mirror ([MirrorNotes]) is never linted: its script owns its shape, and a fix made
+     * here would be overwritten.
+     */
     fun check(path: String, content: String, linkResolves: (String) -> Boolean): List<LintIssue> {
-        if (isExcluded(path)) return emptyList()
+        if (isExcluded(path) || MirrorNotes.isMirror(content)) return emptyList()
         val issues = mutableListOf<LintIssue>()
         if (VaultSchema.isDailyNote(path)) {
             val keys = FrontmatterLines.keys(content)
@@ -92,10 +96,11 @@ object VaultLint {
     /**
      * Applies the safe repairs: LF endings, no trailing spaces outside code, a final newline, the
      * missing standard keys at their place (defaults from the folder and the H1), title quoting
-     * and date quoting. Returns [content] unchanged for excluded files and daily notes' keys.
+     * and date quoting. Returns [content] unchanged for excluded files, desktop mirrors and daily
+     * notes' keys.
      */
     fun fix(path: String, content: String, today: LocalDate): String {
-        if (isExcluded(path)) return content
+        if (isExcluded(path) || MirrorNotes.isMirror(content)) return content
         var text = content.replace("\r\n", "\n").replace('\r', '\n')
         var inFence = false
         text = text.lines().joinToString("\n") { line ->

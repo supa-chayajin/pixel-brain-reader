@@ -3,6 +3,7 @@ package cloud.wafflecommons.pixelbrainreader.data.work
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.FileContentDao
 import cloud.wafflecommons.pixelbrainreader.data.repository.FileRepository
 import cloud.wafflecommons.pixelbrainreader.data.sync.VaultPushScheduler
+import cloud.wafflecommons.pixelbrainreader.data.vault.MirrorNotes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -65,10 +66,14 @@ class BoardRepository @Inject constructor(
         draftWriter.write(BoardFormat.synthesisPath(folder, today), BoardFormat.synthesis(folder, cards(folder), today))
     }
 
-    /** Reads the note from disk (never the mirror, which may lag), applies [change], writes it back. */
+    /**
+     * Reads the note from disk (never the mirror, which may lag), applies [change], writes it back.
+     * A desktop mirror is refused: its script would overwrite the move.
+     */
     private suspend fun edit(path: String, change: (String, LocalDate) -> String) = withContext(Dispatchers.IO) {
         writeMutex.withLock {
             val content = fileRepository.readFile(path) ?: throw IllegalStateException("The note is no longer there.")
+            if (MirrorNotes.isMirror(content)) throw IllegalStateException("it's generated on the desktop, edit the source there")
             val updated = change(content, LocalDate.now())
             if (updated != content) {
                 fileRepository.saveFileLocally(path, updated)

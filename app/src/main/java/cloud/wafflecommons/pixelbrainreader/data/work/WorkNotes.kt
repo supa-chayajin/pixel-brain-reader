@@ -1,6 +1,7 @@
 package cloud.wafflecommons.pixelbrainreader.data.work
 
 import cloud.wafflecommons.pixelbrainreader.data.vault.FrontmatterLines
+import cloud.wafflecommons.pixelbrainreader.data.vault.MirrorNotes
 import java.time.LocalDate
 
 /**
@@ -55,6 +56,9 @@ data class WorkNote(
 
     /** For a `[[wikilink]]`: the file name without `.md`. */
     val linkName: String get() = path.substringAfterLast('/').removeSuffix(".md")
+
+    /** A copy a desktop script rewrites ([MirrorNotes]): read-only, never one of your actions. */
+    val isMirror: Boolean get() = MirrorNotes.isMirror(content)
 
     companion object {
         fun from(path: String, content: String): WorkNote {

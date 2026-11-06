@@ -830,18 +830,20 @@ fun MainScreen(
                                     // VIEW MODE ACTIONS
                                     // 1. Existing Actions
                                     if (uiState.selectedFileName != null) {
-                                        // Edit/View Toggle
-                                        FilledTonalIconButton(
-                                            onClick = { viewModel.toggleEditMode() },
-                                            colors = IconButtonDefaults.filledTonalIconButtonColors(
-                                                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        ) {
-                                            Icon(
-                                                imageVector = if (uiState.isEditing) Icons.Rounded.Visibility else Icons.Rounded.Edit,
-                                                contentDescription = if (uiState.isEditing) "View" else "Edit"
-                                            )
+                                        // Edit/View Toggle — none on a desktop mirror, which is read-only.
+                                        if (!uiState.isMirrorNote) {
+                                            FilledTonalIconButton(
+                                                onClick = { viewModel.toggleEditMode() },
+                                                colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            ) {
+                                                Icon(
+                                                    imageVector = if (uiState.isEditing) Icons.Rounded.Visibility else Icons.Rounded.Edit,
+                                                    contentDescription = if (uiState.isEditing) "View" else "Edit"
+                                                )
+                                            }
                                         }
 
                                         // Delete button removed from here
@@ -1056,6 +1058,7 @@ fun MainScreen(
                                             onRefresh = { viewModel.refreshCurrentFile() },
                                             isExpandedScreen = isLargeScreen,
                                             isEditing = uiState.isEditing,
+                                            isReadOnly = uiState.isMirrorNote,
                                             hasUnsavedChanges = viewModel.hasUnsavedChanges,
                                             saveState = uiState.saveState,
                                             onWikiLinkClick = { target -> viewModel.onWikiLinkClick(target) },

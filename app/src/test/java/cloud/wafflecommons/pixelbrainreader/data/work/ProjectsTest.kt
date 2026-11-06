@@ -116,6 +116,29 @@ class ProjectsTest {
     }
 
     @Test
+    fun `desktop mirrors stay out of actions, recent notes and key notes, except their index`() {
+        val root = "20_Projects/21_Demo"
+        fun mirror(source: String, body: String) =
+            "---\ntitle: \"$source\"\ndate_updated: '2026-11-04'\nmirror_of: \"demo:$source\"\n---\n# $source\n\n$body"
+        val notes = mapOf(
+            "$root/README.md" to "---\ntitle: Demo\n---\n",
+            "$root/Notes/Plan.md" to "---\ntitle: Plan\ndate_updated: '2026-11-01'\n---\n- [ ] write the doc\n",
+            "$root/Repo/RFCs/RFC-001.md" to mirror("rfcs/RFC-001.md", "- [ ] an acceptance criterion\n"),
+            "$root/Repo/Roadmaps/Roadmap_v2.md" to mirror("roadmaps/Roadmap_v2.md", "- [ ] @moi a roadmap line\n"),
+            "$root/Repo/Docs/guide.md" to mirror("docs/guide.md", "Text.\n"),
+            "$root/Claude/Memory/feedback.md" to mirror("memory/feedback.md", "- [ ] not yours either\n"),
+            "$root/Repo/00_Index_demo.md" to "---\ntitle: \"Index\"\nmirror_of: \"demo:__index__\"\n---\n# Index\n"
+        )
+        val links = listOf("10_Journal/2026-11-03.md" to LinkExtractor.keyOfPath("$root/Repo/Docs/guide.md"))
+        val s = ProjectFormat.summarize(root, notes, links, today)
+        assertEquals(listOf("write the doc"), s.actions.map { it.text })
+        assertEquals(listOf("$root/Notes/Plan.md"), s.recentNotes.map { it.path })
+        assertEquals(listOf("$root/Repo/00_Index_demo.md"), s.keyNotes.map { it.path })
+        // Still linkable: a link into a mirror is a link into the project.
+        assertEquals(listOf("10_Journal/2026-11-03.md"), s.linkedFrom)
+    }
+
+    @Test
     fun `actions are shown without markdown`() {
         assertEquals("Fix the kernel: refactor AbstractKernel", ProjectFormat.plainText("**Fix the kernel**: refactor `AbstractKernel`"))
         assertEquals("see the plan and Roadmap", ProjectFormat.plainText("see [[Notes/Plan|the plan]] and [[20_Projects/x/Roadmap]]"))

@@ -72,6 +72,16 @@ class VaultLintTest {
     }
 
     @Test
+    fun `a desktop mirror is neither linted nor fixed`() {
+        // Missing keys, an unquoted title, two H1s, a dead link and trailing spaces: all the script's business.
+        val mirror = "---\ntitle: Guide\nmirror_of: \"demo:docs/guide.md\"\n---\n# Guide \n# Again\n[[Missing]]"
+        assertTrue(VaultLint.check("20_Projects/21_Demo/Repo/Docs/guide.md", mirror, resolves).isEmpty())
+        assertEquals(mirror, VaultLint.fix("20_Projects/21_Demo/Repo/Docs/guide.md", mirror, today))
+        val todoCopy = "---\ntitle: TODO\n---\n\n> Mirrored automatically from `demo/TODO.md` — edit the source.\n\n# TODO \n"
+        assertTrue(VaultLint.check("20_Projects/22_Demo/TODO.md", todoCopy, resolves).isEmpty())
+    }
+
+    @Test
     fun `inbox filing weighs linked notes twice and never offers the inbox, the journal or system folders`() {
         val folders = InboxFiling.folders(
             similar = listOf("20_Projects/API/a.md", "20_Projects/API/b.md", "40_Resources/Dev/c.md", "00_Inbox/d.md", "10_Journal/2026-10-01.md"),

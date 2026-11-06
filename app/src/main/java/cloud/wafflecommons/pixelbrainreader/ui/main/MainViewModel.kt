@@ -28,6 +28,7 @@ import cloud.wafflecommons.pixelbrainreader.data.utils.TaskCompletionDetector
 import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
 import cloud.wafflecommons.pixelbrainreader.data.modes.Visibility
 import cloud.wafflecommons.pixelbrainreader.data.utils.TemplateEngine
+import cloud.wafflecommons.pixelbrainreader.data.vault.MirrorNotes
 import cloud.wafflecommons.pixelbrainreader.data.vault.VaultSchema
 import cloud.wafflecommons.pixelbrainreader.di.ApplicationScope
 import cloud.wafflecommons.pixelbrainreader.ui.components.SaveState
@@ -246,7 +247,8 @@ class MainViewModel @Inject constructor(
         val selectedName: String?,
         val content: String?,
         val isEditing: Boolean,
-        val saveState: SaveState
+        val saveState: SaveState,
+        val isMirror: Boolean
     )
 
     private data class ProgressSlice(
@@ -291,7 +293,9 @@ class MainViewModel @Inject constructor(
             BrowserSlice(path, query, fileView, width, trigger)
         },
         combine(_selectedFilePath, _selectedFileName, _selectedFileContent, _isEditing, _saveState) { path, name, content, editing, saveState ->
-            DocumentSlice(path, name, content, editing, saveState)
+            // A desktop mirror is never shown in the editor, even when the pull turned the open note into one.
+            val mirror = content?.let(MirrorNotes::isMirror) == true
+            DocumentSlice(path, name, content, editing && !mirror, saveState, mirror)
         },
         combine(_isLoading, _isRefreshing, _isSyncing, _isIndexing, _isFocusMode) { loading, refreshing, syncing, indexing, focus ->
             ProgressSlice(loading, refreshing, syncing, indexing, focus)
@@ -319,6 +323,7 @@ class MainViewModel @Inject constructor(
             error = messages.error,
             isFocusMode = progress.isFocusMode,
             isEditing = document.isEditing,
+            isMirrorNote = document.isMirror,
             listPaneWidth = browser.paneWidth,
             folders = browser.fileView.folders,
             analysisResult = dialogs.analysis,
@@ -479,6 +484,10 @@ class MainViewModel @Inject constructor(
     fun toggleEditMode() {
         val next = !_isEditing.value
         if (next) {
+            if (openNoteIsMirror()) {
+                _userMessage.value = MIRROR_READ_ONLY
+                return
+            }
             if (unsavedContent == null) {
                 val current = uiState.value.selectedFileContent
                 unsavedContent = current ?: ""
@@ -492,6 +501,10 @@ class MainViewModel @Inject constructor(
         }
         _isEditing.value = next
     }
+
+    /** A desktop script rewrites the open note: an edit made here would be overwritten. */
+    private fun openNoteIsMirror(): Boolean =
+        (unsavedContent ?: uiState.value.selectedFileContent)?.let(MirrorNotes::isMirror) == true
 
     fun onContentChanged(newContent: String) {
         val oldContent = unsavedContent ?: uiState.value.selectedFileContent ?: ""
@@ -562,6 +575,10 @@ class MainViewModel @Inject constructor(
         val path = _selectedFilePath.value ?: return
         val current = unsavedContent ?: uiState.value.selectedFileContent ?: return
         if (current == historicalContent) return
+        if (MirrorNotes.isMirror(current)) {
+            _userMessage.value = MIRROR_READ_ONLY
+            return
+        }
         restoreBackup = RestoreBackup(path, current)
         replaceEditorContent(historicalContent)
         saveFile()
@@ -1113,6 +1130,7 @@ class MainViewModel @Inject constructor(
         const val AUTOSAVE_DEBOUNCE_MS = 1_500L
         const val SAVED_BADGE_MS = 2_500L
         const val SEARCH_DEBOUNCE_MS = 250L
+        const val MIRROR_READ_ONLY = "Generated note: edit the source on the desktop"
         val WIKI_LINK_BRACKETS = Regex("[\\[\\]]")
     }
 }
@@ -1133,6 +1151,8 @@ data class UiState(
     val error: String? = null,
     val isFocusMode: Boolean = false,
     val isEditing: Boolean = false,
+    /** The open note is a desktop mirror ([MirrorNotes]): read-only, no editor. */
+    val isMirrorNote: Boolean = false,
     val folders: List<String> = emptyList(),
     val showDeleteConfirmation: Boolean = false,
     val listPaneWidth: Float = 300f,

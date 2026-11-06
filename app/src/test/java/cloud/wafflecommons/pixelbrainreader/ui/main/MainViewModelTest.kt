@@ -168,6 +168,31 @@ class MainViewModelTest {
     }
 
     @Test
+    fun aDesktopMirror_NeverOpensInTheEditor_NorTakesARestore() = runTest {
+        val path = "20_Projects/21_Demo/Repo/Docs/guide.md"
+        val mirror = "---\ntitle: \"Guide\"\nmirror_of: \"demo:docs/guide.md\"\n---\n# Guide\n"
+        every { fileRepository.getFileContentFlow(path) } returns flowOf(mirror)
+        viewModel.loadFile(
+            cloud.wafflecommons.pixelbrainreader.data.remote.model.GithubFileDto(
+                name = "guide.md", path = path, type = "file",
+                downloadUrl = null, sha = null, lastModified = 0L
+            )
+        )
+        val state = withContext(Dispatchers.Default) {
+            withTimeout(5_000) { viewModel.uiState.first { it.isMirrorNote } }
+        }
+        assertEquals(false, state.isEditing)
+
+        viewModel.toggleEditMode()
+        viewModel.restoreRevision("---\ntitle: \"Guide\"\n---\n# An older guide\n")
+        advanceUntilIdle()
+
+        // Entering the editor would have copied the note into the editor buffer.
+        assertEquals(null, viewModel.unsavedContent)
+        coVerify(exactly = 0) { fileRepository.saveFileLocally(any(), any()) }
+    }
+
+    @Test
     fun timeMachine_IsDisabledForEncryptedNotes() = runTest {
         assertEquals(emptyList<Any>(), viewModel.getFileCommitHistory("99_Private/diary.md.enc"))
         assertEquals(null, viewModel.getFileContentAtCommit("99_Private/diary.md.enc", "abc"))

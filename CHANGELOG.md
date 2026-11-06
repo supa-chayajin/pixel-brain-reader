@@ -11,6 +11,18 @@ Still planned (`documentation/plans/2026-10-18-v11-work-and-dev-toolkit.md`): th
 dashboard, "explain this error", decision records, people & 1:1s, security watch, the workshop
 kit and the authorship timeline.
 
+### Changed
+
+- **Notes your desktop regenerates are read-only here.** The copies `repo_mirror.py` writes (a
+  `mirror_of:` in their frontmatter: a repository's documents, Claude's memory) and the TODO
+  copy `worktrace.py` writes open under a "Generated, edit the source on the desktop" banner
+  instead of the editor: no Edit button, no vault-rules badge, nothing dropped into them, no
+  Time Machine restore and no board move, since the next desktop run would overwrite the
+  change. They stay listed, searchable and linkable.
+- **A project page shows the notes you wrote.** Mirrored copies no longer count as next actions
+  (their checkboxes are the source repository's), recent notes or key notes. Each mirror's
+  index note stays as one key note, the way into all its copies.
+
 ## [12.2.0] — 2026-11-04
 
 The Daily screen in your order, and Settings back the way it was.

@@ -1,6 +1,7 @@
 package cloud.wafflecommons.pixelbrainreader.data.work
 
 import cloud.wafflecommons.pixelbrainreader.data.vault.LinkExtractor
+import cloud.wafflecommons.pixelbrainreader.data.vault.MirrorNotes
 import java.time.LocalDate
 
 /** One day of a project's auto-generated worklogs (every file of that date summed). */
@@ -26,9 +27,9 @@ data class ProjectSummary(
     /** The last [ProjectFormat.WINDOW_DAYS] days that have a worklog, newest first. */
     val days: List<WorklogDay>,
     val actions: List<ProjectAction>,
-    /** README, roadmap, RFC, TODO and portfolio notes. */
+    /** README, roadmap, RFC, TODO and portfolio notes, plus the index of each desktop mirror. */
     val keyNotes: List<WorkNote>,
-    /** Hand-edited notes, most recently updated first. */
+    /** Hand-edited notes (never a desktop mirror), most recently updated first. */
     val recentNotes: List<WorkNote>,
     /** Notes outside the project that link into it. */
     val linkedFrom: List<String>,
@@ -139,8 +140,12 @@ object ProjectFormat {
         val handNotes = notes.filterKeys { !isWorklog(it) && !DeskHandoffFormat.isHandoff(it) }.map { (p, c) -> WorkNote.from(p, c) }
         val readme = handNotes.firstOrNull { it.path.equals("$root/README.md", ignoreCase = true) }
         val todo = handNotes.firstOrNull { it.path.equals("$root/TODO.md", ignoreCase = true) }
+        // Desktop mirrors are rewritten every session: their checkboxes are the source
+        // repository's, not your actions, and their dozens of roadmaps and RFCs would bury the
+        // notes you wrote. Only the mirror's index stays, as one key note.
+        val (mirrors, ownNotes) = handNotes.partition { it.isMirror }
 
-        val actions = handNotes
+        val actions = ownNotes
             .filter { it != todo }
             .flatMap { note ->
                 MeetingFormat.actions(note.path, note.content).filter { !it.done }.map {
@@ -166,8 +171,9 @@ object ProjectFormat {
             lastActivity = listOfNotNull(lastNoteUpdate, lastWorklog).maxOrNull(),
             days = days,
             actions = actions,
-            keyNotes = handNotes.filter { isKeyNote(it.path) && it != readme }.sortedBy { it.path },
-            recentNotes = handNotes
+            keyNotes = (ownNotes.filter { isKeyNote(it.path) && it != readme } + mirrors.filter { MirrorNotes.isMirrorIndex(it.content) })
+                .sortedBy { it.path },
+            recentNotes = ownNotes
                 .filter { !isKeyNote(it.path) && it.updated != null }
                 .sortedByDescending { it.updated }
                 .take(6),

@@ -31,6 +31,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.rounded.Computer
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Hub
 import androidx.compose.material3.AssistChip
@@ -108,6 +109,8 @@ fun FileDetailPane(
     onRefresh: () -> Unit,
     isExpandedScreen: Boolean,
     isEditing: Boolean,
+    /** A desktop mirror: shown with a banner, never in the editor, nothing dropped into it. */
+    isReadOnly: Boolean = false,
     onContentChange: (String) -> Unit,
     saveState: cloud.wafflecommons.pixelbrainreader.ui.components.SaveState,
     hasUnsavedChanges: Boolean,
@@ -284,7 +287,7 @@ fun FileDetailPane(
                             val tabletop = cloud.wafflecommons.pixelbrainreader.ui.utils.rememberTabletop()
                             @OptIn(ExperimentalLayoutApi::class)
                             val imeVisible = WindowInsets.isImeVisible
-                            if (isEditing && tabletop && !imeVisible) {
+                            if (isEditing && !isReadOnly && tabletop && !imeVisible) {
                                 // --- TABLETOP (E6): the rendered note above the hinge, the editor below it ---
                                 cloud.wafflecommons.pixelbrainreader.ui.utils.HingeSplit(
                                     modifier = Modifier.fillMaxSize(),
@@ -302,7 +305,7 @@ fun FileDetailPane(
                                         )
                                     }
                                 )
-                            } else if (isEditing) {
+                            } else if (isEditing && !isReadOnly) {
                                 if (isExpandedScreen) {
                                     // --- EXPANDED (unfolded) SCREEN ---
                                     Column(Modifier.fillMaxSize()) {
@@ -346,13 +349,17 @@ fun FileDetailPane(
                                 }
 
                                 // View Mode also benefits from the clean slate structure for consistency.
-                                // Dropping text or an image here appends it to the note (E6).
+                                // Dropping text or an image here appends it to the note (E6), except
+                                // into a desktop mirror, whose next rewrite would lose it.
                                 Box(
                                     modifier = Modifier
                                         .fillMaxSize()
                                         .navigationBarsPadding()
                                         .imePadding()
-                                        .noteDropTarget(filePath) { dropped -> onContentChange(content.trimEnd() + "\n\n" + dropped + "\n") }
+                                        .then(
+                                            if (isReadOnly) Modifier
+                                            else Modifier.noteDropTarget(filePath) { dropped -> onContentChange(content.trimEnd() + "\n\n" + dropped + "\n") }
+                                        )
                                 ) {
                                     Column(
                                         modifier = Modifier
@@ -384,6 +391,8 @@ fun FileDetailPane(
                                                 color = MaterialTheme.colorScheme.outlineVariant
                                             )
                                         }
+
+                                        if (isReadOnly) MirrorNoteBanner(Modifier.padding(top = 16.dp))
 
                                         if (parsed.metadata.isNotEmpty() || parsed.tags.isNotEmpty()) {
                                             MetadataHeader(parsed.metadata, parsed.tags)
@@ -551,6 +560,33 @@ fun WelcomeState(onCreateNew: () -> Unit) {
             Icon(Icons.Default.Add, null)
             Spacer(Modifier.width(8.dp))
             Text("Create new file")
+        }
+    }
+}
+
+/** Above a desktop mirror, in place of the editor: the copy is rewritten from its source on the desktop. */
+@Composable
+private fun MirrorNoteBanner(modifier: Modifier = Modifier) {
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        shape = MaterialTheme.shapes.small,
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Computer,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSecondaryContainer
+            )
+            Text(
+                text = "Generated, edit the source on the desktop",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSecondaryContainer
+            )
         }
     }
 }
