@@ -85,6 +85,11 @@ class MissionLogViewModel @Inject constructor(
 
     fun delete(entry: LogEntry) = run("Couldn't delete the entry") { repository.delete(entry) }
 
+    /** Writes the decision's ADR note, links it from the entry, then hands its path to [open]. */
+    fun createDecisionNote(entry: LogEntry, open: (String) -> Unit) = run("Couldn't create the decision note") {
+        open(repository.createDecisionNote(entry))
+    }
+
     fun setFolder(folder: String) = run("Couldn't save the settings") {
         repository.updateSettings { it.copy(folder = folder.trim().trim('/')) }
     }

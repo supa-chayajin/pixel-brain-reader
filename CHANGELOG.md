@@ -37,6 +37,11 @@ kit and the authorship timeline.
   with a short French brief already sent: the objective's open milestones, linked projects and
   latest log entries; the week's load against the usual one and what drains it; the period's
   roles, decisions and finished work. Measured facts only, under 1,200 characters, on the device.
+- **Decision notes from the mission log.** A logged decision gets a "Create decision note"
+  button: a short French ADR (context, options considered, decision, consequences) pre-filled
+  with the decision, its role, who decided, who asked and its reference, written next to the
+  log in `Décisions/` (encrypted when the log is) and never over an existing note. The entry
+  links to it (`[ref:: … · [[ADR …]]]`), and the note opens so you can finish it.
 
 ### Fixed
 

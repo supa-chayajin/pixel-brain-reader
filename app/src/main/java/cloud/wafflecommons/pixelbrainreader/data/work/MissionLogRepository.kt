@@ -109,6 +109,32 @@ class MissionLogRepository @Inject constructor(
         }
     }
 
+    /**
+     * Writes a decision record (C9) for [entry] next to the log, in its `Décisions/` folder and
+     * encrypted when the log is, never over an existing note ("… (2).md"), then links it from the
+     * entry's reference. Returns the note's path.
+     */
+    suspend fun createDecisionNote(entry: LogEntry): String = withContext(Dispatchers.IO) {
+        require(entry.kind == LogKind.DECISION) { "Only a decision gets a decision note." }
+        val settings = currentSettings()
+        val base = DecisionRecords.path(settings, entry)
+        val stem = base.removeSuffix(".enc").removeSuffix(".md")
+        val extension = base.removePrefix(stem)
+        var path = base
+        var n = 2
+        while (exists(path)) {
+            path = "$stem ($n)$extension"
+            n++
+        }
+        writeMutex.withLock { write(path, DecisionRecords.render(path, entry, LocalDate.now()), settings.encrypted) }
+        // Read-the-disk-first replace of the entry's own line: a line changed meanwhile fails loudly.
+        update(entry, entry.copy(reference = DecisionRecords.reference(entry.reference, path)))
+        path
+    }
+
+    private suspend fun exists(path: String): Boolean =
+        if (path.endsWith(".enc")) File(vaultDir, path).exists() else fileRepository.fileExists(path)
+
     suspend fun delete(entry: LogEntry) = mutate(YearMonth.from(entry.at)) { content ->
         MissionLogFormat.replace(content, entry, null) ?: throw IllegalStateException("The entry changed on disk; reload the log.")
     }

@@ -44,6 +44,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -101,7 +102,12 @@ internal fun durationLabel(minutes: Int): String = if (minutes >= 60) "${minutes
 /** The mission log (#1): this month's facts, decisions, requests, refusals and off-ticket time. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MissionLogScreen(startWithAdd: Boolean, onBack: () -> Unit, viewModel: MissionLogViewModel = hiltViewModel()) {
+fun MissionLogScreen(
+    startWithAdd: Boolean,
+    onBack: () -> Unit,
+    onOpenNote: (String) -> Unit = {},
+    viewModel: MissionLogViewModel = hiltViewModel()
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val month by viewModel.month.collectAsStateWithLifecycle()
     val filter by viewModel.filter.collectAsStateWithLifecycle()
@@ -203,6 +209,10 @@ fun MissionLogScreen(startWithAdd: Boolean, onBack: () -> Unit, viewModel: Missi
                 editing = null
             },
             onDelete = editing?.let { entry -> { viewModel.delete(entry); editing = null } },
+            // A decision already in the log can become an ADR note, linked back from the entry.
+            onCreateDecisionNote = editing?.takeIf { it.kind == LogKind.DECISION }?.let { entry ->
+                { viewModel.createDecisionNote(entry, onOpenNote); editing = null }
+            },
             onDismiss = {
                 adding = false
                 editing = null
@@ -334,7 +344,8 @@ internal fun LogEntrySheet(
     roles: List<String>,
     onSave: (LogEntry) -> Unit,
     onDelete: (() -> Unit)?,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onCreateDecisionNote: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     var kind by remember { mutableStateOf(initial?.kind ?: LogKind.FACT) }
@@ -417,6 +428,17 @@ internal fun LogEntrySheet(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            if (onCreateDecisionNote != null) {
+                OutlinedButton(onClick = onCreateDecisionNote, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Rounded.Gavel, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Text("Create decision note", modifier = Modifier.padding(start = 8.dp))
+                }
+                Text(
+                    "A short ADR next to the log: context, options, decision and consequences, linked from this entry.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 if (onDelete != null) TextButton(onClick = onDelete) { Text("Delete", color = MaterialTheme.colorScheme.error) }
                 Box(Modifier.weight(1f))

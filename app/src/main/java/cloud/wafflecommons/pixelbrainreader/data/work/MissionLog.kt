@@ -75,7 +75,11 @@ object MissionLogFormat {
 
     private val STAMP = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
     private val ENTRY = Regex("""^- (\d{4}-\d{2}-\d{2} \d{2}:\d{2}) [—–\-] (.*)$""")
-    private val FIELD = Regex("""\[([\p{L}_ ]+)::\s*([^\]]*)\]""")
+    // A value runs to the field's closing bracket; a `[[wikilink]]` inside it is read whole. A lone
+    // `[` (old hand-written lines) is still accepted; each position has one way to match, so a
+    // malformed line can't make the engine backtrack.
+    private val FIELD = Regex("""\[([\p{L}_ ]+)::\s*((?:\[\[[^\]]*\]\]|\[(?!\[)|[^\[\]])*)\]""")
+    private val WIKILINK = Regex("""\[\[[^\[\]]+\]\]""")
     private val TAG = Regex("""(?<![\p{L}\p{N}_/])#(\p{L}[\p{L}\p{N}_/\-]*)""")
     private val LINE_BREAKS = Regex("""\s*[\r\n]+\s*""")
     private val SPACES = Regex("""\s+""")
@@ -162,7 +166,21 @@ object MissionLogFormat {
 
     private fun String.singleLine(): String = replace(LINE_BREAKS, " ").trim()
 
-    /** A field value can't hold brackets: they would end the field. */
-    private fun String?.field(key: String): String? =
-        this?.singleLine()?.replace('[', '(')?.replace(']', ')')?.takeIf { it.isNotBlank() }?.let { " [$key:: $it]" }
+    /**
+     * A field value can't hold brackets (they would end the field), except a `[[wikilink]]`, the
+     * one shape the parser reads back whole (a decision's `[ref:: [[ADR …]]]`).
+     */
+    private fun String?.field(key: String): String? {
+        val value = this?.singleLine() ?: return null
+        fun plain(part: String) = part.replace('[', '(').replace(']', ')')
+        val safe = buildString {
+            var last = 0
+            WIKILINK.findAll(value).forEach { link ->
+                append(plain(value.substring(last, link.range.first))).append(link.value)
+                last = link.range.last + 1
+            }
+            append(plain(value.substring(last)))
+        }
+        return safe.takeIf { it.isNotBlank() }?.let { " [$key:: $it]" }
+    }
 }

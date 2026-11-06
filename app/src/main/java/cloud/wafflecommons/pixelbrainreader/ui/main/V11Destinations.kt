@@ -153,7 +153,8 @@ fun NavGraphBuilder.v11Destinations(navController: NavHostController, openNote: 
     ) { entry ->
         MissionLogScreen(
             startWithAdd = entry.arguments?.getBoolean("add") ?: false,
-            onBack = { navController.popBackStack() }
+            onBack = { navController.popBackStack() },
+            onOpenNote = openNote
         )
     }
 }
