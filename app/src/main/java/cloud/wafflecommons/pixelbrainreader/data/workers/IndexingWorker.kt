@@ -327,8 +327,8 @@ class IndexingWorker @AssistedInject constructor(
          * Private notes only when a vault password is stored, checked BEFORE the model is loaded.
          * People notes never: what is written about a person is not something to retrieve into an
          * AI answer. Nor the encrypted mission log: work content outside any work folder would
-         * reach AI answers in every mode. Nor Claude's memory mirrored from the desktop (owner
-         * decision D2): it repeats the desktop's memory; the mirrored repository documents stay.
+         * reach AI answers in every mode. Nor Claude's memory mirrored from the desktop (settled
+         * decision #16): it repeats the desktop's memory; the mirrored repository documents stay.
          */
         internal fun embeddingCandidates(
             files: List<cloud.wafflecommons.pixelbrainreader.data.local.entity.FileEntity>,

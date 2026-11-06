@@ -157,7 +157,7 @@ object ProjectFormat {
         // notes you wrote. Only the mirror's index stays, as one key note.
         val (mirrors, ownNotes) = handNotes.partition { it.isMirror }
         // The live TODO splits in two: `@moi` lines are yours, the others are Claude's queue. A
-        // mirrored TODO is a repository's punch list: linked, never parsed.
+        // mirrored TODO is a repository's punch list: linked, never parsed (settled decision #15).
         val (todoMine, claudeQueue) = todo?.takeIf { !it.isMirror }
             ?.let { todoActions(it.path, it.content) }.orEmpty()
             .partition { it.mine }

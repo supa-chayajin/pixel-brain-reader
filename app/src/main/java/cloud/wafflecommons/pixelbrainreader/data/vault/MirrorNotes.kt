@@ -26,8 +26,8 @@ object MirrorNotes {
     fun isMirrorIndex(content: String): Boolean = head(content).mirrorOf?.endsWith(INDEX_SUFFIX) == true
 
     /**
-     * Claude's memory mirrored under a project (`<project>/Claude/Memory/`): never embedded (owner
-     * decision D2, 2026-11-06). It repeats the desktop's own memory and is noise for retrieval;
+     * Claude's memory mirrored under a project (`<project>/Claude/Memory/`): never embedded (settled
+     * decision #16). It repeats the desktop's own memory and is noise for retrieval;
      * the mirrored repository documents (`Repo/`) stay in the index.
      */
     fun isClaudeMemory(path: String): Boolean = path.startsWith(PROJECTS) && path.contains(CLAUDE_MEMORY)

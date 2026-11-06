@@ -7,7 +7,7 @@ import java.time.LocalDate
 
 /**
  * Settled decision #3 (CLAUDE.md): today's journal and 99_System are never embedded; people notes
- * never either, nor Claude's memory mirrored from the desktop (owner decision D2).
+ * never either, nor Claude's memory mirrored from the desktop (settled decision #16).
  */
 class IndexingWorkerCandidatesTest {
 

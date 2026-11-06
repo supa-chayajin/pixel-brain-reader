@@ -113,3 +113,28 @@ holds the commit (fail-closed) until the user reviews it.
 *Why:* the vault is pushed to a git remote and this repository is public. A deny-list
 written to either would publish the very names it protects; the work rule is "no client
 data in any external tool".
+
+## 15. A project's live TODO is read; a mirrored TODO is only linked
+
+A project's `TODO.md` kept in the vault, by the desktop's Claude sessions and the owner,
+is the live list: its `@moi` lines are the owner's and join the project's next actions,
+and every other open line is Claude's queue, shown apart (`ProjectFormat.todoActions`).
+A `TODO.md` that a desktop script copies from a repository (the "Mirrored automatically
+from…" banner, or `mirror_of:`) is never parsed: it stays a link, read-only like every
+desktop mirror (`MirrorNotes`).
+
+*Why:* the live TODO tells the owner that its `@moi` lines show under Next actions on the
+phone, and they didn't. A mirrored TODO is a prose punch list from a repository: the one
+in the vault held 1,400 lines and 77 open boxes, none of them the owner's, which would
+have filled both lists with noise. Decided on 2026-11-06.
+
+## 16. Claude's mirrored memory is not embedded
+
+Of the notes `repo_mirror.py` copies into a project, the repository's documents
+(`<project>/Repo/`) are embedded like any other note, so Cortex can answer from a roadmap
+or an RFC. Claude's memory (`<project>/Claude/Memory/`) is not, and the vectors such a
+note got before the rule are dropped on the next indexing run
+(`IndexingWorker.neverEmbedded`), without re-indexing the vault. Same family as #3.
+
+*Why:* those notes repeat what the desktop sessions already remember, how to work and
+project facts, and are noise for retrieval. Decided on 2026-11-06.
