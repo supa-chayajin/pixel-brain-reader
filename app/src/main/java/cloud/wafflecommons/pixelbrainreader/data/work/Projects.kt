@@ -14,8 +14,14 @@ data class WorklogDay(
     val subjects: List<String>
 )
 
-/** An open checkbox found in one of the project's notes. */
-data class ProjectAction(val path: String, val text: String, val due: LocalDate?, val mine: Boolean)
+/** An open checkbox found in one of the project's notes; [section] is its `##` heading in the project TODO. */
+data class ProjectAction(
+    val path: String,
+    val text: String,
+    val due: LocalDate?,
+    val mine: Boolean,
+    val section: String? = null
+)
 
 /** Everything the project page shows, computed from the vault mirror only. */
 data class ProjectSummary(
@@ -26,14 +32,20 @@ data class ProjectSummary(
     val lastActivity: LocalDate?,
     /** The last [ProjectFormat.WINDOW_DAYS] days that have a worklog, newest first. */
     val days: List<WorklogDay>,
+    /** Your open checkboxes: the notes' and the project TODO's `@moi` lines, yours first, then by due date. */
     val actions: List<ProjectAction>,
+    /** The project TODO's other open lines, in file order: what the desktop sessions do on your go. */
+    val claudeQueue: List<ProjectAction>,
     /** README, roadmap, RFC, TODO and portfolio notes, plus the index of each desktop mirror. */
     val keyNotes: List<WorkNote>,
     /** Hand-edited notes (never a desktop mirror), most recently updated first. */
     val recentNotes: List<WorkNote>,
     /** Notes outside the project that link into it. */
     val linkedFrom: List<String>,
-    /** The auto-mirrored next-actions file (`TODO.md`), when the project has one. */
+    /**
+     * The project's `TODO.md`, when it has one: the live list kept in the vault, or the desktop's
+     * copy of a repository's punch list (a mirror: linked, never parsed).
+     */
     val todoNote: WorkNote?
 ) {
     val name: String get() = root.substringAfterLast('/')
@@ -144,14 +156,21 @@ object ProjectFormat {
         // repository's, not your actions, and their dozens of roadmaps and RFCs would bury the
         // notes you wrote. Only the mirror's index stays, as one key note.
         val (mirrors, ownNotes) = handNotes.partition { it.isMirror }
+        // The live TODO splits in two: `@moi` lines are yours, the others are Claude's queue. A
+        // mirrored TODO is a repository's punch list: linked, never parsed.
+        val (todoMine, claudeQueue) = todo?.takeIf { !it.isMirror }
+            ?.let { todoActions(it.path, it.content) }.orEmpty()
+            .partition { it.mine }
 
-        val actions = ownNotes
-            .filter { it != todo }
-            .flatMap { note ->
-                MeetingFormat.actions(note.path, note.content).filter { !it.done }.map {
-                    ProjectAction(note.path, plainText(it.text), it.due, it.mine)
-                }
-            }
+        val actions = (
+            ownNotes
+                .filter { it != todo }
+                .flatMap { note ->
+                    MeetingFormat.actions(note.path, note.content).filter { !it.done }.map {
+                        ProjectAction(note.path, plainText(it.text), it.due, it.mine)
+                    }
+                } + todoMine
+            )
             // Yours first, then the ones with a due date (soonest first), then the rest.
             .sortedWith(compareBy<ProjectAction>({ !it.mine }, { it.due == null }, { it.due }))
 
@@ -171,6 +190,7 @@ object ProjectFormat {
             lastActivity = listOfNotNull(lastNoteUpdate, lastWorklog).maxOrNull(),
             days = days,
             actions = actions,
+            claudeQueue = claudeQueue,
             keyNotes = (ownNotes.filter { isKeyNote(it.path) && it != readme } + mirrors.filter { MirrorNotes.isMirrorIndex(it.content) })
                 .sortedBy { it.path },
             recentNotes = ownNotes
@@ -180,6 +200,35 @@ object ProjectFormat {
             linkedFrom = linkedFrom,
             todoNote = todo
         )
+    }
+
+    /**
+     * The open lines of a live project TODO (kept in the vault by the desktop sessions and you),
+     * each with the `##` heading it sits under. `@moi` marks yours; the TODO's own rule is that
+     * every other line is Claude's, done when you give the go. Fenced code is skipped.
+     */
+    fun todoActions(path: String, content: String): List<ProjectAction> {
+        val result = mutableListOf<ProjectAction>()
+        var section: String? = null
+        var inFence = false
+        for (line in content.lines()) {
+            val trimmed = line.trimStart()
+            if (trimmed.startsWith("```") || trimmed.startsWith("~~~")) {
+                inFence = !inFence
+                continue
+            }
+            if (inFence) continue
+            when {
+                line.startsWith("## ") -> section = line.removePrefix("## ").trim().ifEmpty { null }
+                line.startsWith("# ") -> section = null
+                else -> MeetingFormat.actions(path, line).firstOrNull()?.takeIf { !it.done }?.let { action ->
+                    // Yours drop the @moi marker; Claude's keep any @name they mention.
+                    val text = if (action.mine) action.text else ObjectiveFormat.milestones(line).first().text
+                    result += ProjectAction(path, plainText(text), action.due, action.mine, section)
+                }
+            }
+        }
+        return result
     }
 
     /** "📌 21_X — Project Log (read me)" → "21_X". */

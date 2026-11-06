@@ -11,6 +11,15 @@ Still planned (`documentation/plans/2026-10-18-v11-work-and-dev-toolkit.md`): th
 dashboard, "explain this error", decision records, people & 1:1s, security watch, the workshop
 kit and the authorship timeline.
 
+### Added
+
+- **Your project TODO on the project page.** A project's live `TODO.md`, the list the desktop
+  sessions and you keep in the vault, is now read. Its `@moi` lines join **Next actions** (yours
+  first, then by due date, so the projects list and widget show them too), and its other open
+  lines fill a new **Claude's queue** card right after: how many are open, the first three
+  under their `##` heading, and a tap opens the TODO. A TODO the desktop copies from a
+  repository (the "Mirrored automatically" banner) stays a link.
+
 ### Changed
 
 - **Notes your desktop regenerates are read-only here.** The copies `repo_mirror.py` writes (a

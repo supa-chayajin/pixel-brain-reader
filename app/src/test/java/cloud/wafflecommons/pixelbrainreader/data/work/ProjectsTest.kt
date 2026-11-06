@@ -89,7 +89,7 @@ class ProjectsTest {
         val root = "20_Projects/21_Demo"
         val notes = mapOf(
             "$root/README.md" to "---\ntitle: \"📌 21_Demo — Project Log (read me)\"\nstatus: 🏗️ wip\n---\n",
-            "$root/TODO.md" to "---\ntitle: Next\ndate_updated: '2026-11-02'\n---\n- [ ] not parsed here\n",
+            "$root/TODO.md" to "---\ntitle: Next\ndate_updated: '2026-11-02'\n---\n- [ ] a line for Claude\n",
             "$root/Notes/Roadmap.md" to "---\ntitle: Roadmap\ndate_updated: '2026-10-01'\n---\n",
             "$root/Notes/Plan.md" to "---\ntitle: Plan\ndate_updated: '2026-11-01'\n---\n- [ ] write the doc\n- [x] done already\n- [ ] @moi ship it 📅 2026-11-10\n",
             "$root/Worklog/2026-11-04.md" to singleWorklog,
@@ -108,11 +108,85 @@ class ProjectsTest {
         assertEquals(today, s.lastActivity)
         assertEquals(listOf("ship it 📅 2026-11-10", "write the doc").map { it.substringBefore(" 📅") }, s.actions.map { it.text.substringBefore(" 📅") })
         assertTrue(s.actions.first().mine)
+        assertEquals(listOf("a line for Claude"), s.claudeQueue.map { it.text })
         assertEquals(listOf("$root/Notes/Roadmap.md", "$root/TODO.md"), s.keyNotes.map { it.path })
         assertEquals(listOf("$root/Notes/Plan.md"), s.recentNotes.map { it.path })
         assertEquals(listOf("10_Journal/2026-11-03.md"), s.linkedFrom)
         assertEquals("$root/TODO.md", s.todoNote?.path)
         assertEquals("feat(api): add the thing", s.leftOff?.subjects?.first())
+    }
+
+    private val liveTodo = """
+        ---
+        title: "✅ Demo — TODO"
+        date_updated: '2026-11-04'
+        tags:
+          - todo
+        ---
+        # ✅ Demo — TODO
+
+        > [!INFO] The one live TODO list
+
+        ## 👤 Yours
+
+        - [ ] @moi Review and merge [the release PR](https://example.org/pr/12)
+        - [ ] @moi Decide on the ignore rule 📅 2026-11-05
+        - [x] @moi Done already
+
+        ## 🧇 Next release (Claude, on your go)
+
+        A due date in prose 📅 2026-12-03 is not a line.
+
+        - [ ] Cut the **pre-release** branches
+        - [ ] Ping @alice about the `RetryPolicy` ceiling
+          - [ ] a nested step
+
+        ```bash
+        - [ ] not a line: code
+        ```
+
+        ## ✔️ Done recently
+
+        - [x] Released on 5 November
+    """.trimIndent()
+
+    @Test
+    fun `the live TODO's @moi lines are next actions, its other open lines are Claude's queue`() {
+        val root = "20_Projects/21_Demo"
+        val notes = mapOf(
+            "$root/README.md" to "---\ntitle: Demo\n---\n",
+            "$root/TODO.md" to liveTodo,
+            "$root/Notes/Plan.md" to "---\ntitle: Plan\ndate_updated: '2026-11-01'\n---\n- [ ] write the doc\n- [ ] @moi ship it 📅 2026-11-10\n"
+        )
+        val s = ProjectFormat.summarize(root, notes, emptyList(), today)
+        // Yours first by due date, then yours without one, then the rest: the existing order.
+        assertEquals(
+            listOf("Decide on the ignore rule", "ship it", "Review and merge the release PR", "write the doc"),
+            s.actions.map { it.text }
+        )
+        assertEquals(LocalDate.of(2026, 11, 5), s.nextAction?.due)
+        assertEquals("👤 Yours", s.actions.first().section)
+        assertEquals("$root/TODO.md", s.actions.first().path)
+        assertEquals(
+            listOf("Cut the pre-release branches", "Ping @alice about the RetryPolicy ceiling", "a nested step"),
+            s.claudeQueue.map { it.text }
+        )
+        assertEquals(setOf("🧇 Next release (Claude, on your go)"), s.claudeQueue.map { it.section }.toSet())
+        assertTrue(s.claudeQueue.none { it.mine })
+        assertEquals("$root/TODO.md", s.todoNote?.path)
+    }
+
+    @Test
+    fun `a TODO mirrored from a repository stays a link`() {
+        val root = "20_Projects/22_Demo"
+        val mirrored = "---\ntitle: \"📋 Demo — Next Actions (TODO)\"\ndate_updated: '2026-11-05'\n---\n\n" +
+            "> Mirrored automatically from `demo/TODO.md` — edit the source, not this copy.\n\n" +
+            "# Demo workspace TODO\n\n### Open right now\n\n- [ ] a line of the repository's punch list\n- [ ] @moi even this one\n"
+        val s = ProjectFormat.summarize(root, mapOf("$root/README.md" to "---\ntitle: Demo\n---\n", "$root/TODO.md" to mirrored), emptyList(), today)
+        assertTrue(s.actions.isEmpty())
+        assertTrue(s.claudeQueue.isEmpty())
+        assertEquals("$root/TODO.md", s.todoNote?.path)
+        assertTrue(s.keyNotes.isEmpty())
     }
 
     @Test

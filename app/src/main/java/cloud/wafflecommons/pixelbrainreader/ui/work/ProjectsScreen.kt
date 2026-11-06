@@ -16,6 +16,7 @@ import androidx.compose.material.icons.rounded.Computer
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Insights
 import androidx.compose.material.icons.rounded.RocketLaunch
+import androidx.compose.material.icons.rounded.SmartToy
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -32,6 +33,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
 import cloud.wafflecommons.pixelbrainreader.data.modes.Visibility
+import cloud.wafflecommons.pixelbrainreader.data.work.ProjectAction
 import cloud.wafflecommons.pixelbrainreader.data.work.ProjectRepository
 import cloud.wafflecommons.pixelbrainreader.data.work.ProjectSummary
 import cloud.wafflecommons.pixelbrainreader.ui.components.FormScaffold
@@ -252,6 +254,9 @@ fun ProjectScreen(
                 NoteRow("Session punch list (TODO)", todo.updated?.let { "updated ${it.format(DAY)}" }) { onOpenNote(todo.path) }
             }
         }
+        if (p.claudeQueue.isNotEmpty()) {
+            ClaudeQueueCard(p.claudeQueue) { onOpenNote(p.claudeQueue.first().path) }
+        }
         if (p.keyNotes.isNotEmpty() || p.recentNotes.isNotEmpty()) {
             SectionCard(title = "Notes", icon = Icons.AutoMirrored.Rounded.Article) {
                 p.keyNotes.forEach { n -> NoteRow(n.title, n.status) { onOpenNote(n.path) } }
@@ -326,6 +331,49 @@ private fun HandoffCard(
     }
 }
 
+/**
+ * The project TODO's lines that aren't yours: what the desktop sessions do once you give the go.
+ * The first few, each group under its `##` heading; the whole card opens the TODO.
+ */
+@Composable
+private fun ClaudeQueueCard(queue: List<ProjectAction>, onOpenTodo: () -> Unit) {
+    SectionCard(
+        title = "Claude's queue",
+        icon = Icons.Rounded.SmartToy,
+        subtitle = "${queue.size} open in the TODO, done on your go",
+        modifier = Modifier.clickable(onClickLabel = "Open the TODO", onClick = onOpenTodo)
+    ) {
+        queue.take(QUEUE_PREVIEW).forEachIndexed { i, a ->
+            if (a.section != null && a.section != queue.getOrNull(i - 1)?.section) {
+                Text(
+                    a.section,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("☐", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                Text(a.text, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            }
+        }
+        if (queue.size > QUEUE_PREVIEW) {
+            Text(
+                "+ ${queue.size - QUEUE_PREVIEW} more, tap to open the TODO",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
 @Composable
 private fun NoteRow(title: String, detail: String?, onClick: () -> Unit) {
     Row(
@@ -344,6 +392,7 @@ private fun NoteRow(title: String, detail: String?, onClick: () -> Unit) {
 }
 
 private const val ACTIVITY_DAYS = 14
+private const val QUEUE_PREVIEW = 3
 private val DAY: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d MMM")
 
 private fun plural(n: Int, one: String) = "$n $one${if (n == 1) "" else "s"}"
