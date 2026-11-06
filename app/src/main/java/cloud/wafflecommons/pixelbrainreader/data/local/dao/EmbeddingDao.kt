@@ -49,4 +49,8 @@ interface EmbeddingDao {
 
     @Query("DELETE FROM embeddings WHERE fileId NOT IN (SELECT path FROM files)")
     suspend fun deleteOrphans()
+
+    /** Every embedded note's path, once. */
+    @Query("SELECT DISTINCT fileId FROM embeddings")
+    suspend fun fileIds(): List<String>
 }

@@ -72,4 +72,13 @@ class MirrorNotesTest {
         assertFalse(MirrorNotes.isMirrorIndex(repoMirror))
         assertFalse(MirrorNotes.isMirrorIndex(todoMirror))
     }
+
+    @Test
+    fun `claude's mirrored memory is found by its folder under a project`() {
+        assertTrue(MirrorNotes.isClaudeMemory("20_Projects/21_Demo/Claude/Memory/feedback.md"))
+        assertTrue(MirrorNotes.isClaudeMemory("20_Projects/22_Demo/app/Claude/Memory/notes/x.md"))
+        assertFalse(MirrorNotes.isClaudeMemory("20_Projects/21_Demo/Claude/Reports/2026-11-06_Audit.md"))
+        assertFalse(MirrorNotes.isClaudeMemory("20_Projects/21_Demo/Repo/Docs/memory.md"))
+        assertFalse(MirrorNotes.isClaudeMemory("30_Areas/Claude/Memory/x.md"))
+    }
 }

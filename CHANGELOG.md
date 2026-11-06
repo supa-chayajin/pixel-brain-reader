@@ -22,6 +22,11 @@ kit and the authorship timeline.
 - **A project page shows the notes you wrote.** Mirrored copies no longer count as next actions
   (their checkboxes are the source repository's), recent notes or key notes. Each mirror's
   index note stays as one key note, the way into all its copies.
+- **Cortex leaves Claude's mirrored memory out.** The notes under a project's `Claude/Memory/`
+  repeat what the desktop sessions already know and are noise for retrieval: they are no
+  longer embedded, and the next indexing run drops their vectors without re-indexing the
+  vault. The mirrored repository documents (`Repo/`) stay searchable, so asking what the next
+  release holds still finds the roadmap.
 
 ## [12.2.0] — 2026-11-04
 

@@ -5,7 +5,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.time.LocalDate
 
-/** Settled decision #3 (CLAUDE.md): today's journal and 99_System are never embedded; people notes never either. */
+/**
+ * Settled decision #3 (CLAUDE.md): today's journal and 99_System are never embedded; people notes
+ * never either, nor Claude's memory mirrored from the desktop (owner decision D2).
+ */
 class IndexingWorkerCandidatesTest {
 
     private val today = LocalDate.of(2026, 10, 17)
@@ -43,5 +46,29 @@ class IndexingWorkerCandidatesTest {
             listOf("10_Journal/2026-10-16.md", "20_Projects/plan.md", "99_Private/diary.md.enc"),
             candidates.map { it.path }
         )
+    }
+
+    @Test
+    fun `claude's mirrored memory is left out, the mirrored repository documents stay`() {
+        val mirrors = listOf(
+            file("20_Projects/21_Demo/Claude/Memory/feedback.md"),
+            file("20_Projects/21_Demo/Repo/Roadmaps/Roadmap_v2.md"),
+            file("20_Projects/21_Demo/Claude/Reports/2026-11-06_Audit.md")
+        )
+        val candidates = IndexingWorker.embeddingCandidates(mirrors, today, hasVaultPassword = true)
+        assertEquals(
+            listOf("20_Projects/21_Demo/Repo/Roadmaps/Roadmap_v2.md", "20_Projects/21_Demo/Claude/Reports/2026-11-06_Audit.md"),
+            candidates.map { it.path }
+        )
+    }
+
+    @Test
+    fun `only the vectors of notes that must stay out are purged`() {
+        val embedded = listOf(
+            "20_Projects/21_Demo/Claude/Memory/feedback.md",
+            "20_Projects/21_Demo/Repo/Docs/guide.md",
+            "10_Journal/2026-10-17.md" // today: not embedded today, but never purged
+        )
+        assertEquals(listOf("20_Projects/21_Demo/Claude/Memory/feedback.md"), IndexingWorker.neverEmbedded(embedded))
     }
 }

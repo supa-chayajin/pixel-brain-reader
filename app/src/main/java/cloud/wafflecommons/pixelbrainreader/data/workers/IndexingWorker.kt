@@ -66,6 +66,10 @@ class IndexingWorker @AssistedInject constructor(
             // getFilesWithoutEmbeddings then returns everything to re-embed.
             vectorSearchEngine.ensureSchemaVersion()
 
+            // Notes embedded before the rule that keeps them out of the index: drop their
+            // vectors without a full re-embed (also cheap, no model load).
+            purgeNeverEmbedded()
+
             // Vault scan: reindexAll uses content-SHA comparison and returns ONLY
             // files whose stored fingerprint differs from on-disk content. Files
             // whose mtime drifted but content matched are absorbed via UPDATE
@@ -144,6 +148,18 @@ class IndexingWorker @AssistedInject constructor(
         } catch (e: Exception) {
             Log.e("IndexingWorker", "Fatal Indexing Error", e)
             if (runAttemptCount < 3) Result.retry() else Result.failure()
+        }
+    }
+
+    private suspend fun purgeNeverEmbedded() {
+        try {
+            val stale = neverEmbedded(embeddingDao.fileIds())
+            stale.forEach { embeddingDao.deleteByFileId(it) }
+            if (stale.isNotEmpty()) Log.i("RAG_DEBUG", "IndexingWorker: dropped the vectors of ${stale.size} note(s) kept out of the index")
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w("RAG_DEBUG", "Purge of excluded notes skipped: ${e.message}")
         }
     }
 
@@ -311,7 +327,8 @@ class IndexingWorker @AssistedInject constructor(
          * Private notes only when a vault password is stored, checked BEFORE the model is loaded.
          * People notes never: what is written about a person is not something to retrieve into an
          * AI answer. Nor the encrypted mission log: work content outside any work folder would
-         * reach AI answers in every mode.
+         * reach AI answers in every mode. Nor Claude's memory mirrored from the desktop (owner
+         * decision D2): it repeats the desktop's memory; the mirrored repository documents stay.
          */
         internal fun embeddingCandidates(
             files: List<cloud.wafflecommons.pixelbrainreader.data.local.entity.FileEntity>,
@@ -329,8 +346,17 @@ class IndexingWorker @AssistedInject constructor(
                     !entity.path.contains("99_System") &&
                     !cloud.wafflecommons.pixelbrainreader.data.vault.VaultSchema.isPeopleNote(entity.path) &&
                     !entity.path.startsWith(cloud.wafflecommons.pixelbrainreader.data.work.MissionLogSettings.ENCRYPTED_FOLDER + "/") &&
+                    !cloud.wafflecommons.pixelbrainreader.data.vault.MirrorNotes.isClaudeMemory(entity.path) &&
                     (!isPrivate || hasVaultPassword)
             }
         }
+
+        /**
+         * The embedded notes to drop: those a rule added after they were embedded keeps out of the
+         * index (Claude's mirrored memory). Today's journal is not one of them: it is embedded once
+         * it is no longer today.
+         */
+        internal fun neverEmbedded(fileIds: List<String>): List<String> =
+            fileIds.filter { cloud.wafflecommons.pixelbrainreader.data.vault.MirrorNotes.isClaudeMemory(it) }
     }
 }

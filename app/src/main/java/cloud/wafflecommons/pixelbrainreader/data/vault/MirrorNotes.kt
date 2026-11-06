@@ -13,6 +13,8 @@ object MirrorNotes {
     private val MIRROR_KEY = Regex("""^mirror_of\s*:\s*\S""")
     private const val TODO_BANNER = "> Mirrored automatically from "
     private const val INDEX_SUFFIX = ":__index__"
+    private const val PROJECTS = "20_Projects/"
+    private const val CLAUDE_MEMORY = "/Claude/Memory/"
 
     /** True for a note a desktop script regenerates. Reads only the head of the note. */
     fun isMirror(content: String): Boolean {
@@ -22,6 +24,13 @@ object MirrorNotes {
 
     /** The index `repo_mirror.py` writes next to its copies (`mirror_of: "<manifest>:__index__"`). */
     fun isMirrorIndex(content: String): Boolean = head(content).mirrorOf?.endsWith(INDEX_SUFFIX) == true
+
+    /**
+     * Claude's memory mirrored under a project (`<project>/Claude/Memory/`): never embedded (owner
+     * decision D2, 2026-11-06). It repeats the desktop's own memory and is noise for retrieval;
+     * the mirrored repository documents (`Repo/`) stay in the index.
+     */
+    fun isClaudeMemory(path: String): Boolean = path.startsWith(PROJECTS) && path.contains(CLAUDE_MEMORY)
 
     /** The `mirror_of:` value (unquoted) and the first non-blank line after the frontmatter. */
     private class Head(val mirrorOf: String?, val firstBodyLine: String?)
