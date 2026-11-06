@@ -32,6 +32,11 @@ kit and the authorship timeline.
   still open, refusals), the requests still open and your overdue `@moi` actions, with one tap
   to the mission log or to your actions. When the overload signal shows, its card names the
   heaviest role and requester too, on this screen and on the tools hub.
+- **One tap to the 🧭 Coach.** "Ask Coach" on an objective, "Triage with Coach" in Load vs
+  recovery and "Coach on this period" in the evidence report open the chat on the Coach preset
+  with a short French brief already sent: the objective's open milestones, linked projects and
+  latest log entries; the week's load against the usual one and what drains it; the period's
+  roles, decisions and finished work. Measured facts only, under 1,200 characters, on the device.
 
 ### Fixed
 

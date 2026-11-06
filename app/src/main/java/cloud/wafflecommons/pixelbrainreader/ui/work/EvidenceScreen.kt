@@ -20,6 +20,7 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -34,9 +35,12 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import cloud.wafflecommons.pixelbrainreader.data.ai.ChatSeed
+import cloud.wafflecommons.pixelbrainreader.data.ai.ChatSeedRepository
 import cloud.wafflecommons.pixelbrainreader.data.modes.ContextMode
 import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
 import cloud.wafflecommons.pixelbrainreader.data.modes.Visibility
+import cloud.wafflecommons.pixelbrainreader.data.work.CoachSeeds
 import cloud.wafflecommons.pixelbrainreader.data.work.EvidenceFigures
 import cloud.wafflecommons.pixelbrainreader.data.work.EvidenceRepository
 import cloud.wafflecommons.pixelbrainreader.data.work.EvidenceScope
@@ -67,6 +71,7 @@ import javax.inject.Inject
 @HiltViewModel
 class EvidenceViewModel @Inject constructor(
     private val repository: EvidenceRepository,
+    private val chatSeeds: ChatSeedRepository,
     modesRepository: ModesRepository
 ) : ViewModel() {
 
@@ -93,6 +98,11 @@ class EvidenceViewModel @Inject constructor(
 
     fun setScope(scope: EvidenceScope) {
         _scope.value = scope
+    }
+
+    /** Prepares the Coach's look at the period's figures; the screen then opens the chat. */
+    fun coach(figures: EvidenceFigures) {
+        chatSeeds.offer(ChatSeed(CoachSeeds.COACH_PRESET, CoachSeeds.evidence(_period.value.frenchLabel, figures)))
     }
 
     private val _working = MutableStateFlow(false)
@@ -138,7 +148,12 @@ private fun ReportPeriod.label(): String = when (this) {
 
 /** The evidence report (#2): a month or a quarter of the mission log, as a French draft. */
 @Composable
-fun EvidenceScreen(onBack: () -> Unit, onOpenNote: (String) -> Unit, viewModel: EvidenceViewModel = hiltViewModel()) {
+fun EvidenceScreen(
+    onBack: () -> Unit,
+    onOpenNote: (String) -> Unit,
+    onOpenChat: () -> Unit,
+    viewModel: EvidenceViewModel = hiltViewModel()
+) {
     val period by viewModel.period.collectAsStateWithLifecycle()
     val scope by viewModel.scope.collectAsStateWithLifecycle()
     val figures by viewModel.figures.collectAsStateWithLifecycle()
@@ -216,6 +231,9 @@ fun EvidenceScreen(onBack: () -> Unit, onOpenNote: (String) -> Unit, viewModel: 
                 enabled = !working && figures != null && !(work && visibility.hideWork),
                 onClick = { viewModel.write(withSummary, onOpenNote) }
             ) { Text("Write the report") }
+            figures?.takeIf { !(work && visibility.hideWork) }?.let { f ->
+                TextButton(onClick = { viewModel.coach(f); onOpenChat() }) { Text("Coach on this period") }
+            }
             if (working) CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
         }
         Text(

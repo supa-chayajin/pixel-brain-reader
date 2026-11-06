@@ -36,8 +36,11 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import cloud.wafflecommons.pixelbrainreader.data.ai.ChatSeed
+import cloud.wafflecommons.pixelbrainreader.data.ai.ChatSeedRepository
 import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
 import cloud.wafflecommons.pixelbrainreader.data.modes.Visibility
+import cloud.wafflecommons.pixelbrainreader.data.work.CoachSeeds
 import cloud.wafflecommons.pixelbrainreader.data.work.Milestone
 import cloud.wafflecommons.pixelbrainreader.data.work.Objective
 import cloud.wafflecommons.pixelbrainreader.data.work.ObjectiveRepository
@@ -69,6 +72,7 @@ import javax.inject.Inject
 @HiltViewModel
 class ObjectivesViewModel @Inject constructor(
     private val repository: ObjectiveRepository,
+    private val chatSeeds: ChatSeedRepository,
     modesRepository: ModesRepository
 ) : ViewModel() {
 
@@ -95,6 +99,11 @@ class ObjectivesViewModel @Inject constructor(
 
     fun updateSlot(transform: (ObjectiveSettings) -> ObjectiveSettings) = run("Couldn't save the slot") { repository.updateSettings(transform) }
 
+    /** Prepares the Coach's first message about [objective]; the screen then opens the chat. */
+    fun coach(objective: Objective) {
+        chatSeeds.offer(ChatSeed(CoachSeeds.COACH_PRESET, CoachSeeds.objective(objective, LocalDate.now())))
+    }
+
     private fun run(failure: String, block: suspend () -> Unit) {
         viewModelScope.launch {
             try {
@@ -114,6 +123,7 @@ fun ObjectivesScreen(
     onBack: () -> Unit,
     onOpenNote: (String) -> Unit,
     onOpenProject: (String) -> Unit,
+    onOpenChat: () -> Unit,
     viewModel: ObjectivesViewModel = hiltViewModel()
 ) {
     val objectives by viewModel.objectives.collectAsStateWithLifecycle()
@@ -140,7 +150,8 @@ fun ObjectivesScreen(
                     onToggle = { m -> viewModel.toggle(objective, m) },
                     onOpen = { onOpenNote(objective.note.path) },
                     onOpenNote = onOpenNote,
-                    onOpenProject = onOpenProject
+                    onOpenProject = onOpenProject,
+                    onCoach = { viewModel.coach(objective); onOpenChat() }
                 )
             }
         }
@@ -187,7 +198,8 @@ private fun ObjectiveCard(
     onToggle: (Milestone) -> Unit,
     onOpen: () -> Unit,
     onOpenNote: (String) -> Unit,
-    onOpenProject: (String) -> Unit
+    onOpenProject: (String) -> Unit,
+    onCoach: () -> Unit
 ) {
     var expanded by rememberSaveable(objective.note.path) { mutableStateOf(false) }
     val stale = objective.stale(today)
@@ -260,6 +272,7 @@ private fun ObjectiveCard(
                     )
                 }
             }
+            TextButton(onClick = onCoach) { Text("Ask Coach") }
         }
     }
 }

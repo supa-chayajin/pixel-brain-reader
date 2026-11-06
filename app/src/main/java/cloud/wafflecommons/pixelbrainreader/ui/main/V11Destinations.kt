@@ -115,7 +115,8 @@ fun NavGraphBuilder.v11Destinations(navController: NavHostController, openNote: 
         LoadRecoveryScreen(
             onBack = { navController.popBackStack() },
             onOpenLog = { navController.navigate(V11Routes.missionLog()) },
-            onOpenActions = { navController.navigate(V11Routes.NEXT_ACTIONS) }
+            onOpenActions = { navController.navigate(V11Routes.NEXT_ACTIONS) },
+            onOpenChat = { navController.navigate(Screen.Chat) }
         )
     }
     composable(V11Routes.MEETINGS) {
@@ -132,11 +133,12 @@ fun NavGraphBuilder.v11Destinations(navController: NavHostController, openNote: 
         ObjectivesScreen(
             onBack = { navController.popBackStack() },
             onOpenNote = openNote,
-            onOpenProject = { navController.navigate(V11Routes.project(it)) }
+            onOpenProject = { navController.navigate(V11Routes.project(it)) },
+            onOpenChat = { navController.navigate(Screen.Chat) }
         )
     }
     composable(V11Routes.EVIDENCE) {
-        EvidenceScreen(onBack = { navController.popBackStack() }, onOpenNote = openNote)
+        EvidenceScreen(onBack = { navController.popBackStack() }, onOpenNote = openNote, onOpenChat = { navController.navigate(Screen.Chat) })
     }
     composable(V11Routes.LEAVE) {
         LeaveScreen(

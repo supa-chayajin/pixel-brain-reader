@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cloud.wafflecommons.pixelbrainreader.data.ai.AiLanguage
+import cloud.wafflecommons.pixelbrainreader.data.ai.ChatSeedRepository
 import cloud.wafflecommons.pixelbrainreader.data.ai.LocalAiManager
 import cloud.wafflecommons.pixelbrainreader.data.ai.NanoException
 import cloud.wafflecommons.pixelbrainreader.data.ai.NanoState
@@ -26,6 +27,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -157,7 +159,8 @@ class ChatViewModel @Inject constructor(
     private val localAiManager: LocalAiManager,
     private val chatRepository: ChatRepository,
     private val vectorSearchEngine: VectorSearchEngine,
-    private val presetRepository: PromptPresetRepository
+    private val presetRepository: PromptPresetRepository,
+    private val chatSeedRepository: ChatSeedRepository
 ) : ViewModel() {
 
     // --- Mode (UI-only state) ------------------------------------------------
@@ -392,6 +395,22 @@ class ChatViewModel @Inject constructor(
         viewModelScope.launch {
             job?.cancelAndJoin()
             chatRepository.clear(modeStorage)
+        }
+    }
+
+    // Last in the class on purpose: viewModelScope dispatches immediately on the main thread, so a
+    // seed already waiting is taken during construction — every property above must exist by then.
+    init {
+        // "Ask Coach" from a work screen: take its seed once, switch to its preset (read from the
+        // vault first, so a customised Coach answers) and send it, after any answer in flight.
+        viewModelScope.launch {
+            chatSeedRepository.seed.filterNotNull().collect {
+                val seed = chatSeedRepository.take() ?: return@collect
+                presetRepository.reload()
+                generationJob?.join()
+                selectPreset(seed.presetId)
+                sendMessage(seed.message)
+            }
         }
     }
 }

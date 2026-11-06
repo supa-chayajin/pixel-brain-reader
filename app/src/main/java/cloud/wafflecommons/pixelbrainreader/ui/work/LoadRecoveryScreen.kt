@@ -17,8 +17,11 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import cloud.wafflecommons.pixelbrainreader.data.ai.ChatSeed
+import cloud.wafflecommons.pixelbrainreader.data.ai.ChatSeedRepository
 import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
 import cloud.wafflecommons.pixelbrainreader.data.modes.Visibility
+import cloud.wafflecommons.pixelbrainreader.data.work.CoachSeeds
 import cloud.wafflecommons.pixelbrainreader.data.work.LoadBreakdown
 import cloud.wafflecommons.pixelbrainreader.data.work.LoadComparison
 import cloud.wafflecommons.pixelbrainreader.data.work.LoadRecovery
@@ -41,6 +44,7 @@ import kotlin.math.roundToInt
 @HiltViewModel
 class LoadRecoveryViewModel @Inject constructor(
     private val repository: LoadRecoveryRepository,
+    private val chatSeeds: ChatSeedRepository,
     modesRepository: ModesRepository
 ) : ViewModel() {
 
@@ -51,6 +55,11 @@ class LoadRecoveryViewModel @Inject constructor(
 
     private val _failed = MutableStateFlow(false)
     val failed: StateFlow<Boolean> = _failed.asStateFlow()
+
+    /** Prepares the Coach's triage of this week's load; the screen then opens the chat. */
+    fun coach(report: LoadRecoveryReport) {
+        chatSeeds.offer(ChatSeed(CoachSeeds.COACH_PRESET, CoachSeeds.load(report)))
+    }
 
     fun load(force: Boolean = false) {
         viewModelScope.launch {
@@ -86,6 +95,7 @@ fun LoadRecoveryScreen(
     onBack: () -> Unit,
     onOpenLog: () -> Unit,
     onOpenActions: () -> Unit,
+    onOpenChat: () -> Unit,
     viewModel: LoadRecoveryViewModel = hiltViewModel()
 ) {
     val report by viewModel.report.collectAsStateWithLifecycle()
@@ -109,7 +119,7 @@ fun LoadRecoveryScreen(
                     subtitle = "A signal shows when the last seven days carry at least 30% more meetings and off-ticket time than your usual week " +
                         "and a recovery measure is below your own norm."
                 )
-                LoadSourcesCard(r.breakdown, onOpenLog, onOpenActions)
+                LoadSourcesCard(r.breakdown, onOpenLog, onOpenActions, onCoach = { viewModel.coach(r); onOpenChat() })
                 SectionCard(
                     title = "After heavy and light work days",
                     icon = Icons.Rounded.MonitorHeart,
@@ -159,7 +169,7 @@ internal fun OverloadCard(signal: OverloadSignal, breakdown: LoadBreakdown? = nu
 
 /** Where this week's load comes from: roles, requesters, open requests and overdue actions, all from the log. */
 @Composable
-private fun LoadSourcesCard(breakdown: LoadBreakdown, onOpenLog: () -> Unit, onOpenActions: () -> Unit) {
+private fun LoadSourcesCard(breakdown: LoadBreakdown, onOpenLog: () -> Unit, onOpenActions: () -> Unit, onCoach: () -> Unit) {
     SectionCard(
         title = "Where this week's load comes from",
         icon = Icons.Rounded.Insights,
@@ -176,9 +186,10 @@ private fun LoadSourcesCard(breakdown: LoadBreakdown, onOpenLog: () -> Unit, onO
         if (breakdown.openRequests.isNotEmpty() || breakdown.overdueMyActions > 0) {
             Text(openLine(breakdown), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Row {
+        androidx.compose.foundation.layout.FlowRow {
             TextButton(onClick = onOpenLog) { Text("Open the log") }
             TextButton(onClick = onOpenActions) { Text("Your actions") }
+            TextButton(onClick = onCoach) { Text("Triage with Coach") }
         }
     }
 }

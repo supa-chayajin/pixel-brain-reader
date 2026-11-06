@@ -1,5 +1,7 @@
 package cloud.wafflecommons.pixelbrainreader.ui.ai
 
+import cloud.wafflecommons.pixelbrainreader.data.ai.ChatSeed
+import cloud.wafflecommons.pixelbrainreader.data.ai.ChatSeedRepository
 import cloud.wafflecommons.pixelbrainreader.data.ai.LocalAiManager
 import cloud.wafflecommons.pixelbrainreader.data.ai.NanoException
 import cloud.wafflecommons.pixelbrainreader.data.ai.NanoState
@@ -91,6 +93,7 @@ class ChatViewModelTest {
         coEvery { reload() } just runs
     }
     private val nanoStateFlow = MutableStateFlow<NanoState>(NanoState.Ready)
+    private val chatSeedRepository = ChatSeedRepository()
     private lateinit var fakeRepo: FakeChatRepository
 
     private lateinit var viewModel: ChatViewModel
@@ -105,7 +108,8 @@ class ChatViewModelTest {
             localAiManager = localAiManager,
             chatRepository = fakeRepo.real,
             vectorSearchEngine = vectorSearchEngine,
-            presetRepository = presetRepository
+            presetRepository = presetRepository,
+            chatSeedRepository = chatSeedRepository
         )
     }
 
@@ -132,6 +136,24 @@ class ChatViewModelTest {
         assertEquals("USER", persisted[0].role)
         assertEquals("On-device reply", persisted[1].content)
         assertEquals("MODEL", persisted[1].role)
+    }
+
+    @Test
+    fun `a seed from a work screen switches to its preset and is sent once`() = runTest {
+        every {
+            localAiManager.generateAugmentedResponseStream(any(), any(), any(), "Mon objectif « Lead »")
+        } returns flowOf("Une question ouverte ?")
+
+        chatSeedRepository.offer(ChatSeed("coach", "Mon objectif « Lead »"))
+        advanceUntilIdle()
+
+        assertEquals(ChatMode.PRESET, viewModel.currentMode.value)
+        assertEquals("coach", viewModel.activePreset.value.id)
+        val persisted = fakeRepo.snapshot("PRESET:coach")
+        assertEquals(listOf("USER", "MODEL"), persisted.map { it.role })
+        assertEquals("Mon objectif « Lead »", persisted[0].content)
+        // Taken once: nothing left for another chat screen to replay.
+        assertNull(chatSeedRepository.take())
     }
 
     @Test
