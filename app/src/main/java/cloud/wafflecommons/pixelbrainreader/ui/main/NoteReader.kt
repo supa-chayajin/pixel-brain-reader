@@ -47,6 +47,7 @@ fun NoteReader(
         when (segment) {
             is NoteSegment.Markdown -> Box(tracked) { MarkwonContent(content = segment.text, onWikiLinkClick = onWikiLinkClick) }
             is NoteSegment.Table -> WideTable(segment, onWikiLinkClick, tracked.padding(vertical = 4.dp))
+            is NoteSegment.Mermaid -> MermaidCard(segment.source, tracked)
         }
     }
 }

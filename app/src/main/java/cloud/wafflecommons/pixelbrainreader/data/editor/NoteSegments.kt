@@ -10,12 +10,16 @@ sealed interface NoteSegment {
 
     /** A GFM table, its own view so a wide one can scroll sideways. */
     data class Table(val markdown: String, val columns: Int) : NoteSegment
+
+    /** A ```mermaid block: drawn by the bundled Mermaid, offline, on demand. */
+    data class Mermaid(val source: String) : NoteSegment
 }
 
 /**
  * Splits a note (frontmatter already stripped) for the reader of long notes: a new segment at each
- * `#`–`###` heading, so the outline can jump to it, and each table apart. Fenced code is never
- * split, and nothing inside it counts as a heading or a table. Pure, line by line.
+ * `#`–`###` heading, so the outline can jump to it, each table apart, and each closed ```mermaid
+ * block as a diagram. Other fenced code is never split, and nothing inside it counts as a heading
+ * or a table. Pure, line by line.
  */
 object NoteSegments {
 
@@ -42,7 +46,12 @@ object NoteSegments {
             if (fence != null) {
                 var end = i + 1
                 while (end < lines.size && !closes(lines[end], fence)) end++
-                for (k in i..minOf(end, lines.lastIndex)) buffer.append(lines[k]).append('\n')
+                if (fence.info.substringBefore(' ').equals("mermaid", ignoreCase = true) && end < lines.size) {
+                    flush()
+                    out += NoteSegment.Mermaid(lines.subList(i + 1, end).joinToString("\n"))
+                } else {
+                    for (k in i..minOf(end, lines.lastIndex)) buffer.append(lines[k]).append('\n')
+                }
                 i = end + 1
                 continue
             }

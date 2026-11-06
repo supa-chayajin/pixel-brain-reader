@@ -77,6 +77,17 @@ class NoteSegmentsTest {
     }
 
     @Test
+    fun `a closed mermaid fence becomes a diagram, other fences stay code`() {
+        val note = "Intro\n\n```mermaid\nflowchart LR\n  A --> B\n```\n\n```js\nconst a = 1\n```\n\n~~~Mermaid theme=dark\nsequenceDiagram\n~~~\n"
+        val s = NoteSegments.split(note)
+        assertEquals(NoteSegment.Mermaid("flowchart LR\n  A --> B"), s[1])
+        assertTrue((s[2] as NoteSegment.Markdown).text.contains("```js"))
+        assertEquals(NoteSegment.Mermaid("sequenceDiagram"), s[3])
+        // An unclosed mermaid fence stays text: nothing to draw yet.
+        assertTrue(NoteSegments.split("```mermaid\ngraph TD").single() is NoteSegment.Markdown)
+    }
+
+    @Test
     fun `an unclosed fence keeps the rest of the note in one piece`() {
         val s = NoteSegments.split("Before\n```\n## inside\n| a | b |\n|---|---|")
         assertEquals(1, s.size)

@@ -33,6 +33,11 @@ kit and the authorship timeline.
   gets an outline button (bottom right) that jumps to any `#`–`###` section; a table wider than
   the screen scrolls sideways instead of squeezing its columns; once you've scrolled far, a
   button brings you back to the top. Fenced code is never split or mistaken for a heading.
+- **Mermaid diagrams, offline.** A ` ```mermaid ` block shows as a card (the kind of diagram
+  and its first lines) with View diagram and Copy source. The diagram is drawn on the phone by
+  the bundled Mermaid 12.2.0 (MIT, 5.2 MB asset, pinned) in a viewer that loads that script and
+  nothing else: no network, every other request refused. If it can't draw, the source is still
+  one tap away.
 
 ## [12.3.0] — 2026-11-06
 
