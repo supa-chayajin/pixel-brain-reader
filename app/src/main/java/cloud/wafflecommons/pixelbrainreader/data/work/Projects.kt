@@ -4,15 +4,47 @@ import cloud.wafflecommons.pixelbrainreader.data.vault.LinkExtractor
 import cloud.wafflecommons.pixelbrainreader.data.vault.MirrorNotes
 import java.time.LocalDate
 
-/** One day of a project's auto-generated worklogs (every file of that date summed). */
+/**
+ * One day of a project's auto-generated worklogs (every file of that date summed). The AI-session
+ * details are null when the worklog doesn't record them (older worklogs): "not recorded", never 0.
+ */
 data class WorklogDay(
     val date: LocalDate,
     val commits: Int,
     val sessions: Int,
     val prompts: Int,
     val tokens: Long,
-    val subjects: List<String>
+    val subjects: List<String>,
+    val toolCalls: Int? = null,
+    /** Tool name → calls (the worklog's top tools); empty when it says "—". */
+    val tools: Map<String, Int>? = null,
+    val tokensIn: Long? = null,
+    val tokensOut: Long? = null,
+    val cacheWrite: Long? = null,
+    val cacheRead: Long? = null
 )
+
+/**
+ * The AI-pairing figures of a set of worklog days (C7), all measured: what a worklog didn't
+ * record stays null and reads "not recorded". No cost estimate, no score.
+ */
+data class PairingStats(
+    /** Distinct dates with a worklog. */
+    val days: Int,
+    /** Distinct dates with at least one AI session. */
+    val sessionDays: Int,
+    val commits: Int,
+    val sessions: Int,
+    val prompts: Int,
+    val toolCalls: Int?,
+    /** Most-used tools, most calls first; null when no worklog recorded them. */
+    val topTools: List<Pair<String, Int>>?,
+    /** Cache reads over all tokens, on the days that recorded the four token buckets. */
+    val cacheReadShare: Double?
+) {
+    val promptsPerSession: Double? get() = if (sessions > 0) prompts.toDouble() / sessions else null
+    val commitsPerSession: Double? get() = if (sessions > 0) commits.toDouble() / sessions else null
+}
 
 /** An open checkbox found in one of the project's notes; [section] is its `##` heading in the project TODO. */
 data class ProjectAction(
@@ -70,8 +102,11 @@ object ProjectFormat {
     const val WINDOW_DAYS = 14L
 
     private val worklogName = Regex("""\d{4}-\d{2}-\d{2}\.md""")
-    private val sessionsLine = Regex("""([\d,]+) session\(s\) · ([\d,]+) prompt\(s\)""")
+    private val sessionsLine = Regex("""([\d,]+) session\(s\) · ([\d,]+) prompt\(s\)(?: · ([\d,]+) tool call\(s\))?""")
     private val tokensLine = Regex("""([\d,]+) tokens total""")
+    private val tokenBuckets = Regex("""\(([\d,]+) in · ([\d,]+) out(?: · ([\d,]+) cache-write · ([\d,]+) cache-read)?\)""")
+    private val toolsLine = Regex("""^-\s*Tools:\s*(.*)$""")
+    private val toolCount = Regex("""^(.+?)\s*×\s*([\d,]+)$""")
 
     /** `20_Projects/<folder>` for a path inside a project, else null. */
     fun rootOf(path: String): String? {
@@ -90,30 +125,45 @@ object ProjectFormat {
 
     /**
      * One worklog file. Commits are the bullets under a `## 🧬 Commits` heading (a workspace
-     * roll-up has none, so per-app files are never counted twice); sessions, prompts and tokens
-     * come from the `## 🤖 AI sessions` lines (only in the roll-up in per-app mode).
+     * roll-up has none, so per-app files are never counted twice); sessions, prompts, tool calls,
+     * the `Tools:` breakdown and the token buckets come from the `## 🤖 AI sessions` lines (only in
+     * the roll-up in per-app mode). What an older worklog doesn't write stays null.
      */
     fun parseWorklog(date: LocalDate, content: String): WorklogDay {
         val subjects = mutableListOf<String>()
         var inCommits = false
+        var tools: Map<String, Int>? = null
         for (line in content.lineSequence()) {
             if (line.startsWith("## ")) {
                 inCommits = line.removePrefix("## ").trimStart().let { it.startsWith("🧬 Commits") || it.startsWith("Commits") }
                 continue
             }
             if (inCommits && line.startsWith("- ")) subjects += line.removePrefix("- ").trim()
+            if (tools == null) toolsLine.matchEntire(line.trim())?.let { tools = parseTools(it.groupValues[1]) }
         }
         val sessions = sessionsLine.find(content)
         val tokens = tokensLine.find(content)
+        val buckets = tokens?.let { tokenBuckets.find(content, it.range.last) }
         return WorklogDay(
             date = date,
             commits = subjects.size,
             sessions = sessions?.groupValues?.get(1)?.number()?.toInt() ?: 0,
             prompts = sessions?.groupValues?.get(2)?.number()?.toInt() ?: 0,
             tokens = tokens?.groupValues?.get(1)?.number() ?: 0L,
-            subjects = subjects
+            subjects = subjects,
+            toolCalls = sessions?.groupValues?.get(3)?.number()?.toInt(),
+            tools = tools,
+            tokensIn = buckets?.groupValues?.get(1)?.number(),
+            tokensOut = buckets?.groupValues?.get(2)?.number(),
+            cacheWrite = buckets?.groupValues?.get(3)?.number(),
+            cacheRead = buckets?.groupValues?.get(4)?.number()
         )
     }
+
+    /** `Bash×139, Edit×79` → {Bash=139, Edit=79}; "—" → empty (recorded: no tool used). */
+    private fun parseTools(list: String): Map<String, Int> = list.split(',')
+        .mapNotNull { toolCount.matchEntire(it.trim()) }
+        .associate { it.groupValues[1].trim() to (it.groupValues[2].number()?.toInt() ?: 0) }
 
     /** Sums the files of one date (a per-app project writes several). */
     fun mergeDays(days: List<WorklogDay>): List<WorklogDay> =
@@ -124,9 +174,36 @@ object ProjectFormat {
                 sessions = same.sumOf { it.sessions },
                 prompts = same.sumOf { it.prompts },
                 tokens = same.sumOf { it.tokens },
-                subjects = same.flatMap { it.subjects }
+                subjects = same.flatMap { it.subjects },
+                toolCalls = same.mapNotNull { it.toolCalls }.takeIf { it.isNotEmpty() }?.sum(),
+                tools = same.mapNotNull { it.tools }.takeIf { it.isNotEmpty() }?.let(::sumTools),
+                tokensIn = same.mapNotNull { it.tokensIn }.takeIf { it.isNotEmpty() }?.sum(),
+                tokensOut = same.mapNotNull { it.tokensOut }.takeIf { it.isNotEmpty() }?.sum(),
+                cacheWrite = same.mapNotNull { it.cacheWrite }.takeIf { it.isNotEmpty() }?.sum(),
+                cacheRead = same.mapNotNull { it.cacheRead }.takeIf { it.isNotEmpty() }?.sum()
             )
         }.sortedByDescending { it.date }
+
+    private fun sumTools(maps: List<Map<String, Int>>): Map<String, Int> =
+        maps.flatMap { it.entries }.groupBy({ it.key }, { it.value }).mapValues { (_, calls) -> calls.sum() }
+
+    /** The AI-pairing figures of [days] (one project's, or every visible project's for the roll-up). */
+    fun pairing(days: List<WorklogDay>, topTools: Int = 5): PairingStats {
+        val withBuckets = days.filter { it.tokensIn != null && it.tokensOut != null && it.cacheWrite != null && it.cacheRead != null }
+        val bucketTotal = withBuckets.sumOf { it.tokensIn!! + it.tokensOut!! + it.cacheWrite!! + it.cacheRead!! }
+        val tools = days.mapNotNull { it.tools }.takeIf { it.isNotEmpty() }?.let(::sumTools)
+        return PairingStats(
+            days = days.map { it.date }.distinct().size,
+            sessionDays = days.filter { it.sessions > 0 }.map { it.date }.distinct().size,
+            commits = days.sumOf { it.commits },
+            sessions = days.sumOf { it.sessions },
+            prompts = days.sumOf { it.prompts },
+            toolCalls = days.mapNotNull { it.toolCalls }.takeIf { it.isNotEmpty() }?.sum(),
+            topTools = tools?.entries?.sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
+                ?.take(topTools)?.map { it.key to it.value },
+            cacheReadShare = if (bucketTotal > 0) withBuckets.sumOf { it.cacheRead!! }.toDouble() / bucketTotal else null
+        )
+    }
 
     fun isKeyNote(path: String): Boolean {
         val name = path.substringAfterLast('/').lowercase()

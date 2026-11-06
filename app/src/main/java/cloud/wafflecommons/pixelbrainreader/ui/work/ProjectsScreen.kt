@@ -33,7 +33,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
 import cloud.wafflecommons.pixelbrainreader.data.modes.Visibility
+import cloud.wafflecommons.pixelbrainreader.data.work.PairingStats
 import cloud.wafflecommons.pixelbrainreader.data.work.ProjectAction
+import cloud.wafflecommons.pixelbrainreader.data.work.ProjectFormat
 import cloud.wafflecommons.pixelbrainreader.data.work.ProjectRepository
 import cloud.wafflecommons.pixelbrainreader.data.work.ProjectSummary
 import cloud.wafflecommons.pixelbrainreader.ui.components.FormScaffold
@@ -48,6 +50,7 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import javax.inject.Inject
+import kotlin.math.roundToInt
 
 @HiltViewModel
 class ProjectsViewModel @Inject constructor(
@@ -160,23 +163,38 @@ fun ProjectsScreen(
                     if (visibility.hideWork) " Work projects are hidden outside ${visibility.workLabel} mode." else "",
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            else -> list.forEach { p ->
+            else -> {
+                // C7: the shipping cadence across the visible projects, measured only.
+                val roll = androidx.compose.runtime.remember(list) { ProjectFormat.pairing(list.flatMap { it.days }) }
+                val active = list.count { it.commits > 0 || it.sessions > 0 }
                 SectionCard(
-                    title = p.title,
-                    icon = Icons.Rounded.RocketLaunch,
-                    subtitle = projectLine(p),
-                    modifier = Modifier.clickable { onOpenProject(p.root) }
+                    title = "Last $ACTIVITY_DAYS days",
+                    icon = Icons.Rounded.Insights,
+                    subtitle = "${plural(active, "active project")} · ${plural(roll.commits, "commit")} · ${plural(roll.sessions, "AI session")}"
                 ) {
-                    p.nextAction?.let {
-                        Text(
-                            "Next: ${it.text}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
+                    PairingLines(roll)
                 }
+                list.forEach { p -> ProjectCard(p, onOpenProject) }
             }
+        }
+    }
+}
+
+@Composable
+private fun ProjectCard(p: ProjectSummary, onOpenProject: (root: String) -> Unit) {
+    SectionCard(
+        title = p.title,
+        icon = Icons.Rounded.RocketLaunch,
+        subtitle = projectLine(p),
+        modifier = Modifier.clickable { onOpenProject(p.root) }
+    ) {
+        p.nextAction?.let {
+            Text(
+                "Next: ${it.text}",
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
@@ -220,6 +238,8 @@ fun ProjectScreen(
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
+                HorizontalDivider(Modifier.padding(vertical = 6.dp))
+                PairingLines(ProjectFormat.pairing(p.days))
             }
         }
         p.leftOff?.takeIf { it.subjects.isNotEmpty() }?.let { day ->
@@ -373,6 +393,40 @@ private fun ClaudeQueueCard(queue: List<ProjectAction>, onOpenTodo: () -> Unit) 
         }
     }
 }
+
+/**
+ * The AI-pairing figures (C7): what the worklogs measured, "not recorded" where an older worklog
+ * didn't write it. No cost estimate, no score.
+ */
+@Composable
+private fun PairingLines(stats: PairingStats) {
+    if (stats.sessions == 0) {
+        Text("No AI session in this window.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        return
+    }
+    PairingRow("AI sessions", "${stats.sessions} on ${plural(stats.sessionDays, "day")}")
+    PairingRow("Prompts per session", stats.promptsPerSession?.let(::oneDecimal) ?: NOT_RECORDED)
+    PairingRow("Commits per session", stats.commitsPerSession?.let(::oneDecimal) ?: NOT_RECORDED)
+    PairingRow("Tool calls", stats.toolCalls?.toString() ?: NOT_RECORDED)
+    PairingRow("Cache reads", stats.cacheReadShare?.let { "${(it * 100).roundToInt()}% of tokens" } ?: NOT_RECORDED)
+    PairingRow(
+        "Top tools",
+        stats.topTools?.let { tools -> tools.joinToString(" · ") { (name, calls) -> "$name $calls" }.ifEmpty { "none" } } ?: NOT_RECORDED
+    )
+}
+
+@Composable
+private fun PairingRow(label: String, value: String) {
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(label, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+        Text(value, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+private const val NOT_RECORDED = "not recorded"
+
+/** "5.3": one decimal under ten, whole numbers above; the UI is English, so always a dot. */
+private fun oneDecimal(x: Double): String = if (x >= 10) x.roundToInt().toString() else ((x * 10).roundToInt() / 10.0).toString()
 
 @Composable
 private fun NoteRow(title: String, detail: String?, onClick: () -> Unit) {

@@ -42,6 +42,12 @@ kit and the authorship timeline.
   with the decision, its role, who decided, who asked and its reference, written next to the
   log in `Décisions/` (encrypted when the log is) and never over an existing note. The entry
   links to it (`[ref:: … · [[ADR …]]]`), and the note opens so you can finish it.
+- **Your shipping cadence and AI pairing at a glance.** The Projects screen opens on the last
+  14 days across your visible projects (active projects, commits, AI sessions), and each project
+  page shows the same figures for itself: sessions and the days they ran on, prompts and
+  commits per session, tool calls, the most-used tools and the share of tokens read from the
+  cache. All measured from the desktop worklogs, "not recorded" where an older worklog didn't
+  write it; no cost estimate, no score.
 
 ### Fixed
 

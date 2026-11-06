@@ -73,6 +73,79 @@ class ProjectsTest {
         assertEquals(202_877_309L, day.tokens)
     }
 
+    private val currentWorklog = """
+        # 🛰️ Demo Worklog — 2026-11-06
+
+        ## 🧬 Commits
+
+        - feat: one
+        - feat: two
+        - fix: three
+
+        ## 🤖 AI sessions
+
+        - 3 session(s) · 300 prompt(s) · 259 tool call(s)
+        - Tools: Bash×139, Edit×79, Write×13, Read×13
+        - 87,235,819 tokens total (464 in · 290,432 out · 1,311,497 cache-write · 85,633,426 cache-read)
+    """.trimIndent()
+
+    @Test
+    fun `a current worklog gives tool calls, the tools and the four token buckets, an older one says not recorded`() {
+        val day = ProjectFormat.parseWorklog(LocalDate.of(2026, 11, 6), currentWorklog)
+        assertEquals(259, day.toolCalls)
+        assertEquals(mapOf("Bash" to 139, "Edit" to 79, "Write" to 13, "Read" to 13), day.tools)
+        assertEquals(464L, day.tokensIn)
+        assertEquals(290_432L, day.tokensOut)
+        assertEquals(1_311_497L, day.cacheWrite)
+        assertEquals(85_633_426L, day.cacheRead)
+
+        // The older single worklog has tool calls and the tools, but only two token buckets.
+        val older = ProjectFormat.parseWorklog(today, singleWorklog)
+        assertEquals(718, older.toolCalls)
+        assertEquals(mapOf("Bash" to 414), older.tools)
+        assertEquals(1_120L, older.tokensIn)
+        assertNull(older.cacheRead)
+
+        // No tools line, no tool calls: not recorded (null), never 0.
+        val oldest = ProjectFormat.parseWorklog(today, "## 🤖 AI sessions\n\n- 1 session(s) · 10 prompt(s)\n- 1,000 tokens total\n")
+        assertNull(oldest.toolCalls)
+        assertNull(oldest.tools)
+        assertNull(oldest.tokensIn)
+
+        // "Tools: —" is recorded: no tool used.
+        val idle = ProjectFormat.parseWorklog(today, "- 0 session(s) · 0 prompt(s) · 0 tool call(s)\n- Tools: —\n- 0 tokens total (0 in · 0 out · 0 cache-write · 0 cache-read)\n")
+        assertEquals(emptyMap<String, Int>(), idle.tools)
+        assertEquals(0, idle.toolCalls)
+    }
+
+    @Test
+    fun `the pairing figures are measured over the window, and say so when a worklog didn't record them`() {
+        val days = ProjectFormat.mergeDays(
+            listOf(
+                ProjectFormat.parseWorklog(LocalDate.of(2026, 11, 6), currentWorklog),
+                ProjectFormat.parseWorklog(LocalDate.of(2026, 11, 4), singleWorklog),
+                ProjectFormat.parseWorklog(LocalDate.of(2026, 11, 3), perAppFile)
+            )
+        )
+        val stats = ProjectFormat.pairing(days)
+        assertEquals(3, stats.days)
+        assertEquals(2, stats.sessionDays)
+        assertEquals(6, stats.commits)
+        assertEquals(5, stats.sessions)
+        assertEquals(1_059.0 / 5, stats.promptsPerSession!!, 1e-9)
+        assertEquals(6.0 / 5, stats.commitsPerSession!!, 1e-9)
+        assertEquals(259 + 718, stats.toolCalls)
+        assertEquals(listOf("Bash" to 553, "Edit" to 79, "Read" to 13, "Write" to 13), stats.topTools!!.take(4))
+        // Only the day with the four buckets counts for the cache share.
+        assertEquals(85_633_426.0 / 87_235_819.0, stats.cacheReadShare!!, 1e-9)
+
+        val unrecorded = ProjectFormat.pairing(listOf(ProjectFormat.parseWorklog(today, "- 1 session(s) · 10 prompt(s)\n")))
+        assertNull(unrecorded.toolCalls)
+        assertNull(unrecorded.topTools)
+        assertNull(unrecorded.cacheReadShare)
+        assertNull(ProjectFormat.pairing(emptyList()).promptsPerSession)
+    }
+
     @Test
     fun `per-app files and the roll-up are summed without counting twice`() {
         val d = LocalDate.of(2026, 11, 3)
