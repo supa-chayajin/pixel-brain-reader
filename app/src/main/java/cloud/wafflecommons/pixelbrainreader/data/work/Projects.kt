@@ -46,7 +46,9 @@ data class ProjectSummary(
      * The project's `TODO.md`, when it has one: the live list kept in the vault, or the desktop's
      * copy of a repository's punch list (a mirror: linked, never parsed).
      */
-    val todoNote: WorkNote?
+    val todoNote: WorkNote?,
+    /** The README's tags: what objectives sharing one of them are linked by. */
+    val tags: List<String> = emptyList()
 ) {
     val name: String get() = root.substringAfterLast('/')
     val commits: Int get() = days.sumOf { it.commits }
@@ -198,7 +200,8 @@ object ProjectFormat {
                 .sortedByDescending { it.updated }
                 .take(6),
             linkedFrom = linkedFrom,
-            todoNote = todo
+            todoNote = todo,
+            tags = readme?.tags.orEmpty()
         )
     }
 

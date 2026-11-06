@@ -11,6 +11,16 @@ Still planned (`documentation/plans/2026-10-18-v11-work-and-dev-toolkit.md`): th
 dashboard, "explain this error", decision records, people & 1:1s, security watch, the workshop
 kit and the authorship timeline.
 
+### Added
+
+- **Objectives show what they're linked with.** Open an objective's card to see its linked
+  projects with their 14-day commit count: a link either way between the objective and one of
+  the project's notes, or a tag that only that project's README carries. Below them are the
+  notes outside the projects that link to it or that it links to (meetings, RFCs, finished
+  board notes; journal entries aside). A tap opens the project or the note. A linked project's
+  commits now count as progress, so an objective no longer reads "no progress for 3 weeks"
+  while the work happens in its project.
+
 ## [12.2.1] — 2026-11-06
 
 The phone side of the desktop's Claude sessions: your TODO lines and Claude's queue on the

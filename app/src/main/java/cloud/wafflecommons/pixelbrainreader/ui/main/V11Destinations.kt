@@ -125,7 +125,11 @@ fun NavGraphBuilder.v11Destinations(navController: NavHostController, openNote: 
         NextActionsScreen(onBack = { navController.popBackStack() }, onOpenNote = openNote)
     }
     composable(V11Routes.OBJECTIVES) {
-        ObjectivesScreen(onBack = { navController.popBackStack() }, onOpenNote = openNote)
+        ObjectivesScreen(
+            onBack = { navController.popBackStack() },
+            onOpenNote = openNote,
+            onOpenProject = { navController.navigate(V11Routes.project(it)) }
+        )
     }
     composable(V11Routes.EVIDENCE) {
         EvidenceScreen(onBack = { navController.popBackStack() }, onOpenNote = openNote)

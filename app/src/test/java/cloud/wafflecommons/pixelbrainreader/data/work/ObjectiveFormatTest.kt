@@ -1,5 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.data.work
 
+import cloud.wafflecommons.pixelbrainreader.data.vault.LinkExtractor
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -73,6 +74,46 @@ class ObjectiveFormatTest {
         assertEquals(listOf("Audit fait"), objective.material.map { it.text })
         assertFalse(objective.stale(LocalDate.of(2026, 10, 20)))
         assertTrue(objective.stale(LocalDate.of(2026, 12, 1)))
+    }
+
+    @Test
+    fun `linked projects and notes resolve both ways, and a linked project's work keeps the objective alive`() {
+        val today = LocalDate.of(2026, 11, 6)
+        val lead = WorkNote.from(
+            "30_Areas/Objectifs/Lead.md",
+            "---\ntitle: \"Lead\"\ndate_updated: '2026-09-01'\ntags:\n  - objectif\n  - plateforme\n  - meta\n---\n# Lead\n\nVoir [[RFC-007]].\n"
+        )
+        val meeting = WorkNote.from("30_Areas/Réunions/2026-10-01 Point.md", "---\ntitle: \"Point\"\ndate_updated: '2026-10-01'\n---\nPour [[Lead]].\n")
+        val daily = WorkNote.from("10_Journal/2026-11-05.md", "---\ndate: 2026-11-05\n---\nAvancé sur [[Lead]].\n")
+        val idea = WorkNote.from("20_Projects/23_Other/Notes/Idea.md", "---\ntitle: \"Idea\"\n---\nServes [[Lead]].\n")
+        val rfc = WorkNote.from("20_Projects/21_Demo/RFCs/RFC-007.md", "---\ntitle: \"RFC 7\"\n---\n# RFC 7\n")
+        fun readme(tags: String) = "---\ntitle: \"Project\"\ntags: [$tags]\n---\n# Project\n"
+        val worklog = "# Worklog\n\n## 🧬 Commits\n\n- feat: one\n- fix: two\n"
+        val demo = ProjectFormat.summarize(
+            "20_Projects/21_Demo",
+            mapOf("20_Projects/21_Demo/README.md" to readme("meta, demo"), rfc.path to rfc.content, "20_Projects/21_Demo/Worklog/2026-11-05.md" to worklog),
+            emptyList(), today
+        )
+        val other = ProjectFormat.summarize("20_Projects/23_Other", mapOf("20_Projects/23_Other/README.md" to readme("meta"), idea.path to idea.content), emptyList(), today)
+        val tagged = ProjectFormat.summarize("20_Projects/24_Tagged", mapOf("20_Projects/24_Tagged/README.md" to readme("meta, plateforme")), emptyList(), today)
+        val unrelated = ProjectFormat.summarize("20_Projects/25_Unrelated", mapOf("20_Projects/25_Unrelated/README.md" to readme("meta")), emptyList(), today)
+        val links = listOf(
+            lead.path to "rfc-007", // the objective links into a project
+            idea.path to "lead", // a project note links to the objective
+            meeting.path to "lead", // a note outside the projects links to it
+            daily.path to "lead" // a journal entry: not a linked note
+        )
+        val byKey = listOf(lead, meeting, daily, idea, rfc).groupBy { LinkExtractor.keyOfPath(it.path) }
+
+        val plain = ObjectiveFormat.objective(lead, emptyList())
+        val linked = ObjectiveFormat.withLinks(plain, links, byKey, listOf(demo, other, tagged, unrelated))
+
+        // `plateforme` is on one README only; `meta` is on all of them and links nothing.
+        assertEquals(listOf("20_Projects/21_Demo", "20_Projects/23_Other", "20_Projects/24_Tagged"), linked.linkedProjects.map { it.root })
+        assertEquals(listOf(meeting.path), linked.linkedNotes.map { it.path })
+        // The note last moved on 1 September, but the linked project committed yesterday.
+        assertTrue(plain.stale(today))
+        assertFalse(linked.stale(today))
     }
 
     @Test

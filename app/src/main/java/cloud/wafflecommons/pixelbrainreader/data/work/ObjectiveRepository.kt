@@ -6,9 +6,11 @@ import androidx.work.PeriodicWorkRequest
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.FileContentDao
+import cloud.wafflecommons.pixelbrainreader.data.local.dao.LinkDao
 import cloud.wafflecommons.pixelbrainreader.data.repository.FileRepository
 import cloud.wafflecommons.pixelbrainreader.data.sync.VaultPushScheduler
 import cloud.wafflecommons.pixelbrainreader.data.vault.FrontmatterLines
+import cloud.wafflecommons.pixelbrainreader.data.vault.LinkExtractor
 import cloud.wafflecommons.pixelbrainreader.data.vault.VaultSchema
 import cloud.wafflecommons.pixelbrainreader.data.workers.ObjectiveSlotWorker
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -34,6 +36,8 @@ import javax.inject.Singleton
 class ObjectiveRepository @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val fileContentDao: FileContentDao,
+    private val linkDao: LinkDao,
+    private val projectRepository: ProjectRepository,
     private val missionLogRepository: MissionLogRepository,
     private val fileRepository: FileRepository,
     private val pushScheduler: VaultPushScheduler
@@ -51,12 +55,16 @@ class ObjectiveRepository @Inject constructor(
         (readSettings() ?: ObjectiveSettings()).also { _settings.value = it }
     }
 
-    /** Every objective in the vault, with the last year of the log as material, soonest milestone first. */
+    /**
+     * Every objective in the vault, with the last year of the log as material and the projects and
+     * notes linked with it (links index, both ways), soonest milestone first.
+     */
     suspend fun objectives(today: LocalDate = LocalDate.now()): List<Objective> = withContext(Dispatchers.IO) {
         val notes = fileContentDao.contentsUnder("")
             .filter { it.path.endsWith(".md") && !VaultSchema.isDailyNote(it.path) }
             .map { WorkNote.from(it.path, it.content) }
-            .filter(ObjectiveFormat::isObjective)
+        val objectiveNotes = notes.filter(ObjectiveFormat::isObjective)
+        if (objectiveNotes.isEmpty()) return@withContext emptyList()
         val log = try {
             missionLogRepository.entriesBetween(today.minusYears(1), today)
         } catch (e: CancellationException) {
@@ -64,7 +72,16 @@ class ObjectiveRepository @Inject constructor(
         } catch (e: Exception) {
             emptyList()
         }
-        notes.map { ObjectiveFormat.objective(it, log) }
+        val links = linkDao.allNoteLinks().map { it.source to it.targetKey }
+        val projects = try {
+            projectRepository.projects(today)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            emptyList()
+        }
+        val byKey = notes.groupBy { LinkExtractor.keyOfPath(it.path) }
+        objectiveNotes.map { ObjectiveFormat.withLinks(ObjectiveFormat.objective(it, log), links, byKey, projects) }
             .sortedWith(compareBy<Objective> { it.nextDue?.due ?: LocalDate.MAX }.thenBy { it.note.title })
     }
 

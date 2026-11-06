@@ -1,5 +1,7 @@
 package cloud.wafflecommons.pixelbrainreader.data.work
 
+import cloud.wafflecommons.pixelbrainreader.data.vault.LinkExtractor
+import cloud.wafflecommons.pixelbrainreader.data.vault.VaultSchema
 import kotlinx.serialization.Serializable
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -11,16 +13,28 @@ import java.time.temporal.TemporalAdjusters
 data class Milestone(val text: String, val done: Boolean, val due: LocalDate?, val sourceLine: String)
 
 /** An objective note (tagged `#objectif`), its milestones and the log entries that serve it as material. */
-data class Objective(val note: WorkNote, val milestones: List<Milestone>, val material: List<LogEntry>) {
+data class Objective(
+    val note: WorkNote,
+    val milestones: List<Milestone>,
+    val material: List<LogEntry>,
+    /** Projects linked with the objective: a link either way with one of their notes, or a shared tag. */
+    val linkedProjects: List<ProjectSummary> = emptyList(),
+    /** Notes outside the projects that link to the objective or that it links to (daily notes aside). */
+    val linkedNotes: List<WorkNote> = emptyList()
+) {
     val done: Int get() = milestones.count { it.done }
     val progress: Float get() = if (milestones.isEmpty()) 0f else done.toFloat() / milestones.size
     val nextDue: Milestone? get() = milestones.filter { !it.done && it.due != null }.minByOrNull { it.due!! }
 
-    /** Nothing moved for [ObjectiveFormat.STALE_DAYS]: neither the note nor a log entry tagged for it. */
+    /**
+     * Nothing moved for [ObjectiveFormat.STALE_DAYS]: neither the note, nor a log entry tagged for
+     * it, nor a linked project (its last worklog or note update).
+     */
     fun stale(today: LocalDate): Boolean {
         val lastNote = note.updated ?: note.created
         val lastLog = material.maxOfOrNull { it.at.toLocalDate() }
-        val last = listOfNotNull(lastNote, lastLog).maxOrNull() ?: return true
+        val lastProject = linkedProjects.mapNotNull { it.lastActivity }.filter { !it.isAfter(today) }.maxOrNull()
+        val last = listOfNotNull(lastNote, lastLog, lastProject).maxOrNull() ?: return true
         return last.isBefore(today.minusDays(ObjectiveFormat.STALE_DAYS))
     }
 }
@@ -86,6 +100,40 @@ object ObjectiveFormat {
     fun objective(note: WorkNote, log: List<LogEntry>): Objective {
         val tags = materialTags(note)
         return Objective(note, milestones(note.content), log.filter { entry -> entry.tags.any { it.lowercase() in tags } })
+    }
+
+    /**
+     * [objective] with what it is linked with, from the links index ([links]: source path → target
+     * key) read both ways: the notes it links to and the notes linking to it. A project counts when
+     * one of its notes is such a note, or when its README carries one of the material tags that no
+     * other project's README carries (a shared one, like `meta`, says nothing about the project).
+     * Any other note counts unless it is a daily note (a journal entry, not a deliverable).
+     * [notesByKey] resolves a link key to the vault's notes; [projects] are the visible ones.
+     */
+    fun withLinks(
+        objective: Objective,
+        links: List<Pair<String, String>>,
+        notesByKey: Map<String, List<WorkNote>>,
+        projects: List<ProjectSummary>
+    ): Objective {
+        val path = objective.note.path
+        val key = LinkExtractor.keyOfPath(path)
+        val outgoing = links.filter { it.first == path }.flatMap { (_, target) -> notesByKey[target].orEmpty() }.map { it.path }
+        val incoming = links.filter { it.second == key && it.first != path }.map { it.first }
+        val connected = (outgoing + incoming).toSet() - path
+        val tags = materialTags(objective.note)
+        val readmeTags = projects.associate { p -> p.root to p.tags.map { it.lowercase().removePrefix("#") }.toSet() }
+        val tagUses = readmeTags.values.flatten().groupingBy { it }.eachCount()
+        val linkedProjects = projects.filter { p ->
+            connected.any { ProjectFormat.rootOf(it) == p.root } ||
+                readmeTags[p.root].orEmpty().any { it in tags && tagUses[it] == 1 }
+        }
+        val byPath = notesByKey.values.flatten().associateBy { it.path }
+        val linkedNotes = connected
+            .filter { ProjectFormat.rootOf(it) == null && !VaultSchema.isDailyNote(it) }
+            .mapNotNull { byPath[it] }
+            .sortedWith(compareByDescending<WorkNote> { it.updated ?: it.created }.thenBy { it.title })
+        return objective.copy(linkedProjects = linkedProjects, linkedNotes = linkedNotes)
     }
 
     /** The next start of the weekly slot strictly after [now]. */

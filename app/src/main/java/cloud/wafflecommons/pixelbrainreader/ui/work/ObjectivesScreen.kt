@@ -30,6 +30,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -74,9 +75,13 @@ class ObjectivesViewModel @Inject constructor(
     val settings: StateFlow<ObjectiveSettings> = repository.settings
     val visibility: StateFlow<Visibility> = modesRepository.visibility
 
-    /** Visible objectives; null while loading. */
+    /** Visible objectives, with only their visible linked notes; null while loading. */
     val objectives: StateFlow<List<Objective>?> = combine(repository.changes, modesRepository.visibility) { _, v -> v }
-        .mapLatest { v -> repository.objectives().filter { v.isVisible(it.note.path) } }
+        .mapLatest { v ->
+            repository.objectives()
+                .filter { v.isVisible(it.note.path) }
+                .map { o -> o.copy(linkedNotes = o.linkedNotes.filter { v.isVisible(it.path) }) }
+        }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     private val _messages = Channel<String>(Channel.BUFFERED)
@@ -105,7 +110,12 @@ class ObjectivesViewModel @Inject constructor(
 
 /** Objectives (#5): notes tagged #objectif, their milestones, the log as material, a weekly slot. */
 @Composable
-fun ObjectivesScreen(onBack: () -> Unit, onOpenNote: (String) -> Unit, viewModel: ObjectivesViewModel = hiltViewModel()) {
+fun ObjectivesScreen(
+    onBack: () -> Unit,
+    onOpenNote: (String) -> Unit,
+    onOpenProject: (String) -> Unit,
+    viewModel: ObjectivesViewModel = hiltViewModel()
+) {
     val objectives by viewModel.objectives.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val visibility by viewModel.visibility.collectAsStateWithLifecycle()
@@ -124,7 +134,14 @@ fun ObjectivesScreen(onBack: () -> Unit, onOpenNote: (String) -> Unit, viewModel
                     "and give it the tags your log entries use: they become its material."
             )
             else -> list.forEach { objective ->
-                ObjectiveCard(objective, today, onToggle = { m -> viewModel.toggle(objective, m) }, onOpen = { onOpenNote(objective.note.path) })
+                ObjectiveCard(
+                    objective,
+                    today,
+                    onToggle = { m -> viewModel.toggle(objective, m) },
+                    onOpen = { onOpenNote(objective.note.path) },
+                    onOpenNote = onOpenNote,
+                    onOpenProject = onOpenProject
+                )
             }
         }
     }
@@ -164,7 +181,14 @@ private fun SlotCard(settings: ObjectiveSettings, workLabel: String, update: ((O
 }
 
 @Composable
-private fun ObjectiveCard(objective: Objective, today: LocalDate, onToggle: (Milestone) -> Unit, onOpen: () -> Unit) {
+private fun ObjectiveCard(
+    objective: Objective,
+    today: LocalDate,
+    onToggle: (Milestone) -> Unit,
+    onOpen: () -> Unit,
+    onOpenNote: (String) -> Unit,
+    onOpenProject: (String) -> Unit
+) {
     var expanded by rememberSaveable(objective.note.path) { mutableStateOf(false) }
     val stale = objective.stale(today)
     SectionCard(
@@ -209,6 +233,52 @@ private fun ObjectiveCard(objective: Objective, today: LocalDate, onToggle: (Mil
                     )
                 }
             }
+            if (objective.linkedProjects.isNotEmpty()) {
+                Text("Linked projects", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
+                objective.linkedProjects.forEach { p ->
+                    LinkedRow(
+                        title = p.title,
+                        detail = if (p.commits > 0) "${p.commits} commit${if (p.commits == 1) "" else "s"} in 14 days" else "no commit in 14 days",
+                        onClick = { onOpenProject(p.root) }
+                    )
+                }
+            }
+            if (objective.linkedNotes.isNotEmpty()) {
+                Text("Linked notes", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
+                objective.linkedNotes.take(LINKED_NOTES_SHOWN).forEach { n ->
+                    LinkedRow(
+                        title = n.title,
+                        detail = listOfNotNull(n.column?.label, n.updated?.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM))).joinToString(" · ").ifEmpty { null },
+                        onClick = { onOpenNote(n.path) }
+                    )
+                }
+                if (objective.linkedNotes.size > LINKED_NOTES_SHOWN) {
+                    Text(
+                        "+ ${objective.linkedNotes.size - LINKED_NOTES_SHOWN} more",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         }
     }
 }
+
+@Composable
+private fun LinkedRow(title: String, detail: String?, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(title, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        detail?.let {
+            Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+        }
+    }
+}
+
+private const val LINKED_NOTES_SHOWN = 8
