@@ -11,6 +11,11 @@ Still planned (`documentation/plans/2026-10-18-v11-work-and-dev-toolkit.md`): th
 dashboard, "explain this error", decision records, people & 1:1s, security watch, the workshop
 kit and the authorship timeline.
 
+## [12.3.0] — 2026-11-06
+
+Closing the loop between projects, objectives, evidence and load: what you link, log and ship
+now shows up in the places that report on it.
+
 ### Added
 
 - **Objectives show what they're linked with.** Open an objective's card to see its linked
