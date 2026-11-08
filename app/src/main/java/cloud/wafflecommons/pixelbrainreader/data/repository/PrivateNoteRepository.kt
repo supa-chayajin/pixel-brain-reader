@@ -1,5 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.data.repository
 
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import android.content.Context
 import android.util.Log
 import cloud.wafflecommons.pixelbrainreader.data.local.security.CryptoManager
@@ -107,6 +108,7 @@ class PrivateNoteRepository @Inject constructor(
     }
 
     suspend fun deleteNote(file: File) = withContext(Dispatchers.IO) {
+        VaultWriteGate.check()
         if (file.exists() && file.delete()) pushScheduler.requestPush()
     }
 
@@ -116,6 +118,7 @@ class PrivateNoteRepository @Inject constructor(
     }
 
     private fun writeAtomically(target: File, bytes: ByteArray) {
+        VaultWriteGate.check()
         val temp = File(stagingDir, "${target.name}.${System.nanoTime()}.tmp")
         try {
             FileOutputStream(temp).use { out ->

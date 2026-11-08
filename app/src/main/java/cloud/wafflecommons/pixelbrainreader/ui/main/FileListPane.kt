@@ -33,6 +33,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.ui.theme.NavBarClearance
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -240,8 +241,8 @@ fun FileListPane(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    // Header: Analyze Folder
-                    item(key = "analyze_btn") {
+                    // Header: Analyze Folder (no AI on a read-only device)
+                    if (!VaultWriteGate.readOnly) item(key = "analyze_btn") {
                         FilledTonalButton(
                             onClick = {
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -282,6 +283,9 @@ fun FileListPane(
                         SwipeToDismissBox(
                             state = dismissState,
                             modifier = Modifier.animateItem(),
+                            // A read-only device renames and deletes nothing.
+                            enableDismissFromStartToEnd = !VaultWriteGate.readOnly,
+                            enableDismissFromEndToStart = !VaultWriteGate.readOnly,
                             backgroundContent = {
                                 // Key the affordance off the LIVE swipe direction, not targetValue.
                                 // targetValue stays Settled until the (deliberately deep) trigger

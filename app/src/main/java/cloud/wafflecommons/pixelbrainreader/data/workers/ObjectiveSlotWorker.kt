@@ -1,5 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.data.workers
 
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import android.content.Context
 import android.util.Log
 import androidx.hilt.work.HiltWorker
@@ -26,6 +27,7 @@ class ObjectiveSlotWorker @AssistedInject constructor(
 ) : CoroutineWorker(appContext, workerParams) {
 
     override suspend fun doWork(): Result {
+        if (VaultWriteGate.readOnly) return Result.success() // a read-only device runs no writer
         try {
             if (!modesRepository.currentVisibility().muteWorkNotifications) {
                 val today = LocalDate.now()

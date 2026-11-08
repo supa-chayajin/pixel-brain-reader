@@ -35,6 +35,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.ai.ChatSeed
 import cloud.wafflecommons.pixelbrainreader.data.ai.ChatSeedRepository
 import cloud.wafflecommons.pixelbrainreader.data.modes.ContextMode
@@ -232,7 +233,9 @@ fun EvidenceScreen(
                 onClick = { viewModel.write(withSummary, onOpenNote) }
             ) { Text("Write the report") }
             figures?.takeIf { !(work && visibility.hideWork) }?.let { f ->
-                TextButton(onClick = { viewModel.coach(f); onOpenChat() }) { Text("Coach on this period") }
+                if (!VaultWriteGate.readOnly) { // no AI on a read-only device
+                    TextButton(onClick = { viewModel.coach(f); onOpenChat() }) { Text("Coach on this period") }
+                }
             }
             if (working) CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
         }

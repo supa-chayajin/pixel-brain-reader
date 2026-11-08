@@ -1,5 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.data.utils
 
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
@@ -58,6 +59,8 @@ class SafeFileProvider @Inject constructor(
      * one (the fsync matters: without it the rename can land before the data does).
      */
     fun atomicWrite(path: String, bytes: ByteArray) {
+        // A read-only device never writes the vault (VaultWriteGate).
+        VaultWriteGate.check()
         val targetFile = getSafeFile(path)
         targetFile.parentFile?.mkdirs()
         // One temp file per write: concurrent saves of the same note (typing autosave + pause flush)

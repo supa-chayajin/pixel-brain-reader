@@ -152,3 +152,20 @@ by side. Forms, lists, Chat and the reader keep a readable width (`ui/utils/Adap
 *Why:* on a tablet in landscape (1280 × 800 dp) every screen was one column stretched across the
 width, and the bottom bar took height from the content. The owner chose each of these layouts on
 2026-11-08; it ends "a bottom bar at every size", on wide windows only.
+
+## 18. A read-only device never writes
+
+A device logged in as **read-only** (the login screen's switch) never changes the vault, enforced
+in layers that each stop a write alone: a read-only GitHub token; the role chosen only at login,
+with a fresh copy whenever the role or the repository changes; git refusing every write and
+pulling fast-forward only (`JGitProvider`); one gate at the top of every file writer
+(`VaultWriteGate`, kept honest by `VaultWriteGuardTest`); no background writer, worker, widget
+action or tile; the AI off; and a UI that offers nothing that writes. A tripwire checks the copy
+at every start and after every pull and stops the sync until it is reset to GitHub.
+
+*Why:* the app assumes one writer — today's board is last-burn-wins, Health Connect rewrites
+today's health from each device, shared state files conflict, and the confidentiality deny-list
+lives on one device. A second device that writes loses data; one that only reads is safe. The
+owner asked for it on 2026-11-08 to read the real vault on a tablet. Writes from a second
+device (health, habits, chores, mood) are a separate plan
+(`documentation/plans/2026-11-08-read-only-device.md`, "Phase 2"), never a quiet exception.

@@ -1,5 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.data.repository
 
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import android.content.Context
 import cloud.wafflecommons.pixelbrainreader.data.remote.JGitProvider
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -22,6 +23,7 @@ class AssetRepository @Inject constructor(
         get() = File(context.filesDir, "vault")
 
     suspend fun saveAsset(path: String, data: ByteArray) = withContext(Dispatchers.IO) {
+        VaultWriteGate.check()
         val file = File(rootDir, path)
         file.parentFile?.mkdirs()
         file.writeBytes(data)
@@ -37,6 +39,7 @@ class AssetRepository @Inject constructor(
      */
     suspend fun saveDropped(notePath: String, mime: String, originalName: String?, open: () -> java.io.InputStream?): String? =
         withContext(Dispatchers.IO) {
+            VaultWriteGate.check()
             val setting = cloud.wafflecommons.pixelbrainreader.data.vault.Attachments.settingOf(
                 File(rootDir, ".obsidian/app.json").takeIf { it.exists() }?.readText()
             )

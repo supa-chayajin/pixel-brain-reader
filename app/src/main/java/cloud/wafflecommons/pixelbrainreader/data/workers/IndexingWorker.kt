@@ -1,5 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.data.workers
 
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import android.content.Context
 import android.util.Log
 import androidx.hilt.work.HiltWorker
@@ -47,6 +48,7 @@ class IndexingWorker @AssistedInject constructor(
 ) : CoroutineWorker(appContext, workerParams) {
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
+        if (VaultWriteGate.readOnly) return@withContext Result.success() // no embeddings (AI) on a read-only device
         try {
             val startTime = System.currentTimeMillis()
             val embeddingsBefore = runCatching { embeddingDao.count() }.getOrDefault(-1)

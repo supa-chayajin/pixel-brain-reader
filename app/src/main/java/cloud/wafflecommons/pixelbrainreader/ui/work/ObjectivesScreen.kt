@@ -36,6 +36,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.ai.ChatSeed
 import cloud.wafflecommons.pixelbrainreader.data.ai.ChatSeedRepository
 import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
@@ -272,7 +273,7 @@ private fun ObjectiveCard(
                     )
                 }
             }
-            TextButton(onClick = onCoach) { Text("Ask Coach") }
+            if (!VaultWriteGate.readOnly) TextButton(onClick = onCoach) { Text("Ask Coach") } // no AI on a read-only device
         }
     }
 }

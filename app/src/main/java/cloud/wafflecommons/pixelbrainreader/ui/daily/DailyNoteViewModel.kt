@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.health.DailyHealthMetrics
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyDashboardEntity
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyTaskEntity
@@ -161,6 +162,18 @@ class DailyNoteViewModel @Inject constructor(
     // Global Sync State for PullToRefresh
     val isSyncing: StateFlow<SyncState> = syncOrchestrator.syncState
 
+    /** The read-only tripwire: what this device's copy holds that GitHub doesn't (empty when healthy). */
+    val readOnlyDrift: StateFlow<List<String>> = syncOrchestrator.readOnlyDrift
+
+    /** Makes a read-only device's copy GitHub's again, after the tripwire fired. */
+    fun resetToGitHub() {
+        viewModelScope.launch {
+            val result = syncOrchestrator.resetToGitHub()
+            _userMessage.value = if (result.isSuccess) "This device's copy is GitHub's again"
+            else "Couldn't reset to GitHub: ${result.exceptionOrNull()?.message}"
+        }
+    }
+
     // RFC-009: Gratitude Express Flow
     val gratitudes: StateFlow<List<GratitudeEntity>> = _selectedDate.flatMapLatest { date ->
         dailyNoteRepository.getGratitudesStream(date)
@@ -293,6 +306,7 @@ class DailyNoteViewModel @Inject constructor(
     }
 
     fun markEchoReviewed(path: String) {
+        if (VaultWriteGate.refuses()) return // a read-only device changes nothing
         viewModelScope.launch {
             memoryEchoRepository.markEchoReviewed(path)
             _memoryEchoes.value = _memoryEchoes.value.filter { it.path != path }
@@ -378,28 +392,34 @@ class DailyNoteViewModel @Inject constructor(
     // --- Interactive Actions ---
 
     fun addTimelineEntry(content: String, time: LocalTime) {
+        if (VaultWriteGate.refuses()) return // a read-only device changes nothing
         viewModelScope.launch { dashboardRepository.addTimelineEntry(_selectedDate.value, content, time) }
     }
 
     fun updateTimelineEntry(entry: TimelineEntryEntity) {
+        if (VaultWriteGate.refuses()) return // a read-only device changes nothing
         viewModelScope.launch { dashboardRepository.updateTimelineEntry(entry) }
     }
 
     fun addTask(label: String, targetDate: LocalDate? = null, scheduledTime: LocalTime? = null) {
+        if (VaultWriteGate.refuses()) return // a read-only device changes nothing
         viewModelScope.launch {
             taskRepository.addTask(label, targetDate ?: _selectedDate.value, scheduledTime)
         }
     }
 
     fun updateTask(task: DailyTaskEntity) {
+        if (VaultWriteGate.refuses()) return // a read-only device changes nothing
         viewModelScope.launch { dashboardRepository.updateTask(task) }
     }
 
     fun toggleTask(taskId: String, isDone: Boolean) {
+        if (VaultWriteGate.refuses()) return // a read-only device changes nothing
         viewModelScope.launch { taskRepository.toggleTask(taskId, isDone) }
     }
 
     fun deleteTask(task: DailyTaskEntity) {
+        if (VaultWriteGate.refuses()) return // a read-only device changes nothing
         viewModelScope.launch {
             dashboardRepository.deleteTask(task.id)
             _userMessage.value = "Task removed"
@@ -407,15 +427,18 @@ class DailyNoteViewModel @Inject constructor(
     }
 
     fun addGratitude(text: String) {
+        if (VaultWriteGate.refuses()) return // a read-only device changes nothing
         viewModelScope.launch { dailyNoteRepository.addGratitude(_selectedDate.value, text) }
     }
 
     fun saveScrap(content: String, color: Int = 0xFF000000.toInt()) {
+        if (VaultWriteGate.refuses()) return // a read-only device changes nothing
         viewModelScope.launch { scratchRepository.saveScrap(content, color) }
     }
 
     /** Appends one line to the day's Ideas (Second Brain), saved like a typed edit. */
     fun addIdea(text: String) {
+        if (VaultWriteGate.refuses()) return // a read-only device changes nothing
         val date = _selectedDate.value
         val newIdeas = if (ideasText.isBlank()) "- $text" else "${ideasText.trimEnd()}\n- $text"
         ideasText = newIdeas
@@ -429,6 +452,7 @@ class DailyNoteViewModel @Inject constructor(
      * A moment without a written time is stamped now.
      */
     fun capture(guess: cloud.wafflecommons.pixelbrainreader.data.capture.CaptureGuess) {
+        if (VaultWriteGate.refuses()) return // a read-only device changes nothing
         val text = guess.text.trim()
         if (text.isEmpty()) return
         when (guess.kind) {
@@ -454,6 +478,7 @@ class DailyNoteViewModel @Inject constructor(
      * off at its first line the next time the daily note was parsed.
      */
     fun compileAndSaveVoiceNote(transcript: String) {
+        if (VaultWriteGate.refuses()) return // a read-only device changes nothing
         if (transcript.isBlank()) return
         val date = _selectedDate.value
         viewModelScope.launch {
@@ -484,10 +509,12 @@ class DailyNoteViewModel @Inject constructor(
     }
 
     fun deleteScrap(scrap: ScratchNoteEntity) {
+        if (VaultWriteGate.refuses()) return // a read-only device changes nothing
         viewModelScope.launch { scratchRepository.deleteScrap(scrap) }
     }
 
     fun promoteScrapToIdeas(scrap: ScratchNoteEntity) {
+        if (VaultWriteGate.refuses()) return // a read-only device changes nothing
         val date = _selectedDate.value
         val newIdeas = if (ideasText.isBlank()) scrap.content else "$ideasText\n\n${scrap.content}"
         ideasText = newIdeas
@@ -502,12 +529,14 @@ class DailyNoteViewModel @Inject constructor(
     }
 
     fun onIdeasChanged(content: String) {
+        if (VaultWriteGate.refuses()) return // a read-only device changes nothing
         ideasText = content
         _saveState.value = SaveState.UNSAVED
         _ideasEdits.value = PendingEdit(_selectedDate.value, content)
     }
 
     fun onNotesChanged(content: String) {
+        if (VaultWriteGate.refuses()) return // a read-only device changes nothing
         notesText = content
         _saveState.value = SaveState.UNSAVED
         _notesEdits.value = PendingEdit(_selectedDate.value, content)
@@ -602,6 +631,7 @@ class DailyNoteViewModel @Inject constructor(
      * Local-only — Google Calendar sync is import-only.
      */
     fun createEventFromCommand(line: String, date: LocalDate = _selectedDate.value) {
+        if (VaultWriteGate.refuses()) return // a read-only device changes nothing
         val parsed = MarkdownCommandParser.parseEvent(line, today = date)
             ?: run {
                 _userMessage.value = "Couldn't parse /event command"
@@ -621,6 +651,7 @@ class DailyNoteViewModel @Inject constructor(
     }
 
     fun deleteTimelineEvent(entry: TimelineEntryEntity) {
+        if (VaultWriteGate.refuses()) return // a read-only device changes nothing
         viewModelScope.launch {
             dashboardRepository.deleteTimelineEntry(entry.id)
             _userMessage.value = "Event removed"
@@ -644,6 +675,7 @@ class DailyNoteViewModel @Inject constructor(
     }
 
     fun compileDay() {
+        if (VaultWriteGate.refuses()) return // a read-only device changes nothing
         viewModelScope.launch {
             try {
                 dashboardRepository.burnToDisk(_selectedDate.value)

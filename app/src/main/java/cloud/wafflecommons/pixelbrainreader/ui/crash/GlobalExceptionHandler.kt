@@ -4,7 +4,9 @@ import android.app.Application
 import android.content.Context
 import android.content.Intent
 import android.os.Process
+import android.util.Log
 import androidx.core.content.edit
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import java.io.PrintWriter
 import java.io.StringWriter
 import kotlin.system.exitProcess
@@ -15,6 +17,13 @@ class GlobalExceptionHandler(
 ) : Thread.UncaughtExceptionHandler {
 
     override fun uncaughtException(thread: Thread, throwable: Throwable) {
+        // A read-only device refused a write that no screen guarded: nothing was written, so there
+        // is nothing to recover from (the gate already told the screens). Every vault write runs in
+        // a coroutine, whose failure arrives here while its thread keeps running.
+        if (VaultWriteGate.readOnly && VaultWriteGate.isRefusal(throwable)) {
+            Log.w("GlobalExceptionHandler", "A write was refused on this read-only device", throwable)
+            return
+        }
         try {
             // Log the exception (optional, depends on policy, but good for local debugging if logcat is active)
             // Log.e("GlobalExceptionHandler", "Uncaught exception", throwable)

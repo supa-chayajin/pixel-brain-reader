@@ -52,6 +52,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.ui.components.ComposeCortexEditor
 import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
 import cloud.wafflecommons.pixelbrainreader.ui.theme.PixelBrainReaderTheme
@@ -347,7 +348,7 @@ fun PrivateVaultScreen(
                      )
                  },
                  floatingActionButton = {
-                     FloatingActionButton(
+                     if (!VaultWriteGate.readOnly) FloatingActionButton(
                          onClick = {
                              haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                              showCreateDialog = true
@@ -597,34 +598,37 @@ fun PrivateEditor(
                     }
                 },
                 actions = {
-                    // Dictate straight into the encrypted note.
-                    CortexIconButton(onClick = { startDictation() }) {
-                        Icon(Icons.Default.Mic, contentDescription = "Dictate")
-                    }
-                    // Beautify the SELECTED text as Markdown. Disabled when nothing is selected.
-                    CortexIconButton(
-                        onClick = { beautifySelection() },
-                        enabled = hasSelection && !isBeautifying
-                    ) {
-                        if (isBeautifying) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp
-                            )
-                        } else {
-                            Icon(Icons.Default.AutoFixHigh, contentDescription = "Beautify selection as Markdown")
+                    // A read-only device writes nothing and has no AI: the note is only read.
+                    if (!VaultWriteGate.readOnly) {
+                        // Dictate straight into the encrypted note.
+                        CortexIconButton(onClick = { startDictation() }) {
+                            Icon(Icons.Default.Mic, contentDescription = "Dictate")
                         }
-                    }
-                    CortexIconButton(onClick = onOpenAssist) {
-                        Icon(Icons.Default.AutoAwesome, contentDescription = "Writing assistant")
-                    }
-                    if (file != null) {
-                        CortexIconButton(onClick = { showDeleteDialog = true }) {
-                            Icon(
-                                Icons.Default.Delete,
-                                contentDescription = "Delete note",
-                                tint = MaterialTheme.colorScheme.error
-                            )
+                        // Beautify the SELECTED text as Markdown. Disabled when nothing is selected.
+                        CortexIconButton(
+                            onClick = { beautifySelection() },
+                            enabled = hasSelection && !isBeautifying
+                        ) {
+                            if (isBeautifying) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Icon(Icons.Default.AutoFixHigh, contentDescription = "Beautify selection as Markdown")
+                            }
+                        }
+                        CortexIconButton(onClick = onOpenAssist) {
+                            Icon(Icons.Default.AutoAwesome, contentDescription = "Writing assistant")
+                        }
+                        if (file != null) {
+                            CortexIconButton(onClick = { showDeleteDialog = true }) {
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = "Delete note",
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                            }
                         }
                     }
                     cloud.wafflecommons.pixelbrainreader.ui.components.SaveStatusIndicator(
@@ -644,7 +648,8 @@ fun PrivateEditor(
                 value = editorValue,
                 onValueChange = { applyChange(it) },
                 modifier = Modifier.fillMaxSize(),
-                useMonospace = true
+                useMonospace = true,
+                readOnly = VaultWriteGate.readOnly
             )
         }
     }

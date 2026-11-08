@@ -3,6 +3,8 @@ package cloud.wafflecommons.pixelbrainreader.data.usecase
 import android.content.Context
 import android.util.Log
 import androidx.health.connect.client.HealthConnectClient
+import cloud.wafflecommons.pixelbrainreader.data.device.ReadOnlyDeviceException
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.health.HealthConnectManager
 import cloud.wafflecommons.pixelbrainreader.data.repository.FileRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.HealthMetricsRepository
@@ -31,6 +33,8 @@ class SyncHealthDataUseCase @Inject constructor(
     }
 
     suspend operator fun invoke(date: LocalDate = LocalDate.now()): Result<Unit> = withContext(Dispatchers.IO) {
+        // Health is the phone's: a read-only device never writes it (VaultWriteGate).
+        if (VaultWriteGate.readOnly) return@withContext Result.failure(ReadOnlyDeviceException())
         try {
             if (healthConnectManager.checkAvailability() != HealthConnectClient.SDK_AVAILABLE) {
                 return@withContext Result.failure(Exception("Health Connect SDK is not available"))

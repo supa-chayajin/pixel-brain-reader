@@ -17,6 +17,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.ai.ChatSeed
 import cloud.wafflecommons.pixelbrainreader.data.ai.ChatSeedRepository
 import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
@@ -189,7 +190,7 @@ private fun LoadSourcesCard(breakdown: LoadBreakdown, onOpenLog: () -> Unit, onO
         androidx.compose.foundation.layout.FlowRow {
             TextButton(onClick = onOpenLog) { Text("Open the log") }
             TextButton(onClick = onOpenActions) { Text("Your actions") }
-            TextButton(onClick = onCoach) { Text("Triage with Coach") }
+            if (!VaultWriteGate.readOnly) TextButton(onClick = onCoach) { Text("Triage with Coach") } // no AI on a read-only device
         }
     }
 }

@@ -1,5 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.data.sync
 
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import android.util.Log
 import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
 import cloud.wafflecommons.pixelbrainreader.data.remote.JGitProvider
@@ -56,6 +57,7 @@ class VaultPushScheduler @Inject constructor(
 
     /** Non-blocking: marks the vault dirty; the actual push runs later, batched with other requests. */
     fun requestPush() {
+        if (VaultWriteGate.readOnly) return // a read-only device never pushes
         requests.trySend(Unit)
     }
 

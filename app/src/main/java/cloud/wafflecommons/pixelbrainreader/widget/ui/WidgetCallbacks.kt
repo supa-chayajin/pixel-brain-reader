@@ -6,6 +6,7 @@ import androidx.glance.GlanceId
 import androidx.glance.action.ActionParameters
 import androidx.glance.appwidget.action.ActionCallback
 import androidx.glance.appwidget.updateAll
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.gamification.Attribute
 import cloud.wafflecommons.pixelbrainreader.data.model.HabitLogEntry
 import cloud.wafflecommons.pixelbrainreader.data.model.HabitStatus
@@ -56,6 +57,7 @@ private fun moodLabel(score: Int): String = when (score) {
 /** Logs a one-tap mood entry (score 1..5) for right now, awards MOOD_LOGGED XP. */
 class MoodLogCallback : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
+        if (VaultWriteGate.refuses()) return // a read-only device: the widget shows, it doesn't log
         val score = parameters[WidgetKeys.MOOD_SCORE] ?: return
         val ep = WidgetLiveData.entryPoint(context)
         val today = LocalDate.now()
@@ -80,6 +82,7 @@ class MoodLogCallback : ActionCallback {
 /** Toggles a habit's completion for today. Awards HABIT_DONE XP only on a real not-done → done flip. */
 class HabitToggleCallback : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
+        if (VaultWriteGate.refuses()) return // a read-only device: the widget shows, it doesn't log
         val habitId = parameters[WidgetKeys.HABIT_ID] ?: return
         val targetDone = parameters[WidgetKeys.HABIT_TARGET_DONE] ?: true
         val ep = WidgetLiveData.entryPoint(context)
@@ -115,6 +118,7 @@ class HabitToggleCallback : ActionCallback {
 /** Toggles a daily-dashboard task's done state and awards TASK_COMPLETED XP on first completion. */
 class TaskToggleCallback : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
+        if (VaultWriteGate.refuses()) return // a read-only device: the widget shows, it doesn't log
         val taskId = parameters[WidgetKeys.TASK_ID] ?: return
         val targetDone = parameters[WidgetKeys.TASK_TARGET_DONE] ?: true
         val ep = WidgetLiveData.entryPoint(context)
@@ -133,6 +137,7 @@ class TaskToggleCallback : ActionCallback {
 /** Marks a chore done today (stamps lastDoneDate) and awards its effort as XP — once per day. */
 class ChoreDoneCallback : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
+        if (VaultWriteGate.refuses()) return // a read-only device: the widget shows, it doesn't log
         val choreId = parameters[WidgetKeys.CHORE_ID] ?: return
         val effort = parameters[WidgetKeys.CHORE_EFFORT] ?: 0
         val ep = WidgetLiveData.entryPoint(context)

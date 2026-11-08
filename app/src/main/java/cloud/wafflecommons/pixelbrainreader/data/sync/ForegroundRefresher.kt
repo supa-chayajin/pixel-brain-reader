@@ -1,5 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.data.sync
 
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import android.util.Log
 import cloud.wafflecommons.pixelbrainreader.data.system.AppClock
 import cloud.wafflecommons.pixelbrainreader.data.usecase.SyncHealthDataUseCase
@@ -58,6 +59,8 @@ class ForegroundRefresher @Inject constructor(
     }
 
     private suspend fun refreshIfStale(today: LocalDate) {
+        // A read-only device writes no health metrics nor habits: it shows what the phone wrote.
+        if (VaultWriteGate.readOnly) return
         val now = System.currentTimeMillis()
         if (today == lastRefreshDay && now - lastRefreshAt < MIN_INTERVAL_MS) return
         lastRefreshDay = today

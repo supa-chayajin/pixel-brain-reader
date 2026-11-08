@@ -11,6 +11,38 @@ Still planned (`documentation/plans/2026-10-18-v11-work-and-dev-toolkit.md`): th
 dashboard, "explain this error", decision records, people & 1:1s, security watch, the workshop
 kit and the authorship timeline.
 
+## [12.6.0] — 2026-11-08
+
+A second device can follow the real vault without being able to change it.
+
+### Added
+
+- **Read-only device.** A switch on the login screen. A read-only device keeps every note
+  readable and fresh, and never changes the vault: no file written in its copy, no commit, no
+  push. Its sync only fast-forwards to what GitHub has (never a rebase, never a merge); there
+  is no Health Connect write, no board burn, no Google import, no reminder or check-in, and
+  the AI is off (no Gemini Nano, no embeddings, no Chat tab, no "Ask Coach", no folder
+  analysis). Notes open view-only with a banner, Daily shows "Read-only" without the Add box
+  or the + button, swipes, widgets, tiles, the share sheet and `pixelbrain://import` do
+  nothing but say so. Use a fine-grained token with read-only access to the one repository
+  ("Sign in with GitHub" is hidden there: its token can write everywhere).
+- **A fresh copy when the role or the repository changes.** Logging in as another role or to
+  another repository replaces this device's copy of the vault and its derived data (the chat
+  history is kept). If the old copy holds changes GitHub doesn't have — today's board
+  included — the login says how many and asks before discarding them.
+- **A tripwire.** At every start and after every pull a read-only device checks that its copy
+  still matches GitHub; if anything changed, a banner on Daily lists it, sync stops, and
+  "Reset to GitHub" puts GitHub's copy back.
+
+### Changed
+
+- The login form scrolls and keeps a readable width on a wide screen.
+
+### Fixed
+
+- **Log out is back**, as the last row of Settings → About, with a confirmation. The button had
+  disappeared in January, which left no way to change a device's token, vault or role.
+
 ## [12.5.0] — 2026-11-08
 
 Tablets and the unfolded Fold get layouts of their own instead of a phone screen stretched

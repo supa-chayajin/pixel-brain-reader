@@ -1,9 +1,11 @@
 package cloud.wafflecommons.pixelbrainreader.data.sync
 
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.guard.CommitHeldException
 import cloud.wafflecommons.pixelbrainreader.data.guard.FindingKind
 import cloud.wafflecommons.pixelbrainreader.data.guard.GuardFinding
 import cloud.wafflecommons.pixelbrainreader.data.remote.JGitProvider
+import cloud.wafflecommons.pixelbrainreader.data.remote.LocalChanges
 import cloud.wafflecommons.pixelbrainreader.data.remote.SyncResult
 import cloud.wafflecommons.pixelbrainreader.data.repository.DailyDashboardRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.GoogleCalendarRepository
@@ -24,6 +26,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
+import org.junit.After
 import org.junit.Before
 import org.junit.Test
 
@@ -83,8 +86,44 @@ class SyncOrchestratorTest {
             gitSyncCoordinator = coordinator,
             appScope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined),
             modesRepository = { mockk(relaxed = true) },
-            syncDigestRepository = { mockk(relaxed = true) }
+            syncDigestRepository = { mockk(relaxed = true) },
+            healthMetricsRepository = { mockk(relaxed = true) }
         )
+    }
+
+    @After
+    fun tearDown() {
+        VaultWriteGate.readOnly = false
+    }
+
+    @Test
+    fun `a read-only device follows GitHub - no burn, no commit, no Health, no Google, no push`() = runBlocking {
+        VaultWriteGate.readOnly = true
+        coEvery { jGit.localChanges(any()) } returns LocalChanges(emptyList(), 0)
+
+        assertTrue(orchestrator.executeFullSyncCycle(force = true))
+
+        assertTrue(orchestrator.syncState.value is SyncState.Success)
+        coVerify(exactly = 1) { jGit.pull() }
+        coVerify(exactly = 0) { daily.burnToDisk(any()) }
+        coVerify(exactly = 0) { jGit.commit(any()) }
+        coVerify(exactly = 0) { jGit.push() }
+        coVerify(exactly = 0) { health.invoke(any()) }
+        coVerify(exactly = 0) { calendar.syncTodayEvents(any()) }
+        coVerify(exactly = 0) { tasks.syncPendingTasks(any()) }
+        coVerify(exactly = 1) { daily.reloadTodayFromDiskReadOnly() }
+    }
+
+    @Test
+    fun `a read-only copy that changed stops the sync - never Success`() = runBlocking {
+        VaultWriteGate.readOnly = true
+        coEvery { jGit.localChanges(any()) } returns LocalChanges(listOf("notes/stray.md"), 0)
+
+        assertFalse(orchestrator.executeFullSyncCycle(force = true))
+
+        assertTrue(orchestrator.syncState.value is SyncState.Error)
+        assertTrue(orchestrator.readOnlyDrift.value == listOf("notes/stray.md"))
+        coVerify(exactly = 0) { jGit.push() }
     }
 
     @Test

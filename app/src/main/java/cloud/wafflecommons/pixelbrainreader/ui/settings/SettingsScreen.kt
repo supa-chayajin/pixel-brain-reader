@@ -38,6 +38,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.ai.NanoState
 import cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
 import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
@@ -90,6 +91,7 @@ fun SettingsScreen(
     onNavigateToMoodTags: () -> Unit = {},
     onNavigateToGamificationSettings: () -> Unit = {},
     onOpenNote: (String) -> Unit = {},
+    onLogout: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -98,6 +100,30 @@ fun SettingsScreen(
     val vaultGraphReport by viewModel.vaultGraphReport.collectAsStateWithLifecycle()
     val isAnalyzingGraph by viewModel.isAnalyzingGraph.collectAsStateWithLifecycle()
     var showGraphDialog by rememberSaveable { mutableStateOf(false) }
+    var confirmLogout by rememberSaveable { mutableStateOf(false) }
+
+    // Logging out forgets the token only; the next login picks the vault and the device's role.
+    if (confirmLogout) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { confirmLogout = false },
+            title = { Text("Log out?") },
+            text = {
+                Text(
+                    "This device forgets its GitHub token. Your notes stay on GitHub and in this " +
+                        "device's copy; logging in again needs a token."
+                )
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    confirmLogout = false
+                    onLogout()
+                }) { Text("Log out") }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { confirmLogout = false }) { Text("Cancel") }
+            }
+        )
+    }
 
     if (showGraphDialog) {
         cloud.wafflecommons.pixelbrainreader.ui.components.VaultGraphDialog(
@@ -372,7 +398,11 @@ fun SettingsScreen(
                     indexingState is SettingsViewModel.IndexingState.Enqueued
 
                 Text(
-                    text = "Embedding the vault is now manual. Tap below to embed only the files that changed since your last index. Private notes are included if the vault has been unlocked.",
+                    text = if (VaultWriteGate.readOnly) {
+                        "The AI is off on this read-only device: the vault is not embedded. Search and the link check still work."
+                    } else {
+                        "Embedding the vault is now manual. Tap below to embed only the files that changed since your last index. Private notes are included if the vault has been unlocked."
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -382,7 +412,7 @@ fun SettingsScreen(
                 Button(
                     onClick = { viewModel.triggerVaultIndexing() },
                     modifier = Modifier.fillMaxWidth(),
-                    enabled = !isRunning
+                    enabled = !isRunning && !VaultWriteGate.readOnly
                 ) {
                     if (isRunning) {
                         CircularProgressIndicator(
@@ -661,6 +691,25 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                // The device's role (DeviceRole) is chosen at login: changing it means logging out.
+                if (VaultWriteGate.readOnly) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = "Read-only device: it reads the vault and never changes it. Log out to change this.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                ListItem(
+                    modifier = Modifier.clickable {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        confirmLogout = true
+                    },
+                    leadingContent = { Icon(Icons.AutoMirrored.Outlined.Logout, contentDescription = null) },
+                    supportingContent = { Text("Forget this device's token; the next login picks the vault and the role") }
+                ) {
+                    Text("Log out")
+                }
             }
             
             }

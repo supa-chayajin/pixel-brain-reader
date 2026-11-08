@@ -4,10 +4,14 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cloud.wafflecommons.pixelbrainreader.data.auth.GitHubDeviceAuthRepository
+import cloud.wafflecommons.pixelbrainreader.data.device.DeviceRole
+import cloud.wafflecommons.pixelbrainreader.data.device.LocalCopyReset
 import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
+import cloud.wafflecommons.pixelbrainreader.data.repository.DailyDashboardRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.FileRepository
 import cloud.wafflecommons.pixelbrainreader.data.sync.SyncOrchestrator
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -21,7 +25,10 @@ class LoginViewModel @Inject constructor(
     private val secretManager: SecretManager,
     private val repository: FileRepository,
     private val gitHubDeviceAuth: GitHubDeviceAuthRepository,
-    private val syncOrchestrator: SyncOrchestrator
+    private val syncOrchestrator: SyncOrchestrator,
+    private val deviceRole: DeviceRole,
+    private val localCopyReset: LocalCopyReset,
+    private val dailyDashboardRepository: DailyDashboardRepository
 ) : ViewModel() {
 
     private val _token = MutableStateFlow("")
@@ -50,6 +57,33 @@ class LoginViewModel @Inject constructor(
 
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
+
+    /** A read-only device reads the vault and never changes it (DeviceRole); starts from the saved role. */
+    private val _readOnly = MutableStateFlow(deviceRole.saved())
+    val readOnly: StateFlow<Boolean> = _readOnly.asStateFlow()
+
+    fun onReadOnlyChanged(readOnly: Boolean) {
+        _readOnly.value = readOnly
+    }
+
+    /**
+     * Set while a login that starts from a fresh clone waits for the user to discard what the old
+     * copy holds that GitHub doesn't: how many changes (-1 when they couldn't be counted).
+     */
+    private val _pendingDiscard = MutableStateFlow<Int?>(null)
+    val pendingDiscard: StateFlow<Int?> = _pendingDiscard.asStateFlow()
+    private var discardConfirmed = false
+
+    fun confirmDiscard() {
+        _pendingDiscard.value = null
+        discardConfirmed = true
+        onConnectClick()
+    }
+
+    fun cancelDiscard() {
+        _pendingDiscard.value = null
+        discardConfirmed = false
+    }
 
     fun onTokenChanged(newToken: String) {
         _token.value = newToken
@@ -151,6 +185,36 @@ class LoginViewModel @Inject constructor(
             _isLoading.value = true
             _errorMessage.value = null
 
+            // 0. A new role or another repository starts from a fresh clone: nothing of the old copy
+            // (a sandbox's, a writing device's) may sit under the vault this device then reads. What
+            // the old copy holds that GitHub doesn't is shown before anything is discarded.
+            val readOnly = _readOnly.value
+            val host = if (provider == "gitlab") "gitlab.com" else "github.com"
+            val freshClone = localCopyReset.needsFreshClone(readOnly, "https://$host/$owner/$repo.git")
+            if (freshClone && !discardConfirmed) {
+                val changes = localCopyReset.pendingChanges()
+                if (!changes.isEmpty) {
+                    _pendingDiscard.value = if (changes.unreadable) -1 else changes.files.size + changes.unpushedCommits
+                    _isLoading.value = false
+                    return@launch
+                }
+            }
+            discardConfirmed = false
+            if (freshClone) {
+                try {
+                    localCopyReset.reset()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.e("StartLogin", "Fresh clone: reset failed", e)
+                    _errorMessage.value = e.message ?: "Couldn't remove this device's old copy of the vault."
+                    _isLoading.value = false
+                    return@launch
+                }
+            }
+            // The role first: the clone and its first sync below then take its path.
+            withContext(Dispatchers.IO) { deviceRole.apply(readOnly) }
+
             // 1. Secure Storage (Vault) — Keystore-backed writes, kept off the main thread.
             val cleanToken = _token.value.replace("\n", "").replace("\r", "").trim()
             withContext(Dispatchers.IO) {
@@ -168,6 +232,11 @@ class LoginViewModel @Inject constructor(
                 // gamification profile from the vault too — they used to stay empty until the
                 // next app restart.
                 syncOrchestrator.reconcileVaultIntoRoom()
+                if (readOnly) {
+                    // Today's board from the phone's note, and the tripwire armed.
+                    dailyDashboardRepository.reloadTodayFromDiskReadOnly()
+                    syncOrchestrator.checkReadOnlyDrift()
+                }
                 _loginSuccess.value = true
                 Log.d("StartLogin", "Vault sealed and Database primed.")
             } else {

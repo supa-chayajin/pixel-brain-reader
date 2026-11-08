@@ -27,4 +27,11 @@ interface ChatDao {
 
     @Query("DELETE FROM chat_messages WHERE mode = :mode")
     suspend fun clearHistoryByMode(mode: String)
+
+    /** Every message: a fresh clone (LocalCopyReset) clears Room but keeps the chat history. */
+    @Query("SELECT * FROM chat_messages")
+    suspend fun getAllMessages(): List<ChatMessageEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertMessages(messages: List<ChatMessageEntity>)
 }

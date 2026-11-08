@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
 import cloud.wafflecommons.pixelbrainreader.data.repository.AppThemeConfig
 import cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
@@ -226,6 +227,11 @@ class MainActivity : FragmentActivity() {
 
         // Shared from another app: a page (its link), a highlight with its link, or text.
         if (intent.action == Intent.ACTION_SEND) {
+            // A read-only device saves nothing: back to the app that shared, with the notice.
+            if (VaultWriteGate.refuses()) {
+                finish()
+                return
+            }
             val text = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()
             val html = intent.getStringExtra(Intent.EXTRA_HTML_TEXT)
             if (!text.isNullOrBlank() || !html.isNullOrBlank()) {
@@ -254,8 +260,8 @@ class MainActivity : FragmentActivity() {
                     )
                     if (route != null) pendingDestination = route
                 }
-                WidgetNav.HOST_CAPTURE -> pendingCapture = true
-                "import" -> {
+                WidgetNav.HOST_CAPTURE -> if (!VaultWriteGate.refuses()) pendingCapture = true
+                "import" -> if (!VaultWriteGate.refuses()) {
                     val url = try { intent.data?.getQueryParameter("url") } catch (e: Exception) { null }
                     if (url != null && isSafeImportUrl(url)) pendingImportUrl = url
                 }

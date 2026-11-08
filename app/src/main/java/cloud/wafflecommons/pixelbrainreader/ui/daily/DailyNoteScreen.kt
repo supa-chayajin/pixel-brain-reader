@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridScope
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.ui.utils.isWideLayout
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -95,6 +96,7 @@ fun DailyNoteScreen(
     val sectionOrder by layoutViewModel.order.collectAsStateWithLifecycle()
     val moreExpanded by layoutViewModel.moreExpanded.collectAsStateWithLifecycle()
     val guardHeld by guardStatus.held.collectAsStateWithLifecycle()
+    val readOnlyDrift by viewModel.readOnlyDrift.collectAsStateWithLifecycle()
     val leaveReturn by leaveViewModel.returning.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { leaveViewModel.loadReturn() }
     val syncDigest by activityViewModel.digest.collectAsStateWithLifecycle()
@@ -172,9 +174,11 @@ fun DailyNoteScreen(
         topBar = {
             CortexTopAppBar(
                 title = "Cortex",
-                subtitle = state.date.format(DateTimeFormatter.ofPattern("MMM dd, yyyy")),
+                subtitle = state.date.format(DateTimeFormatter.ofPattern("MMM dd, yyyy")) +
+                    if (VaultWriteGate.readOnly) " · Read-only" else "",
                 navigationIcon = {
-                    FilledTonalIconButton(
+                    // A read-only device burns nothing.
+                    if (!VaultWriteGate.readOnly) FilledTonalIconButton(
                         onClick = { viewModel.compileDay() },
                         colors = IconButtonDefaults.filledTonalIconButtonColors(
                             containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
@@ -250,7 +254,8 @@ fun DailyNoteScreen(
 
             // Lift the FAB to sit just above the floating nav bar (which overlays content). Beside the
             // side rail there is no bar: it keeps the standard corner, clear of the last block.
-            Box(modifier = Modifier.padding(bottom = if (LocalNavRail.current) 0.dp else 66.dp)) {
+            // A read-only device adds nothing.
+            if (!VaultWriteGate.readOnly) Box(modifier = Modifier.padding(bottom = if (LocalNavRail.current) 0.dp else 66.dp)) {
                 CortexExpandableFAB(
                     expanded = fabExpanded,
                     onExpandedChange = { fabExpanded = it },
@@ -318,19 +323,27 @@ fun DailyNoteScreen(
                     // One input for the whole day: it files the line itself. On a wide window the mode
                     // chips share its line, leaving more of the height to the day. (The input keeps its
                     // place in this item either way, so a line half typed survives a rotation.)
-                    item(key = "quick-add", span = StaggeredGridItemSpan.FullLine) {
+                    // A read-only device files nothing: no Add box (on a wide window the line keeps the chips).
+                    if (twoColumns || !VaultWriteGate.readOnly) item(key = "quick-add", span = StaggeredGridItemSpan.FullLine) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             if (twoColumns) {
                                 modeChips()
                                 Spacer(Modifier.width(16.dp))
                             }
-                            QuickAddBar(
+                            if (!VaultWriteGate.readOnly) QuickAddBar(
                                 onCapture = viewModel::capture,
                                 onVoice = { dictation.start() },
                                 modifier = Modifier.weight(1f)
                             )
                         }
                     }
+                    // A read-only device whose copy no longer matches GitHub (its tripwire)
+                    if (readOnlyDrift.isNotEmpty()) {
+                        item(key = "read-only-drift", span = StaggeredGridItemSpan.FullLine) {
+                            ReadOnlyDriftBanner(changes = readOnlyDrift, onReset = viewModel::resetToGitHub)
+                        }
+                    }
+
                     // Changes held back by the confidentiality guard
                     if (guardHeld.isNotEmpty()) {
                         item(key = "guard", span = StaggeredGridItemSpan.FullLine) {

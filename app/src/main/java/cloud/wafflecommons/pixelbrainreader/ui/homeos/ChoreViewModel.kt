@@ -2,6 +2,7 @@ package cloud.wafflecommons.pixelbrainreader.ui.homeos
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.gamification.Attribute
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.HomeRoomEntity
 import cloud.wafflecommons.pixelbrainreader.data.repository.ChoreRepository
@@ -69,6 +70,7 @@ class ChoreViewModel @Inject constructor(
     }
 
     fun doChore(choreId: String) {
+        if (VaultWriteGate.refuses()) return // a read-only device changes nothing
         if (!choresInFlight.add(choreId)) return
         viewModelScope.launch {
             try {
@@ -104,6 +106,7 @@ class ChoreViewModel @Inject constructor(
     }
 
     fun addChoreWithRoomId(name: String, roomId: String, frequencyDays: Int, baseEffort: Int, pastDays: Int = 0) {
+        if (VaultWriteGate.refuses()) return // a read-only device changes nothing
         viewModelScope.launch(Dispatchers.IO) {
             val randomId = java.util.UUID.randomUUID().toString()
             val safeFreq = frequencyDays.takeIf { it > 0 } ?: 1
@@ -122,6 +125,7 @@ class ChoreViewModel @Inject constructor(
     }
 
     fun addChore(name: String, room: String, frequencyDays: Int, baseEffort: Int, pastDays: Int = 0) {
+        if (VaultWriteGate.refuses()) return // a read-only device changes nothing
         viewModelScope.launch(Dispatchers.IO) {
             val safeRoomName = room.trim().takeIf { it.isNotEmpty() } ?: "Uncategorized"
             val safeFreq = frequencyDays.takeIf { it > 0 } ?: 1
@@ -145,6 +149,7 @@ class ChoreViewModel @Inject constructor(
     }
 
     fun addDebugChore() {
+        if (VaultWriteGate.refuses()) return // a read-only device changes nothing
         addChore(
             name = "Chore ${java.util.UUID.randomUUID().toString().take(4)}",
             room = listOf("Kitchen", "Bathroom", "Living Room").random(),

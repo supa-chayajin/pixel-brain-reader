@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.ai.GeminiRagManager
 import cloud.wafflecommons.pixelbrainreader.data.gamification.GamificationRepository
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.FileEntity
@@ -412,6 +413,7 @@ class MainViewModel @Inject constructor(
                 if (owner == null || repo == null) return@launch
 
                 val result = repository.syncRepository(owner, repo)
+                syncOrchestrator.afterReadOnlyPull() // a read-only device: tripwire + today's board
                 if (result.isSuccess) {
                     _error.value = null
                     // The pull may have brought new mood/habit/chore JSON: rebuild Room from it.
@@ -484,6 +486,7 @@ class MainViewModel @Inject constructor(
     fun toggleEditMode() {
         val next = !_isEditing.value
         if (next) {
+            if (VaultWriteGate.refuses()) return // a read-only device edits nothing
             if (openNoteIsMirror()) {
                 _userMessage.value = MIRROR_READ_ONLY
                 return
@@ -507,6 +510,7 @@ class MainViewModel @Inject constructor(
         (unsavedContent ?: uiState.value.selectedFileContent)?.let(MirrorNotes::isMirror) == true
 
     fun onContentChanged(newContent: String) {
+        if (VaultWriteGate.refuses()) return // a read-only device edits nothing
         val oldContent = unsavedContent ?: uiState.value.selectedFileContent ?: ""
         TaskCompletionDetector.newlyCompletedTasks(oldContent, newContent).forEach { task ->
             // Task was just checked off! Process XP.
@@ -527,6 +531,7 @@ class MainViewModel @Inject constructor(
      * git lock) and toast "Saved & Synced".
      */
     fun saveFile() {
+        if (VaultWriteGate.readOnly) return // nothing to save: a read-only device never edits
         val path = _selectedFilePath.value ?: return
         val content = unsavedContent ?: return
         if (savedContents[path] == content) return
@@ -572,6 +577,7 @@ class MainViewModel @Inject constructor(
      * not a user edit: tasks that were already checked in the old version must not grant XP again.
      */
     fun restoreRevision(historicalContent: String) {
+        if (VaultWriteGate.refuses()) return // a read-only device restores nothing
         val path = _selectedFilePath.value ?: return
         val current = unsavedContent ?: uiState.value.selectedFileContent ?: return
         if (current == historicalContent) return
@@ -751,6 +757,7 @@ class MainViewModel @Inject constructor(
     }
 
     fun requestDeleteFile(file: GithubFileDto? = null) {
+        if (VaultWriteGate.refuses()) return
         // A swipe-delete passes the row's file so we can delete it WITHOUT opening it first
         // (opening caused the doc to flash into the detail pane before the confirm dialog).
         pendingDeleteFile = file
@@ -802,6 +809,7 @@ class MainViewModel @Inject constructor(
     }
 
     fun renameFile(newName: String, targetFile: GithubFileDto? = null) {
+        if (VaultWriteGate.refuses()) return
         val path = targetFile?.path ?: _selectedFilePath.value ?: return
         val isDirectory = uiState.value.files.find { it.path == path }?.type == "dir"
         val parentPath = if (path.contains("/")) path.substringBeforeLast("/") else ""
@@ -819,6 +827,7 @@ class MainViewModel @Inject constructor(
     }
 
     fun moveFile(file: GithubFileDto, targetFolder: String) {
+        if (VaultWriteGate.refuses()) return
         val newPath = if (targetFolder.isEmpty()) file.name else "$targetFolder/${file.name}"
         if (file.path == newPath) {
             _userMessage.value = "Item is already in this folder"
@@ -882,6 +891,7 @@ class MainViewModel @Inject constructor(
      * Fetches folders and filters unavailable destinations.
      */
     fun prepareMove(targetFile: GithubFileDto) {
+        if (VaultWriteGate.refuses()) return
         viewModelScope.launch {
             val allFolders = repository.getAllFolders()
 
@@ -934,6 +944,7 @@ class MainViewModel @Inject constructor(
     }
 
     fun openCreateFileDialog() {
+        if (VaultWriteGate.refuses()) return
         viewModelScope.launch {
             _availableTemplates.value = templateRepository.getAvailableTemplates()
             _showCreateFileDialog.value = true
@@ -951,6 +962,7 @@ class MainViewModel @Inject constructor(
     }
 
     fun createNewFile(filename: String? = null, templateName: String? = null, values: Map<String, String> = emptyMap()) {
+        if (VaultWriteGate.refuses()) return
         val parentPath = _currentPath.value
         val finalName = if (filename.isNullOrBlank()) "Untitled_${System.currentTimeMillis()}.md" else (if (filename.endsWith(".md")) filename else "$filename.md")
         val fullPath = if (parentPath.isNotEmpty()) "$parentPath/$finalName" else finalName
@@ -992,6 +1004,7 @@ class MainViewModel @Inject constructor(
      * Analyzes current folder contents and generates an index.
      */
     fun analyzeCurrentFolder() {
+        if (VaultWriteGate.readOnly) return // no AI on a read-only device
         // The current listing is already the DIRECT children (no subdirectories), filtered
         // to files — exactly the "direct folder only" scope requested. No hard 10-file cap
         // here; GeminiRagManager bounds the work internally and summarizes file-by-file.
@@ -1060,6 +1073,7 @@ class MainViewModel @Inject constructor(
     }
 
     fun appendContent(text: String) {
+        if (VaultWriteGate.refuses()) return
         val currentContent = unsavedContent ?: uiState.value.selectedFileContent ?: ""
 
         val newContent = if (currentContent.isBlank()) text else "$currentContent\n\n$text"
@@ -1091,6 +1105,7 @@ class MainViewModel @Inject constructor(
     }
 
     fun saveChatToInbox(content: String) {
+        if (VaultWriteGate.refuses()) return
         viewModelScope.launch {
             val folderName = "00_Inbox"
             repository.createLocalFolder(folderName)
@@ -1115,7 +1130,7 @@ class MainViewModel @Inject constructor(
                 val dto = GithubFileDto(name = noteName, path = notePath, type = "file", downloadUrl = null, sha = null, lastModified = System.currentTimeMillis())
                 loadFile(dto)
                 _isLoading.value = false
-                _isEditing.value = startEditing
+                _isEditing.value = startEditing && !VaultWriteGate.readOnly
                 _navigationTrigger.value = "home"
             } catch (e: CancellationException) {
                 throw e

@@ -1,5 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.data.repository
 
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import android.util.Log
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.FileContentDao
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.FileDao
@@ -61,7 +62,8 @@ date: {{date}}
         val fileName = today.format(DateTimeFormatter.ISO_DATE) + ".md"
         val targetPath = "$JOURNAL_ROOT/$fileName"
         
-        if (!hasNote(today)) {
+        // A read-only device never creates the day's note: it shows the one the phone wrote.
+        if (!hasNote(today) && !VaultWriteGate.readOnly) {
              createNoteFromTemplate(today)
         }
         
@@ -111,6 +113,7 @@ date: {{date}}
      * WARNING: Does NOT check if file exists (Caller must check).
      */
     suspend fun createNoteFromTemplate(date: LocalDate) {
+        if (VaultWriteGate.readOnly) return
         // Legacy: Used by MainViewModel via getOrCreateTodayNote wrapper. 
         // Logic is now in createDailyNote called by VM with explicit content.
         // We can keep this for backward compatibility or refactor MainViewModel entirely.
@@ -150,6 +153,7 @@ date: {{date}}
      * Creates standard daily note with provided content and PUSHES immediately.
      */
     suspend fun createDailyNote(date: LocalDate, content: String, owner: String?, repo: String?) {
+        if (VaultWriteGate.readOnly) return
          withContext(Dispatchers.IO) {
              val fileName = date.format(DateTimeFormatter.ISO_DATE) + ".md"
              val targetPath = "$JOURNAL_ROOT/$fileName"
@@ -177,6 +181,7 @@ date: {{date}}
      * Cleanup: Moves or Deletes misplaced daily notes at the root.
      */
     private suspend fun cleanupMisplacedDailyNotes() {
+        if (VaultWriteGate.readOnly) return
         try {
             // Find all files at the root (path doesn't contain '/')
             val rootFiles = fileDao.getFiles("").firstOrNull() ?: emptyList()
@@ -207,6 +212,7 @@ date: {{date}}
      * Prevents data loss by backing up the current daily note before triggering a repo sync.
      */
     suspend fun syncWithBackup(date: LocalDate, owner: String, repo: String) = withContext(Dispatchers.IO) {
+        if (VaultWriteGate.readOnly) return@withContext
         val fileName = date.format(DateTimeFormatter.ISO_DATE) + ".md"
         val path = "$JOURNAL_ROOT/$fileName"
         
@@ -258,6 +264,7 @@ date: {{date}}
      * Adds a gratitude entry and rewards the user.
      */
     suspend fun addGratitude(date: LocalDate, text: String) = withContext(Dispatchers.IO) {
+        if (VaultWriteGate.refuses()) return@withContext
         dailyDashboardDao.insertDashboard(
             cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyDashboardEntity(date = date)
         )

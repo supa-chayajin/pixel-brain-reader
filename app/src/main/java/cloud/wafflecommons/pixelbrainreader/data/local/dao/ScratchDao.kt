@@ -21,6 +21,10 @@ interface ScratchDao {
     @Delete
     suspend fun deleteScrap(scrap: ScratchNoteEntity)
 
+    /** The active scraps gone, before a read-only device rebuilds them from today's note. */
+    @Query("DELETE FROM scratch_notes WHERE isPromoted = 0")
+    suspend fun deleteActiveScraps()
+
     @Query("SELECT * FROM scratch_notes WHERE id = :id")
     suspend fun getScrapById(id: String): ScratchNoteEntity?
 }

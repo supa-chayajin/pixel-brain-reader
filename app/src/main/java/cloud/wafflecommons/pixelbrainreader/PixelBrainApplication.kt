@@ -1,5 +1,7 @@
 package cloud.wafflecommons.pixelbrainreader
 
+import cloud.wafflecommons.pixelbrainreader.data.device.DeviceRole
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import android.app.Application
 import android.util.Log
 import androidx.hilt.work.HiltWorkerFactory
@@ -49,6 +51,9 @@ class PixelBrainApplication : Application(), Configuration.Provider {
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onCreate() {
+        // The device's role first, before Hilt builds anything that could write the vault
+        // (VaultWriteGate) or start the AI (LocalAiManager).
+        VaultWriteGate.readOnly = DeviceRole.load(this)
         super.onCreate()
         // CrashActivity runs in a separate `:crash` process (see manifest);
         // that process boots its own Application instance. Skip all of the
@@ -66,20 +71,40 @@ class PixelBrainApplication : Application(), Configuration.Provider {
             )
         )
         appClock.start()
+        showRefusalNotices()
         // Today's health numbers + health-driven habits, refreshed each time the app is opened.
         appScope.launch { safely("Foreground refresher") { foregroundRefresher.get().start() } }
-        scheduleDailyBurnWork()
+        if (!VaultWriteGate.readOnly) scheduleDailyBurnWork()
         cancelLegacyGoogleOutboxWorkers()
         // Hydrate the gamification profile from disk first thing so the level/XP shown across the
         // app (and the mutation baseline) is the real saved state from the first frame.
         appScope.launch { safely("Gamification hydrate") { gamificationRepository.get().loadState() } }
         runStartupReconcile()
-        scheduleVaultIndexing()
+        if (!VaultWriteGate.readOnly) scheduleVaultIndexing() // no embeddings (AI) on a read-only device
         registerBackgroundObserver()
         // (Re)schedule reminder notifications from the saved preferences. Also
         // creates the notification channels. Cheap; runs off the main thread.
-        appScope.launch { safely("Reminder scheduling") { reminderScheduler.get().reschedule() } }
-        appScope.launch { safely("Objectives slot scheduling") { objectiveRepository.get().scheduleSlot() } }
+        if (!VaultWriteGate.readOnly) appScope.launch { safely("Reminder scheduling") { reminderScheduler.get().reschedule() } }
+        if (!VaultWriteGate.readOnly) appScope.launch { safely("Objectives slot scheduling") { objectiveRepository.get().scheduleSlot() } }
+    }
+
+    /**
+     * A write refused on a read-only device (VaultWriteGate) shows one short notice, whatever asked
+     * for it: a screen, a widget, a tile, a shortcut. A burst of refusals shows it once.
+     */
+    private fun showRefusalNotices() {
+        appScope.launch(Dispatchers.Main) {
+            var lastShown = 0L
+            VaultWriteGate.refusals.collect {
+                val now = android.os.SystemClock.elapsedRealtime()
+                if (lastShown == 0L || now - lastShown > REFUSAL_NOTICE_GAP_MS) {
+                    lastShown = now
+                    android.widget.Toast.makeText(
+                        this@PixelBrainApplication, VaultWriteGate.REFUSAL_MESSAGE, android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+        }
     }
 
     /**
@@ -114,7 +139,7 @@ class PixelBrainApplication : Application(), Configuration.Provider {
             object : DefaultLifecycleObserver {
                 override fun onStop(owner: LifecycleOwner) {
                     appScope.launch {
-                        safely("Background burn (ON_STOP)") {
+                        if (!VaultWriteGate.readOnly) safely("Background burn (ON_STOP)") {
                             dailyDashboardRepository.get().burnToDisk(LocalDate.now())
                         }
                         safely("Widget snapshot (ON_STOP)") {
@@ -143,9 +168,16 @@ class PixelBrainApplication : Application(), Configuration.Provider {
             // the last burn is still on disk, rebuild today's dashboard/scraps/gratitude
             // from that markdown. No-op on a normal launch (guarded on an empty Room).
             // Runs FIRST so no scan or UI initialization can insert a blank today row ahead of it.
-            safely("Startup today-rehydrate") { dailyDashboardRepository.get().rehydrateTodayFromDiskIfEmpty() }
+            safely("Startup today-rehydrate") {
+                // A read-only device rebuilds today from the note the phone wrote; a writing one only
+                // when Room lost its board (the destructive-migration safety net).
+                if (VaultWriteGate.readOnly) dailyDashboardRepository.get().reloadTodayFromDiskReadOnly()
+                else dailyDashboardRepository.get().rehydrateTodayFromDiskIfEmpty()
+            }
             safely("Startup file reindex") { vaultDiscoveryRepository.get().reindexAll(0L) }
             syncOrchestrator.get().reconcileVaultIntoRoom()
+            // The read-only tripwire, armed at every start: a copy that changed shows at once.
+            if (VaultWriteGate.readOnly) safely("Read-only tripwire") { syncOrchestrator.get().checkReadOnlyDrift() }
         }
     }
 
@@ -192,4 +224,9 @@ class PixelBrainApplication : Application(), Configuration.Provider {
         get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
             .build()
+
+    private companion object {
+        /** Refusals closer together than this show one notice. */
+        const val REFUSAL_NOTICE_GAP_MS = 3_000L
+    }
 }

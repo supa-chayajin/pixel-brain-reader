@@ -22,6 +22,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.ui.theme.LocalNavRail
 import cloud.wafflecommons.pixelbrainreader.ui.theme.railBottomClearance
 import cloud.wafflecommons.pixelbrainreader.ui.utils.isWideLayout
@@ -378,11 +379,12 @@ private data class NavDest(val route: String, val icon: ImageVector, val label: 
 private fun navDestinations(currentRoute: String?, isViewingDailyNote: Boolean, order: List<String>): List<NavDest> =
     inNavOrder(
         order,
-        listOf(
+        listOfNotNull(
             NavDest(Screen.Home, Icons.Rounded.Dashboard, "Repo", currentRoute == Screen.Home && !isViewingDailyNote),
             NavDest("habits", Icons.Rounded.DateRange, "Habits", currentRoute == "habits"),
             NavDest(Screen.HomeOS, Icons.Rounded.CleaningServices, "Chores", currentRoute == Screen.HomeOS),
-            NavDest(Screen.Chat, Icons.Rounded.Psychology, "Chat", currentRoute == Screen.Chat),
+            // No AI on a read-only device (DeviceRole).
+            NavDest(Screen.Chat, Icons.Rounded.Psychology, "Chat", currentRoute == Screen.Chat).takeUnless { VaultWriteGate.readOnly },
             NavDest(Screen.MoodTracker, Icons.Default.Mood, "Mood", currentRoute == Screen.MoodTracker),
             NavDest(Screen.Stats, Icons.Default.Star, "Stats", currentRoute == Screen.Stats)
         )
@@ -1012,8 +1014,8 @@ fun MainScreen(
                                     // VIEW MODE ACTIONS
                                     // 1. Existing Actions
                                     if (uiState.selectedFileName != null) {
-                                        // Edit/View Toggle — none on a desktop mirror, which is read-only.
-                                        if (!uiState.isMirrorNote) {
+                                        // Edit/View Toggle — none on a desktop mirror or a read-only device.
+                                        if (!uiState.isMirrorNote && !VaultWriteGate.readOnly) {
                                             FilledTonalIconButton(
                                                 onClick = { viewModel.toggleEditMode() },
                                                 colors = IconButtonDefaults.filledTonalIconButtonColors(
@@ -1240,7 +1242,8 @@ fun MainScreen(
                                             onRefresh = { viewModel.refreshCurrentFile() },
                                             isExpandedScreen = isLargeScreen,
                                             isEditing = uiState.isEditing,
-                                            isReadOnly = uiState.isMirrorNote,
+                                            isReadOnly = uiState.isMirrorNote || VaultWriteGate.readOnly,
+                                            readOnlyDevice = !uiState.isMirrorNote && VaultWriteGate.readOnly,
                                             hasUnsavedChanges = viewModel.hasUnsavedChanges,
                                             saveState = uiState.saveState,
                                             onWikiLinkClick = { target -> viewModel.onWikiLinkClick(target) },
@@ -1257,7 +1260,7 @@ fun MainScreen(
                                             // Hand off this note (C13): a link to it, on its own project when it has one.
                                             // Never a private note: its name would land in a plain file.
                                             onHandOff = uiState.selectedFilePath
-                                                ?.takeIf { it.endsWith(".md") && !it.startsWith("99_Private/") }
+                                                ?.takeIf { it.endsWith(".md") && !it.startsWith("99_Private/") && !VaultWriteGate.readOnly }
                                                 ?.let { path ->
                                                     {
                                                         val link = "[[" + path.substringAfterLast('/').removeSuffix(".md") + "]] "
@@ -1340,7 +1343,8 @@ fun MainScreen(
                     onOpenNote = { path ->
                         viewModel.openVaultFile(path)
                         navController.popBackStack()
-                    }
+                    },
+                    onLogout = onLogout
                 )
             }
 

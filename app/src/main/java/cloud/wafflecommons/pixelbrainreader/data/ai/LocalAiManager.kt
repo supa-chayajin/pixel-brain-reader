@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import android.util.Log
 import com.google.mlkit.genai.common.DownloadStatus
 import com.google.mlkit.genai.common.FeatureStatus
@@ -92,6 +93,12 @@ class LocalAiManager @Inject constructor(
      * progress (resumed from a prior session) we attach to its progress flow for the UI.
      */
     suspend fun refreshAvailability() = withContext(Dispatchers.IO) {
+        // No AI on a read-only device (DeviceRole): no probe, no download, no pre-load, and every
+        // generation fails fast on this state.
+        if (VaultWriteGate.readOnly) {
+            _nanoState.value = NanoState.Unavailable(READ_ONLY_REASON)
+            return@withContext
+        }
         if (_nanoState.value is NanoState.Downloading) return@withContext
         _nanoState.value = NanoState.Checking
         Log.i(tag, "Probing ML Kit GenAI status (package=${appContext.packageName})…")
@@ -125,6 +132,7 @@ class LocalAiManager @Inject constructor(
      * actual work runs on [ioScope].
      */
     fun downloadModel() {
+        if (VaultWriteGate.readOnly) return
         ioScope.launch {
             when (val current = _nanoState.value) {
                 is NanoState.Downloading -> {
@@ -366,6 +374,7 @@ class LocalAiManager @Inject constructor(
     }
 
     private companion object {
+        const val READ_ONLY_REASON = "the AI is off on this read-only device"
         // Generous — the first inference after a fresh (re)download reloads the model into
         // memory and can take a while. Chat streaming uses its own tighter budget.
         const val INFERENCE_TIMEOUT_MS = 120_000L

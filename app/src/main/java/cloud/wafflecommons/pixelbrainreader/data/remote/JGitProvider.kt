@@ -2,6 +2,8 @@ package cloud.wafflecommons.pixelbrainreader.data.remote
 
 import android.content.Context
 import android.util.Log
+import cloud.wafflecommons.pixelbrainreader.data.device.ReadOnlyDeviceException
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.guard.CommitGuard
 import cloud.wafflecommons.pixelbrainreader.data.guard.CommitHeldException
 import cloud.wafflecommons.pixelbrainreader.data.guard.GuardFinding
@@ -16,6 +18,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.eclipse.jgit.api.Git
+import org.eclipse.jgit.api.MergeCommand
+import org.eclipse.jgit.lib.BranchTrackingStatus
 import org.eclipse.jgit.api.errors.EmptyCommitException
 import org.eclipse.jgit.api.errors.RefNotAdvertisedException
 import org.eclipse.jgit.lib.TextProgressMonitor
@@ -194,6 +198,8 @@ class JGitProvider @Inject constructor(
                         throw e
                     }
                 } else {
+                    // A read-only device only ever holds a clone of GitHub.
+                    if (VaultWriteGate.readOnly) return@withLock Result.failure(ReadOnlyDeviceException())
                     // INIT STRATEGY (Local-only start)
                     Log.i("JGitProvider", "Initializing new local repository.")
                     rootDir.mkdirs()
@@ -216,6 +222,7 @@ class JGitProvider @Inject constructor(
      * commit right afterwards don't need this.
      */
     suspend fun addAll(): Result<Unit> = withContext(Dispatchers.IO) {
+        if (VaultWriteGate.readOnly) return@withContext Result.failure(ReadOnlyDeviceException())
         gitMutex.withLock {
             cleanStaleLocksIfNeeded()
             try {
@@ -236,6 +243,7 @@ class JGitProvider @Inject constructor(
      * Removes a file from the git index.
      */
     suspend fun removeFile(relativePath: String): Result<Unit> = withContext(Dispatchers.IO) {
+        if (VaultWriteGate.readOnly) return@withContext Result.failure(ReadOnlyDeviceException())
         gitMutex.withLock {
             cleanStaleLocksIfNeeded()
             try {
@@ -255,6 +263,7 @@ class JGitProvider @Inject constructor(
      * Adds a specific file to the git index.
      */
     suspend fun addFile(relativePath: String): Result<Unit> = withContext(Dispatchers.IO) {
+        if (VaultWriteGate.readOnly) return@withContext Result.failure(ReadOnlyDeviceException())
         gitMutex.withLock {
             cleanStaleLocksIfNeeded()
             try {
@@ -275,6 +284,8 @@ class JGitProvider @Inject constructor(
      * changed. Handles Detached HEAD by switching back to main first.
      */
     suspend fun commit(message: String): Result<Unit> = withContext(Dispatchers.IO) {
+        // A read-only device never stages nor commits anything.
+        if (VaultWriteGate.readOnly) return@withContext Result.failure(ReadOnlyDeviceException())
         gitMutex.withLock {
             cleanStaleLocksIfNeeded()
             try {
@@ -369,6 +380,7 @@ class JGitProvider @Inject constructor(
      * Pushes to remote. Fails when the remote refuses the update (see [describeRejectedUpdates]).
      */
     suspend fun push(remoteName: String = "origin"): Result<Unit> = withContext(Dispatchers.IO) {
+        if (VaultWriteGate.readOnly) return@withContext Result.failure(ReadOnlyDeviceException())
         if (!isReady()) return@withContext Result.failure(Exception("Repository not initialized"))
 
         gitMutex.withLock {
@@ -406,6 +418,8 @@ class JGitProvider @Inject constructor(
      */
     suspend fun pull(remoteName: String = "origin"): SyncResult = withContext(Dispatchers.IO) {
         if (!isReady()) return@withContext SyncResult.Error(Exception("Repository not initialized"))
+        // A read-only device never rebases nor merges: it only fast-forwards.
+        if (VaultWriteGate.readOnly) return@withContext pullFastForwardOnly(remoteName)
 
         gitMutex.withLock {
             cleanStaleLocksIfNeeded()
@@ -508,6 +522,7 @@ class JGitProvider @Inject constructor(
      * Configures the remote URL.
      */
     suspend fun setRemote(url: String, remoteName: String = "origin"): Result<Unit> = withContext(Dispatchers.IO) {
+        if (VaultWriteGate.readOnly) return@withContext Result.failure(ReadOnlyDeviceException())
         if (!isReady()) return@withContext Result.failure(Exception("Repo not ready"))
         // Mutate .git/config under the same gitMutex every other write uses — otherwise a
         // concurrent pull()/push() reading remote.<name>.url can race a half-written config
@@ -529,6 +544,114 @@ class JGitProvider @Inject constructor(
         }
     }
 
+    /**
+     * A read-only device's pull: fetch, then fast-forward only. Never a rebase or a merge commit,
+     * never a write of the device's own. A branch that diverged or a working tree that changed
+     * stops with an error instead (see [localChanges] and [resetToRemote]).
+     */
+    private suspend fun pullFastForwardOnly(remoteName: String): SyncResult = gitMutex.withLock {
+        cleanStaleLocksIfNeeded()
+        try {
+            val provider = getCredentialsProvider() ?: return@withLock SyncResult.Error(Exception("No API Token found"))
+            Git.open(rootDir).use { git ->
+                val result = git.pull()
+                    .setRemote(remoteName)
+                    .setRebase(false)
+                    .setFastForward(MergeCommand.FastForwardMode.FF_ONLY)
+                    .setCredentialsProvider(provider)
+                    .setTimeout(NETWORK_TIMEOUT_SECONDS)
+                    .setProgressMonitor(AndroidLogProgressMonitor())
+                    .call()
+                val status = result.mergeResult?.mergeStatus
+                if (result.isSuccessful && (status == null || status.isSuccessful)) {
+                    Log.i("JGitProvider", "Read-only pull (fast-forward only): ${status ?: "nothing to merge"}")
+                    SyncResult.Success
+                } else {
+                    Log.w("JGitProvider", "Read-only pull refused: $status")
+                    SyncResult.Error(
+                        ReadOnlyDeviceException("This read-only copy no longer follows GitHub ($status). Reset it to GitHub.")
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            if (e is RefNotAdvertisedException) return@withLock SyncResult.Success
+            onGitFailure(e)
+            Log.e("JGitProvider", "Read-only pull failed", e)
+            SyncResult.Error(e)
+        }
+    }
+
+    /** The URL this clone pulls from, or null without a clone. */
+    suspend fun originUrl(remoteName: String = "origin"): String? = withContext(Dispatchers.IO) {
+        if (!isReady()) return@withContext null
+        runCatching { Git.open(rootDir).use { it.repository.config.getString("remote", remoteName, "url") } }.getOrNull()
+    }
+
+    /**
+     * What this clone holds that GitHub doesn't: changed or new files in the working tree and
+     * commits not pushed yet. Always empty on a healthy read-only device (its tripwire), and what a
+     * login that starts from a fresh clone would discard.
+     */
+    suspend fun localChanges(branch: String = "main"): LocalChanges = withContext(Dispatchers.IO) {
+        if (!isReady()) return@withContext LocalChanges(emptyList(), 0)
+        gitMutex.withLock {
+            try {
+                Git.open(rootDir).use { git ->
+                    val status = git.status().call()
+                    val files = (status.added + status.changed + status.modified + status.missing +
+                        status.removed + status.untracked + status.conflicting).toSortedSet().toList()
+                    val ahead = BranchTrackingStatus.of(git.repository, branch)?.aheadCount ?: 0
+                    LocalChanges(files, ahead)
+                }
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.w("JGitProvider", "Could not read the local changes", e)
+                LocalChanges(emptyList(), 0, unreadable = true)
+            }
+        }
+    }
+
+    /**
+     * Deletes the local clone, for a login that starts from a fresh one. It is moved aside in one
+     * rename first, so a delete that fails halfway never leaves a half clone the next login opens.
+     */
+    suspend fun deleteLocalClone(): Boolean = withContext(Dispatchers.IO) {
+        gitMutex.withLock {
+            staleLocksChecked = false
+            val discarded = File(rootDir.parentFile, "vault_discarded")
+            if (discarded.exists()) discarded.deleteRecursively()
+            if (rootDir.exists() && !rootDir.renameTo(discarded)) return@withLock false
+            discarded.deleteRecursively()
+            true
+        }
+    }
+
+    /**
+     * A read-only device's way back to a faithful copy: fetch, hard reset to GitHub's [branch],
+     * untracked files removed. Refused on a device that writes: there it could discard real work.
+     */
+    suspend fun resetToRemote(branch: String = "main", remoteName: String = "origin"): Result<Unit> = withContext(Dispatchers.IO) {
+        if (!VaultWriteGate.readOnly) return@withContext Result.failure(IllegalStateException("Only a read-only device resets to GitHub"))
+        if (!isReady()) return@withContext Result.failure(Exception("Repository not initialized"))
+        gitMutex.withLock {
+            cleanStaleLocksIfNeeded()
+            try {
+                val provider = getCredentialsProvider() ?: return@withLock Result.failure(Exception("No API Token found"))
+                Git.open(rootDir).use { git ->
+                    git.fetch().setRemote(remoteName).setCredentialsProvider(provider).setTimeout(NETWORK_TIMEOUT_SECONDS).call()
+                    git.reset().setMode(org.eclipse.jgit.api.ResetCommand.ResetType.HARD).setRef("$remoteName/$branch").call()
+                    git.clean().setCleanDirectories(true).call()
+                }
+                Result.success(Unit)
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                onGitFailure(e)
+                Result.failure(e)
+            }
+        }
+    }
+
     // Kept for signature compatibility, but setupRepository handles this now
     suspend fun cloneRepo(url: String): Result<Unit> = setupRepository(url)
 
@@ -540,6 +663,7 @@ class JGitProvider @Inject constructor(
      * Use with caution.
      */
     suspend fun commitAndForcePush(message: String): Result<Unit> = withContext(Dispatchers.IO) {
+        if (VaultWriteGate.readOnly) return@withContext Result.failure(ReadOnlyDeviceException())
         Log.w("GitSync", "Starting EMERGENCY FORCE PUSH")
         if (!isReady()) return@withContext Result.failure(Exception("Repository not initialized"))
 
@@ -893,4 +1017,9 @@ class JGitProvider @Inject constructor(
          */
         const val NETWORK_TIMEOUT_SECONDS = 30
     }
+}
+
+/** What a clone holds that GitHub doesn't (see [JGitProvider.localChanges]). */
+data class LocalChanges(val files: List<String>, val unpushedCommits: Int, val unreadable: Boolean = false) {
+    val isEmpty: Boolean get() = files.isEmpty() && unpushedCommits == 0 && !unreadable
 }

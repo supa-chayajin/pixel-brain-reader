@@ -1,5 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.data.sync
 
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import android.util.Log
 import cloud.wafflecommons.pixelbrainreader.data.gamification.GamificationRepository
 import cloud.wafflecommons.pixelbrainreader.data.guard.CommitHeldException
@@ -20,6 +21,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -80,7 +82,8 @@ class SyncOrchestrator @Inject constructor(
     private val gitSyncCoordinator: GitSyncCoordinator,
     @param:ApplicationScope private val appScope: CoroutineScope,
     private val modesRepository: dagger.Lazy<cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository>,
-    private val syncDigestRepository: dagger.Lazy<SyncDigestRepository>
+    private val syncDigestRepository: dagger.Lazy<SyncDigestRepository>,
+    private val healthMetricsRepository: dagger.Lazy<cloud.wafflecommons.pixelbrainreader.data.repository.HealthMetricsRepository>
 ) {
     companion object {
         private const val TAG = "SyncOrchestrator"
@@ -177,6 +180,9 @@ class SyncOrchestrator @Inject constructor(
 
         _syncState.value = SyncState.Syncing(SyncStep.PULLING)
         Log.i(TAG, "=== Starting Full Sync Cycle ===")
+
+        // A read-only device only follows GitHub: no burn, no commit, no Health or Google, no push.
+        if (VaultWriteGate.readOnly) return runReadOnlyCycle()
 
         // Phase 0a: Burn today's Room-only board (dashboard/timeline/tasks/scraps/gratitude)
         // to its markdown file BEFORE we commit, so the vault copy is always fresh and ships
@@ -328,6 +334,100 @@ class SyncOrchestrator @Inject constructor(
         Log.i(TAG, "=== Full Sync Cycle Complete ===")
         _syncState.value = SyncState.Success
         return true
+    }
+
+    private val _readOnlyDrift = MutableStateFlow<List<String>>(emptyList())
+
+    /**
+     * The read-only tripwire: what a read-only device's copy holds that GitHub doesn't, although
+     * nothing may write it. Empty on a healthy device; the Daily screen offers a reset otherwise.
+     */
+    val readOnlyDrift: StateFlow<List<String>> = _readOnlyDrift.asStateFlow()
+
+    /**
+     * A read-only device's cycle: fast-forward from GitHub (JGitProvider.pull), then refresh what
+     * the screens read (file index, then Room from the vault JSON). Nothing is burnt, written,
+     * committed or pushed; a copy that changed anyway stops the cycle on the tripwire.
+     */
+    private suspend fun runReadOnlyCycle(): Boolean {
+        Log.i(TAG, "=== Read-only cycle: follow GitHub ===")
+        val headBeforePull = jGitProvider.headId()
+        val pullError = when (val pullResult = jGitProvider.pull()) {
+            is SyncResult.Success -> {
+                syncDigestRepository.get().recordPull(headBeforePull)
+                null
+            }
+            is SyncResult.ResolvedWithConflicts -> "Pull stopped on a conflict."
+            is SyncResult.Error -> pullResult.exception.message ?: "Pull failed"
+        }
+        checkReadOnlyDrift()
+        // Today's board follows the note the phone wrote (the device has no edits of its own).
+        runCatching { dailyDashboardRepository.reloadTodayFromDiskReadOnly() }
+            .onFailure { if (it is CancellationException) throw it; Log.w(TAG, "Read-only board reload failed (non-fatal)", it) }
+        if (pullError != null) {
+            _syncState.value = SyncState.Error(pullError)
+            lastSyncTimestamp = System.currentTimeMillis()
+            return false
+        }
+        _syncState.value = SyncState.Syncing(SyncStep.INDEXING)
+        runCatching { vaultDiscoveryRepository.reindexAll(0L) }
+            .onFailure { if (it is CancellationException) throw it; Log.w(TAG, "Read-only reindex failed (non-fatal)", it) }
+        _syncState.value = SyncState.Syncing(SyncStep.RECONCILING)
+        reconcileVaultIntoRoom()
+        healthMetricsRepository.get().notifyChanged() // the phone's health files, re-read
+        lastSyncTimestamp = System.currentTimeMillis()
+        val drift = _readOnlyDrift.value
+        if (drift.isNotEmpty()) {
+            _syncState.value = SyncState.Error("This read-only device changed ${drift.size} file(s): reset it to GitHub.")
+            return false
+        }
+        _syncState.value = SyncState.Success
+        return true
+    }
+
+    /**
+     * What a read-only device does after a pull that didn't come from [runReadOnlyCycle] (the file
+     * list's refresh): the tripwire, then today's board and health from the files the phone wrote.
+     */
+    suspend fun afterReadOnlyPull() {
+        if (!VaultWriteGate.readOnly) return
+        checkReadOnlyDrift()
+        runCatching { dailyDashboardRepository.reloadTodayFromDiskReadOnly() }
+            .onFailure { if (it is CancellationException) throw it }
+        healthMetricsRepository.get().notifyChanged()
+    }
+
+    /** Re-reads the tripwire (empty when the device writes, or when its copy is still GitHub's). */
+    suspend fun checkReadOnlyDrift() {
+        if (!VaultWriteGate.readOnly) {
+            _readOnlyDrift.value = emptyList()
+            return
+        }
+        val changes = jGitProvider.localChanges()
+        _readOnlyDrift.value = when {
+            changes.unreadable -> listOf("(the copy could not be read)")
+            else -> changes.files + if (changes.unpushedCommits > 0) listOf("${changes.unpushedCommits} local commit(s)") else emptyList()
+        }
+    }
+
+    /**
+     * Makes a read-only device's copy GitHub's again (JGitProvider.resetToRemote: it holds nothing
+     * of its own), then refreshes the screens. Refused on a device that writes.
+     */
+    suspend fun resetToGitHub(): Result<Unit> = withContext(Dispatchers.IO) {
+        syncMutex.withLock {
+            val result = jGitProvider.resetToRemote()
+            if (result.isSuccess) {
+                runCatching { vaultDiscoveryRepository.reindexAll(0L) }
+                    .onFailure { if (it is CancellationException) throw it }
+                reconcileVaultIntoRoom()
+                runCatching { dailyDashboardRepository.reloadTodayFromDiskReadOnly() }
+                    .onFailure { if (it is CancellationException) throw it }
+                healthMetricsRepository.get().notifyChanged()
+            }
+            checkReadOnlyDrift()
+            result
+        }
     }
 
     /**

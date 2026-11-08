@@ -1,5 +1,7 @@
 package cloud.wafflecommons.pixelbrainreader.data.repository
 
+import cloud.wafflecommons.pixelbrainreader.data.device.ReadOnlyDeviceException
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import android.content.Context
 import android.util.Log
 import cloud.wafflecommons.pixelbrainreader.data.guard.CommitHeldException
@@ -87,6 +89,28 @@ class FileRepository @Inject constructor(
                return@withLock Result.failure(error)
            }
 
+           // A read-only device has nothing to commit or push: it only follows GitHub (fast-forward).
+           if (VaultWriteGate.readOnly) {
+               // The tripwire: a copy that changed stops here (Daily offers "Reset to GitHub").
+               if (!jGitProvider.localChanges().isEmpty) {
+                   return@withLock Result.failure(
+                       cloud.wafflecommons.pixelbrainreader.data.device.ReadOnlyDeviceException(
+                           "This read-only device's copy differs from GitHub: reset it from Daily."
+                       )
+                   )
+               }
+               _syncStatus.value = SyncStep.PULLING.label
+               val headBefore = jGitProvider.headId()
+               when (val pull = jGitProvider.pull()) {
+                   is SyncResult.Success -> syncDigestRepository.get().recordPull(headBefore)
+                   is SyncResult.Error -> return@withLock Result.failure(pull.exception)
+                   is SyncResult.ResolvedWithConflicts -> return@withLock Result.failure(Exception("Pull stopped on a conflict."))
+               }
+               _syncStatus.value = SyncStep.INDEXING.label
+               vaultDiscoveryRepository.reindexAll()
+               return@withLock Result.success(Unit)
+           }
+
            // 2. Commit (commit() stages everything itself). A commit held by the confidentiality
            // guard stops here: the edits stay staged, so the rebase couldn't run anyway.
            _syncStatus.value = "Committing locally…"
@@ -132,6 +156,7 @@ class FileRepository @Inject constructor(
     // --- Shim Methods ---
 
     suspend fun createLocalFolder(path: String) = withContext(Dispatchers.IO) {
+        if (VaultWriteGate.readOnly) return@withContext
         val dir = File(vaultRoot, path)
         // Nothing to do — and, crucially, no full-vault reindex — when the folder already exists.
         // This used to reindex the entire vault on every XP grant and chore/habit config export.
@@ -145,6 +170,7 @@ class FileRepository @Inject constructor(
      * target and reports failures instead of throwing.
      */
     suspend fun renameFileSafe(oldPath: String, newPath: String): Result<Unit> = withContext(Dispatchers.IO) {
+        if (VaultWriteGate.refuses()) return@withContext Result.failure(ReadOnlyDeviceException())
         val old = File(vaultRoot, oldPath)
         val new = File(vaultRoot, newPath)
         if (!old.exists()) return@withContext Result.failure(IOException("Source not found: $oldPath"))
@@ -158,6 +184,7 @@ class FileRepository @Inject constructor(
 
     /** Deletes a file or a whole folder and records the deletion in a local commit. */
     suspend fun deleteFile(path: String): Result<Unit> = withContext(Dispatchers.IO) {
+        if (VaultWriteGate.refuses()) return@withContext Result.failure(ReadOnlyDeviceException())
         val file = File(vaultRoot, path)
         if (!file.exists()) return@withContext Result.failure(IOException("File not found: $path"))
         val deleted = if (file.isDirectory) file.deleteRecursively() else file.delete()
@@ -192,6 +219,7 @@ class FileRepository @Inject constructor(
      * when the file is missing or could not be moved. Blocking — call from Dispatchers.IO.
      */
     fun moveAsideCorrupt(path: String): File? {
+        if (VaultWriteGate.readOnly) return null
         val source = getLocalFile(path)
         if (!source.exists()) return null
         val backup = File(source.parentFile, "${source.name}.corrupt-${System.currentTimeMillis()}")

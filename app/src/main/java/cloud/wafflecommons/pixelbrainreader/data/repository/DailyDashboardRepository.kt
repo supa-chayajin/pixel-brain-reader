@@ -1,5 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.data.repository
 
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.ai.BriefingGenerator
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.DailyDashboardDao
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyDashboardEntity
@@ -222,6 +223,20 @@ class DailyDashboardRepository @Inject constructor(
             "Cold-start recovery: restored today from disk (${parsed.timeline.size} timeline, " +
                 "${parsed.tasks.size} tasks, ${parsed.scraps.size} scraps, ${parsed.gratitude.size} gratitude)"
         )
+    }
+
+    /**
+     * A read-only device's board follows the note the phone writes: after each pull (and at start),
+     * today is rebuilt from disk. The SHIELD that keeps a writing device's Room-only edits doesn't
+     * apply, since a read-only device has none. Refused on a device that writes.
+     */
+    suspend fun reloadTodayFromDiskReadOnly() = withContext(Dispatchers.IO) {
+        if (!VaultWriteGate.readOnly) return@withContext
+        val today = LocalDate.now()
+        dashboardDao.deleteDashboard(today)
+        scratchDao.deleteActiveScraps()
+        gratitudeDao.deleteGratitudesForDate(today.format(DateTimeFormatter.ISO_LOCAL_DATE))
+        rehydrateTodayFromDiskIfEmpty()
     }
 
     suspend fun burnToDisk(date: LocalDate) = withContext(Dispatchers.IO) {

@@ -16,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry
 
 @Composable
@@ -44,7 +45,8 @@ fun WelcomeScreen(modifier: Modifier = Modifier) {
             Spacer(modifier = Modifier.height(16.dp))
             StaggeredEntry(index = 2) {
                 Text(
-                    text = "You can analyze a folder to get started.",
+                    // No folder analysis (AI) on a read-only device.
+                    text = if (VaultWriteGate.readOnly) "Pick a note to read it here." else "You can analyze a folder to get started.",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

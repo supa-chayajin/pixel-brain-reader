@@ -1,5 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.ui.modes
 
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import android.graphics.drawable.Icon
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
@@ -33,6 +34,7 @@ class ModeTileService : TileService() {
 
     override fun onClick() {
         super.onClick()
+        if (VaultWriteGate.readOnly) return // the modes live in the vault: a read-only device can't switch them
         scope.launch {
             val next = when (modesRepository.currentVisibility().mode) {
                 ContextMode.WORK -> ContextMode.PERSONAL

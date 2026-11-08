@@ -2,6 +2,7 @@ package cloud.wafflecommons.pixelbrainreader.ui.privatevault
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.ai.LocalAiManager
 import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
 import cloud.wafflecommons.pixelbrainreader.data.repository.PrivateNoteRepository
@@ -119,6 +120,7 @@ class PrivateJournalViewModel @Inject constructor(
     }
 
     fun startNewNote() {
+        if (VaultWriteGate.refuses()) return // a read-only device writes nothing
         // Triggered by FAB -> Dialog -> createNote
         _uiState.update {
             it.copy(
@@ -214,6 +216,7 @@ class PrivateJournalViewModel @Inject constructor(
     }
 
     fun createNote(filename: String, initialContent: String = "") {
+        if (VaultWriteGate.refuses()) return // a read-only device writes nothing
         viewModelScope.launch {
             try {
                 // 1. Validate
@@ -259,6 +262,7 @@ class PrivateJournalViewModel @Inject constructor(
     }
 
     fun onEditorContentChange(text: String) {
+        if (VaultWriteGate.refuses()) return // a read-only device writes nothing
         _uiState.update { it.copy(editorContent = text) }
         _saveState.value = SaveState.UNSAVED
         _autoSaveTriggerFlow.value = text
@@ -284,6 +288,7 @@ class PrivateJournalViewModel @Inject constructor(
     }
 
     fun saveNote() {
+        if (VaultWriteGate.readOnly) return // nothing to save: a read-only device never edits
         val state = _uiState.value
         val file = state.selectedFile ?: return
         val content = state.editorContent
@@ -324,6 +329,7 @@ class PrivateJournalViewModel @Inject constructor(
     }
 
     fun deleteCurrentNote() {
+        if (VaultWriteGate.refuses()) return // a read-only device writes nothing
         val file = _uiState.value.selectedFile ?: return
         viewModelScope.launch {
             repository.deleteNote(file)
@@ -362,7 +368,7 @@ class PrivateJournalViewModel @Inject constructor(
         sessionPassword = null
         secretManager.setPrivateVaultSessionUnlocked(false)
         val content = state.editorContent
-        if (file == null || pwd == null || state.isLocked || savedContents[file.path] == content) {
+        if (VaultWriteGate.readOnly || file == null || pwd == null || state.isLocked || savedContents[file.path] == content) {
             pwd?.let { Arrays.fill(it, ' ') }
             repository.forgetKeys()
             return
@@ -396,12 +402,16 @@ class PrivateJournalViewModel @Inject constructor(
     private val _assistState = MutableStateFlow(AssistState())
     val assistState = _assistState.asStateFlow()
 
-    fun openAssist() { _assistState.value = AssistState(visible = true) }
+    fun openAssist() {
+        if (VaultWriteGate.refuses()) return // no AI on a read-only device
+        _assistState.value = AssistState(visible = true)
+    }
     fun dismissAssist() { _assistState.value = AssistState() }
 
     /** Runs a French journaling-assist action over the current entry. Never mutates the note
      *  directly — the result is shown for the user to explicitly apply. */
     fun runWritingAssist(action: AssistAction) {
+        if (VaultWriteGate.refuses()) return // a read-only device writes nothing
         val content = _uiState.value.editorContent
         _assistState.value = AssistState(visible = true, isLoading = true, action = action)
         viewModelScope.launch {
@@ -441,12 +451,14 @@ class PrivateJournalViewModel @Inject constructor(
     }
 
     fun applyAssistReplace() {
+        if (VaultWriteGate.refuses()) return // a read-only device writes nothing
         val r = _assistState.value.result ?: return
         replaceEditorContent(r)
         dismissAssist()
     }
 
     fun applyAssistAppend() {
+        if (VaultWriteGate.refuses()) return // a read-only device writes nothing
         val r = _assistState.value.result ?: return
         val cur = _uiState.value.editorContent
         replaceEditorContent(if (cur.isBlank()) r else "$cur\n\n$r")
@@ -460,6 +472,7 @@ class PrivateJournalViewModel @Inject constructor(
      * current selection.
      */
     suspend fun beautifyMarkdown(selectedText: String): String? {
+        if (VaultWriteGate.readOnly) return null // no AI on a read-only device
         if (selectedText.isBlank()) return null
         val prompt = """
             Reformate le texte suivant en Markdown propre et bien structuré. Applique des titres,

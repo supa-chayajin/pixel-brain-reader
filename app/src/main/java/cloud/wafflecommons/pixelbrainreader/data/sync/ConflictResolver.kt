@@ -1,5 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.data.sync
 
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import android.content.Context
 import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -24,6 +25,7 @@ class ConflictResolver @Inject constructor(
      * Secures a backup of the local file before JGit overwrites it.
      */
     suspend fun secureLocalBackup(conflictingRelativePath: String): File? = withContext(Dispatchers.IO) {
+        if (VaultWriteGate.readOnly) return@withContext null
         try {
             val originalFile = File(rootDir, conflictingRelativePath)
             if (!originalFile.exists() || !originalFile.canRead()) {

@@ -12,6 +12,10 @@ interface GratitudeDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertGratitude(entity: GratitudeEntity)
 
+    /** A day's gratitude gone, before a read-only device rebuilds it from that day's note. */
+    @Query("DELETE FROM daily_gratitudes WHERE date = :date")
+    suspend fun deleteGratitudesForDate(date: String)
+
     @Query("DELETE FROM daily_gratitudes WHERE id = :id")
     suspend fun deleteGratitude(id: String)
 

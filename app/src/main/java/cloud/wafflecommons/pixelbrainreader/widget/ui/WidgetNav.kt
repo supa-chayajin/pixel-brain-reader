@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import androidx.core.net.toUri
 import cloud.wafflecommons.pixelbrainreader.MainActivity
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 
 /**
  * Single source of truth for how home-screen widgets and launcher shortcuts navigate into the app.
@@ -41,8 +42,23 @@ object WidgetNav {
     const val SCREEN_PROJECTS = "projects"
     const val SCREEN_HANDOFF = "handoff"
 
-    /** Maps a public screen key to the internal NavHost route, or null if unknown (→ reject). */
-    fun screenToRoute(screen: String?): String? = when (screen?.lowercase()?.trim()) {
+    /**
+     * Maps a public screen key to the internal NavHost route, or null if unknown (→ reject). A
+     * read-only device (VaultWriteGate) has no chat and no hand-off composer, and opens the mission
+     * log without its add dialog.
+     */
+    fun screenToRoute(screen: String?): String? {
+        val key = screen?.lowercase()?.trim()
+        if (VaultWriteGate.readOnly) {
+            when (key) {
+                SCREEN_CHAT, SCREEN_HANDOFF -> return null
+                SCREEN_LOG -> return "mission_log?add=false"
+            }
+        }
+        return routeOf(key)
+    }
+
+    private fun routeOf(key: String?): String? = when (key) {
         SCREEN_DAILY -> "daily_note"
         SCREEN_MOOD -> "mood"
         SCREEN_HABITS -> "habits"

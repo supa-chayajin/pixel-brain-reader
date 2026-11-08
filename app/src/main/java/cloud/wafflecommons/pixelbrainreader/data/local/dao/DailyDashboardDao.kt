@@ -116,6 +116,10 @@ interface DailyDashboardDao {
     @Query("DELETE FROM daily_tasks WHERE scheduledDate = :date")
     suspend fun clearTasks(date: LocalDate)
 
+    /** Today's row gone, so a read-only device can rebuild its board from disk (DailyDashboardRepository). */
+    @Query("DELETE FROM daily_dashboard WHERE date = :date")
+    suspend fun deleteDashboard(date: java.time.LocalDate)
+
     // --- Transactional Helper ---
     @Transaction
     suspend fun ingestDailyData(

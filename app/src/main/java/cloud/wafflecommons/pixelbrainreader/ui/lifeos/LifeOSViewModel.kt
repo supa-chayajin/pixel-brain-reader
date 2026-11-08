@@ -2,6 +2,7 @@ package cloud.wafflecommons.pixelbrainreader.ui.lifeos
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.gamification.AttributeParser
 import cloud.wafflecommons.pixelbrainreader.data.gamification.GamificationRepository
 import cloud.wafflecommons.pixelbrainreader.data.gamification.GamificationState
@@ -117,6 +118,7 @@ class LifeOSViewModel @Inject constructor(
     }
 
     fun toggleHabit(habitId: String) {
+        if (VaultWriteGate.refuses()) return // a read-only device changes nothing
         val state = uiState.value
         val stats = state.habitsWithStats.find { it.config.id == habitId } ?: return
         // Automatic (Health-Connect) habits are read-only — their state is reconciled from
@@ -145,6 +147,7 @@ class LifeOSViewModel @Inject constructor(
     }
 
     fun updateHabitValue(habitId: String, newValue: Double) {
+        if (VaultWriteGate.refuses()) return // a read-only device changes nothing
         val state = uiState.value
         val stats = state.habitsWithStats.find { it.config.id == habitId } ?: return
         val habitConfig = stats.config
@@ -178,6 +181,7 @@ class LifeOSViewModel @Inject constructor(
     }
 
     fun toggleTask(task: DailyTaskEntity) {
+        if (VaultWriteGate.refuses()) return // a read-only device changes nothing
         val isDone = !task.isDone
         val rewardKey = "task:${task.id}"
         val grantXp = isDone && rewardedCompletions.add(rewardKey)
@@ -196,6 +200,7 @@ class LifeOSViewModel @Inject constructor(
     }
 
     fun addDebugHabit() {
+        if (VaultWriteGate.refuses()) return // a read-only device changes nothing
         viewModelScope.launch {
             val randomId = java.util.UUID.randomUUID().toString()
             val newHabit = HabitConfig(

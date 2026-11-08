@@ -1,5 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.data.notifications
 
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -42,6 +43,7 @@ class CheckInReceiver : BroadcastReceiver() {
     @Inject @ApplicationScope lateinit var appScope: CoroutineScope
 
     override fun onReceive(context: Context, intent: Intent) {
+        if (VaultWriteGate.readOnly) return // a read-only device logs nothing
         val pending = goAsync()
         val app = context.applicationContext
         appScope.launch {

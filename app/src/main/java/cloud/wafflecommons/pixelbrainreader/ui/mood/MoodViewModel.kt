@@ -3,6 +3,7 @@ package cloud.wafflecommons.pixelbrainreader.ui.mood
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.repository.DailyMoodData
 import cloud.wafflecommons.pixelbrainreader.data.repository.MoodEntry
 import cloud.wafflecommons.pixelbrainreader.data.repository.MoodRepository
@@ -104,6 +105,7 @@ class MoodViewModel @Inject constructor(
      * background, so the sheet no longer waits on the network.
      */
     fun addMoodEntry(score: Int, activities: List<String>, note: String, customTimestamp: LocalDateTime? = null) {
+        if (VaultWriteGate.refuses()) return // a read-only device changes nothing
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             val message = try {

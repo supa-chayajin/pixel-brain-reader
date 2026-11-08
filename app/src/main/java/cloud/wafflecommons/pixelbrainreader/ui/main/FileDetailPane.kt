@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.rounded.Computer
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Hub
+import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
@@ -127,6 +128,8 @@ fun FileDetailPane(
     isEditing: Boolean,
     /** A desktop mirror: shown with a banner, never in the editor, nothing dropped into it. */
     isReadOnly: Boolean = false,
+    /** Read-only because the whole device is (DeviceRole), not because the note is a mirror. */
+    readOnlyDevice: Boolean = false,
     onContentChange: (String) -> Unit,
     saveState: cloud.wafflecommons.pixelbrainreader.ui.components.SaveState,
     hasUnsavedChanges: Boolean,
@@ -236,7 +239,7 @@ fun FileDetailPane(
                             )
                         }
                         Spacer(Modifier.weight(1f))
-                        if (filePath != null && content != null) {
+                        if (filePath != null && content != null && !isReadOnly) {
                             VaultRulesBadge(path = filePath, content = content, onFix = onContentChange)
                         }
                         if (onHandOff != null) {
@@ -429,7 +432,7 @@ fun FileDetailPane(
                                             )
                                         }
 
-                                        if (isReadOnly) MirrorNoteBanner(Modifier.padding(top = 16.dp))
+                                        if (isReadOnly) MirrorNoteBanner(Modifier.padding(top = 16.dp), readOnlyDevice)
 
                                         if (parsed.metadata.isNotEmpty() || parsed.tags.isNotEmpty()) {
                                             MetadataHeader(parsed.metadata, parsed.tags)
@@ -630,9 +633,12 @@ fun WelcomeState(onCreateNew: () -> Unit) {
     }
 }
 
-/** Above a desktop mirror, in place of the editor: the copy is rewritten from its source on the desktop. */
+/**
+ * Above a desktop mirror, in place of the editor: the copy is rewritten from its source on the desktop.
+ * On a read-only device ([readOnlyDevice]) every note opens this way: it is edited on the phone.
+ */
 @Composable
-private fun MirrorNoteBanner(modifier: Modifier = Modifier) {
+private fun MirrorNoteBanner(modifier: Modifier = Modifier, readOnlyDevice: Boolean = false) {
     Surface(
         color = MaterialTheme.colorScheme.secondaryContainer,
         shape = MaterialTheme.shapes.small,
@@ -644,12 +650,12 @@ private fun MirrorNoteBanner(modifier: Modifier = Modifier) {
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Icon(
-                imageVector = Icons.Rounded.Computer,
+                imageVector = if (readOnlyDevice) Icons.Rounded.Visibility else Icons.Rounded.Computer,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSecondaryContainer
             )
             Text(
-                text = "Generated, edit the source on the desktop",
+                text = if (readOnlyDevice) "Read-only device: edit this note on your phone" else "Generated, edit the source on the desktop",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSecondaryContainer
             )

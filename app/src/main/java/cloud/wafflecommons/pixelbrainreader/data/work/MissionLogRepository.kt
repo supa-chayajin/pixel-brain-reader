@@ -1,5 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.data.work
 
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import android.content.Context
 import cloud.wafflecommons.pixelbrainreader.data.local.security.CryptoManager
 import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
@@ -170,6 +171,7 @@ class MissionLogRepository @Inject constructor(
     }
 
     private suspend fun write(path: String, content: String, encrypted: Boolean) {
+        VaultWriteGate.check()
         if (!encrypted) {
             fileRepository.saveFileLocally(path, content)
             return
