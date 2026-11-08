@@ -138,3 +138,17 @@ note got before the rule are dropped on the next indexing run
 
 *Why:* those notes repeat what the desktop sessions already remember, how to work and
 project facts, and are noise for retrieval. Decided on 2026-11-06.
+
+## 17. Wide screens have layouts of their own
+
+On a wide window (840 dp and more: a tablet in landscape, an unfolded Fold) the navigation is a
+side rail, Daily emphasized at its top and the tabs in the owner's order; phones, the folded Fold
+and a tablet in portrait keep the floating bottom bar. There, the Daily screen packs its blocks
+into two columns in the owner's order, each under the shorter column (the mode chips share the
+Add box's line, the banners keep the full width, Timeline and Tasks pack like the others); Settings stays one centred column,
+same order, nothing folded; Projects, Boards and Runbooks show their list and the open page side
+by side. Forms, lists, Chat and the reader keep a readable width (`ui/utils/AdaptiveLayout.kt`).
+
+*Why:* on a tablet in landscape (1280 × 800 dp) every screen was one column stretched across the
+width, and the bottom bar took height from the content. The owner chose each of these layouts on
+2026-11-08; it ends "a bottom bar at every size", on wide windows only.

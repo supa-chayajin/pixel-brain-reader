@@ -11,6 +11,32 @@ Still planned (`documentation/plans/2026-10-18-v11-work-and-dev-toolkit.md`): th
 dashboard, "explain this error", decision records, people & 1:1s, security watch, the workshop
 kit and the authorship timeline.
 
+## [12.5.0] — 2026-11-08
+
+Tablets and the unfolded Fold get layouts of their own instead of a phone screen stretched
+across the width.
+
+### Changed
+
+- **A side rail on wide screens.** From 840 dp (a tablet in landscape, the unfolded Fold) the
+  navigation is a rail along the left edge: Daily at the top, the tabs below in your order. It
+  no longer takes height from the content and stays while you type. Phones, the folded Fold
+  and a tablet in portrait keep the floating bottom bar.
+- **Daily in two columns.** On a wide screen the day's blocks pack into two columns, in your
+  order: each one goes under the shorter column, so a short block (the weather) leaves no gap
+  beside a tall one (the summary). The mode chips share the Add box's line, the banners keep
+  the full width, and the + button keeps the corner that the bottom bar used to take.
+- **Projects, Boards and Runbooks side by side.** On a wide screen the list and the open page
+  show together: the open entry is highlighted, opening another replaces the page, and back
+  closes the page first. On a phone the page still opens over the list.
+- **The toolkit in two columns** on a wide screen, pinned tools first.
+- **Readable widths.** Settings (same order, nothing folded), its sub-pages, the toolkit's
+  pages and forms, the mission log, Chat and Mood stay in one centred column instead of
+  stretching across the screen; a note keeps about 80 characters a line in the reader.
+- **Habits in two wide columns** on a tablet or an unfolded Fold, so a category of two fills its
+  row instead of sitting in the corner of a row of narrow cards. Chores counts its columns on
+  the space beside the rail.
+
 ## [12.4.1] — 2026-11-06
 
 The phone reads two more project layouts the desktop now keeps in the vault.

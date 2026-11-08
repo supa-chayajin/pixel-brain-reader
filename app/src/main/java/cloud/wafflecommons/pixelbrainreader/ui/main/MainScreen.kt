@@ -12,6 +12,19 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
+import cloud.wafflecommons.pixelbrainreader.ui.theme.LocalNavRail
+import cloud.wafflecommons.pixelbrainreader.ui.theme.railBottomClearance
+import cloud.wafflecommons.pixelbrainreader.ui.utils.isWideLayout
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -126,9 +139,11 @@ internal val ExpressiveNavBarHeight = 64.dp
  * occluded by the floating [ExpressiveNavBar]. The bar floats over content and
  * reserves no layout space, so = bar height + its 16.dp vertical padding + 8.dp
  * breathing room. The system nav-bar inset is NOT included here (it is already
- * applied by the Home Scaffold's content padding).
+ * applied by the Home Scaffold's content padding). Beside the side rail (a wide window)
+ * there is no bar: only the system navigation bar is left to clear.
  */
-internal val ExpressiveNavBarClearance = ExpressiveNavBarHeight + 24.dp
+internal val ExpressiveNavBarClearance: Dp
+    @Composable get() = if (LocalNavRail.current) railBottomClearance() else ExpressiveNavBarHeight + 24.dp
 
 /**
  * Material 3 Expressive floating navigation bar modeled on the new Google Finance
@@ -145,34 +160,10 @@ private fun ExpressiveNavBar(
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val haptic = LocalHapticFeedback.current
-
-    // The floating bar's elevation shadow is tinted with the primary (sage) accent. On a dark
-    // surface that bright tint reads as an ugly glowing halo — but a shadow dimmed all the way to
-    // black just vanishes against the dark page. So on dark themes we keep the shadow COLOURED and
-    // at full elevation, only dialling its brightness partway down toward black: still clearly a
-    // shadow, just a subtler, darker green. Derived from the resolved surface luminance so it
-    // tracks the ACTUAL theme (not just the system setting).
-    val isDarkSurface = MaterialTheme.colorScheme.surface.luminance() < 0.5f
-    val navShadowColor = if (isDarkSurface) lerp(MaterialTheme.colorScheme.primary, Color.Black, 0.4f)
-        else MaterialTheme.colorScheme.primary
-    val navShadowElevation = 6.dp
-
-    data class NavDest(val route: String, val icon: ImageVector, val label: String, val selected: Boolean)
+    val navShadowColor = navShadowColor()
 
     // First three = the folded set (Repo, Habits, Chores). Unfolded reveals the rest.
-    val allRegular = listOf(
-        NavDest(Screen.Home, Icons.Rounded.Dashboard, "Repo", currentRoute == Screen.Home && !isViewingDailyNote),
-        NavDest("habits", Icons.Rounded.DateRange, "Habits", currentRoute == "habits"),
-        NavDest(Screen.HomeOS, Icons.Rounded.CleaningServices, "Chores", currentRoute == Screen.HomeOS),
-        NavDest(Screen.Chat, Icons.Rounded.Psychology, "Chat", currentRoute == Screen.Chat),
-        NavDest(Screen.MoodTracker, Icons.Default.Mood, "Mood", currentRoute == Screen.MoodTracker),
-        NavDest(Screen.Stats, Icons.Default.Star, "Stats", currentRoute == Screen.Stats)
-    )
-    // Apply the user's custom order; any destination not present in `order` (e.g. added in a
-    // later app version) is appended so nothing ever disappears from the bar.
-    val ordered = order.mapNotNull { route -> allRegular.find { it.route == route } }
-        .plus(allRegular.filter { dest -> order.none { it == dest.route } })
+    val ordered = navDestinations(currentRoute, isViewingDailyNote, order)
     val regular = if (isLargeScreen) ordered else ordered.take(3)
     val dailySelected = currentRoute == Screen.DailyNote
 
@@ -187,8 +178,8 @@ private fun ExpressiveNavBar(
         // Shared geometry so the group, the Daily button and the selection pill
         // are all concentric: outerRadius on the bar, (outerRadius - innerPad) on
         // the selection pill so it looks like it FILLS the bar's inner area.
-        val barRadius = 28.dp
-        val innerPad = 6.dp
+        val barRadius = NavBarRadius
+        val innerPad = NavInnerPad
         val pillRadius = barRadius - innerPad
 
         // --- Main floating group of regular tabs ---
@@ -204,7 +195,7 @@ private fun ExpressiveNavBar(
                 // inverted into an ugly white halo under a device force-dark override, so we
                 // set the spot/ambient colours explicitly to the accent.
                 .shadow(
-                    elevation = navShadowElevation,
+                    elevation = NavShadowElevation,
                     shape = RoundedCornerShape(barRadius),
                     spotColor = navShadowColor,
                     ambientColor = navShadowColor
@@ -267,81 +258,242 @@ private fun ExpressiveNavBar(
         }
 
         // --- Separate, emphasized "Daily" button (à la Finance's "Ask") ---
-        // Same radius + same dark surface as the group, distinguished only by a
-        // green GLOW (colored shadow + accent border), like Finance's Ask button.
-        val accent = MaterialTheme.colorScheme.primary
-        // Smoothly fade the Daily icon/label between active (bright) and idle (dimmed).
-        val dailyContent by animateColorAsState(
-            targetValue = if (dailySelected) accent else accent.copy(alpha = 0.5f),
-            animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
-            label = "dailyContent"
+        DailyNavButton(
+            selected = dailySelected,
+            onSelect = { onSelect(Screen.DailyNote) },
+            shadowColor = navShadowColor
         )
-        val surfaceHi = MaterialTheme.colorScheme.surfaceContainerHighest
-        // Soft spring fade-in of the top-right glow + accent border when Daily is selected,
-        // plus a gentle scale-pop — the "expressive" flourish.
-        val glowAlpha by animateFloatAsState(
-            targetValue = if (dailySelected) 0.45f else 0f,
-            animationSpec = spring(stiffness = Spring.StiffnessLow),
-            label = "dailyGlow"
-        )
-        val borderAlpha by animateFloatAsState(
-            targetValue = if (dailySelected) 0.9f else 0f,
-            animationSpec = spring(stiffness = Spring.StiffnessLow),
-            label = "dailyBorder"
-        )
-        val dailyScale by animateFloatAsState(
-            targetValue = if (dailySelected) 1.06f else 1f,
-            animationSpec = spring(
-                dampingRatio = Spring.DampingRatioMediumBouncy,
-                stiffness = Spring.StiffnessMedium
-            ),
-            label = "dailyScale"
-        )
-        val dailyGlow = remember(glowAlpha, accent) {
-            object : ShaderBrush() {
-                override fun createShader(size: Size): Shader =
-                    RadialGradientShader(
-                        center = Offset(size.width, 0f),
-                        radius = size.maxDimension,
-                        colors = listOf(accent.copy(alpha = glowAlpha), Color.Transparent)
+    }
+}
+
+/** Width of the rail's tab group and Daily button. */
+private val RailWidth = 76.dp
+
+/** Height of one tab in the rail. */
+private val RailItemHeight = 60.dp
+
+/**
+ * The navigation of a wide window (a tablet in landscape, an unfolded Fold): the same floating tab
+ * group and emphasized Daily button as [ExpressiveNavBar], stood up along the left edge, where the
+ * thumbs reach when the screen is held in two hands, and no longer taking height from the content.
+ * Every tab shows, in the user's order. The group scrolls when the window is too short for it.
+ */
+@Composable
+private fun ExpressiveNavRail(
+    currentRoute: String?,
+    isViewingDailyNote: Boolean,
+    order: List<String>,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val navShadowColor = navShadowColor()
+    val regular = navDestinations(currentRoute, isViewingDailyNote, order)
+    val dailySelected = currentRoute == Screen.DailyNote
+
+    Box(
+        modifier = modifier
+            .fillMaxHeight()
+            .background(MaterialTheme.colorScheme.background)
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Start + WindowInsetsSides.Vertical)),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 10.dp, vertical = 16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            DailyNavButton(
+                selected = dailySelected,
+                onSelect = { onSelect(Screen.DailyNote) },
+                shadowColor = navShadowColor,
+                modifier = Modifier.width(RailWidth),
+                horizontalPadding = 0.dp
+            )
+
+            Surface(
+                shape = RoundedCornerShape(NavBarRadius),
+                color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                modifier = Modifier
+                    .width(RailWidth)
+                    .shadow(
+                        elevation = NavShadowElevation,
+                        shape = RoundedCornerShape(NavBarRadius),
+                        spotColor = navShadowColor,
+                        ambientColor = navShadowColor
                     )
+            ) {
+                val selectedIndex = regular.indexOfFirst { it.selected }
+                // Same parked, sliding pill as the bar, moving down the rail instead of across.
+                var parkedIndex by remember { mutableIntStateOf(selectedIndex.coerceAtLeast(0)) }
+                LaunchedEffect(selectedIndex) { if (selectedIndex >= 0) parkedIndex = selectedIndex }
+                val itemHeightPx = with(LocalDensity.current) { RailItemHeight.toPx() }
+                val indicatorY by animateFloatAsState(
+                    targetValue = parkedIndex * itemHeightPx,
+                    animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = 320f),
+                    label = "railIndicatorY"
+                )
+                val indicatorAlpha by animateFloatAsState(
+                    targetValue = if (selectedIndex >= 0) 1f else 0f,
+                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                    label = "railIndicatorAlpha"
+                )
+                Box(modifier = Modifier.padding(NavInnerPad)) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(RailItemHeight)
+                            .graphicsLayer {
+                                translationY = indicatorY
+                                alpha = indicatorAlpha
+                            }
+                            .clip(RoundedCornerShape(NavBarRadius - NavInnerPad))
+                            .background(MaterialTheme.colorScheme.secondaryContainer)
+                    )
+                    Column {
+                        regular.forEach { item ->
+                            NavPiece(
+                                icon = item.icon,
+                                label = item.label,
+                                selected = item.selected,
+                                onClick = { if (!item.selected) onSelect(item.route) },
+                                modifier = Modifier.fillMaxWidth().height(RailItemHeight)
+                            )
+                        }
+                    }
+                }
             }
         }
-        Box(
-            modifier = Modifier
-                .graphicsLayer { scaleX = dailyScale; scaleY = dailyScale }
-                .height(64.dp)
-                // Match the nav group with a theme-coloured (accent) elevation shadow so
-                // the emphasized Daily button doesn't read as flat — and never inverts to
-                // a white halo under force-dark.
-                .shadow(
-                    elevation = navShadowElevation,
-                    shape = RoundedCornerShape(barRadius),
-                    spotColor = navShadowColor,
-                    ambientColor = navShadowColor
+    }
+}
+
+/** One regular tab of the bar or the rail. */
+private data class NavDest(val route: String, val icon: ImageVector, val label: String, val selected: Boolean)
+
+/**
+ * The regular tabs (all but Daily) in the user's custom order; a destination absent from the saved
+ * order (one added in a later app version) is appended, so nothing ever disappears from the bar.
+ */
+private fun navDestinations(currentRoute: String?, isViewingDailyNote: Boolean, order: List<String>): List<NavDest> =
+    inNavOrder(
+        order,
+        listOf(
+            NavDest(Screen.Home, Icons.Rounded.Dashboard, "Repo", currentRoute == Screen.Home && !isViewingDailyNote),
+            NavDest("habits", Icons.Rounded.DateRange, "Habits", currentRoute == "habits"),
+            NavDest(Screen.HomeOS, Icons.Rounded.CleaningServices, "Chores", currentRoute == Screen.HomeOS),
+            NavDest(Screen.Chat, Icons.Rounded.Psychology, "Chat", currentRoute == Screen.Chat),
+            NavDest(Screen.MoodTracker, Icons.Default.Mood, "Mood", currentRoute == Screen.MoodTracker),
+            NavDest(Screen.Stats, Icons.Default.Star, "Stats", currentRoute == Screen.Stats)
+        )
+    ) { it.route }
+
+/** Corner radius of the nav surfaces; the selection pill sits [NavInnerPad] inside it. */
+private val NavBarRadius = 28.dp
+private val NavInnerPad = 6.dp
+private val NavShadowElevation = 6.dp
+
+/**
+ * The floating nav surfaces' elevation shadow is tinted with the primary (sage) accent. On a dark
+ * surface that bright tint reads as an ugly glowing halo — but a shadow dimmed all the way to
+ * black just vanishes against the dark page. So on dark themes we keep the shadow COLOURED and
+ * at full elevation, only dialling its brightness partway down toward black: still clearly a
+ * shadow, just a subtler, darker green. Derived from the resolved surface luminance so it
+ * tracks the ACTUAL theme (not just the system setting).
+ */
+@Composable
+private fun navShadowColor(): Color {
+    val isDarkSurface = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    return if (isDarkSurface) lerp(MaterialTheme.colorScheme.primary, Color.Black, 0.4f)
+        else MaterialTheme.colorScheme.primary
+}
+
+/**
+ * The emphasized "Daily" button, apart from the tab group (à la Finance's "Ask"): same radius and
+ * dark surface as the group, distinguished only by a green GLOW (colored shadow + accent border).
+ * [horizontalPadding] gives it its width in the bar; the rail gives it a width instead.
+ */
+@Composable
+private fun DailyNavButton(
+    selected: Boolean,
+    onSelect: () -> Unit,
+    shadowColor: Color,
+    modifier: Modifier = Modifier,
+    horizontalPadding: Dp = 28.dp
+) {
+    val haptic = LocalHapticFeedback.current
+    val accent = MaterialTheme.colorScheme.primary
+    // Smoothly fade the Daily icon/label between active (bright) and idle (dimmed).
+    val dailyContent by animateColorAsState(
+        targetValue = if (selected) accent else accent.copy(alpha = 0.5f),
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label = "dailyContent"
+    )
+    val surfaceHi = MaterialTheme.colorScheme.surfaceContainerHighest
+    // Soft spring fade-in of the top-right glow + accent border when Daily is selected,
+    // plus a gentle scale-pop — the "expressive" flourish.
+    val glowAlpha by animateFloatAsState(
+        targetValue = if (selected) 0.45f else 0f,
+        animationSpec = spring(stiffness = Spring.StiffnessLow),
+        label = "dailyGlow"
+    )
+    val borderAlpha by animateFloatAsState(
+        targetValue = if (selected) 0.9f else 0f,
+        animationSpec = spring(stiffness = Spring.StiffnessLow),
+        label = "dailyBorder"
+    )
+    val dailyScale by animateFloatAsState(
+        targetValue = if (selected) 1.06f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "dailyScale"
+    )
+    val dailyGlow = remember(glowAlpha, accent) {
+        object : ShaderBrush() {
+            override fun createShader(size: Size): Shader =
+                RadialGradientShader(
+                    center = Offset(size.width, 0f),
+                    radius = size.maxDimension,
+                    colors = listOf(accent.copy(alpha = glowAlpha), Color.Transparent)
                 )
-                .clip(RoundedCornerShape(barRadius))
-                // Opaque dark base so no content bleeds through the pill...
-                .background(surfaceHi)
-                // ...then a green glow on top, anchored to the top-right corner
-                // (fading to transparent) so it reads as a directional accent.
-                .background(dailyGlow)
-                .border(
-                    BorderStroke(1.5.dp, accent.copy(alpha = borderAlpha)),
-                    RoundedCornerShape(barRadius)
-                )
-                .clickable {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    if (!dailySelected) onSelect(Screen.DailyNote)
-                }
-                .padding(horizontal = 28.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(Icons.Rounded.AutoAwesome, contentDescription = "Daily", tint = dailyContent, modifier = Modifier.size(24.dp))
-                Spacer(Modifier.height(3.dp))
-                Text("Daily", style = MaterialTheme.typography.labelMedium, color = dailyContent, maxLines = 1)
+        }
+    }
+    Box(
+        modifier = modifier
+            .graphicsLayer { scaleX = dailyScale; scaleY = dailyScale }
+            .height(64.dp)
+            // Match the nav group with a theme-coloured (accent) elevation shadow so
+            // the emphasized Daily button doesn't read as flat — and never inverts to
+            // a white halo under force-dark.
+            .shadow(
+                elevation = NavShadowElevation,
+                shape = RoundedCornerShape(NavBarRadius),
+                spotColor = shadowColor,
+                ambientColor = shadowColor
+            )
+            .clip(RoundedCornerShape(NavBarRadius))
+            // Opaque dark base so no content bleeds through the pill...
+            .background(surfaceHi)
+            // ...then a green glow on top, anchored to the top-right corner
+            // (fading to transparent) so it reads as a directional accent.
+            .background(dailyGlow)
+            .border(
+                BorderStroke(1.5.dp, accent.copy(alpha = borderAlpha)),
+                RoundedCornerShape(NavBarRadius)
+            )
+            .clickable {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                if (!selected) onSelect()
             }
+            .padding(horizontal = horizontalPadding),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(Icons.Rounded.AutoAwesome, contentDescription = "Daily", tint = dailyContent, modifier = Modifier.size(24.dp))
+            Spacer(Modifier.height(3.dp))
+            Text("Daily", style = MaterialTheme.typography.labelMedium, color = dailyContent, maxLines = 1)
         }
     }
 }
@@ -550,8 +702,20 @@ fun MainScreen(
     val navLayoutType = if (WindowInsets.isImeVisible || isEditingFile || currentRoute == Screen.Import) {
         androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType.None
     } else {
-        // Custom ExpressiveNavBar is a bottom bar in all sizes (Finance-style).
+        // Custom ExpressiveNavBar: a floating bottom bar (Finance-style) on phones and portrait tablets.
         androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType.NavigationBar
+    }
+    // A wide window (a tablet in landscape, an unfolded Fold) navigates with the side rail instead.
+    // Beside the content, it never covers the keyboard or the editor, so it stays for both; only
+    // the share screen (one focused flow, not a tab) hides it.
+    val useRail = isWideLayout()
+    val railVisible = useRail && currentRoute != Screen.Import
+    val navigateToTab: (String) -> Unit = { route ->
+        navController.navigate(route) {
+            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
+        }
     }
 
     // SAF launcher: export the whole vault as a ZIP to a user-picked location (outside the app).
@@ -688,8 +852,26 @@ fun MainScreen(
     // The nav bar FLOATS over the content (Finance-style): content fills the whole
     // screen and the bar is overlaid at the bottom, so the page shows through around
     // and behind it — no reserved dark strip. (Content behind the bar is accepted.)
+    // On a wide window the rail stands beside the content instead, and the screens
+    // learn through LocalNavRail that no bar covers their bottom.
+    CompositionLocalProvider(LocalNavRail provides railVisible) {
     Box(modifier = Modifier.fillMaxSize()) {
-        Box(modifier = Modifier.fillMaxSize()) {
+      Row(modifier = Modifier.fillMaxSize()) {
+        if (railVisible) {
+            ExpressiveNavRail(
+                currentRoute = currentRoute,
+                isViewingDailyNote = isViewingDailyNote,
+                order = navBarOrder,
+                onSelect = navigateToTab
+            )
+        }
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                // The rail already keeps clear of the start inset (a cutout, a side nav bar).
+                .then(if (railVisible) Modifier.consumeWindowInsets(WindowInsets.safeDrawing.only(WindowInsetsSides.Start)) else Modifier)
+        ) {
             androidx.navigation.compose.NavHost(
             navController = navController,
             startDestination = Screen.DailyNote,
@@ -1297,26 +1479,22 @@ fun MainScreen(
             )
         }
     }
+      }
 
         // --- Floating nav bar, overlaid on the content (Finance-style) ---
         // Hidden while the keyboard is open (navLayoutType == None) so it doesn't
-        // float above the IME on text surfaces.
-        if (navLayoutType != androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType.None) {
+        // float above the IME on text surfaces. A wide window has the rail instead.
+        if (!useRail && navLayoutType != androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType.None) {
             ExpressiveNavBar(
                 currentRoute = currentRoute,
                 isViewingDailyNote = isViewingDailyNote,
                 isLargeScreen = isLargeScreen,
                 order = navBarOrder,
-                onSelect = { route ->
-                    navController.navigate(route) {
-                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                },
+                onSelect = navigateToTab,
                 modifier = Modifier.align(Alignment.BottomCenter)
             )
         }
+    }
     }
 }
 

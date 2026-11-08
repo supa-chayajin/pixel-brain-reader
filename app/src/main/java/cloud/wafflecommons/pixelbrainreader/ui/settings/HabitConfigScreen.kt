@@ -1,7 +1,9 @@
 package cloud.wafflecommons.pixelbrainreader.ui.settings
 
+import cloud.wafflecommons.pixelbrainreader.ui.utils.centeredMaxWidth
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.*
+import cloud.wafflecommons.pixelbrainreader.ui.theme.LocalNavRail
 import cloud.wafflecommons.pixelbrainreader.ui.theme.NavBarClearance
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -61,8 +63,8 @@ fun HabitConfigScreen(
             )
         },
         floatingActionButton = {
-            // Lift the FAB above the floating ExpressiveNavBar (which overlays content).
-            Box(modifier = Modifier.padding(bottom = 66.dp)) {
+            // Lift the FAB above the floating ExpressiveNavBar (which overlays content); none beside the rail.
+            Box(modifier = Modifier.padding(bottom = if (LocalNavRail.current) 0.dp else 66.dp)) {
                 FloatingActionButton(onClick = {
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     editingHabit = HabitConfig(
@@ -78,7 +80,7 @@ fun HabitConfigScreen(
         }
     ) { padding ->
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding),
+            modifier = Modifier.fillMaxSize().padding(padding).centeredMaxWidth(),
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = NavBarClearance),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {

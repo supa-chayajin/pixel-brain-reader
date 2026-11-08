@@ -6,7 +6,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridScope
+import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
+import cloud.wafflecommons.pixelbrainreader.ui.utils.isWideLayout
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCircle
@@ -29,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import cloud.wafflecommons.pixelbrainreader.ui.theme.LocalNavRail
 import cloud.wafflecommons.pixelbrainreader.ui.theme.NavBarClearance
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -243,8 +248,9 @@ fun DailyNoteScreen(
                 }
             )
 
-            // Lift the FAB to sit just above the floating nav bar (which overlays content).
-            Box(modifier = Modifier.padding(bottom = 66.dp)) {
+            // Lift the FAB to sit just above the floating nav bar (which overlays content). Beside the
+            // side rail there is no bar: it keeps the standard corner, clear of the last block.
+            Box(modifier = Modifier.padding(bottom = if (LocalNavRail.current) 0.dp else 66.dp)) {
                 CortexExpandableFAB(
                     expanded = fabExpanded,
                     onExpandedChange = { fabExpanded = it },
@@ -270,46 +276,64 @@ fun DailyNoteScreen(
             if (state.isLoading && state.timelineEvents.isEmpty() && state.dailyTasks.isEmpty()) {
                  DailyNoteSkeleton()
             } else {
-                LazyColumn(
+                // One column on a phone and a tablet in portrait. On a wide window (a tablet in
+                // landscape, an unfolded Fold) the day's blocks pack into two: each goes under the
+                // shorter column, in the user's order; what sits above them keeps the full width.
+                val twoColumns = isWideLayout()
+                // Mode (Work / Personal / Off, under the user's names) and the tools hub
+                val modeChips: @Composable () -> Unit = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        cloud.wafflecommons.pixelbrainreader.ui.modes.ModeChip(
+                            visibility = visibility,
+                            onClick = { showModeSheet = true }
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        androidx.compose.material3.AssistChip(
+                            onClick = onOpenWork,
+                            label = { Text(visibility.appearance.toolkitName) },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Rounded.Apps,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        )
+                    }
+                }
+                LazyVerticalStaggeredGrid(
+                    columns = StaggeredGridCells.Fixed(if (twoColumns) 2 else 1),
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(horizontal = 16.dp),
                     // Room under the last block for the floating + button, so "More today" never sits beneath it.
                     contentPadding = PaddingValues(top = 16.dp, bottom = NavBarClearance + 88.dp),
-                    verticalArrangement = Arrangement.spacedBy(24.dp)
+                    verticalItemSpacing = 24.dp,
+                    horizontalArrangement = Arrangement.spacedBy(24.dp)
                 ) {
-                    // Mode (Work / Personal / Off, under the user's names) and the tools hub
-                    item(key = "mode") {
+                    if (!twoColumns) {
+                        item(key = "mode", span = StaggeredGridItemSpan.FullLine) { modeChips() }
+                    }
+
+                    // One input for the whole day: it files the line itself. On a wide window the mode
+                    // chips share its line, leaving more of the height to the day. (The input keeps its
+                    // place in this item either way, so a line half typed survives a rotation.)
+                    item(key = "quick-add", span = StaggeredGridItemSpan.FullLine) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            cloud.wafflecommons.pixelbrainreader.ui.modes.ModeChip(
-                                visibility = visibility,
-                                onClick = { showModeSheet = true }
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            androidx.compose.material3.AssistChip(
-                                onClick = onOpenWork,
-                                label = { Text(visibility.appearance.toolkitName) },
-                                leadingIcon = {
-                                    Icon(
-                                        Icons.Rounded.Apps,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
+                            if (twoColumns) {
+                                modeChips()
+                                Spacer(Modifier.width(16.dp))
+                            }
+                            QuickAddBar(
+                                onCapture = viewModel::capture,
+                                onVoice = { dictation.start() },
+                                modifier = Modifier.weight(1f)
                             )
                         }
                     }
-
-                    // One input for the whole day: it files the line itself.
-                    item(key = "quick-add") {
-                        QuickAddBar(
-                            onCapture = viewModel::capture,
-                            onVoice = { dictation.start() }
-                        )
-                    }
                     // Changes held back by the confidentiality guard
                     if (guardHeld.isNotEmpty()) {
-                        item(key = "guard") {
+                        item(key = "guard", span = StaggeredGridItemSpan.FullLine) {
                             cloud.wafflecommons.pixelbrainreader.ui.guard.GuardHoldBanner(
                                 held = guardHeld,
                                 onReview = onOpenConfidentiality
@@ -319,14 +343,14 @@ fun DailyNoteScreen(
 
                     // What the last sync brought, until dismissed.
                     if (syncDigest?.let { !it.dismissed && it.total > 0 } == true) {
-                        item(key = "sync-digest") {
+                        item(key = "sync-digest", span = StaggeredGridItemSpan.FullLine) {
                             cloud.wafflecommons.pixelbrainreader.ui.work.SyncDigestCard(onOpen = onOpenActivity, viewModel = activityViewModel)
                         }
                     }
 
                     // The days after a leave: what changed meanwhile (Work mode only).
                     if (leaveReturn != null && !visibility.hideWork) {
-                        item(key = "back-from-leave") {
+                        item(key = "back-from-leave", span = StaggeredGridItemSpan.FullLine) {
                             cloud.wafflecommons.pixelbrainreader.ui.work.BackFromLeaveCard(onOpenNote = onOpenNote, viewModel = leaveViewModel)
                         }
                     }
@@ -340,7 +364,7 @@ fun DailyNoteScreen(
                             else -> true
                         }
                     }
-                    val renderSection: androidx.compose.foundation.lazy.LazyListScope.(DailySection, Int) -> Unit = { s, index ->
+                    val renderSection: LazyStaggeredGridScope.(DailySection, Int) -> Unit = { s, index ->
                         when (s) {
                             DailySection.WEATHER -> item(key = "weather") {
                                 cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = index) {
@@ -361,7 +385,9 @@ fun DailyNoteScreen(
                                         lastUpdate = if (hideHealth) null else lastUpdate,
                                         topDailyTags = if (hideHealth) emptyList() else state.topDailyTags,
                                         healthMetrics = if (hideHealth) null else state.healthMetrics,
-                                        moodTrend = if (hideHealth) emptyList() else state.moodTrend
+                                        moodTrend = if (hideHealth) emptyList() else state.moodTrend,
+                                        // Beside another block, its top lines up with that block's.
+                                        verticalMargin = if (twoColumns) 0.dp else 8.dp
                                     )
                                 }
                             }
@@ -445,15 +471,17 @@ fun DailyNoteScreen(
                             }
                         }
                     }
-                    // On a wide screen, Timeline and Tasks sit side by side when they follow each other in a
-                    // group (in the place of the first of the two); otherwise each keeps its own place.
-                    val renderGroup: androidx.compose.foundation.lazy.LazyListScope.(List<DailySection>) -> Unit = { group ->
+                    // In one column wider than a phone (a tablet in portrait), Timeline and Tasks sit side by
+                    // side when they follow each other in a group (in the place of the first of the two);
+                    // otherwise each keeps its own place. In two columns they pack like the other blocks, so
+                    // they fill the space under a short block instead of waiting below the tallest one.
+                    val renderGroup: LazyStaggeredGridScope.(List<DailySection>) -> Unit = { group ->
                         val visible = group.filter(hasContent)
-                        val pairAt = if (isWide) timelineTasksPairAt(visible) else null
+                        val pairAt = if (isWide && !twoColumns) timelineTasksPairAt(visible) else null
                         visible.forEachIndexed { index, s ->
                             if (pairAt != null && index == pairAt + 1) return@forEachIndexed
                             if (index == pairAt) {
-                                item(key = "timeline-tasks") {
+                                item(key = "timeline-tasks", span = StaggeredGridItemSpan.FullLine) {
                                     cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = index) {
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
@@ -486,7 +514,7 @@ fun DailyNoteScreen(
                     val foldGroup = sectionOrder.filter { it !in shownSections }
                     renderGroup(shownGroup)
                     if (foldGroup.any(hasContent)) {
-                        item(key = "more-today") {
+                        item(key = "more-today", span = StaggeredGridItemSpan.FullLine) {
                             MoreTodayHeader(
                                 summary = moreTodaySummary(
                                     fold = foldGroup.toSet(),

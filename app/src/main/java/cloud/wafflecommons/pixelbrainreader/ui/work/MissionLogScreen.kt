@@ -1,5 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.ui.work
 
+import cloud.wafflecommons.pixelbrainreader.ui.utils.centeredMaxWidth
 import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -144,7 +145,7 @@ fun MissionLogScreen(
             HiddenWork(visibility.workLabel, Modifier.padding(padding))
         } else {
             LazyColumn(
-                modifier = Modifier.padding(padding).fillMaxSize(),
+                modifier = Modifier.padding(padding).fillMaxSize().centeredMaxWidth(),
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = NavBarClearance + 72.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {

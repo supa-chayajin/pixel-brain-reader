@@ -30,6 +30,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cloud.wafflecommons.pixelbrainreader.ui.theme.NavBarClearance
+import cloud.wafflecommons.pixelbrainreader.ui.utils.isMediumOrWider
+import cloud.wafflecommons.pixelbrainreader.ui.utils.centeredMaxWidth
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cloud.wafflecommons.pixelbrainreader.data.model.HabitConfig
@@ -103,7 +105,10 @@ fun HabitDashboardScreen(
                 }
             } else {
                 androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
-                    columns = androidx.compose.foundation.lazy.grid.GridCells.Adaptive(minSize = 155.dp),
+                    // Narrow columns on a phone. On a tablet or an unfolded Fold, two wide ones: a
+                    // category (one to three habits, usually) fills its row instead of a corner of it.
+                    columns = if (isMediumOrWider()) androidx.compose.foundation.lazy.grid.GridCells.Fixed(2)
+                        else androidx.compose.foundation.lazy.grid.GridCells.Adaptive(minSize = 155.dp),
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(bottom = NavBarClearance),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -123,7 +128,8 @@ fun HabitDashboardScreen(
                 item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
                     SingleChoiceSegmentedButtonRow(
                         modifier = Modifier
-                            .fillMaxWidth()
+                            // Two segments read as one control up to this width, centred beyond it.
+                            .centeredMaxWidth(480.dp)
                             .padding(horizontal = 16.dp, vertical = 4.dp)
                     ) {
                         SegmentedButton(

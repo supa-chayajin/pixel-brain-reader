@@ -21,6 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import cloud.wafflecommons.pixelbrainreader.ui.theme.NavBarClearance
+import cloud.wafflecommons.pixelbrainreader.ui.utils.centeredMaxWidth
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import cloud.wafflecommons.pixelbrainreader.data.repository.MoodEntry
@@ -68,6 +69,8 @@ fun MoodHistoryScreen(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
+                // The day's summary and timeline as one readable column on a large screen.
+                .centeredMaxWidth()
         ) {
             // Date Selector
             DateSelector(

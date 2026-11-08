@@ -42,6 +42,7 @@ import cloud.wafflecommons.pixelbrainreader.data.ai.NanoState
 import cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
 import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
 import cloud.wafflecommons.pixelbrainreader.ui.theme.NavBarClearance
+import cloud.wafflecommons.pixelbrainreader.ui.utils.centeredMaxWidth
 import cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
@@ -198,6 +199,8 @@ fun SettingsScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .verticalScroll(scrollState)
+                // Same page on a large screen, centred at a readable width (nothing moves or folds).
+                .centeredMaxWidth()
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {

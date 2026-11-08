@@ -1,6 +1,12 @@
 package cloud.wafflecommons.pixelbrainreader.ui.main
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
+import androidx.compose.material.icons.rounded.RocketLaunch
+import androidx.compose.material.icons.rounded.ViewKanban
 import androidx.navigation.NavGraphBuilder
+import cloud.wafflecommons.pixelbrainreader.ui.components.HubEmptyPane
+import cloud.wafflecommons.pixelbrainreader.ui.components.HubListDetail
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.composable
@@ -91,10 +97,21 @@ fun NavGraphBuilder.v11Destinations(navController: NavHostController, openNote: 
             onOpen = { route -> navController.navigate(route) }
         )
     }
+    // Projects, Boards and Runbooks: the list and the open page side by side on a wide window, the
+    // page over the list otherwise (HubListDetail). Their own routes below still open one page directly.
     composable(V11Routes.PROJECTS) {
-        cloud.wafflecommons.pixelbrainreader.ui.work.ProjectsScreen(
-            onBack = { navController.popBackStack() },
-            onOpenProject = { navController.navigate(V11Routes.project(it)) }
+        HubListDetail(
+            list = { open, onOpen ->
+                cloud.wafflecommons.pixelbrainreader.ui.work.ProjectsScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenProject = onOpen,
+                    selectedRoot = open
+                )
+            },
+            detail = { root, onClose ->
+                cloud.wafflecommons.pixelbrainreader.ui.work.ProjectScreen(root = root, onBack = onClose, onOpenNote = openNote)
+            },
+            emptyDetail = { HubEmptyPane(Icons.Rounded.RocketLaunch, "Pick a project to see its page here.") }
         )
     }
     composable(V11Routes.PROJECT, arguments = listOf(navArgument("root") { type = NavType.StringType; defaultValue = "" })) { entry ->
@@ -105,7 +122,11 @@ fun NavGraphBuilder.v11Destinations(navController: NavHostController, openNote: 
         )
     }
     composable(V11Routes.BOARDS) {
-        BoardsScreen(onBack = { navController.popBackStack() }, onOpenBoard = { navController.navigate(V11Routes.board(it)) })
+        HubListDetail(
+            list = { open, onOpen -> BoardsScreen(onBack = { navController.popBackStack() }, onOpenBoard = onOpen, selected = open) },
+            detail = { folder, onClose -> BoardScreen(folder = folder, onBack = onClose, onOpenNote = openNote) },
+            emptyDetail = { HubEmptyPane(Icons.Rounded.ViewKanban, "Pick a board to see its columns here.") }
+        )
     }
     composable(V11Routes.BOARD, arguments = listOf(navArgument("folder") { type = NavType.StringType; defaultValue = "" })) { entry ->
         BoardScreen(
@@ -128,7 +149,11 @@ fun NavGraphBuilder.v11Destinations(navController: NavHostController, openNote: 
         )
     }
     composable(V11Routes.RUNBOOKS) {
-        RunbooksScreen(onBack = { navController.popBackStack() }, onPlay = { navController.navigate(V11Routes.runbook(it)) })
+        HubListDetail(
+            list = { open, onOpen -> RunbooksScreen(onBack = { navController.popBackStack() }, onPlay = onOpen, selected = open) },
+            detail = { path, onClose -> RunbookPlayerScreen(path = path, onBack = onClose, onOpenNote = openNote) },
+            emptyDetail = { HubEmptyPane(Icons.AutoMirrored.Rounded.PlaylistPlay, "Pick a runbook to play it here.") }
+        )
     }
     composable(V11Routes.RUNBOOK, arguments = listOf(navArgument("path") { type = NavType.StringType; defaultValue = "" })) { entry ->
         RunbookPlayerScreen(path = entry.arguments?.getString("path").orEmpty(), onBack = { navController.popBackStack() }, onOpenNote = openNote)

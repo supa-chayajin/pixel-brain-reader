@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cloud.wafflecommons.pixelbrainreader.data.health.DailyHealthMetrics
@@ -31,13 +32,15 @@ fun DailyNoteHeader(
     topDailyTags: List<String>,
     modifier: Modifier = Modifier,
     healthMetrics: DailyHealthMetrics? = null,
-    moodTrend: List<DailyMoodPoint> = emptyList()
+    moodTrend: List<DailyMoodPoint> = emptyList(),
+    /** Space above and below the card; the two-column Daily screen sets 0 so its top lines up with its neighbour's. */
+    verticalMargin: Dp = 8.dp
 ) {
 
     ElevatedCard(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp),
+            .padding(vertical = verticalMargin),
         shape = MaterialTheme.shapes.extraLarge,
         colors = CardDefaults.elevatedCardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainer

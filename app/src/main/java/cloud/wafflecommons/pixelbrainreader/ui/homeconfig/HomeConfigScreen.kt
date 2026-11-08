@@ -1,7 +1,9 @@
 package cloud.wafflecommons.pixelbrainreader.ui.homeconfig
 
+import cloud.wafflecommons.pixelbrainreader.ui.utils.centeredMaxWidth
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import cloud.wafflecommons.pixelbrainreader.ui.theme.LocalNavRail
 import cloud.wafflecommons.pixelbrainreader.ui.theme.NavBarClearance
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -66,10 +68,10 @@ fun HomeConfigScreen(
             )
         },
         floatingActionButton = {
-            // Lift the stacked FABs above the floating ExpressiveNavBar (which overlays content).
+            // Lift the stacked FABs above the floating ExpressiveNavBar (which overlays content); none beside the rail.
             Column(
                 horizontalAlignment = Alignment.End,
-                modifier = Modifier.padding(bottom = 66.dp)
+                modifier = Modifier.padding(bottom = if (LocalNavRail.current) 0.dp else 66.dp)
             ) {
                 SmallFloatingActionButton(
                     onClick = {
@@ -94,7 +96,8 @@ fun HomeConfigScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
+                .padding(padding)
+                .centeredMaxWidth(),
             contentPadding = PaddingValues(bottom = NavBarClearance)
         ) {
             item {

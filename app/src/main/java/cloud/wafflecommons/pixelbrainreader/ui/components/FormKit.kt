@@ -54,6 +54,10 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import cloud.wafflecommons.pixelbrainreader.ui.theme.NavBarClearance
+import cloud.wafflecommons.pixelbrainreader.ui.utils.centeredMaxWidth
+import cloud.wafflecommons.pixelbrainreader.ui.utils.isWideLayout
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -94,10 +98,35 @@ fun FormScaffold(
                 .padding(padding)
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
+                // A readable column on a large screen: centred, never wider than ContentMaxWidth.
+                .centeredMaxWidth()
                 .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = NavBarClearance),
             verticalArrangement = Arrangement.spacedBy(16.dp),
             content = content
         )
+    }
+}
+
+/**
+ * [items] as cards, in order: two per row on a wide window (the cards of a row share its height),
+ * one per row otherwise. Meant inside a [FormScaffold] column, which spaces what it holds.
+ */
+@Composable
+fun <T> CardGrid(items: List<T>, card: @Composable (item: T, modifier: Modifier) -> Unit) {
+    if (!isWideLayout()) {
+        items.forEach { card(it, Modifier) }
+    } else {
+        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            items.chunked(2).forEach { row ->
+                Row(
+                    modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    row.forEach { item -> card(item, Modifier.weight(1f).fillMaxHeight()) }
+                    if (row.size == 1) Spacer(Modifier.weight(1f))
+                }
+            }
+        }
     }
 }
 
@@ -109,13 +138,18 @@ fun SectionCard(
     icon: ImageVector? = null,
     tint: Color = MaterialTheme.colorScheme.primary,
     subtitle: String? = null,
+    selected: Boolean = false,
     trailing: @Composable () -> Unit = {},
     content: @Composable ColumnScope.() -> Unit = {}
 ) {
     ElevatedCard(
         modifier = modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+        // [selected]: the entry whose page is open beside the list (a hub on a wide window).
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = if (selected) MaterialTheme.colorScheme.secondaryContainer
+                else MaterialTheme.colorScheme.surfaceContainerHigh
+        )
     ) {
         Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {

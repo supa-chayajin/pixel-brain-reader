@@ -173,7 +173,7 @@ internal fun SnippetCard(block: CodeBlock, title: String, onCopy: () -> Unit, on
 
 /** The vault's runbooks (notes tagged #runbook or in a Runbooks folder). */
 @Composable
-fun RunbooksScreen(onBack: () -> Unit, onPlay: (String) -> Unit, viewModel: SnippetsViewModel = hiltViewModel()) {
+fun RunbooksScreen(onBack: () -> Unit, onPlay: (String) -> Unit, selected: String? = null, viewModel: SnippetsViewModel = hiltViewModel()) {
     val runbooks by viewModel.runbooks.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { viewModel.loadRunbooks() }
     FormScaffold(title = "Runbooks", onBack = onBack) {
@@ -186,6 +186,7 @@ fun RunbooksScreen(onBack: () -> Unit, onPlay: (String) -> Unit, viewModel: Snip
                     title = note.title,
                     icon = Icons.AutoMirrored.Rounded.PlaylistPlay,
                     subtitle = note.path,
+                    selected = note.path == selected,
                     modifier = Modifier.clickable { onPlay(note.path) }
                 )
             }
@@ -211,7 +212,8 @@ fun RunbookPlayerScreen(path: String, onBack: () -> Unit, onOpenNote: (String) -
     val copy = rememberCopyToClipboard()
     val tabletop = cloud.wafflecommons.pixelbrainreader.ui.utils.rememberTabletop()
 
-    val (note, steps) = loaded ?: (null to emptyList())
+    // The runbook played before may still be in the ViewModel shared with the hub's list.
+    val (note, steps) = loaded?.takeIf { it.first.path == path } ?: (null to emptyList())
 
     fun record(status: StepStatus) {
         val step = steps.getOrNull(index) ?: return

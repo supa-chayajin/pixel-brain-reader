@@ -1,5 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.ui.settings
 
+import cloud.wafflecommons.pixelbrainreader.ui.utils.centeredMaxWidth
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -75,7 +76,7 @@ fun DailyLayoutScreen(
         }
     ) { padding ->
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding),
+            modifier = Modifier.fillMaxSize().padding(padding).centeredMaxWidth(),
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = NavBarClearance),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {

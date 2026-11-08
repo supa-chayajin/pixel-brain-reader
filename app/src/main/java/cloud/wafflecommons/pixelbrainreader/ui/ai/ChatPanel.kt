@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
 import cloud.wafflecommons.pixelbrainreader.ui.theme.NavBarClearance
+import cloud.wafflecommons.pixelbrainreader.ui.utils.centeredMaxWidth
 import androidx.hilt.navigation.compose.hiltViewModel
 import java.time.format.DateTimeFormatter
 
@@ -169,6 +170,8 @@ fun ChatPanel(
                 // rather than stacking the nav-bar inset again → no gap above keyboard.
                 .consumeWindowInsets(innerPadding)
                 .imePadding()
+                // One conversation column on a large screen: messages and input share its width.
+                .centeredMaxWidth()
         ) {
             // Chat Content
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
@@ -268,7 +271,8 @@ fun BrainModeSwitch(
     Box {
     SingleChoiceSegmentedButtonRow(
         modifier = Modifier
-            .fillMaxWidth()
+            // Three segments read as one control up to this width, centred beyond it.
+            .centeredMaxWidth(640.dp)
             .padding(horizontal = 24.dp, vertical = 8.dp)
     ) {
         modes.forEachIndexed { index, (mode, icon, label) ->

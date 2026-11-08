@@ -26,6 +26,8 @@ import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import cloud.wafflecommons.pixelbrainreader.ui.theme.NavBarClearance
+import cloud.wafflecommons.pixelbrainreader.ui.utils.CardMinWidth
+import cloud.wafflecommons.pixelbrainreader.ui.utils.isMediumOrWider
 import androidx.hilt.navigation.compose.hiltViewModel
 import cloud.wafflecommons.pixelbrainreader.data.sync.SyncState
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -41,12 +43,10 @@ fun ChoreDashboardScreen(
 
     val windowWidthDp = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp() }
 
-    // Adaptive: More granular columns for foldables/large tablets
-    val columns = when {
-        windowWidthDp > 1200.dp -> 3
-        windowWidthDp > 600.dp -> 2
-        else -> 1
-    }
+    // One column on a phone. From a medium window on, as many CardMinWidth columns as the space
+    // beside the navigation holds (2 on a tablet in portrait or an unfolded Fold, 3 in landscape):
+    // measured on the content, which the side rail narrows.
+    val columns = if (isMediumOrWider()) StaggeredGridCells.Adaptive(minSize = CardMinWidth) else StaggeredGridCells.Fixed(1)
 
     Scaffold(
         topBar = {
@@ -81,7 +81,7 @@ fun ChoreDashboardScreen(
         } else {
             val horizontalPadding = if (windowWidthDp > 840.dp) 32.dp else 16.dp
             LazyVerticalStaggeredGrid(
-                columns = StaggeredGridCells.Fixed(columns),
+                columns = columns,
                 contentPadding = PaddingValues(start = horizontalPadding, end = horizontalPadding, top = 16.dp, bottom = NavBarClearance),
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalItemSpacing = 16.dp,

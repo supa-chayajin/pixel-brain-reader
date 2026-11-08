@@ -1,6 +1,8 @@
 package cloud.wafflecommons.pixelbrainreader.ui.main
 
 import android.widget.TextView
+import cloud.wafflecommons.pixelbrainreader.ui.utils.ReadingMaxWidth
+import cloud.wafflecommons.pixelbrainreader.ui.utils.centeredMaxWidth
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -399,6 +401,8 @@ fun FileDetailPane(
                                             .fillMaxSize()
                                             .padding(horizontal = 16.dp)
                                             .verticalScroll(scrollState)
+                                            // About 80 characters a line in a wide pane; the whole pane still scrolls.
+                                            .centeredMaxWidth(ReadingMaxWidth)
                                     ) {
                                         val moodData = moodState.moodData
                                         if (isDailyNote && moodData != null) {

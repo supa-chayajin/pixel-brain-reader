@@ -1,5 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.ui.settings
 
+import cloud.wafflecommons.pixelbrainreader.ui.utils.centeredMaxWidth
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -100,6 +101,7 @@ fun RemindersScreen(
                 .padding(padding)
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
+                .centeredMaxWidth()
                 .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = NavBarClearance),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {

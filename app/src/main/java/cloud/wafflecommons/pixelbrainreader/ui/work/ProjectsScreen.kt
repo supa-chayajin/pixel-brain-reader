@@ -165,6 +165,7 @@ class ProjectsViewModel @Inject constructor(
 fun ProjectsScreen(
     onBack: () -> Unit,
     onOpenProject: (root: String) -> Unit,
+    selectedRoot: String? = null,
     viewModel: ProjectsViewModel = hiltViewModel()
 ) {
     val projects by viewModel.projects.collectAsStateWithLifecycle()
@@ -191,18 +192,19 @@ fun ProjectsScreen(
                 ) {
                     PairingLines(roll)
                 }
-                list.forEach { p -> ProjectCard(p, onOpenProject) }
+                list.forEach { p -> ProjectCard(p, onOpenProject, selected = p.root == selectedRoot) }
             }
         }
     }
 }
 
 @Composable
-private fun ProjectCard(p: ProjectSummary, onOpenProject: (root: String) -> Unit) {
+private fun ProjectCard(p: ProjectSummary, onOpenProject: (root: String) -> Unit, selected: Boolean = false) {
     SectionCard(
         title = p.title,
         icon = Icons.Rounded.RocketLaunch,
         subtitle = projectLine(p),
+        selected = selected,
         modifier = Modifier.clickable { onOpenProject(p.root) }
     ) {
         p.nextAction?.let {
@@ -227,7 +229,11 @@ fun ProjectScreen(
     val state by viewModel.project.collectAsStateWithLifecycle()
     val visibility by viewModel.visibility.collectAsStateWithLifecycle()
     LaunchedEffect(root, visibility) { viewModel.loadProject(root) }
-    val p = (state as? ProjectsViewModel.ProjectState.Loaded)?.summary
+    // Side by side in the hub, the list and this page share the ViewModel: until this project loads,
+    // it may still hold the one opened before, which must not show under this one's title.
+    val loaded = (state as? ProjectsViewModel.ProjectState.Loaded)?.summary
+    val stale = loaded != null && loaded.root != root
+    val p = loaded?.takeUnless { stale }
     val handoffs by viewModel.handoffs.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
     LaunchedEffect(root) { viewModel.loadHandoffs(root) }
@@ -239,7 +245,7 @@ fun ProjectScreen(
     FormScaffold(title = p?.title ?: root.substringAfterLast('/'), onBack = onBack, snackbarHostState = snackbar) {
         if (p == null) {
             Text(
-                if (state == ProjectsViewModel.ProjectState.Loading) "Loading…" else "This project is hidden or no longer exists.",
+                if (state == ProjectsViewModel.ProjectState.Loading || stale) "Loading…" else "This project is hidden or no longer exists.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             return@FormScaffold
@@ -482,9 +488,19 @@ private fun PairingLines(stats: PairingStats) {
 
 @Composable
 private fun PairingRow(label: String, value: String) {
+    // The short label keeps its width; the value takes the rest, right-aligned. (With the weight on
+    // the label, a long value — the top tools — squeezed it to one letter a line in a narrow column.)
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(label, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-        Text(value, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Text(label, style = MaterialTheme.typography.bodySmall)
+        Text(
+            value,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.primary,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = androidx.compose.ui.text.style.TextAlign.End,
+            modifier = Modifier.weight(1f)
+        )
     }
 }
 

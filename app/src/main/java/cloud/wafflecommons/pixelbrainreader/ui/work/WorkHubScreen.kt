@@ -1,5 +1,7 @@
 package cloud.wafflecommons.pixelbrainreader.ui.work
 
+import androidx.compose.ui.Modifier
+import cloud.wafflecommons.pixelbrainreader.ui.components.CardGrid
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material.icons.Icons
@@ -155,8 +157,9 @@ fun WorkHubScreen(
         }
         val pinnedTools = HubTool.entries.filter { it.id in pinned }
         val otherTools = HubTool.entries.filter { it.id !in pinned }
-        pinnedTools.forEach { tool ->
-            HubCard(tool, pinned = true, onPin = { viewModel.setPinned(tool, it) }, onClick = { onOpen(tool.route) })
+        // Two per row on a wide window (CardGrid), pinned first as always.
+        CardGrid(pinnedTools) { tool, cardModifier ->
+            HubCard(tool, pinned = true, onPin = { viewModel.setPinned(tool, it) }, onClick = { onOpen(tool.route) }, modifier = cardModifier)
         }
         if (otherTools.isNotEmpty()) {
             androidx.compose.material3.TextButton(onClick = { showAll = !showAll }) {
@@ -168,8 +171,8 @@ fun WorkHubScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                otherTools.forEach { tool ->
-                    HubCard(tool, pinned = false, onPin = { viewModel.setPinned(tool, it) }, onClick = { onOpen(tool.route) })
+                CardGrid(otherTools) { tool, cardModifier ->
+                    HubCard(tool, pinned = false, onPin = { viewModel.setPinned(tool, it) }, onClick = { onOpen(tool.route) }, modifier = cardModifier)
                 }
             }
         }
@@ -223,12 +226,18 @@ enum class HubTool(
 
 /** A hub entry that opens a tool, with a pin to keep it at the top. */
 @Composable
-internal fun HubCard(tool: HubTool, pinned: Boolean, onPin: (Boolean) -> Unit, onClick: () -> Unit) {
+internal fun HubCard(
+    tool: HubTool,
+    pinned: Boolean,
+    onPin: (Boolean) -> Unit,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     SectionCard(
         title = tool.title,
         icon = tool.icon,
         subtitle = tool.subtitle,
-        modifier = androidx.compose.ui.Modifier.clickable(onClick = onClick),
+        modifier = modifier.clickable(onClick = onClick),
         trailing = {
             androidx.compose.material3.IconToggleButton(checked = pinned, onCheckedChange = onPin) {
                 androidx.compose.material3.Icon(

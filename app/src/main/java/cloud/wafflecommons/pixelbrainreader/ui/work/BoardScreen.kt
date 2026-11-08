@@ -156,7 +156,7 @@ class BoardViewModel @Inject constructor(
 
 /** The folders shown as boards, and a way to add one. */
 @Composable
-fun BoardsScreen(onBack: () -> Unit, onOpenBoard: (String) -> Unit, viewModel: BoardViewModel = hiltViewModel()) {
+fun BoardsScreen(onBack: () -> Unit, onOpenBoard: (String) -> Unit, selected: String? = null, viewModel: BoardViewModel = hiltViewModel()) {
     val config by viewModel.config.collectAsStateWithLifecycle()
     val folders by viewModel.folders.collectAsStateWithLifecycle()
     val visibility by viewModel.visibility.collectAsStateWithLifecycle()
@@ -180,6 +180,7 @@ fun BoardsScreen(onBack: () -> Unit, onOpenBoard: (String) -> Unit, viewModel: B
                 title = board.substringAfterLast('/'),
                 icon = Icons.Rounded.ViewKanban,
                 subtitle = board,
+                selected = board == selected,
                 modifier = Modifier.clickable { onOpenBoard(board) },
                 trailing = { TextButton(onClick = { viewModel.removeBoard(board) }) { Text("Remove") } }
             )
@@ -203,7 +204,8 @@ fun BoardScreen(folder: String, onBack: () -> Unit, onOpenNote: (String) -> Unit
     val today = LocalDate.now()
 
     val columns: List<Pair<String, List<BoardCard>>> = buildList {
-        val all = cards.orEmpty()
+        // The board opened before may still be in the ViewModel shared with the hub's list: none of its cards.
+        val all = cards.orEmpty().filter { it.note.path.startsWith("$folder/") }
         StatusColumn.entries.filter { showArchived || it != StatusColumn.ARCHIVE }.forEach { column ->
             add(column.label to all.filter { it.note.column == column })
         }
