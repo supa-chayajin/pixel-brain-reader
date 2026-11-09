@@ -105,6 +105,9 @@ another uninstall (see the explanation page).
 
 ## 7. Publish (only after smoke passes)
 
+The tag and its GitHub release go out together (settled decision 19): never push a tag
+without creating its release right after, and keep a tag local until it can have one.
+
 ```bash
 git push origin main --follow-tags
 gh release create vX.Y.Z <signed>.apk mapping.txt --title "vX.Y.Z" --notes "<changelog section>"

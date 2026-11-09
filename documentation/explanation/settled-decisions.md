@@ -169,3 +169,14 @@ lives on one device. A second device that writes loses data; one that only reads
 owner asked for it on 2026-11-08 to read the real vault on a tablet. Writes from a second
 device (health, habits, chores, mood) are a separate plan
 (`documentation/plans/2026-11-08-read-only-device.md`, "Phase 2"), never a quiet exception.
+
+## 19. Every tag has a GitHub release
+
+A version tag never reaches GitHub on its own. Pushing `vX.Y.Z` and creating its release
+(`gh release create vX.Y.Z`, the CHANGELOG section as notes, the signed APK and its R8
+`mapping.txt` attached when they exist) are one step — step 7 of
+`documentation/how-to/release-signed-build.md`. A tag that can't get its release yet stays local.
+
+*Why:* the owner asked for it on 2026-11-09. Tags `v10.1.0`, `v11.1.0`, `v12.1.0` and `v12.6.0`
+had reached GitHub without a release, so the releases page — where versions and their R8
+mappings are archived (decision 13) — stopped at `v10.0.0`.
