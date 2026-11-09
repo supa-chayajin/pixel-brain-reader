@@ -26,9 +26,9 @@ import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 
 /**
- * The three most recently active projects (C11), each with its two-week activity and next
- * action. Live-read from the vault mirror; work projects drop out outside Work mode. Tapping
- * opens the Projects screen.
+ * The Projects page's first three projects (C11): the pinned first, then the most recently active,
+ * hidden ones left out — each with its two-week activity and next action. Live-read from the vault
+ * mirror; work projects drop out outside Work mode. Tapping opens the Projects screen.
  */
 class ProjectsWidget : GlanceAppWidget() {
 

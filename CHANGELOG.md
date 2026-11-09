@@ -13,8 +13,8 @@ kit and the authorship timeline.
 
 ## [12.7.0] — 2026-11-09
 
-Moods get a look of your own: an icon for each activity tag, and a set of emojis to pick from
-a list instead of typing five of them.
+Moods get a look of your own — an icon for each activity tag, a set of emojis picked from a
+list — and Projects becomes a tab, with a fresher list you can pin and hide.
 
 ### Added
 
@@ -32,9 +32,24 @@ a list instead of typing five of them.
   Life Stats, the Mood and Companion widgets, and the evening check-in notification. Past
   moods change face too: a mood is a score, the face only shows it. A new mood is saved with
   the face you saw. The setting is kept on the device, like the Daily layout.
+- **Projects is a tab.** The Projects page joins the navigation bar and the side rail, after
+  your other tabs: move it in Settings → Navigation bar order (a folded phone shows the first
+  three). As a tab it has no back arrow; opened from the toolkit, it still has one.
+- **Pin and hide projects.** The tune button of the Projects page opens "Arrange projects":
+  pin a project to keep it on top (the pinned ones in your order, ▲/▼), hide one to take it
+  out of the list, its figures and the Projects widget. Hidden projects wait in a "Hidden"
+  fold at the bottom of the list; "Show" brings one back. The arrangement is saved in the vault
+  (`10_Journal/data/config/projects.json`), so every device lists the projects alike; a
+  read-only device follows it without the tune button. The Projects widget shows the page's
+  first three, under the same names.
 
 ### Changed
 
+- **A fresher Projects list.** Each card has a badge in a colour of its own (the folder's
+  number, or the name's initials), the name without the folder's number and underscores
+  ("21_Garden_Planner" reads "Garden Planner", on the project's page too), the status as a
+  pill, the last 14 days of commits as small bars, the figures as chips and the next action in
+  a box of its own. The 14-day summary opens on three big numbers.
 - The five "Mood Emojis" text fields are gone. They were saved but never shown anywhere: the
   check-in always used its own faces.
 - The mood history shows each check-in's face from the set instead of the label it was saved

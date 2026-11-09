@@ -23,6 +23,7 @@ import androidx.compose.material.icons.rounded.DateRange
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.Psychology
+import androidx.compose.material.icons.rounded.RocketLaunch
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -47,7 +48,8 @@ private val NAV_ITEM_META: Map<String, Pair<ImageVector, String>> = mapOf(
     "home_os" to (Icons.Rounded.CleaningServices to "Chores"),
     "chat" to (Icons.Rounded.Psychology to "Chat"),
     "mood" to (Icons.Default.Mood to "Mood"),
-    "stats" to (Icons.Default.Star to "Stats")
+    "stats" to (Icons.Default.Star to "Stats"),
+    "projects" to (Icons.Rounded.RocketLaunch to "Projects")
 )
 
 @OptIn(ExperimentalMaterial3Api::class)

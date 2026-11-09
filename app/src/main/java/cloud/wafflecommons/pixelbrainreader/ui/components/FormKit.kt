@@ -72,7 +72,8 @@ import java.time.ZoneOffset
 @Composable
 fun FormScaffold(
     title: String,
-    onBack: () -> Unit,
+    /** null: no back arrow (a navigation tab's own page). */
+    onBack: (() -> Unit)?,
     snackbarHostState: SnackbarHostState? = null,
     actions: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {},
     content: @Composable ColumnScope.() -> Unit
@@ -82,8 +83,10 @@ fun FormScaffold(
             TopAppBar(
                 title = { Text(title) },
                 navigationIcon = {
-                    CortexIconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    if (onBack != null) {
+                        CortexIconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        }
                     }
                 },
                 actions = actions

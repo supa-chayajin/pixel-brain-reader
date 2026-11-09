@@ -100,10 +100,12 @@ fun NavGraphBuilder.v11Destinations(navController: NavHostController, openNote: 
     // Projects, Boards and Runbooks: the list and the open page side by side on a wide window, the
     // page over the list otherwise (HubListDetail). Their own routes below still open one page directly.
     composable(V11Routes.PROJECTS) {
+        // A navigation tab since 12.7.0: no back arrow, unless the toolkit opened it.
+        val fromToolkit = navController.previousBackStackEntry?.destination?.route == V11Routes.WORK_HUB
         HubListDetail(
             list = { open, onOpen ->
                 cloud.wafflecommons.pixelbrainreader.ui.work.ProjectsScreen(
-                    onBack = { navController.popBackStack() },
+                    onBack = if (fromToolkit) { { navController.popBackStack() } } else null,
                     onOpenProject = onOpen,
                     selectedRoot = open
                 )

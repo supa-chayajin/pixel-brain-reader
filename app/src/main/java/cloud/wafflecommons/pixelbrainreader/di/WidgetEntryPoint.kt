@@ -45,6 +45,7 @@ interface WidgetEntryPoint {
     fun widgetUpdateManager(): WidgetUpdateManager
     fun modesRepository(): ModesRepository
     fun projectRepository(): cloud.wafflecommons.pixelbrainreader.data.work.ProjectRepository
+    fun projectArrangementRepository(): cloud.wafflecommons.pixelbrainreader.data.work.ProjectArrangementRepository
 
     /** The mood emoji set the Mood widget draws its buttons with. */
     fun gamificationPreferences(): GamificationPreferences

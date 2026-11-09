@@ -62,6 +62,7 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.rounded.Visibility
 
 import androidx.compose.material.icons.rounded.Psychology
+import androidx.compose.material.icons.rounded.RocketLaunch
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.DateRange
 import androidx.compose.material.icons.rounded.Search
@@ -386,7 +387,14 @@ private fun navDestinations(currentRoute: String?, isViewingDailyNote: Boolean, 
             // No AI on a read-only device (DeviceRole).
             NavDest(Screen.Chat, Icons.Rounded.Psychology, "Chat", currentRoute == Screen.Chat).takeUnless { VaultWriteGate.readOnly },
             NavDest(Screen.MoodTracker, Icons.Default.Mood, "Mood", currentRoute == Screen.MoodTracker),
-            NavDest(Screen.Stats, Icons.Default.Star, "Stats", currentRoute == Screen.Stats)
+            NavDest(Screen.Stats, Icons.Default.Star, "Stats", currentRoute == Screen.Stats),
+            // Also lit on a project page opened directly (the Projects widget, a deep link).
+            NavDest(
+                V11Routes.PROJECTS,
+                Icons.Rounded.RocketLaunch,
+                "Projects",
+                currentRoute == V11Routes.PROJECTS || currentRoute == V11Routes.PROJECT
+            )
         )
     ) { it.route }
 

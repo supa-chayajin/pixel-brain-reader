@@ -1,5 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.ui.main
 
+import cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -33,5 +34,17 @@ class NavOrderTest {
     @Test
     fun `no saved order keeps the default order`() {
         assertEquals(tabs, inNavOrder(emptyList(), tabs) { it })
+    }
+
+    @Test
+    fun `projects is a tab, and joins an order saved before it as the last one`() {
+        val defaults = UserPreferencesRepository.DEFAULT_NAVBAR_ORDER
+        assertEquals("projects", defaults.last())
+        assertEquals(V11Routes.PROJECTS, defaults.last())
+        // A phone's order from 12.6.0, tabs rearranged: everything stays where it was.
+        assertEquals(
+            listOf("stats", "home", "chat", "habits", "home_os", "mood", "projects"),
+            inNavOrder(listOf("stats", "home", "chat", "habits", "home_os", "mood"), defaults) { it }
+        )
     }
 }

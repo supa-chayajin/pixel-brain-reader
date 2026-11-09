@@ -1,27 +1,52 @@
 package cloud.wafflecommons.pixelbrainreader.ui.work
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Article
+import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.rounded.Checklist
+import androidx.compose.material.icons.rounded.Commit
+import androidx.compose.material.icons.rounded.ExpandLess
+import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
+import androidx.compose.material.icons.rounded.PushPin
+import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.Visibility
+import androidx.compose.material.icons.rounded.VisibilityOff
+import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.rounded.Computer
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Insights
-import androidx.compose.material.icons.rounded.RocketLaunch
 import androidx.compose.material.icons.rounded.SmartToy
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -31,20 +56,35 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
 import cloud.wafflecommons.pixelbrainreader.data.modes.Visibility
+import cloud.wafflecommons.pixelbrainreader.data.work.ArrangedProjects
 import cloud.wafflecommons.pixelbrainreader.data.work.PairingStats
+import cloud.wafflecommons.pixelbrainreader.data.work.ProjectArrangement
+import cloud.wafflecommons.pixelbrainreader.data.work.ProjectArrangementRepository
 import cloud.wafflecommons.pixelbrainreader.data.work.ProjectAction
 import cloud.wafflecommons.pixelbrainreader.data.work.ProjectFormat
 import cloud.wafflecommons.pixelbrainreader.data.work.ProjectRepository
 import cloud.wafflecommons.pixelbrainreader.data.work.ProjectSummary
+import cloud.wafflecommons.pixelbrainreader.data.work.projectBadgeText
+import cloud.wafflecommons.pixelbrainreader.data.work.projectDisplayName
 import cloud.wafflecommons.pixelbrainreader.data.work.TodoAnswers
+import cloud.wafflecommons.pixelbrainreader.data.work.WorklogDay
+import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
 import cloud.wafflecommons.pixelbrainreader.ui.components.FormScaffold
 import cloud.wafflecommons.pixelbrainreader.ui.components.SectionCard
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -64,6 +104,7 @@ class ProjectsViewModel @Inject constructor(
     private val repository: ProjectRepository,
     private val handoffRepository: cloud.wafflecommons.pixelbrainreader.data.work.DeskHandoffRepository,
     private val todoRepository: cloud.wafflecommons.pixelbrainreader.data.work.ProjectTodoRepository,
+    private val arrangementRepository: ProjectArrangementRepository,
     modesRepository: ModesRepository
 ) : ViewModel() {
 
@@ -147,8 +188,25 @@ class ProjectsViewModel @Inject constructor(
     /** null while loading. */
     val projects: StateFlow<List<ProjectSummary>?> = _projects.asStateFlow()
 
+    private val _arrangement = MutableStateFlow(ProjectArrangement())
+    /** The pinned and hidden projects (the vault's, so every device lists them alike). */
+    val arrangement: StateFlow<ProjectArrangement> = _arrangement.asStateFlow()
+
+    // The list's own message: beside a project page (a wide window), the page shows [message].
+    private val _arrangeMessage = MutableStateFlow<String?>(null)
+    val arrangeMessage: StateFlow<String?> = _arrangeMessage.asStateFlow()
+    fun clearArrangeMessage() { _arrangeMessage.value = null }
+
     fun load() {
         viewModelScope.launch {
+            // The arrangement first, so the list never shows unarranged for a frame.
+            _arrangement.value = try {
+                arrangementRepository.read()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                ProjectArrangement()
+            }
             _projects.value = try {
                 repository.projects()
             } catch (e: CancellationException) {
@@ -158,63 +216,499 @@ class ProjectsViewModel @Inject constructor(
             }
         }
     }
+
+    fun pin(root: String) = arrange { it.pin(root) }
+    fun unpin(root: String) = arrange { it.unpin(root) }
+    fun hide(root: String) = arrange { it.hide(root) }
+    fun show(root: String) = arrange { it.show(root) }
+    fun swapPinned(a: String, b: String) = arrange { it.swapPinned(a, b) }
+
+    /** Saves a change of the arrangement; a read-only device refuses it (and says so). */
+    private fun arrange(change: (ProjectArrangement) -> ProjectArrangement) {
+        viewModelScope.launch {
+            val saved = try {
+                arrangementRepository.update(change)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                null
+            }
+            when {
+                saved != null -> _arrangement.value = saved
+                !VaultWriteGate.readOnly -> _arrangeMessage.value = "Couldn't save the arrangement"
+            }
+        }
+    }
 }
 
-/** Every project of the vault, the most recently active first. */
+/**
+ * Every project of the vault, the most recently active first. A navigation tab since 12.7.0:
+ * [onBack] is null there (no back arrow), set when the toolkit opened it.
+ */
 @Composable
 fun ProjectsScreen(
-    onBack: () -> Unit,
+    onBack: (() -> Unit)?,
     onOpenProject: (root: String) -> Unit,
     selectedRoot: String? = null,
     viewModel: ProjectsViewModel = hiltViewModel()
 ) {
     val projects by viewModel.projects.collectAsStateWithLifecycle()
+    val arrangement by viewModel.arrangement.collectAsStateWithLifecycle()
     val visibility by viewModel.visibility.collectAsStateWithLifecycle()
+    val message by viewModel.arrangeMessage.collectAsStateWithLifecycle()
     LaunchedEffect(visibility) { viewModel.load() }
+    val snackbar = remember { androidx.compose.material3.SnackbarHostState() }
+    LaunchedEffect(message) {
+        message?.let { snackbar.showSnackbar(it); viewModel.clearArrangeMessage() }
+    }
+    // The arrangement lives in the vault: a read-only device shows the phone's and can't change it.
+    val canArrange = !VaultWriteGate.readOnly
+    var arranging by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    var hiddenOpen by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    val arranged = remember(projects, arrangement) { projects?.let { arrangement.arrange(it) } }
 
-    FormScaffold(title = "Projects", onBack = onBack) {
+    FormScaffold(
+        title = "Projects",
+        onBack = onBack,
+        snackbarHostState = snackbar,
+        actions = {
+            if (canArrange && !projects.isNullOrEmpty()) {
+                CortexIconButton(onClick = { arranging = true }) {
+                    Icon(Icons.Rounded.Tune, contentDescription = "Arrange projects")
+                }
+            }
+        }
+    ) {
         val list = projects
         when {
-            list == null -> Text("Loading…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            list == null || arranged == null -> Text("Loading…", color = MaterialTheme.colorScheme.onSurfaceVariant)
             list.isEmpty() -> Text(
                 "No project folder found under 20_Projects/." +
                     if (visibility.hideWork) " Work projects are hidden outside ${visibility.workLabel} mode." else "",
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             else -> {
-                // C7: the shipping cadence across the visible projects, measured only.
-                val roll = androidx.compose.runtime.remember(list) { ProjectFormat.pairing(list.flatMap { it.days }) }
-                val active = list.count { it.commits > 0 || it.sessions > 0 }
-                SectionCard(
-                    title = "Last $ACTIVITY_DAYS days",
-                    icon = Icons.Rounded.Insights,
-                    subtitle = "${plural(active, "active project")} · ${plural(roll.commits, "commit")} · ${plural(roll.sessions, "AI session")}"
-                ) {
+                // C7: the shipping cadence across the projects shown (hidden ones aside), measured only.
+                val shown = arranged.shown
+                val roll = remember(shown) { ProjectFormat.pairing(shown.flatMap { it.days }) }
+                val active = shown.count { it.commits > 0 || it.sessions > 0 }
+                SectionCard(title = "Last $ACTIVITY_DAYS days", icon = Icons.Rounded.Insights) {
+                    // The window at a glance, then what the worklogs measured.
+                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                        BigStat(active, if (active == 1) "active project" else "active projects", Modifier.weight(1f))
+                        BigStat(roll.commits, if (roll.commits == 1) "commit" else "commits", Modifier.weight(1f))
+                        BigStat(roll.sessions, if (roll.sessions == 1) "AI session" else "AI sessions", Modifier.weight(1f))
+                    }
+                    HorizontalDivider(Modifier.padding(vertical = 4.dp))
                     PairingLines(roll)
                 }
-                list.forEach { p -> ProjectCard(p, onOpenProject, selected = p.root == selectedRoot) }
+                if (shown.isEmpty()) {
+                    Text("Every project is hidden: bring one back below.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                shown.forEach { p ->
+                    ProjectCard(p, onOpenProject, selected = p.root == selectedRoot, pinned = arrangement.isPinned(p.root))
+                }
+                if (arranged.hidden.isNotEmpty()) {
+                    HiddenProjects(
+                        hidden = arranged.hidden,
+                        open = hiddenOpen,
+                        onToggle = { hiddenOpen = !hiddenOpen },
+                        onShow = if (canArrange) viewModel::show else null,
+                        onOpenProject = onOpenProject
+                    )
+                }
+            }
+        }
+    }
+    if (arranging && arranged != null) {
+        ArrangeProjectsSheet(
+            arranged = arranged,
+            onPin = viewModel::pin,
+            onUnpin = viewModel::unpin,
+            onHide = viewModel::hide,
+            onShow = viewModel::show,
+            onSwapPinned = viewModel::swapPinned,
+            onDismiss = { arranging = false }
+        )
+    }
+}
+
+/**
+ * A project at a glance: a badge in a colour of its own (the folder's number, else its initials),
+ * its name without the folder's number and underscores, its status, its last [ACTIVITY_DAYS] days
+ * of commits as bars, the window's figures and the next action.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ProjectCard(p: ProjectSummary, onOpenProject: (root: String) -> Unit, selected: Boolean = false, pinned: Boolean = false) {
+    val colors = MaterialTheme.colorScheme
+    ElevatedCard(
+        onClick = { onOpenProject(p.root) },
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        // [selected]: the project whose page is open beside the list (a wide window).
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = if (selected) colors.secondaryContainer else colors.surfaceContainerHigh
+        )
+    ) {
+        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ProjectBadge(p)
+                Spacer(Modifier.width(14.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (pinned) {
+                            Icon(
+                                Icons.Rounded.PushPin,
+                                contentDescription = "Pinned",
+                                tint = colors.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(Modifier.width(6.dp))
+                        }
+                        Text(
+                            projectDisplayName(p.title),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Text(
+                        activityAgo(p.lastActivity) ?: "No activity yet",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.onSurfaceVariant
+                    )
+                }
+                p.status?.let {
+                    Spacer(Modifier.width(8.dp))
+                    StatusPill(it)
+                }
+            }
+            ActivityBars(p.days)
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                StatChip(Icons.Rounded.Commit, plural(p.commits, "commit"))
+                if (p.sessions > 0) StatChip(Icons.Rounded.SmartToy, plural(p.sessions, "AI session"))
+                if (p.actions.isNotEmpty()) StatChip(Icons.Rounded.Checklist, plural(p.actions.size, "open action"))
+            }
+            p.nextAction?.let { NextActionBox(it.text) }
+        }
+    }
+}
+
+/** A figure of the window, big, over its label. */
+@Composable
+private fun BigStat(value: Int, label: String, modifier: Modifier = Modifier) {
+    Column(modifier = modifier) {
+        Text(
+            value.toString(),
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/** The folder's number ("21") or the name's initials, on the project's own colour. */
+@Composable
+private fun ProjectBadge(p: ProjectSummary, size: androidx.compose.ui.unit.Dp = 48.dp) {
+    val (container, content) = badgeColors(p.root)
+    Box(
+        modifier = Modifier
+            .size(size)
+            .clip(RoundedCornerShape(size * 0.3f))
+            .background(container),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            projectBadgeText(p.name, p.title),
+            style = if (size < 48.dp) MaterialTheme.typography.labelLarge else MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = content
+        )
+    }
+}
+
+/**
+ * A soft colour per project, the same on every visit (a hash of its folder), in one of twelve hues
+ * and toned for the theme: deep on a dark surface, pale on a light one.
+ */
+@Composable
+private fun badgeColors(seed: String): Pair<Color, Color> {
+    val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val hue = ((seed.hashCode() and Int.MAX_VALUE) % BADGE_HUES) * (360f / BADGE_HUES)
+    return Color.hsl(hue, 0.42f, if (dark) 0.30f else 0.86f) to Color.hsl(hue, 0.65f, if (dark) 0.84f else 0.28f)
+}
+
+@Composable
+private fun StatusPill(status: String) {
+    Surface(shape = CircleShape, color = MaterialTheme.colorScheme.tertiaryContainer) {
+        Text(
+            status,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onTertiaryContainer,
+            maxLines = 1,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+        )
+    }
+}
+
+/** Commits per day over the last [ACTIVITY_DAYS] days, oldest on the left; a quiet day is a stub. */
+@Composable
+private fun ActivityBars(days: List<WorklogDay>) {
+    val perDay = androidx.compose.runtime.remember(days) { commitsPerDay(days, LocalDate.now()) }
+    val most = perDay.maxOrNull()?.takeIf { it > 0 } ?: 1
+    val busy = MaterialTheme.colorScheme.primary
+    val quiet = MaterialTheme.colorScheme.outlineVariant
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(32.dp)
+            .clearAndSetSemantics {
+                contentDescription = "${plural(perDay.sum(), "commit")} in $ACTIVITY_DAYS days, at most ${perDay.max()} a day"
+            },
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.Bottom
+    ) {
+        perDay.forEach { commits ->
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(if (commits == 0) 0.1f else 0.2f + 0.8f * commits / most)
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(if (commits == 0) quiet else busy)
+            )
+        }
+    }
+}
+
+@Composable
+private fun StatChip(icon: ImageVector, text: String) {
+    Row(
+        modifier = Modifier
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+        Text(text, style = MaterialTheme.typography.labelMedium)
+    }
+}
+
+@Composable
+private fun NextActionBox(text: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.medium)
+            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+            .padding(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Icon(
+            Icons.AutoMirrored.Rounded.ArrowForward,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(18.dp)
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text("Next", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+            Text(text, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+/** The hidden projects, folded at the bottom of the list: one tap opens one, "Show" brings it back. */
+@Composable
+private fun HiddenProjects(
+    hidden: List<ProjectSummary>,
+    open: Boolean,
+    onToggle: () -> Unit,
+    onShow: ((String) -> Unit)?,
+    onOpenProject: (root: String) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(MaterialTheme.shapes.medium)
+                .clickable(onClickLabel = if (open) "Fold the hidden projects" else "Unfold the hidden projects", onClick = onToggle)
+                .padding(horizontal = 4.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                if (open) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text("Hidden (${hidden.size})", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        androidx.compose.animation.AnimatedVisibility(visible = open) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                hidden.forEach { p ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(MaterialTheme.shapes.medium)
+                            .background(MaterialTheme.colorScheme.surfaceContainer)
+                            .clickable { onOpenProject(p.root) }
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        ProjectBadge(p, size = 36.dp)
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            projectDisplayName(p.title),
+                            style = MaterialTheme.typography.bodyLarge,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (onShow != null) TextButton(onClick = { onShow(p.root) }) { Text("Show") }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Pin, order, hide and show the projects; every change is saved to the vault at once. */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun ArrangeProjectsSheet(
+    arranged: ArrangedProjects,
+    onPin: (String) -> Unit,
+    onUnpin: (String) -> Unit,
+    onHide: (String) -> Unit,
+    onShow: (String) -> Unit,
+    onSwapPinned: (String, String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    androidx.compose.material3.ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = androidx.compose.material3.rememberBottomSheetState(
+            initialValue = androidx.compose.material3.SheetValue.Hidden,
+            enabledValues = setOf(androidx.compose.material3.SheetValue.Hidden, androidx.compose.material3.SheetValue.Expanded)
+        )
+    ) {
+        ArrangeProjectsContent(arranged, onPin, onUnpin, onHide, onShow, onSwapPinned)
+    }
+}
+
+/** The arrange sheet's body, apart so a device test can draw it without the vault. */
+@Composable
+internal fun ArrangeProjectsContent(
+    arranged: ArrangedProjects,
+    onPin: (String) -> Unit,
+    onUnpin: (String) -> Unit,
+    onHide: (String) -> Unit,
+    onShow: (String) -> Unit,
+    onSwapPinned: (String, String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    androidx.compose.foundation.lazy.LazyColumn(
+        modifier = modifier.fillMaxWidth(),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        item(key = "intro") {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Arrange projects", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text(
+                    "Pinned projects stay on top, in this order; the others follow by latest activity. " +
+                        "Hidden ones wait at the bottom of the list. Saved in your vault: every device lists them alike.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        if (arranged.pinned.isNotEmpty()) {
+            item(key = "h-pinned") { ArrangeHeader("Pinned") }
+            arranged.pinned.forEachIndexed { index, p ->
+                item(key = "p:" + p.root) {
+                    val name = projectDisplayName(p.title)
+                    ArrangeRow(p) {
+                        IconButton(enabled = index > 0, onClick = { onSwapPinned(p.root, arranged.pinned[index - 1].root) }) {
+                            Icon(Icons.Rounded.KeyboardArrowUp, contentDescription = "Move $name up")
+                        }
+                        IconButton(enabled = index < arranged.pinned.lastIndex, onClick = { onSwapPinned(p.root, arranged.pinned[index + 1].root) }) {
+                            Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = "Move $name down")
+                        }
+                        IconButton(onClick = { onUnpin(p.root) }) {
+                            Icon(Icons.Rounded.PushPin, contentDescription = "Unpin $name", tint = MaterialTheme.colorScheme.primary)
+                        }
+                        IconButton(onClick = { onHide(p.root) }) {
+                            Icon(Icons.Rounded.VisibilityOff, contentDescription = "Hide $name")
+                        }
+                    }
+                }
+            }
+        }
+        if (arranged.others.isNotEmpty()) {
+            item(key = "h-others") { ArrangeHeader(if (arranged.pinned.isEmpty()) "By latest activity" else "Then, by latest activity") }
+            arranged.others.forEach { p ->
+                item(key = "o:" + p.root) {
+                    val name = projectDisplayName(p.title)
+                    ArrangeRow(p) {
+                        IconButton(onClick = { onPin(p.root) }) {
+                            Icon(Icons.Outlined.PushPin, contentDescription = "Pin $name")
+                        }
+                        IconButton(onClick = { onHide(p.root) }) {
+                            Icon(Icons.Rounded.VisibilityOff, contentDescription = "Hide $name")
+                        }
+                    }
+                }
+            }
+        }
+        if (arranged.hidden.isNotEmpty()) {
+            item(key = "h-hidden") { ArrangeHeader("Hidden") }
+            arranged.hidden.forEach { p ->
+                item(key = "x:" + p.root) {
+                    ArrangeRow(p, dimmed = true) {
+                        IconButton(onClick = { onShow(p.root) }) {
+                            Icon(Icons.Rounded.Visibility, contentDescription = "Show ${projectDisplayName(p.title)}")
+                        }
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun ProjectCard(p: ProjectSummary, onOpenProject: (root: String) -> Unit, selected: Boolean = false) {
-    SectionCard(
-        title = p.title,
-        icon = Icons.Rounded.RocketLaunch,
-        subtitle = projectLine(p),
-        selected = selected,
-        modifier = Modifier.clickable { onOpenProject(p.root) }
+private fun ArrangeHeader(title: String) {
+    Text(
+        title,
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(top = 16.dp, bottom = 4.dp)
+    )
+}
+
+@Composable
+private fun ArrangeRow(p: ProjectSummary, dimmed: Boolean = false, actions: @Composable () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        p.nextAction?.let {
-            Text(
-                "Next: ${it.text}",
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
+        ProjectBadge(p, size = 36.dp)
+        Spacer(Modifier.width(12.dp))
+        Text(
+            projectDisplayName(p.title),
+            style = MaterialTheme.typography.bodyLarge,
+            color = if (dimmed) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+        actions()
     }
 }
 
@@ -242,7 +736,7 @@ fun ProjectScreen(
         message?.let { snackbar.showSnackbar(it); viewModel.clearMessage() }
     }
 
-    FormScaffold(title = p?.title ?: root.substringAfterLast('/'), onBack = onBack, snackbarHostState = snackbar) {
+    FormScaffold(title = projectDisplayName(p?.title ?: root.substringAfterLast('/')), onBack = onBack, snackbarHostState = snackbar) {
         if (p == null) {
             Text(
                 if (state == ProjectsViewModel.ProjectState.Loading || stale) "Loading…" else "This project is hidden or no longer exists.",
@@ -527,6 +1021,7 @@ private fun NoteRow(title: String, detail: String?, onClick: () -> Unit) {
 }
 
 private const val ACTIVITY_DAYS = 14
+private const val BADGE_HUES = 12
 private const val QUEUE_PREVIEW = 3
 private const val QUESTIONS_SHOWN = 5
 private val DAY: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d MMM")
@@ -543,15 +1038,25 @@ internal fun projectLine(p: ProjectSummary, today: LocalDate = LocalDate.now()):
             append(" in $ACTIVITY_DAYS days")
         }
     }
-    p.lastActivity?.let { last ->
-        val ago = ChronoUnit.DAYS.between(last, today)
-        parts += when {
-            ago <= 0L -> "active today"
-            ago == 1L -> "active yesterday"
-            ago < 60L -> "active $ago days ago"
-            else -> "last active ${last.format(DateTimeFormatter.ofPattern("MMM yyyy"))}"
-        }
-    }
+    activityAgo(p.lastActivity, today)?.let { parts += it }
     p.status?.let { parts += it }
     return parts.joinToString(" · ").ifEmpty { "No activity yet" }
+}
+
+/** "active yesterday", "active 3 days ago", "last active Mar 2026"; null without any activity. */
+internal fun activityAgo(last: LocalDate?, today: LocalDate = LocalDate.now()): String? {
+    if (last == null) return null
+    val ago = ChronoUnit.DAYS.between(last, today)
+    return when {
+        ago <= 0L -> "active today"
+        ago == 1L -> "active yesterday"
+        ago < 60L -> "active $ago days ago"
+        else -> "last active ${last.format(DateTimeFormatter.ofPattern("MMM yyyy"))}"
+    }
+}
+
+/** Commits on each of the [ACTIVITY_DAYS] days ending [today], oldest first; 0 for a day without a worklog. */
+internal fun commitsPerDay(days: List<WorklogDay>, today: LocalDate): List<Int> {
+    val byDate = days.groupBy { it.date }.mapValues { (_, sameDay) -> sameDay.sumOf { it.commits } }
+    return (ACTIVITY_DAYS - 1 downTo 0).map { back -> byDate[today.minusDays(back.toLong())] ?: 0 }
 }
