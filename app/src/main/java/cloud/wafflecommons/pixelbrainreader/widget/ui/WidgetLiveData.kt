@@ -2,6 +2,7 @@ package cloud.wafflecommons.pixelbrainreader.widget.ui
 
 import android.content.Context
 import cloud.wafflecommons.pixelbrainreader.data.model.HabitStatus
+import cloud.wafflecommons.pixelbrainreader.data.mood.MoodEmojiSets
 import cloud.wafflecommons.pixelbrainreader.di.WidgetEntryPoint
 import cloud.wafflecommons.pixelbrainreader.domain.lifeos.HabitScheduler
 import dagger.hilt.android.EntryPointAccessors
@@ -25,7 +26,13 @@ object WidgetLiveData {
     data class WidgetHabit(val id: String, val title: String, val done: Boolean, val isAutomatic: Boolean = false)
     data class WidgetTask(val id: String, val label: String, val time: String?, val done: Boolean)
     data class WidgetChore(val id: String, val name: String, val effort: Int)
-    data class WidgetMood(val emoji: String, val entryCount: Int, val hidden: Boolean = false)
+    /** [faces]: the device's mood emoji set, score 1 to 5 (the buttons). */
+    data class WidgetMood(
+        val emoji: String,
+        val entryCount: Int,
+        val hidden: Boolean = false,
+        val faces: List<String> = MoodEmojiSets.DEFAULT.faces
+    )
 
     /** Today's SCHEDULED habits (via [HabitScheduler]) with their done state, ordered by sortOrder. */
     suspend fun habitsForToday(context: Context): List<WidgetHabit> {
@@ -94,13 +101,17 @@ object WidgetLiveData {
         } catch (e: CancellationException) { throw e } catch (e: Exception) { emptyList() }
     }
 
-    /** Today's mood summary (main emoji + entry count); nothing while screen-share safe is on. */
+    /**
+     * Today's mood summary (main emoji + entry count) and the faces of the device's emoji set;
+     * no summary while screen-share safe is on.
+     */
     suspend fun moodToday(context: Context): WidgetMood {
         return try {
             val ep = entryPoint(context)
-            if (ep.modesRepository().currentVisibility().hideHealth) return WidgetMood("🙈", 0, hidden = true)
+            val faces = (ep.gamificationPreferences().moodEmojiSetFlow.firstOrNull() ?: MoodEmojiSets.DEFAULT).faces
+            if (ep.modesRepository().currentVisibility().hideHealth) return WidgetMood("🙈", 0, hidden = true, faces = faces)
             val daily = ep.moodRepository().getDailyMood(LocalDate.now()).firstOrNull()
-            WidgetMood(daily?.summary?.mainEmoji ?: "🫥", daily?.entries?.size ?: 0)
+            WidgetMood(daily?.summary?.mainEmoji ?: "🫥", daily?.entries?.size ?: 0, faces = faces)
         } catch (e: CancellationException) { throw e } catch (e: Exception) { WidgetMood("🫥", 0) }
     }
 }

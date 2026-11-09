@@ -8,11 +8,16 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import cloud.wafflecommons.pixelbrainreader.data.gamification.Attribute
+import cloud.wafflecommons.pixelbrainreader.data.mood.MoodEmojiSet
+import cloud.wafflecommons.pixelbrainreader.data.mood.MoodEmojiSets
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -29,7 +34,8 @@ class GamificationPreferences @Inject constructor(
         val SLEEP_MIN_MINUTES = intPreferencesKey("sleep_min_minutes")
         val TAG_TO_STAT_MAPPING = stringPreferencesKey("tag_to_stat_mapping")
         val LAST_HEALTH_SYNERGY_APPLIED_DATE = stringPreferencesKey("last_health_synergy_applied_date")
-        val MOOD_EMOJI_MAPPING = stringPreferencesKey("mood_emoji_mapping")
+        /** The id of the mood emoji set this device shows (replaced the never-read per-score "mood_emoji_mapping"). */
+        val MOOD_EMOJI_SET = stringPreferencesKey("mood_emoji_set")
     }
 
     val stepTargetFlow: Flow<Int> = context.gamificationDataStore.data.map { preferences ->
@@ -58,19 +64,15 @@ class GamificationPreferences @Inject constructor(
         preferences[Keys.LAST_HEALTH_SYNERGY_APPLIED_DATE] ?: ""
     }
 
-    val moodEmojiMappingFlow: Flow<Map<Int, String>> = context.gamificationDataStore.data.map { preferences ->
-        val json = preferences[Keys.MOOD_EMOJI_MAPPING]
-        if (json.isNullOrEmpty()) {
-            mapOf(1 to "😭", 2 to "😕", 3 to "😐", 4 to "🙂", 5 to "🤩")
-        } else {
-            try {
-                val type = object : TypeToken<Map<Int, String>>() {}.type
-                gson.fromJson(json, type)
-            } catch (e: Exception) {
-                mapOf(1 to "😭", 2 to "😕", 3 to "😐", 4 to "🙂", 5 to "🤩")
-            }
-        }
-    }
+    /**
+     * The mood emoji set this device shows everywhere ([MoodEmojiSets]); the default until one is
+     * picked, or when the store can't be read — a display setting never stops a mood from showing
+     * or saving. Distinct: the store emits on every key change (the step slider writes per tick).
+     */
+    val moodEmojiSetFlow: Flow<MoodEmojiSet> = context.gamificationDataStore.data
+        .map { preferences -> MoodEmojiSets.byId(preferences[Keys.MOOD_EMOJI_SET]) }
+        .catch { e -> if (e is IOException) emit(MoodEmojiSets.DEFAULT) else throw e }
+        .distinctUntilChanged()
 
     suspend fun setStepTarget(target: Int) {
         context.gamificationDataStore.edit { preferences ->
@@ -97,10 +99,9 @@ class GamificationPreferences @Inject constructor(
         }
     }
 
-    suspend fun setMoodEmojiMapping(mapping: Map<Int, String>) {
-        val json = gson.toJson(mapping)
+    suspend fun setMoodEmojiSet(id: String) {
         context.gamificationDataStore.edit { preferences ->
-            preferences[Keys.MOOD_EMOJI_MAPPING] = json
+            preferences[Keys.MOOD_EMOJI_SET] = MoodEmojiSets.byId(id).id
         }
     }
 }

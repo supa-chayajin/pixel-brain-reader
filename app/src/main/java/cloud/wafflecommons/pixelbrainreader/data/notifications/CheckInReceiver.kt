@@ -7,6 +7,7 @@ import android.content.Intent
 import android.util.Log
 import androidx.core.app.RemoteInput
 import cloud.wafflecommons.pixelbrainreader.data.capture.CheckInRouting
+import cloud.wafflecommons.pixelbrainreader.data.local.preferences.GamificationPreferences
 import cloud.wafflecommons.pixelbrainreader.data.repository.DailyDashboardRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.DailyNoteRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.MoodEntry
@@ -19,6 +20,7 @@ import cloud.wafflecommons.pixelbrainreader.domain.gamification.XpActionType
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.LocalTime
@@ -40,6 +42,7 @@ class CheckInReceiver : BroadcastReceiver() {
     @Inject lateinit var taskRepository: TaskRepository
     @Inject lateinit var scratchRepository: ScratchRepository
     @Inject lateinit var grantXpUseCase: GrantXpUseCase
+    @Inject lateinit var gamificationPreferences: GamificationPreferences
     @Inject @ApplicationScope lateinit var appScope: CoroutineScope
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -74,7 +77,7 @@ class CheckInReceiver : BroadcastReceiver() {
             MoodEntry(time = time, score = score, label = mood.second, activities = emptyList(), note = null)
         )
         runCatching { grantXpUseCase.execute("mood_checkin", XpActionType.MOOD_LOGGED) }
-        NotificationHelper.postCheckInLine(context, moodLabel = mood.third)
+        NotificationHelper.postCheckInLine(context, moodLabel = CheckInRouting.buttonLabel(mood, gamificationPreferences.moodEmojiSetFlow.first()))
     }
 
     private suspend fun reply(context: Context, intent: Intent, forceGratitude: Boolean) {

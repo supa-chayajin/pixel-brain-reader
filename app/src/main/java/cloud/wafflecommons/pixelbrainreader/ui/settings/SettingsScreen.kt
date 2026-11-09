@@ -95,7 +95,6 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val moodEmojiMapping by viewModel.moodEmojiMapping.collectAsStateWithLifecycle()
     val nanoState by viewModel.nanoState.collectAsStateWithLifecycle()
     val vaultGraphReport by viewModel.vaultGraphReport.collectAsStateWithLifecycle()
     val isAnalyzingGraph by viewModel.isAnalyzingGraph.collectAsStateWithLifecycle()
@@ -555,7 +554,7 @@ fun SettingsScreen(
                         onNavigateToMoodTags()
                     },
                     leadingContent = { Icon(Icons.Rounded.Mood, contentDescription = null) },
-                    supportingContent = { Text("The tags you can add when you log a mood") }
+                    supportingContent = { Text("The tags you can add when you log a mood, and their icons") }
                 ) {
                     Text("Manage Mood Tags")
                 }
@@ -566,7 +565,7 @@ fun SettingsScreen(
                         onNavigateToGamificationSettings()
                     },
                     leadingContent = { Icon(Icons.Filled.Tune, contentDescription = null) },
-                    supportingContent = { Text("Health goals, mood emojis, and which tags feed which stat") }
+                    supportingContent = { Text("Health goals, the mood emoji set, and which tags feed which stat") }
                 ) {
                     Text("RPG & Gamification Rules")
                 }

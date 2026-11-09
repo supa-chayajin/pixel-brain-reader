@@ -31,7 +31,7 @@ import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 
 /**
- * One-tap mood check-in. Five emoji buttons log a mood entry for right now via [MoodLogCallback] —
+ * One-tap mood check-in. Five emoji buttons (the device's mood emoji set) log a mood entry for right now via [MoodLogCallback] —
  * no need to open the app. The header shows today's summary and deep-links into the Mood screen.
  */
 class MoodWidget : GlanceAppWidget() {
@@ -62,7 +62,8 @@ class MoodWidget : GlanceAppWidget() {
                     modifier = GlanceModifier.fillMaxWidth().defaultWeight(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    val faces = listOf(1 to "😫", 2 to "🙁", 3 to "😐", 4 to "🙂", 5 to "🤩")
+                    // The device's mood emoji set, score 1 to 5.
+                    val faces = mood.faces.mapIndexed { index, face -> (index + 1) to face }
                     faces.forEachIndexed { index, (score, emoji) ->
                         MoodButton(score, emoji, GlanceModifier.defaultWeight().fillMaxHeight())
                         if (index != faces.lastIndex) Spacer(GlanceModifier.width(8.dp))

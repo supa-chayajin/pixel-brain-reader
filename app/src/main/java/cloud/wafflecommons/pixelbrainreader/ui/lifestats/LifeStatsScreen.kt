@@ -143,15 +143,6 @@ private fun DashboardCard(title: String, trailing: String? = null, content: @Com
     }
 }
 
-private fun moodEmoji(score: Float): String = when {
-    score <= 0f -> "∅"
-    score < 1.8f -> "😫"
-    score < 2.6f -> "😞"
-    score < 3.4f -> "😐"
-    score < 4.2f -> "🙂"
-    else -> "🤩"
-}
-
 // --- 1. RPG Hero (level / class / XP) ---
 @OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -281,7 +272,7 @@ private fun MoodSummaryCard(uiState: LifeStatsUiState) {
     val bestDay = realDays.maxByOrNull { it.score }
     DashboardCard(title = "Mood") {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(moodEmoji(uiState.avgMood7Days), style = MaterialTheme.typography.displaySmall)
+            Text(uiState.avgMood7DaysEmoji, style = MaterialTheme.typography.displaySmall)
             Spacer(Modifier.width(20.dp))
             Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.weight(1f)) {
                 StatLine(Icons.Default.Mood, ChartPalette.Habits, "7-day average", String.format(java.util.Locale.US, "%.1f/5", uiState.avgMood7Days))

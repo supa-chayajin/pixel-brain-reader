@@ -10,6 +10,7 @@ import cloud.wafflecommons.pixelbrainreader.data.local.entity.MoodEntity
 import cloud.wafflecommons.pixelbrainreader.data.local.preferences.GamificationPreferences
 import cloud.wafflecommons.pixelbrainreader.data.model.HabitConfig
 import cloud.wafflecommons.pixelbrainreader.data.model.HabitLogEntry
+import cloud.wafflecommons.pixelbrainreader.data.mood.MoodEmojiSet
 import cloud.wafflecommons.pixelbrainreader.data.repository.ChoreRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.HabitRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.HealthMetricsRepository
@@ -47,6 +48,8 @@ data class LifeStatsMoodPoint(
 data class LifeStatsUiState(
     val moodHistory: List<LifeStatsMoodPoint> = emptyList(),
     val avgMood7Days: Float = 0f,
+    /** The 7-day average's face in the device's mood emoji set; "∅" without a mood. */
+    val avgMood7DaysEmoji: String = NO_MOOD,
     val avgMood30Days: Float = 0f,
     val avgHeartRate: Int = 0,
     val caloriesBurned: Int = 0,
@@ -115,17 +118,21 @@ class LifeStatsViewModel @Inject constructor(
     val uiState: StateFlow<LifeStatsUiState> = appClock.today
         .flatMapLatest { today ->
             combine(
-                moodRepository.getMoodsBetween(today.minusDays(30), today),
-                // Two years of logs so streaks continue across January 1st.
-                habitRepository.getLogsBetweenFlow(LocalDate.of(today.year - 1, 1, 1), LocalDate.of(today.year, 12, 31)),
-                habitRepository.getHabitConfigsFlow(),
-                choreRepository.getAllChoresStream(),
-                healthMetricsRepository.changes.flatMapLatest { healthMetricsRepository.getMetricsHistoryFlow(today, 7) }
-            ) { moods, logsByHabit, configs, chores, health ->
-                Inputs(today, moods, logsByHabit, configs, chores, health)
-            }
+                combine(
+                    moodRepository.getMoodsBetween(today.minusDays(30), today),
+                    // Two years of logs so streaks continue across January 1st.
+                    habitRepository.getLogsBetweenFlow(LocalDate.of(today.year - 1, 1, 1), LocalDate.of(today.year, 12, 31)),
+                    habitRepository.getHabitConfigsFlow(),
+                    choreRepository.getAllChoresStream(),
+                    healthMetricsRepository.changes.flatMapLatest { healthMetricsRepository.getMetricsHistoryFlow(today, 7) }
+                ) { moods, logsByHabit, configs, chores, health ->
+                    Inputs(today, moods, logsByHabit, configs, chores, health)
+                },
+                gamificationPreferences.moodEmojiSetFlow,
+                ::Pair
+            )
         }
-        .map { buildState(it) }
+        .map { (inputs, emojiSet) -> buildState(inputs, emojiSet) }
         .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), LifeStatsUiState(isLoading = true))
 
@@ -169,7 +176,7 @@ class LifeStatsViewModel @Inject constructor(
         (state.taskCompletionRate + state.habitCompletionRate + choreRate) / 3f
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0f)
 
-    private fun buildState(inputs: Inputs): LifeStatsUiState {
+    private fun buildState(inputs: Inputs, emojiSet: MoodEmojiSet): LifeStatsUiState {
         val today = inputs.today
 
         // --- Mental Health (Mood) ---
@@ -204,7 +211,7 @@ class LifeStatsViewModel @Inject constructor(
 
             val dayMoods = moodsByDate[key].orEmpty()
             val avg = if (dayMoods.isNotEmpty()) dayMoods.map { it.score }.average() else 0.0
-            moodHistoryLine.add(LifeStatsMoodPoint(day, avg.toFloat(), moodEmoji(avg), dayAvgBpm))
+            moodHistoryLine.add(LifeStatsMoodPoint(day, avg.toFloat(), moodEmoji(avg, emojiSet), dayAvgBpm))
         }
 
         // --- Productivity (Habits): today's completion + best current streak ---
@@ -228,6 +235,7 @@ class LifeStatsViewModel @Inject constructor(
         return LifeStatsUiState(
             moodHistory = moodHistoryLine,
             avgMood7Days = avgMood7Days,
+            avgMood7DaysEmoji = moodEmoji(avgMood7Days.toDouble(), emojiSet),
             avgMood30Days = avgMood30Days,
             avgHeartRate = if (hrDaysCount > 0) totalHrSum / hrDaysCount else 0,
             caloriesBurned = todayMetrics?.caloriesBurned?.toInt() ?: 0,
@@ -255,13 +263,10 @@ class LifeStatsViewModel @Inject constructor(
     private fun List<MoodEntity>.averageScore(): Float =
         if (isEmpty()) 0f else map { it.score }.average().toFloat()
 
-    private fun moodEmoji(avg: Double): String = when {
-        avg == 0.0 -> "∅"
-        avg < 1.8 -> "😫"
-        avg.isNaN() -> "😐"
-        avg < 2.6 -> "😞"
-        avg < 3.4 -> "😐"
-        avg < 4.2 -> "🙂"
-        else -> "🤩"
-    }
+    /** A day (or an average) without a mood shows [NO_MOOD]; scores start at 1. */
+    private fun moodEmoji(avg: Double, emojiSet: MoodEmojiSet): String =
+        if (avg <= 0.0) NO_MOOD else emojiSet.forAverage(avg)
 }
+
+/** What a day without a mood shows in the Life Stats mood figures. */
+private const val NO_MOOD = "∅"

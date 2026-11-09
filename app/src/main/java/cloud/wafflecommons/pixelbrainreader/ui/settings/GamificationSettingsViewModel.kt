@@ -4,6 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cloud.wafflecommons.pixelbrainreader.data.gamification.Attribute
 import cloud.wafflecommons.pixelbrainreader.data.local.preferences.GamificationPreferences
+import cloud.wafflecommons.pixelbrainreader.data.mood.MoodEmojiSet
+import cloud.wafflecommons.pixelbrainreader.data.mood.MoodEmojiSets
+import cloud.wafflecommons.pixelbrainreader.widget.ui.WidgetUpdateManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -13,7 +16,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class GamificationSettingsViewModel @Inject constructor(
-    private val preferences: GamificationPreferences
+    private val preferences: GamificationPreferences,
+    private val widgetUpdateManager: WidgetUpdateManager
 ) : ViewModel() {
 
     val stepTarget: StateFlow<Int> = preferences.stepTargetFlow
@@ -37,11 +41,11 @@ class GamificationSettingsViewModel @Inject constructor(
             initialValue = emptyMap()
         )
 
-    val moodEmojiMapping: StateFlow<Map<Int, String>> = preferences.moodEmojiMappingFlow
+    val moodEmojiSet: StateFlow<MoodEmojiSet> = preferences.moodEmojiSetFlow
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
-            initialValue = mapOf(1 to "😭", 2 to "😕", 3 to "😐", 4 to "🙂", 5 to "🤩")
+            initialValue = MoodEmojiSets.DEFAULT
         )
 
     fun updateStepTarget(target: Int) {
@@ -72,11 +76,16 @@ class GamificationSettingsViewModel @Inject constructor(
         }
     }
 
-    fun updateMoodEmojiMapping(score: Int, emoji: String) {
-        val currentMap = moodEmojiMapping.value.toMutableMap()
-        currentMap[score] = emoji
+    /**
+     * Saves the device's mood emoji set. The screens follow the preference; the widgets are redrawn
+     * (the Mood widget reads the set live, the Companion widget's chart from a rebuilt snapshot).
+     */
+    fun selectMoodEmojiSet(id: String) {
         viewModelScope.launch {
-            preferences.setMoodEmojiMapping(currentMap)
+            preferences.setMoodEmojiSet(id)
+            widgetUpdateManager.triggerUpdate()
+            // Not suspending: nothing to cancel. WorkManager unavailable → the next rebuild picks it up.
+            runCatching { widgetUpdateManager.scheduleSnapshotUpdate() }
         }
     }
 }

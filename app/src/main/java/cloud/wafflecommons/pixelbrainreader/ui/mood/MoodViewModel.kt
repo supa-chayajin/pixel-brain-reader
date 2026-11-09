@@ -4,9 +4,13 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
+import cloud.wafflecommons.pixelbrainreader.data.local.preferences.GamificationPreferences
+import cloud.wafflecommons.pixelbrainreader.data.mood.MoodEmojiSet
+import cloud.wafflecommons.pixelbrainreader.data.mood.MoodEmojiSets
 import cloud.wafflecommons.pixelbrainreader.data.repository.DailyMoodData
 import cloud.wafflecommons.pixelbrainreader.data.repository.MoodEntry
 import cloud.wafflecommons.pixelbrainreader.data.repository.MoodRepository
+import cloud.wafflecommons.pixelbrainreader.data.repository.MoodTag
 import cloud.wafflecommons.pixelbrainreader.data.repository.MoodTagRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.NoteRepository
 import cloud.wafflecommons.pixelbrainreader.data.system.AppClock
@@ -17,12 +21,14 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -44,14 +50,22 @@ class MoodViewModel @Inject constructor(
     private val moodRepository: MoodRepository,
     moodTagRepository: MoodTagRepository,
     private val noteRepository: NoteRepository,
-    appClock: AppClock
+    appClock: AppClock,
+    gamificationPreferences: GamificationPreferences
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(MoodState(selectedDate = appClock.today.value))
     val uiState: StateFlow<MoodState> = _uiState.asStateFlow()
 
-    /** Canonical, vault-synced activity tags offered in the check-in sheet. */
-    val availableTags: StateFlow<List<String>> = moodTagRepository.tags
+    /** Canonical, vault-synced activity tags (with their icons) offered in the check-in sheet. */
+    val availableTags: StateFlow<List<MoodTag>> = moodTagRepository.tags
+
+    /**
+     * The device's mood emoji set: the sheet's faces, the history's faces, and the label a new entry
+     * is saved with. Eager, so [addMoodEntry] stores the faces the sheet showed.
+     */
+    val emojiSet: StateFlow<MoodEmojiSet> = gamificationPreferences.moodEmojiSetFlow
+        .stateIn(viewModelScope, SharingStarted.Eagerly, MoodEmojiSets.DEFAULT)
 
     // One-shot UI events (toasts). Buffered so emitting never suspends the save coroutine.
     private val _uiEvent = MutableSharedFlow<UiEvent>(extraBufferCapacity = 8)
@@ -111,15 +125,8 @@ class MoodViewModel @Inject constructor(
             val message = try {
                 val timestamp = customTimestamp ?: LocalDateTime.now()
 
-                // Auto-map score to label for simplicity
-                val label = when (score) {
-                    1 -> "😫"
-                    2 -> "😞"
-                    3 -> "😐"
-                    4 -> "🙂"
-                    5 -> "🤩"
-                    else -> "😐"
-                }
+                // The label is the face the sheet showed for this score.
+                val label = emojiSet.value.forScore(score)
 
                 val entry = MoodEntry(
                     time = timestamp.format(DateTimeFormatter.ofPattern("HH:mm")),

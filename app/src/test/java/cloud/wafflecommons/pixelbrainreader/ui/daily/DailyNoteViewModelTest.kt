@@ -286,6 +286,9 @@ class DailyNoteViewModelTest {
             memoryEchoRepository = mockk(relaxed = true),
             voiceCompiler = mockk(relaxed = true),
             captureRepository = mockk(relaxed = true),
+            gamificationPreferences = mockk {
+                every { moodEmojiSetFlow } returns flowOf(cloud.wafflecommons.pixelbrainreader.data.mood.MoodEmojiSets.DEFAULT)
+            },
             appClock = appClock,
             appScope = kotlinx.coroutines.CoroutineScope(testDispatcher)
         )

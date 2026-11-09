@@ -13,6 +13,7 @@ import android.graphics.Typeface
 import androidx.core.graphics.createBitmap
 import androidx.core.graphics.toColorInt
 import cloud.wafflecommons.pixelbrainreader.data.health.HeartRatePoint
+import cloud.wafflecommons.pixelbrainreader.data.mood.MoodEmojiSets
 import cloud.wafflecommons.pixelbrainreader.data.repository.MoodEntry
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -21,10 +22,12 @@ import kotlin.math.roundToInt
 @Singleton
 class WidgetChartRenderer @Inject constructor() {
 
+    /** [moodFaces]: the device's mood emoji set, score 1 to 5 (empty: the default set). */
     fun renderVitalityGraph(
         context: Context,
         heartRates: List<HeartRatePoint>,
-        moods: List<MoodEntry>
+        moods: List<MoodEntry>,
+        moodFaces: List<String> = emptyList()
     ): Bitmap? {
         // Even if empty heart rates, we might want to show empty graph line? 
         // No, return null to show "No Data" state if absolutely nothing.
@@ -153,7 +156,7 @@ class WidgetChartRenderer @Inject constructor() {
                         if (epoch in startTime..endTime) {
                             val normX = (epoch - startTime) / range.toFloat()
                             val x = normX * width
-                            val emoji = getEmojiForScore(mood.score)
+                            val emoji = moodFaces.getOrNull(mood.score - 1) ?: MoodEmojiSets.DEFAULT.forScore(mood.score)
                             canvas.drawText(emoji, x, 16f * density, textPaint)
                         }
                     } catch (e: Exception) {
@@ -164,16 +167,5 @@ class WidgetChartRenderer @Inject constructor() {
         }
 
         return bitmap
-    }
-    
-    private fun getEmojiForScore(score: Int): String {
-        return when (score) {
-            1 -> "😞"
-            2 -> "😐"
-            3 -> "🙂"
-            4 -> "😀"
-            5 -> "🤩"
-            else -> "😐"
-        }
     }
 }

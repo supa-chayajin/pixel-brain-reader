@@ -25,6 +25,7 @@ import cloud.wafflecommons.pixelbrainreader.ui.utils.centeredMaxWidth
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import cloud.wafflecommons.pixelbrainreader.data.repository.MoodEntry
+import cloud.wafflecommons.pixelbrainreader.data.repository.MoodTag
 import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -37,6 +38,8 @@ fun MoodHistoryScreen(
     modesViewModel: cloud.wafflecommons.pixelbrainreader.ui.modes.ModesViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val emojiSet by viewModel.emojiSet.collectAsStateWithLifecycle()
+    val tags by viewModel.availableTags.collectAsStateWithLifecycle()
     val visibility by modesViewModel.visibility.collectAsStateWithLifecycle()
     val context = androidx.compose.ui.platform.LocalContext.current
 
@@ -99,7 +102,7 @@ fun MoodHistoryScreen(
                         // "HH:mm" time, and a duplicate LazyColumn key crashes the screen.
                         itemsIndexed(entries.orEmpty(), key = { index, entry -> "${entry.time}#$index" }) { _, entry ->
                             Box(Modifier.animateItem()) {
-                                MoodTimelineItem(entry)
+                                MoodTimelineItem(entry, face = emojiSet.forScore(entry.score), tags = tags)
                             }
                         }
                     }
@@ -183,9 +186,13 @@ fun SummaryHeader(emoji: String?, avg: Double?) {
     }
 }
 
+/**
+ * One check-in. [face] is the entry's score in the device's emoji set (not the label it was saved
+ * with: the widget and the evening notification save words), [tags] gives its activities their icons.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun MoodTimelineItem(entry: MoodEntry) {
+fun MoodTimelineItem(entry: MoodEntry, face: String, tags: List<MoodTag>) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -219,7 +226,7 @@ fun MoodTimelineItem(entry: MoodEntry) {
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(text = entry.label, fontSize = 20.sp)
+                    Text(text = face, fontSize = 20.sp)
                     Text(text = "Score: ${entry.score}", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
                 }
 
@@ -227,7 +234,17 @@ fun MoodTimelineItem(entry: MoodEntry) {
                     Spacer(modifier = Modifier.height(8.dp))
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         entry.activities.forEach { activity ->
-                            SuggestionChip(onClick = {}, label = { Text(activity) })
+                            SuggestionChip(
+                                onClick = {},
+                                label = { Text(activity) },
+                                icon = {
+                                    Icon(
+                                        MoodTagIcons.resolve(activity, tags).image,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(SuggestionChipDefaults.IconSize)
+                                    )
+                                }
+                            )
                         }
                     }
                 }

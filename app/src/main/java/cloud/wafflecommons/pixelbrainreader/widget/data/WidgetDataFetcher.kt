@@ -60,7 +60,7 @@ class WidgetDataFetcher @Inject constructor(
                 val timeStr = java.time.format.DateTimeFormatter.ofPattern("HH:mm").format(dt)
                 MoodEntry(time = timeStr, score = it.score, label = "", activities = emptyList(), note = null)
             }
-            val graphBitmap = chartRenderer.renderVitalityGraph(context, hrPoints, reconstructMoods)
+            val graphBitmap = chartRenderer.renderVitalityGraph(context, hrPoints, reconstructMoods, snapshot.moodFaces)
 
             CompanionWidgetState(
                 heroClass = snapshot.heroClass.name,

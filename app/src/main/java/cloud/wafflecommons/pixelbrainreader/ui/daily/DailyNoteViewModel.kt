@@ -14,6 +14,9 @@ import cloud.wafflecommons.pixelbrainreader.data.local.entity.GratitudeEntity
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.MoodEntity
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.ScratchNoteEntity
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.TimelineEntryEntity
+import cloud.wafflecommons.pixelbrainreader.data.local.preferences.GamificationPreferences
+import cloud.wafflecommons.pixelbrainreader.data.mood.MoodEmojiSet
+import cloud.wafflecommons.pixelbrainreader.data.mood.MoodEmojiSets
 import cloud.wafflecommons.pixelbrainreader.data.repository.DailyDashboardRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.DailyMoodData
 import cloud.wafflecommons.pixelbrainreader.data.repository.DailyNoteRepository
@@ -110,6 +113,7 @@ class DailyNoteViewModel @Inject constructor(
     private val memoryEchoRepository: cloud.wafflecommons.pixelbrainreader.data.repository.MemoryEchoRepository,
     private val voiceCompiler: cloud.wafflecommons.pixelbrainreader.data.ai.VoiceCompiler,
     private val captureRepository: cloud.wafflecommons.pixelbrainreader.data.repository.CaptureRepository,
+    private val gamificationPreferences: GamificationPreferences,
     appClock: AppClock,
     @param:ApplicationScope private val appScope: CoroutineScope
 ) : ViewModel() {
@@ -193,8 +197,9 @@ class DailyNoteViewModel @Inject constructor(
             .flatMapLatest { date ->
                 combine(
                     moodRepository.getMoodsBetween(date.minusDays(6), date),
-                    healthMetricsRepository.getMetricsHistoryFlow(date, 7)
-                ) { moods, metrics -> buildMoodTrend(date, moods, metrics) }
+                    healthMetricsRepository.getMetricsHistoryFlow(date, 7),
+                    gamificationPreferences.moodEmojiSetFlow
+                ) { moods, metrics, emojiSet -> buildMoodTrend(date, moods, metrics, emojiSet) }
             }
 
     private val _weather: StateFlow<WeatherData> =
@@ -706,11 +711,15 @@ class DailyNoteViewModel @Inject constructor(
         private const val WEATHER_MAX_ATTEMPTS = 3
         private const val WEATHER_RETRY_DELAY_MS = 15_000L
 
-        /** Seven daily points ending at [endDate]: average mood score/emoji and average heart rate. */
+        /**
+         * Seven daily points ending at [endDate]: average mood score, its face in [emojiSet], and
+         * average heart rate.
+         */
         internal fun buildMoodTrend(
             endDate: LocalDate,
             moods: List<MoodEntity>,
-            metrics: List<DailyHealthMetrics>
+            metrics: List<DailyHealthMetrics>,
+            emojiSet: MoodEmojiSet = MoodEmojiSets.DEFAULT
         ): List<DailyMoodPoint> {
             val moodsByDate = moods.groupBy { it.date }
             val bpmByDate = metrics.associate { it.date to it.averageHeartRate }
@@ -723,18 +732,9 @@ class DailyNoteViewModel @Inject constructor(
                     DailyMoodPoint(day, 0f, "∅", bpm)
                 } else {
                     val avg = dayMoods.map { it.score }.average()
-                    DailyMoodPoint(day, avg.toFloat(), moodEmojiFor(avg), bpm)
+                    DailyMoodPoint(day, avg.toFloat(), emojiSet.forAverage(avg), bpm)
                 }
             }
-        }
-
-        private fun moodEmojiFor(avg: Double): String = when {
-            avg < 1.8 -> "😫"
-            avg.isNaN() -> "😐"
-            avg < 2.6 -> "😞"
-            avg < 3.4 -> "😐"
-            avg < 4.2 -> "🙂"
-            else -> "🤩"
         }
     }
 }

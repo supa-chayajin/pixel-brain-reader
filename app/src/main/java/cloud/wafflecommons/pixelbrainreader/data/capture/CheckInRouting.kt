@@ -1,5 +1,7 @@
 package cloud.wafflecommons.pixelbrainreader.data.capture
 
+import cloud.wafflecommons.pixelbrainreader.data.mood.MoodEmojiSet
+
 /**
  * Where a line typed into the evening check-in notification goes. The evening flavour of
  * [CaptureRouter]: a plain line is about the day (a timeline moment, not a scrap), a to-do written
@@ -27,10 +29,17 @@ object CheckInRouting {
         return Routed(destination, text, guess)
     }
 
-    /** The three one-tap moods of the notification: score (1..5) and the label the app stores. */
+    /**
+     * The three one-tap moods of the notification: score (1..5), the label the app stores, and the
+     * button's word ([buttonLabel] puts the face of the device's emoji set in front of it).
+     */
     val MOODS: List<Triple<Int, String, String>> = listOf(
-        Triple(4, "Good", "🙂 Good"),
-        Triple(3, "Okay", "😐 Okay"),
-        Triple(2, "Bad", "😔 Hard")
+        Triple(4, "Good", "Good"),
+        Triple(3, "Okay", "Okay"),
+        Triple(2, "Bad", "Hard")
     )
+
+    /** "🙂 Good": a mood's button, and the title of the step that follows it, in [emojiSet]. */
+    fun buttonLabel(mood: Triple<Int, String, String>, emojiSet: MoodEmojiSet): String =
+        "${emojiSet.forScore(mood.first)} ${mood.third}"
 }

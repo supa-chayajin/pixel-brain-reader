@@ -5,6 +5,7 @@ import cloud.wafflecommons.pixelbrainreader.data.gamification.Attribute
 import cloud.wafflecommons.pixelbrainreader.data.gamification.CharacterClass
 import cloud.wafflecommons.pixelbrainreader.data.gamification.GamificationRepository
 import cloud.wafflecommons.pixelbrainreader.data.health.HealthConnectManager
+import cloud.wafflecommons.pixelbrainreader.data.mood.MoodEmojiSets
 import cloud.wafflecommons.pixelbrainreader.data.repository.MoodRepository
 import kotlinx.coroutines.flow.firstOrNull
 import java.time.Instant
@@ -38,7 +39,8 @@ class OracleGenerator @Inject constructor(
             // Mood (Yesterday's average)
             val yesterdayDate = LocalDate.now().minusDays(1)
             val moodData = moodRepository.getDailyMood(yesterdayDate).firstOrNull()
-            val mood = moodData?.summary?.mainEmoji ?: "Neutral"
+            // The classic faces whatever set the screens show: the prompt must read a face, not a moon or a number.
+            val mood = moodData?.summary?.averageScore?.let { MoodEmojiSets.CLASSIC.forAverage(it) } ?: "Neutral"
             
             // Gamification
             val gameState = gamificationRepository.gamificationState.firstOrNull()

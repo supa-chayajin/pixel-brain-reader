@@ -10,6 +10,7 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -17,11 +18,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cloud.wafflecommons.pixelbrainreader.data.gamification.Attribute
+import cloud.wafflecommons.pixelbrainreader.data.mood.MoodEmojiSet
+import cloud.wafflecommons.pixelbrainreader.data.mood.MoodEmojiSets
 import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
 import cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar
 import cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry
@@ -38,7 +41,7 @@ fun GamificationSettingsScreen(
     val stepTarget by viewModel.stepTarget.collectAsStateWithLifecycle()
     val sleepMinMinutes by viewModel.sleepMinMinutes.collectAsStateWithLifecycle()
     val tagMappings by viewModel.tagToStatMapping.collectAsStateWithLifecycle()
-    val moodEmojiMapping by viewModel.moodEmojiMapping.collectAsStateWithLifecycle()
+    val moodEmojiSet by viewModel.moodEmojiSet.collectAsStateWithLifecycle()
 
     var newTagText by remember { mutableStateOf("") }
     var expandedDropdown by remember { mutableStateOf(false) }
@@ -109,7 +112,7 @@ fun GamificationSettingsScreen(
             }
             }
 
-            // Mood Emojis Section
+            // Mood Emojis Section: one set of faces for every mood this device shows.
             StaggeredEntry(index = 1) {
             ElevatedCard(modifier = Modifier.fillMaxWidth()) {
                 Column(
@@ -117,24 +120,33 @@ fun GamificationSettingsScreen(
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     Text("Mood Emojis", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    
+                    Text(
+                        "The faces of your moods on this device: the check-in, the history, the stats and the widgets. " +
+                            "Moods you already logged change face too.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    MoodEmojiSetDropdown(
+                        selected = moodEmojiSet,
+                        onSelect = { set ->
+                            view.performHapticTick()
+                            viewModel.selectMoodEmojiSet(set.id)
+                        }
+                    )
+                    // The set at a glance: score 1 (worst) to 5 (best).
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.SpaceEvenly
                     ) {
-                        (1..5).forEach { score ->
-                            var currentEmoji by remember(moodEmojiMapping) { mutableStateOf(moodEmojiMapping[score] ?: "") }
-                            OutlinedTextField(
-                                value = currentEmoji,
-                                onValueChange = { 
-                                    currentEmoji = it.take(2)
-                                    viewModel.updateMoodEmojiMapping(score, currentEmoji)
-                                },
-                                modifier = Modifier.weight(1f),
-                                label = { Text("$score") },
-                                textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Center),
-                                singleLine = true
-                            )
+                        moodEmojiSet.faces.forEachIndexed { index, face ->
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(face, fontSize = 28.sp)
+                                Text(
+                                    "${index + 1}",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
                 }
@@ -250,6 +262,49 @@ fun GamificationSettingsScreen(
                     }
                 }
             }
+            }
+        }
+    }
+}
+
+/** Picks the device's mood emoji set; each entry shows its five faces. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MoodEmojiSetDropdown(selected: MoodEmojiSet, onSelect: (MoodEmojiSet) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
+        OutlinedTextField(
+            value = selected.name,
+            onValueChange = {},
+            readOnly = true,
+            singleLine = true,
+            label = { Text("Emoji set") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier
+                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, true)
+                .fillMaxWidth()
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            MoodEmojiSets.ALL.forEach { set ->
+                DropdownMenuItem(
+                    text = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(set.name, modifier = Modifier.weight(1f))
+                            Spacer(Modifier.width(16.dp))
+                            Text(set.faces.joinToString(" "), fontSize = 20.sp)
+                        }
+                    },
+                    leadingIcon = {
+                        // Keeps every name aligned; only the current set shows the check.
+                        Box(Modifier.size(24.dp)) {
+                            if (set.id == selected.id) Icon(Icons.Default.Check, contentDescription = "Current set")
+                        }
+                    },
+                    onClick = {
+                        expanded = false
+                        if (set.id != selected.id) onSelect(set)
+                    }
+                )
             }
         }
     }

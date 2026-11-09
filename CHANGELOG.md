@@ -11,6 +11,42 @@ Still planned (`documentation/plans/2026-10-18-v11-work-and-dev-toolkit.md`): th
 dashboard, "explain this error", decision records, people & 1:1s, security watch, the workshop
 kit and the authorship timeline.
 
+## [12.7.0] — 2026-11-09
+
+Moods get a look of your own: an icon for each activity tag, and a set of emojis to pick from
+a list instead of typing five of them.
+
+### Added
+
+- **An icon for each mood tag.** In Settings → Manage Mood Tags, tap a tag's icon to pick
+  another one (about 90 icons in six groups: work & study, people, places & travel, leisure,
+  body & health, everyday), or "Default" to go back to the one it had. A new tag can get its
+  icon before it is added. The check-in sheet and the mood history show the icons. They are
+  saved with the tags in the vault (`10_Journal/data/config/mood_tags.json`, an `icons` entry
+  next to the unchanged list), so they follow the tags to the other devices; an older version
+  of the app still reads the list.
+- **Mood emoji sets.** Settings → RPG & Gamification Rules → Mood Emojis is now a dropdown of
+  nine sets (classic faces, gentle faces, expressive faces, cats, weather, moon phases, plants,
+  hearts, numbers) with a preview of the five faces. The set applies everywhere a mood shows
+  on this device: the check-in sheet, the mood history, the Daily summary and its 7-day trend,
+  Life Stats, the Mood and Companion widgets, and the evening check-in notification. Past
+  moods change face too: a mood is a score, the face only shows it. A new mood is saved with
+  the face you saw. The setting is kept on the device, like the Daily layout.
+
+### Changed
+
+- The five "Mood Emojis" text fields are gone. They were saved but never shown anywhere: the
+  check-in always used its own faces.
+- The mood history shows each check-in's face from the set instead of the label it was saved
+  with (the Mood widget and the evening notification save words like "Good").
+- The evening check-in's "Hard" button and the Mood widget's second button use the set's face
+  for a score of 2 (😞 by default, instead of 😔 and 🙁).
+
+### Fixed
+
+- On a read-only device, the Mood Tags page no longer offers to add, move or remove a tag. The
+  edit was refused but the list on screen changed until the next restart.
+
 ## [12.6.0] — 2026-11-08
 
 A second device can follow the real vault without being able to change it.

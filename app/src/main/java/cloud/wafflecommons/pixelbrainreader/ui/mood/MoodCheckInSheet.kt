@@ -11,7 +11,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -20,7 +19,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
@@ -38,18 +36,14 @@ fun MoodCheckInSheet(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     // Canonical activity tags, curated in Settings ▸ Mood Tags and synced via the vault.
     val availableTags by viewModel.availableTags.collectAsStateWithLifecycle()
+    // The faces of the device's mood emoji set (Settings ▸ RPG & Gamification Rules).
+    val emojiSet by viewModel.emojiSet.collectAsStateWithLifecycle()
     val haptic = LocalHapticFeedback.current
     var selectedMood by remember { mutableIntStateOf(3) }
     val selectedActivities = remember { mutableStateListOf<String>() }
     var noteText by remember { mutableStateOf("") }
 
-    val moods = listOf(
-        Pair(1, "😫"),
-        Pair(2, "😞"),
-        Pair(3, "😐"),
-        Pair(4, "🙂"),
-        Pair(5, "🤩")
-    )
+    val moods = remember(emojiSet) { emojiSet.faces.mapIndexed { index, face -> (index + 1) to face } }
 
 
     ModalBottomSheet(
@@ -158,19 +152,19 @@ fun MoodCheckInSheet(
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         availableTags.forEach { tag ->
-                            val isSelected = selectedActivities.contains(tag)
+                            val isSelected = selectedActivities.contains(tag.name)
 
                             FilterChip(
                                 selected = isSelected,
                                 onClick = {
                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    if (isSelected) selectedActivities.remove(tag)
-                                    else selectedActivities.add(tag)
+                                    if (isSelected) selectedActivities.remove(tag.name)
+                                    else selectedActivities.add(tag.name)
                                 },
-                                label = { Text(tag) },
+                                label = { Text(tag.name) },
                                 leadingIcon = {
                                     Icon(
-                                        imageVector = tagIcon(tag),
+                                        imageVector = MoodTagIcons.resolve(tag).image,
                                         contentDescription = null,
                                         modifier = Modifier.size(18.dp)
                                     )
@@ -210,26 +204,6 @@ fun MoodCheckInSheet(
             }
         }
     }
-}
-
-/**
- * Resolves a leading icon for a mood tag. Known/seed tags keep their original glyph;
- * user-added tags fall back to a generic tag icon (icons can't be persisted, so they're
- * derived from the label here rather than stored alongside the tag).
- */
-private fun tagIcon(label: String): ImageVector = when (label) {
-    "Coding" -> Icons.Outlined.Code
-    "Working" -> Icons.Outlined.WorkHistory
-    "Gaming" -> Icons.Outlined.SportsEsports
-    "Chilling" -> Icons.Outlined.BeachAccess
-    "Solo" -> Icons.Outlined.Person
-    "Family" -> Icons.Outlined.FamilyRestroom
-    "Friends" -> Icons.Outlined.Groups
-    "Home" -> Icons.Outlined.Home
-    "Work" -> Icons.Outlined.HomeWork
-    "CDS" -> Icons.Outlined.Work
-    "Out" -> Icons.Outlined.NaturePeople
-    else -> Icons.Outlined.Tag
 }
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)

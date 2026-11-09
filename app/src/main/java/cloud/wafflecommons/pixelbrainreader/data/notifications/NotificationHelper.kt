@@ -14,6 +14,8 @@ import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.toBitmap
 import cloud.wafflecommons.pixelbrainreader.MainActivity
 import cloud.wafflecommons.pixelbrainreader.R
+import cloud.wafflecommons.pixelbrainreader.data.capture.CheckInRouting
+import cloud.wafflecommons.pixelbrainreader.data.mood.MoodEmojiSet
 import cloud.wafflecommons.pixelbrainreader.ui.privatevault.PrivateJournalActivity
 import cloud.wafflecommons.pixelbrainreader.widget.ui.WidgetNav
 
@@ -157,14 +159,17 @@ object NotificationHelper {
         notify(context, NOTIF_OBJECTIVES, builder)
     }
 
-    /** Evening check-in, step 1: three one-tap moods. Tapping the body opens the Daily screen. */
-    fun postCheckInMood(context: Context) {
+    /**
+     * Evening check-in, step 1: three one-tap moods, their faces from [emojiSet] (the device's set).
+     * Tapping the body opens the Daily screen.
+     */
+    fun postCheckInMood(context: Context, emojiSet: MoodEmojiSet) {
         ensureChannels(context)
         val builder = baseBuilder(context, CHANNEL_CHECKIN, title = "How was today?", text = "One tap for your mood, then one line if you like.")
             .setContentIntent(activityPending(context, 4, WidgetNav.openIntent(context, WidgetNav.SCREEN_DAILY)))
-        cloud.wafflecommons.pixelbrainreader.data.capture.CheckInRouting.MOODS.forEachIndexed { i, (score, _, label) ->
-            val intent = checkInIntent(context, CheckInReceiver.ACTION_MOOD).putExtra(CheckInReceiver.EXTRA_SCORE, score)
-            builder.addAction(0, label, broadcastPending(context, 10 + i, intent, mutable = false))
+        CheckInRouting.MOODS.forEachIndexed { i, mood ->
+            val intent = checkInIntent(context, CheckInReceiver.ACTION_MOOD).putExtra(CheckInReceiver.EXTRA_SCORE, mood.first)
+            builder.addAction(0, CheckInRouting.buttonLabel(mood, emojiSet), broadcastPending(context, 10 + i, intent, mutable = false))
         }
         notify(context, NOTIF_CHECKIN, builder)
     }

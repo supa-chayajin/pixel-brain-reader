@@ -6,6 +6,7 @@ import android.util.Log
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import cloud.wafflecommons.pixelbrainreader.data.local.preferences.GamificationPreferences
 import cloud.wafflecommons.pixelbrainreader.data.notifications.NotificationHelper
 import cloud.wafflecommons.pixelbrainreader.data.notifications.ReminderScheduler
 import cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
@@ -23,14 +24,15 @@ class EveningCheckInWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted workerParams: WorkerParameters,
     private val userPrefs: UserPreferencesRepository,
-    private val reminderScheduler: ReminderScheduler
+    private val reminderScheduler: ReminderScheduler,
+    private val gamificationPreferences: GamificationPreferences
 ) : CoroutineWorker(appContext, workerParams) {
 
     override suspend fun doWork(): Result {
         if (VaultWriteGate.readOnly) return Result.success() // a read-only device runs no writer
         try {
             if (userPrefs.eveningCheckInEnabled.first()) {
-                NotificationHelper.postCheckInMood(applicationContext)
+                NotificationHelper.postCheckInMood(applicationContext, gamificationPreferences.moodEmojiSetFlow.first())
             }
         } catch (e: CancellationException) {
             throw e

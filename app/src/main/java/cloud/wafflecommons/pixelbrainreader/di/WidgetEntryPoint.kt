@@ -3,6 +3,7 @@ package cloud.wafflecommons.pixelbrainreader.di
 import cloud.wafflecommons.pixelbrainreader.data.gamification.GamificationRepository
 import cloud.wafflecommons.pixelbrainreader.data.health.HealthConnectManager
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.HabitDao
+import cloud.wafflecommons.pixelbrainreader.data.local.preferences.GamificationPreferences
 import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.ChoreRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.DailyDashboardRepository
@@ -44,4 +45,7 @@ interface WidgetEntryPoint {
     fun widgetUpdateManager(): WidgetUpdateManager
     fun modesRepository(): ModesRepository
     fun projectRepository(): cloud.wafflecommons.pixelbrainreader.data.work.ProjectRepository
+
+    /** The mood emoji set the Mood widget draws its buttons with. */
+    fun gamificationPreferences(): GamificationPreferences
 }

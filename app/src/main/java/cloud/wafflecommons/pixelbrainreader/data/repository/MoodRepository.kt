@@ -5,13 +5,15 @@ import androidx.room.withTransaction
 import cloud.wafflecommons.pixelbrainreader.data.local.AppDatabase
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.MoodDao
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.MoodEntity
+import cloud.wafflecommons.pixelbrainreader.data.local.preferences.GamificationPreferences
+import cloud.wafflecommons.pixelbrainreader.data.mood.MoodEmojiSet
 import cloud.wafflecommons.pixelbrainreader.data.sync.VaultPushScheduler
 import cloud.wafflecommons.pixelbrainreader.widget.ui.WidgetUpdateManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -37,7 +39,8 @@ data class MoodEntry(
 )
 
 /**
- * Summary statistics for a daily mood log.
+ * Summary statistics for a daily mood log. [mainEmoji] is the face of the average in the device's
+ * mood emoji set, so it follows a change of set.
  */
 data class MoodSummary(
     val averageScore: Double,
@@ -82,7 +85,8 @@ class MoodRepository @Inject constructor(
     private val moodDao: MoodDao,
     private val database: AppDatabase,
     private val pushScheduler: VaultPushScheduler,
-    private val widgetUpdateManager: WidgetUpdateManager
+    private val widgetUpdateManager: WidgetUpdateManager,
+    private val gamificationPreferences: GamificationPreferences
 ) {
     private val moodDir = "10_Journal/data/health/mood"
 
@@ -153,13 +157,13 @@ class MoodRepository @Inject constructor(
     }
 
     /**
-     * Observes mood data for a specific date (Reactive from DB).
+     * Observes mood data for a specific date (Reactive from DB), its summary emoji in the device's
+     * mood emoji set (re-emitted when the set changes).
      */
-    fun getDailyMood(date: LocalDate): Flow<DailyMoodData?> {
-        return moodDao.getMood(date.toString()).map { entities ->
-            if (entities.isNotEmpty()) mapToDomain(entities, date.toString()) else null
+    fun getDailyMood(date: LocalDate): Flow<DailyMoodData?> =
+        combine(moodDao.getMood(date.toString()), gamificationPreferences.moodEmojiSetFlow) { entities, emojiSet ->
+            if (entities.isNotEmpty()) mapToDomain(entities, date.toString(), emojiSet) else null
         }
-    }
 
     /**
      * Legacy synchronous accessor for Stats
@@ -183,9 +187,10 @@ class MoodRepository @Inject constructor(
                 val newDto = MoodEntryDto(entry.time, entry.score, entry.label, entry.activities, entry.note)
                 val updatedEntries = currentData.entries.filterNot { it.time == newDto.time } + newDto
                 val avg = updatedEntries.map { it.score }.average()
+                val emojiSet = gamificationPreferences.moodEmojiSetFlow.first()
                 val updatedData = currentData.copy(
                     entries = updatedEntries,
-                    summary = MoodSummaryDto(avg, calculateDailyEmoji(avg))
+                    summary = MoodSummaryDto(avg, emojiSet.forAverage(avg))
                 )
                 fileRepository.saveFileLocally(path, jsonParser.encodeToString(updatedData))
 
@@ -244,24 +249,13 @@ class MoodRepository @Inject constructor(
         )
     }
 
-    private fun mapToDomain(entities: List<MoodEntity>, dateIdx: String): DailyMoodData {
+    private fun mapToDomain(entities: List<MoodEntity>, dateIdx: String, emojiSet: MoodEmojiSet): DailyMoodData {
         val entries = entities.map {
             MoodEntry(it.time, it.score, it.label, it.activities.split(",").filter { s -> s.isNotBlank() }, it.note)
         }
         val avg = if (entries.isNotEmpty()) entries.map { it.score }.average() else 0.0
-        val summary = MoodSummary(avg, calculateDailyEmoji(avg))
+        val summary = MoodSummary(avg, emojiSet.forAverage(avg))
         return DailyMoodData(dateIdx, entries, summary)
-    }
-
-    private fun calculateDailyEmoji(avg: Double): String {
-        return when {
-            avg < 1.8 -> "😫"
-            avg.isNaN() -> "😐"
-            avg < 2.6 -> "😞"
-            avg < 3.4 -> "😐"
-            avg < 4.2 -> "🙂"
-            else -> "🤩"
-        }
     }
 
     private companion object {

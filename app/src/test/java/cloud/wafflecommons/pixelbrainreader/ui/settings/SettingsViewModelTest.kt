@@ -8,7 +8,6 @@ import cloud.wafflecommons.pixelbrainreader.data.ai.NanoState
 import cloud.wafflecommons.pixelbrainreader.data.ai.VectorSearchEngine
 import cloud.wafflecommons.pixelbrainreader.data.auth.GoogleAuthRepository
 import cloud.wafflecommons.pixelbrainreader.data.health.HealthConnectManager
-import cloud.wafflecommons.pixelbrainreader.data.local.preferences.GamificationPreferences
 import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
 import cloud.wafflecommons.pixelbrainreader.data.model.AiModel
 import cloud.wafflecommons.pixelbrainreader.data.repository.AppThemeConfig
@@ -46,7 +45,6 @@ class SettingsViewModelTest {
     private val syncHealthDataUseCase: SyncHealthDataUseCase = mockk(relaxed = true)
     private val habitRepository: HabitRepository = mockk(relaxed = true)
     private val choreRepository: ChoreRepository = mockk(relaxed = true)
-    private val gamificationPrefs: GamificationPreferences = mockk(relaxed = true)
     private val googleAuthManager: GoogleAuthRepository = mockk(relaxed = true)
     private val localAiManager: LocalAiManager = mockk(relaxed = true)
     private val vaultGraphAnalyzer: cloud.wafflecommons.pixelbrainreader.data.utils.VaultGraphAnalyzer = mockk(relaxed = true)
@@ -71,7 +69,6 @@ class SettingsViewModelTest {
         every { userPrefs.isGoogleSyncEnabled } returns flowOf(false)
         every { userPrefs.soundEffectsEnabled } returns flowOf(false)
         every { googleAuthManager.isAccountLinked } returns MutableStateFlow(false)
-        every { gamificationPrefs.moodEmojiMappingFlow } returns flowOf(emptyMap())
         every { secretManager.getRepoInfo() } returns Pair("testOwner", "testRepo")
     }
 
@@ -92,7 +89,6 @@ class SettingsViewModelTest {
         syncHealthDataUseCase = syncHealthDataUseCase,
         habitRepository = habitRepository,
         choreRepository = choreRepository,
-        gamificationPrefs = gamificationPrefs,
         googleAuthManager = googleAuthManager,
         localAiManager = localAiManager,
         vaultGraphAnalyzer = vaultGraphAnalyzer

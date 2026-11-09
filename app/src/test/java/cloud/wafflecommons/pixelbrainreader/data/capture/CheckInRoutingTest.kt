@@ -1,6 +1,7 @@
 package cloud.wafflecommons.pixelbrainreader.data.capture
 
 import cloud.wafflecommons.pixelbrainreader.data.capture.CheckInRouting.Destination
+import cloud.wafflecommons.pixelbrainreader.data.mood.MoodEmojiSets
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -46,5 +47,17 @@ class CheckInRoutingTest {
     fun `mood buttons use scores and labels the app already stores`() {
         assertEquals(listOf(4, 3, 2), CheckInRouting.MOODS.map { it.first })
         assertEquals(listOf("Good", "Okay", "Bad"), CheckInRouting.MOODS.map { it.second })
+    }
+
+    @Test
+    fun `mood buttons wear the faces of the device's emoji set`() {
+        assertEquals(
+            listOf("🙂 Good", "😐 Okay", "😞 Hard"),
+            CheckInRouting.MOODS.map { CheckInRouting.buttonLabel(it, MoodEmojiSets.CLASSIC) }
+        )
+        assertEquals(
+            listOf("🌖 Good", "🌗 Okay", "🌘 Hard"),
+            CheckInRouting.MOODS.map { CheckInRouting.buttonLabel(it, MoodEmojiSets.byId("moon")) }
+        )
     }
 }

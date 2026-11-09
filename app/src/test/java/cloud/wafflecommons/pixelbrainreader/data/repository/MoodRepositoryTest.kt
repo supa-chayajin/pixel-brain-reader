@@ -3,6 +3,9 @@ package cloud.wafflecommons.pixelbrainreader.data.repository
 import cloud.wafflecommons.pixelbrainreader.data.local.AppDatabase
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.MoodDao
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.MoodEntity
+import cloud.wafflecommons.pixelbrainreader.data.local.preferences.GamificationPreferences
+import cloud.wafflecommons.pixelbrainreader.data.mood.MoodEmojiSet
+import cloud.wafflecommons.pixelbrainreader.data.mood.MoodEmojiSets
 import cloud.wafflecommons.pixelbrainreader.data.sync.VaultPushScheduler
 import cloud.wafflecommons.pixelbrainreader.widget.ui.WidgetUpdateManager
 import io.mockk.Runs
@@ -13,8 +16,12 @@ import io.mockk.just
 import io.mockk.mockk
 import io.mockk.mockkStatic
 import io.mockk.slot
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -30,6 +37,10 @@ class MoodRepositoryTest {
     private val database: AppDatabase = mockk(relaxed = true)
     private val pushScheduler: VaultPushScheduler = mockk(relaxed = true)
     private val widgetUpdateManager: WidgetUpdateManager = mockk(relaxed = true)
+    private val emojiSet = MutableStateFlow<MoodEmojiSet>(MoodEmojiSets.CLASSIC)
+    private val gamificationPreferences: GamificationPreferences = mockk {
+        every { moodEmojiSetFlow } returns emojiSet
+    }
     private val json = Json { ignoreUnknownKeys = true; isLenient = true; prettyPrint = true }
     private lateinit var repository: MoodRepository
 
@@ -46,7 +57,8 @@ class MoodRepositoryTest {
             moodDao = moodDao,
             database = database,
             pushScheduler = pushScheduler,
-            widgetUpdateManager = widgetUpdateManager
+            widgetUpdateManager = widgetUpdateManager,
+            gamificationPreferences = gamificationPreferences
         )
     }
 
@@ -101,4 +113,49 @@ class MoodRepositoryTest {
         val result = repository.getDailyMood(date).first()
         assertEquals(null, result)
     }
+
+    @Test
+    fun getDailyMood_SummaryEmojiFollowsTheDevicesEmojiSet() = runTest {
+        val date = LocalDate.of(2026, 1, 7)
+        every { moodDao.getMood(date.toString()) } returns flowOf(
+            listOf(entity(date, "09:00", 5, "🤩"), entity(date, "18:00", 4, "🙂"))
+        )
+
+        val emissions = mutableListOf<String?>()
+        val collector = launch { repository.getDailyMood(date).take(2).toList().forEach { emissions += it?.summary?.mainEmoji } }
+        testScheduler.runCurrent()
+        emojiSet.value = MoodEmojiSets.byId("moon")
+        collector.join()
+
+        // Average 4.5: the best face of each set, and the stored labels stay what they were.
+        assertEquals(listOf("🤩", "🌕"), emissions)
+        assertEquals(listOf("🤩", "🙂"), repository.getDailyMood(date).first()!!.entries.map { it.label })
+    }
+
+    @Test
+    fun addEntry_WritesTheSummaryInTheDevicesEmojiSet() = runTest {
+        val date = LocalDate.of(2026, 1, 8)
+        val path = "10_Journal/data/health/mood/2026-01-08.json"
+        coEvery { fileRepository.readFile(path) } returns null
+        val saved = slot<String>()
+        coEvery { fileRepository.saveFileLocally(path, capture(saved)) } just Runs
+        emojiSet.value = MoodEmojiSets.byId("plants")
+
+        repository.addEntry(date, MoodEntry("09:00", 2, "🍂", emptyList()))
+
+        val data = json.decodeFromString<DailyMoodDataDto>(saved.captured)
+        assertEquals("🍂", data.summary?.mainEmoji)
+        assertEquals("🍂", data.entries.single().label)
+    }
+
+    private fun entity(date: LocalDate, time: String, score: Int, label: String) = MoodEntity(
+        timestamp = java.time.LocalDateTime.of(date, java.time.LocalTime.parse(time))
+            .atZone(java.time.ZoneId.systemDefault()).toEpochSecond() * 1000,
+        date = date.toString(),
+        time = time,
+        score = score,
+        label = label,
+        activities = "",
+        note = null
+    )
 }

@@ -24,6 +24,8 @@ data class WidgetDataSnapshot(
     // --- Mood ---
     val lastMoodEmoji: String? = null,
     val moodEntryCount: Int = 0,
+    /** The device's mood emoji set (score 1 to 5) the chart draws; empty in an older snapshot. */
+    val moodFaces: List<String> = emptyList(),
 
     // --- Health (glanceable strings + raw for grids) ---
     val steps: String = "0",

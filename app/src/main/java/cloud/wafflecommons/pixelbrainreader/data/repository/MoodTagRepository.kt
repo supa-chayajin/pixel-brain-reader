@@ -1,6 +1,7 @@
 package cloud.wafflecommons.pixelbrainreader.data.repository
 
 import android.util.Log
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.sync.VaultPushScheduler
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -16,12 +17,27 @@ import kotlinx.serialization.json.Json
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** On-disk shape of the mood-tag config file. */
-@Serializable
-private data class MoodTagsDto(val tags: List<String> = emptyList())
+/**
+ * A mood activity tag and the icon picked for it: a key of the picker's catalog
+ * (`ui/mood/MoodTagIcons`), or null for the tag's default icon. The key is kept as written, so an
+ * icon this version doesn't know survives an edit (and shows the default meanwhile).
+ */
+data class MoodTag(val name: String, val icon: String? = null)
 
 /**
- * Canonical list of activity tags offered when logging a mood.
+ * On-disk shape of the mood-tag config file. [icons] (tag → icon key, 12.7.0) sits NEXT TO the
+ * unchanged [tags] list instead of turning it into objects: an older app version still reads the
+ * list (it ignores unknown keys) rather than failing to parse it and seeding the defaults. A tag
+ * without an entry shows its default icon; with no icon picked the file is exactly the old one.
+ */
+@Serializable
+private data class MoodTagsDto(
+    val tags: List<String> = emptyList(),
+    val icons: Map<String, String> = emptyMap()
+)
+
+/**
+ * Canonical list of activity tags offered when logging a mood, each with its icon.
  *
  * Local-first: the source of truth is a single JSON file in the vault
  * ([TAGS_PATH]), so the list syncs across devices via git just like notes and mood
@@ -47,9 +63,9 @@ class MoodTagRepository @Inject constructor(
     /** Serializes disk reads/writes so a rapid add/remove/reorder burst can't interleave. */
     private val ioMutex = Mutex()
 
-    private val _tags = MutableStateFlow(DEFAULT_TAGS)
+    private val _tags = MutableStateFlow(defaultTags())
     /** Reactive canonical tag list. Observed by the check-in sheet and the settings page. */
-    val tags: StateFlow<List<String>> = _tags.asStateFlow()
+    val tags: StateFlow<List<MoodTag>> = _tags.asStateFlow()
 
     @Volatile
     private var loaded = false
@@ -82,10 +98,10 @@ class MoodTagRepository @Inject constructor(
 
     /** Caller holds [ioMutex]. */
     private suspend fun loadFromDisk() {
-        val parsed: List<String>? = try {
+        val parsed: List<MoodTag>? = try {
             fileRepository.readFile(TAGS_PATH)
                 ?.takeIf { it.isNotBlank() }
-                ?.let { json.decodeFromString<MoodTagsDto>(it).tags }
+                ?.let { json.decodeFromString<MoodTagsDto>(it).toTags() }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -99,25 +115,29 @@ class MoodTagRepository @Inject constructor(
             null
         }
         // parsed == null ⇒ no saved file; parsed == [] ⇒ user cleared the list (kept).
-        _tags.value = parsed?.distinct() ?: DEFAULT_TAGS
+        _tags.value = parsed ?: defaultTags()
         loaded = true
     }
 
-    /** Appends a new tag (trimmed, case-insensitively de-duplicated). No-op if blank/duplicate. */
-    suspend fun addTag(raw: String) {
-        val tag = raw.trim()
-        if (tag.isBlank()) return
+    /**
+     * Appends a new tag (trimmed, case-insensitively de-duplicated), with [icon] if one was picked.
+     * No-op if blank/duplicate.
+     */
+    suspend fun addTag(raw: String, icon: String? = null) {
+        val name = raw.trim()
+        if (name.isBlank()) return
         ensureLoaded()
         update { current ->
-            if (current.any { it.equals(tag, ignoreCase = true) }) current else current + tag
+            if (current.any { it.name.equals(name, ignoreCase = true) }) current
+            else current + MoodTag(name, icon.orNullIfBlank())
         }
     }
 
-    /** Removes a tag from the offered list. Historical mood entries are untouched. */
-    suspend fun removeTag(tag: String) {
+    /** Removes a tag (and its icon) from the offered list. Historical mood entries are untouched. */
+    suspend fun removeTag(name: String) {
         ensureLoaded()
         update { current ->
-            if (tag in current) current.filterNot { it == tag } else current
+            if (current.any { it.name == name }) current.filterNot { it.name == name } else current
         }
     }
 
@@ -133,13 +153,24 @@ class MoodTagRepository @Inject constructor(
         }
     }
 
+    /** Sets the icon of the tag [name]; null (or blank) brings back its default icon. */
+    suspend fun setIcon(name: String, icon: String?) {
+        ensureLoaded()
+        val chosen = icon.orNullIfBlank()
+        update { current ->
+            current.map { if (it.name == name) it.copy(icon = chosen) else it }
+        }
+    }
+
     /**
      * Atomic read-modify-write: [transform] runs on the current list **inside** the mutex so
      * concurrent edits can't clobber each other (a rapid add/remove/reorder burst is serialized,
      * not raced). A no-op transform (returns an equal list) skips the write entirely. The in-memory
      * flow is updated first so the UI reacts instantly; the git push is batched in the background.
+     * A read-only device changes nothing, not even the list on screen.
      */
-    private suspend fun update(transform: (List<String>) -> List<String>) {
+    private suspend fun update(transform: (List<MoodTag>) -> List<MoodTag>) {
+        if (VaultWriteGate.refuses()) return
         withContext(Dispatchers.IO) {
             ioMutex.withLock {
                 val current = _tags.value
@@ -147,7 +178,7 @@ class MoodTagRepository @Inject constructor(
                 if (next == current) return@withLock
                 _tags.value = next
                 try {
-                    fileRepository.saveFileLocally(TAGS_PATH, json.encodeToString(MoodTagsDto(next)))
+                    fileRepository.saveFileLocally(TAGS_PATH, json.encodeToString(next.toDto()))
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -159,6 +190,17 @@ class MoodTagRepository @Inject constructor(
         }
     }
 
+    private fun MoodTagsDto.toTags(): List<MoodTag> =
+        tags.distinct().map { name -> MoodTag(name, icons[name].orNullIfBlank()) }
+
+    /** Icons follow the tag order, so a reorder rewrites the file in the same order. */
+    private fun List<MoodTag>.toDto(): MoodTagsDto = MoodTagsDto(
+        tags = map { it.name },
+        icons = mapNotNull { tag -> tag.icon?.let { tag.name to it } }.toMap()
+    )
+
+    private fun String?.orNullIfBlank(): String? = this?.trim()?.takeIf { it.isNotEmpty() }
+
     companion object {
         private const val TAG = "MoodTagRepository"
         const val TAGS_PATH = "10_Journal/data/config/mood_tags.json"
@@ -169,5 +211,7 @@ class MoodTagRepository @Inject constructor(
             "Solo", "Family", "Friends",
             "Home", "Work", "CDS", "Out"
         )
+
+        private fun defaultTags(): List<MoodTag> = DEFAULT_TAGS.map { MoodTag(it) }
     }
 }
