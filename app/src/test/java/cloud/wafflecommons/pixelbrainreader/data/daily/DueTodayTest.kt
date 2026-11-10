@@ -94,4 +94,16 @@ class DueTodayTest {
         )
         assertEquals(listOf("late action", "a milestone", "b chore"), DueToday.sorted(items).map { it.text })
     }
+
+    @Test
+    fun `the chores sum up in one line, rooms by urgency, the oldest due date`() {
+        val items = listOf(
+            DueItem(DueKind.CHORE, "Vaisselle", today, "Cuisine"),
+            DueItem(DueKind.CHORE, "Aspirateur", today.minusDays(1), "Salle de séjour"),
+            DueItem(DueKind.CHORE, "Aspirateur", today.minusDays(1), "Cuisine"),
+            DueItem(DueKind.ACTION, "Send the notes", today.minusDays(5), "Sync", "n.md")
+        )
+        assertEquals(DueToday.ChoreSummary(3, listOf("Salle de séjour", "Cuisine"), today.minusDays(1)), DueToday.choreSummary(items))
+        assertEquals(null, DueToday.choreSummary(items.filter { it.kind != DueKind.CHORE }))
+    }
 }

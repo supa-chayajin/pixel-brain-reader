@@ -26,6 +26,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cloud.wafflecommons.pixelbrainreader.data.daily.DueItem
 import cloud.wafflecommons.pixelbrainreader.data.daily.DueKind
+import cloud.wafflecommons.pixelbrainreader.data.daily.DueToday
 import cloud.wafflecommons.pixelbrainreader.data.daily.DueTodayRepository
 import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
 import cloud.wafflecommons.pixelbrainreader.data.system.AppClock
@@ -76,7 +77,10 @@ class DueTodayViewModel @Inject constructor(
     }
 }
 
-/** Milestones, your actions and the chores due today or overdue; a tap opens the note or the Chores tab. */
+/**
+ * Milestones and your actions due today or overdue, a row each (a tap opens the note), then the chores
+ * due as one line (a tap opens Chores) so they never bury the rest (owner, 2026-11-10).
+ */
 @Composable
 fun DueTodaySection(
     items: List<DueItem>,
@@ -93,18 +97,35 @@ fun DueTodaySection(
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(horizontal = 4.dp)
         )
-        items.forEach { item ->
-            DueRow(item = item, today = today, onClick = {
-                val path = item.path
-                if (path != null) onOpenNote(path) else onOpenChores()
-            })
+        items.filter { it.kind != DueKind.CHORE }.forEach { item ->
+            DueRow(
+                icon = if (item.kind == DueKind.MILESTONE) Icons.Rounded.Flag else Icons.Rounded.TaskAlt,
+                text = item.text,
+                context = if (item.kind == DueKind.MILESTONE) "Objective · ${item.context}" else item.context,
+                late = item.overdueDays(today),
+                onClick = { item.path?.let(onOpenNote) }
+            )
+        }
+        DueToday.choreSummary(items)?.let { chores ->
+            DueRow(
+                icon = Icons.Rounded.CleaningServices,
+                text = if (chores.count == 1) "1 chore due" else "${chores.count} chores due",
+                context = chores.rooms.joinToString(", "),
+                late = java.time.temporal.ChronoUnit.DAYS.between(chores.oldestDue, today),
+                onClick = onOpenChores
+            )
         }
     }
 }
 
 @Composable
-private fun DueRow(item: DueItem, today: LocalDate, onClick: () -> Unit) {
-    val late = item.overdueDays(today)
+private fun DueRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    text: String,
+    context: String,
+    late: Long,
+    onClick: () -> Unit
+) {
     Surface(
         onClick = onClick,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -113,11 +134,7 @@ private fun DueRow(item: DueItem, today: LocalDate, onClick: () -> Unit) {
     ) {
         Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(
-                imageVector = when (item.kind) {
-                    DueKind.MILESTONE -> Icons.Rounded.Flag
-                    DueKind.ACTION -> Icons.Rounded.TaskAlt
-                    DueKind.CHORE -> Icons.Rounded.CleaningServices
-                },
+                imageVector = icon,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(20.dp)
@@ -125,18 +142,14 @@ private fun DueRow(item: DueItem, today: LocalDate, onClick: () -> Unit) {
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(
-                    text = item.text,
+                    text = text,
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = when (item.kind) {
-                        DueKind.MILESTONE -> "Objective · ${item.context}"
-                        DueKind.ACTION -> item.context
-                        DueKind.CHORE -> "Chore · ${item.context}"
-                    },
+                    text = context,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,

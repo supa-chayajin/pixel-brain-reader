@@ -69,6 +69,16 @@ object DueToday {
             else DueItem(DueKind.CHORE, chore.name, due, roomNames[chore.roomId] ?: "Home")
         }
 
+    /** The chores of the block as one line (owner, 2026-11-10): how many, their rooms by urgency, the oldest due date. */
+    data class ChoreSummary(val count: Int, val rooms: List<String>, val oldestDue: LocalDate)
+
+    /** Null when no chore is due. */
+    fun choreSummary(items: List<DueItem>): ChoreSummary? {
+        val chores = items.filter { it.kind == DueKind.CHORE }
+        if (chores.isEmpty()) return null
+        return ChoreSummary(chores.size, chores.sortedBy { it.due }.map { it.context }.distinct(), chores.minOf { it.due })
+    }
+
     fun sorted(items: List<DueItem>): List<DueItem> =
         items.sortedWith(compareBy<DueItem> { it.due }.thenBy { it.kind.ordinal }.thenBy { it.text.lowercase() })
 }
