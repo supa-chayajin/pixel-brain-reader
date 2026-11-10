@@ -26,7 +26,7 @@ fun NewFileBottomSheet(
     onCreate: (filename: String, templateName: String?, values: Map<String, String>) -> Unit
 ) {
     // Expressive: Allow partial expansion (half-height)
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+    val sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden)
     val haptic = LocalHapticFeedback.current
     var filename by remember { mutableStateOf("") }
     var selectedTemplate by remember { mutableStateOf<String?>(null) } // null = Blank
@@ -143,7 +143,6 @@ private fun TemplateListItem(
 ) {
     val haptic = LocalHapticFeedback.current
     ListItem(
-        headlineContent = { Text(displayName) },
         leadingContent = {
             Icon(
                 imageVector = icon,
@@ -164,7 +163,7 @@ private fun TemplateListItem(
                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 onClick()
             }
-    )
+    ) { Text(displayName) }
 }
 
 /**

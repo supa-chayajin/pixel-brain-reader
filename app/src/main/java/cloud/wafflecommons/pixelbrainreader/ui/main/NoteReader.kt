@@ -15,7 +15,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.SheetValue
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.Modifier
@@ -86,7 +87,7 @@ internal fun plainHeading(text: String): String {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NoteOutlineSheet(outline: List<Pair<Int, NoteHeading>>, onPick: (segmentIndex: Int) -> Unit, onDismiss: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState()) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden)) {
         Column(
             modifier = Modifier
                 .padding(horizontal = 20.dp)

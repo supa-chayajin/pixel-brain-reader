@@ -5,7 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Rule
+import androidx.compose.material.icons.automirrored.rounded.Rule
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
@@ -15,7 +15,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.SheetValue
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -81,11 +82,11 @@ fun VaultRulesBadge(path: String, content: String, onFix: (String) -> Unit, view
     if (issues.isEmpty()) return
     IconButton(onClick = { open = true }, modifier = Modifier.size(36.dp)) {
         BadgedBox(badge = { Badge { Text("${issues.size}") } }) {
-            Icon(Icons.Rounded.Rule, contentDescription = "Vault rules", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(Icons.AutoMirrored.Rounded.Rule, contentDescription = "Vault rules", tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
     if (open) {
-        ModalBottomSheet(onDismissRequest = { open = false }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        ModalBottomSheet(onDismissRequest = { open = false }, sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded))) {
             Column(modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Vault rules", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 Text(

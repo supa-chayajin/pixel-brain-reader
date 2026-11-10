@@ -24,7 +24,7 @@ import kotlinx.coroutines.withContext
  */
 @Singleton
 class LocalCopyReset @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
     private val jGitProvider: JGitProvider,
     private val database: AppDatabase,
     private val deviceRole: DeviceRole,

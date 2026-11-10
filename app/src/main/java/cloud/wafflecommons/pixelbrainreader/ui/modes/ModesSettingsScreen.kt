@@ -86,20 +86,18 @@ fun ModesSettingsScreen(onBack: () -> Unit, viewModel: ModesViewModel = hiltView
         ) {
             ContextMode.entries.forEach { mode ->
                 ListItem(
-                    headlineContent = { Text(appearance.label(mode)) },
                     supportingContent = { Text("${ModeAppearance.defaultLabel(mode)} mode") },
                     leadingContent = { Icon(ModeIcons.of(appearance, mode), contentDescription = null) },
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                     modifier = Modifier.clickable { editMode = mode }
-                )
+                ) { Text(appearance.label(mode)) }
             }
             ListItem(
-                headlineContent = { Text(appearance.toolkitName) },
                 supportingContent = { Text("Tools hub: mission log, boards, meetings, objectives…") },
                 leadingContent = { Icon(Icons.Rounded.Apps, contentDescription = null) },
                 colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                 modifier = Modifier.clickable { editToolkit = true }
-            )
+            ) { Text(appearance.toolkitName) }
         }
 
         SectionCard(

@@ -12,7 +12,7 @@ import javax.inject.Singleton
  * preferences: nothing secret. [VaultWriteGate] mirrors it for every writer.
  */
 @Singleton
-class DeviceRole @Inject constructor(@ApplicationContext private val context: Context) {
+class DeviceRole @Inject constructor(@param:ApplicationContext private val context: Context) {
 
     val isReadOnly: Boolean
         get() = VaultWriteGate.readOnly

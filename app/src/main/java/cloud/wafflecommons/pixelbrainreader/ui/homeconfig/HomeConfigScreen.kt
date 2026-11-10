@@ -189,7 +189,6 @@ fun HomeConfigScreen(
                 } else {
                     items(chores, key = { it.id }) { chore ->
                         ListItem(
-                            headlineContent = { Text(chore.name, fontWeight = FontWeight.Medium) },
                             supportingContent = { Text("Every ${chore.frequencyDays} days • ${chore.baseEffort} XP") },
                             trailingContent = {
                                 Row {
@@ -207,7 +206,7 @@ fun HomeConfigScreen(
                                     showChoreSheet = chore
                                 }
                                 .animateItem()
-                        )
+                        ) { Text(chore.name, fontWeight = FontWeight.Medium) }
                     }
                 }
             }

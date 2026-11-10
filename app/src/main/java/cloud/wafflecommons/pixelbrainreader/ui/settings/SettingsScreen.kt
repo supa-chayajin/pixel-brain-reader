@@ -22,7 +22,7 @@ import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.rounded.Hub
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -662,7 +662,7 @@ fun SettingsScreen(
                 }
 
                 ListItem(
-                    leadingContent = { Icon(Icons.Filled.VolumeUp, contentDescription = null) },
+                    leadingContent = { Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = null) },
                     supportingContent = { Text("A short sound when you complete a habit or a task") },
                     trailingContent = {
                         Switch(

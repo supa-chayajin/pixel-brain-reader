@@ -32,7 +32,8 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.SheetValue
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -101,14 +102,13 @@ fun ModeSheet(
     onOpenSettings: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded))) {
         Column(modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 24.dp)) {
             Text("Mode", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Text(visibility.sourceLine(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.size(8.dp))
             ContextMode.entries.forEach { mode ->
                 ListItem(
-                    headlineContent = { Text(visibility.label(mode)) },
                     supportingContent = { Text(mode.description()) },
                     leadingContent = { Icon(ModeIcons.of(visibility.appearance, mode), contentDescription = null) },
                     trailingContent = { RadioButton(selected = visibility.mode == mode, onClick = null) },
@@ -117,18 +117,17 @@ fun ModeSheet(
                         role = Role.RadioButton,
                         onClick = { onSelect(mode) }
                     )
-                )
+                ) { Text(visibility.label(mode)) }
             }
             if (visibility.source == ModeSource.MANUAL) {
                 TextButton(onClick = onFollowSchedule) { Text("Follow the schedule again") }
             }
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
             ListItem(
-                headlineContent = { Text("Screen-share safe") },
                 supportingContent = { Text("Hides work, private and health content everywhere — for demos and shared screens.") },
                 leadingContent = { Icon(Icons.Rounded.VisibilityOff, contentDescription = null) },
                 trailingContent = { Switch(checked = visibility.screenShareSafe, onCheckedChange = onScreenShareSafe) }
-            )
+            ) { Text("Screen-share safe") }
             OutlinedButton(onClick = onOpenSettings, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
                 Icon(Icons.Rounded.Settings, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
