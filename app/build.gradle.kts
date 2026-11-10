@@ -193,6 +193,13 @@ configurations.all {
     }
 }
 
+// Settled decision #9, made mechanical: every resolved version is pinned in gradle.lockfile, so an
+// upgrade or a downgrade (a library bumped by another one included) shows up as a diff. A
+// deliberate change regenerates it in its own commit: ./gradlew :app:dependencies --write-locks
+dependencyLocking {
+    lockAllConfigurations()
+}
+
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.fragment.ktx)
