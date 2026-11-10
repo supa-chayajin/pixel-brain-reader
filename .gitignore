@@ -24,6 +24,7 @@ local.properties
 .tooling-venv/
 .venv/
 graphify-out/
+notes/
 scripts/
 CLAUDE.md
 opencode.json
