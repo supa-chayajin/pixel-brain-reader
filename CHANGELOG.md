@@ -11,6 +11,16 @@ Still planned (`documentation/plans/2026-10-18-v11-work-and-dev-toolkit.md`): th
 dashboard, "explain this error", decision records, people & 1:1s, security watch, the workshop
 kit and the authorship timeline.
 
+## [12.7.1] — 2026-11-10
+
+### Changed
+
+- **The Projects widget shows more projects as you make it taller.** It used to stop at
+  three whatever its size. Now it follows its height: one to three projects on a short
+  widget (without the "→ next action" line, to keep three in view), then three to ten with
+  their next action as you stretch it. Same order as the Projects tab — pinned first, then
+  the most active, hidden ones left out.
+
 ## [12.7.0] — 2026-11-09
 
 Moods get a look of your own — an icon for each activity tag, a set of emojis picked from a

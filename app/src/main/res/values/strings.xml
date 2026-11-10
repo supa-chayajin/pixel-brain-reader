@@ -15,7 +15,7 @@
     <string name="widget_today_desc">See and tick off today\'s tasks in place.</string>
     <string name="widget_chores_label">Chores Due</string>
     <string name="widget_projects_label">Projects</string>
-    <string name="widget_projects_desc">Your most active projects and their next action.</string>
+    <string name="widget_projects_desc">Your projects, more as you make it taller, with their next action.</string>
     <string name="widget_chores_desc">Chores due today — mark them done and earn XP.</string>
     <string name="widget_quickactions_label">Quick Actions</string>
     <string name="widget_quickactions_desc">Capture, journal, mood, habits, chores and search — one tap away.</string>

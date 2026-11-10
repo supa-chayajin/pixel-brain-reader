@@ -70,16 +70,16 @@ object WidgetLiveData {
         } catch (e: CancellationException) { throw e } catch (e: Exception) { emptyList() }
     }
 
-    /** Chores that are due today (lastDone + frequency ≤ today), non-archived, by sortOrder. */
     data class WidgetProject(val title: String, val line: String, val next: String?)
 
     /**
-     * The Projects widget's three (C11): the Projects page's list — the pinned first, then the most
-     * recently active, hidden ones left out — under the page's names.
+     * The Projects widget's list (C11): the Projects page's — the pinned first, then the most
+     * recently active, hidden ones left out — under the page's names, at most [limit]. The widget
+     * shows as many as its height allows (`ProjectsWidgetLayout`).
      */
-    suspend fun activeProjects(context: Context): List<WidgetProject> = try {
+    suspend fun activeProjects(context: Context, limit: Int): List<WidgetProject> = try {
         val ep = entryPoint(context)
-        ep.projectArrangementRepository().read().arrange(ep.projectRepository().projects()).shown.take(3).map { p ->
+        ep.projectArrangementRepository().read().arrange(ep.projectRepository().projects()).shown.take(limit).map { p ->
             val activity = buildList {
                 if (p.commits > 0) add("${p.commits} commit${if (p.commits == 1) "" else "s"}")
                 if (p.sessions > 0) add("${p.sessions} AI")
@@ -88,6 +88,7 @@ object WidgetLiveData {
         }
     } catch (e: CancellationException) { throw e } catch (e: Exception) { emptyList() }
 
+    /** Chores that are due today (lastDone + frequency ≤ today), non-archived, by sortOrder. */
     suspend fun choresDue(context: Context): List<WidgetChore> {
         return try {
             val ep = entryPoint(context)
