@@ -7,8 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Still planned (`documentation/plans/2026-10-18-v11-work-and-dev-toolkit.md`): "explain this
-error" (next), people & 1:1s, security watch, the workshop kit and the authorship timeline.
+Planned: `documentation/plans/2026-11-10-dream-app-roadmap.md`. Next, 12.9.0 "Trust": an AI
+self-test, read-only Google scopes, private notes kept out of the AI unless switched on,
+dependency locking, the authorship timeline in Connections and chat answers saved with their
+sources; then "explain this error" (12.10.0).
 
 ## [12.8.0] — 2026-11-10
 
