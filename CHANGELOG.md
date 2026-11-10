@@ -7,10 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Planned: `documentation/plans/2026-11-10-dream-app-roadmap.md`. Next, 12.9.0 "Trust": an AI
-self-test, read-only Google scopes, private notes kept out of the AI unless switched on,
-dependency locking, the authorship timeline in Connections and chat answers saved with their
-sources; then "explain this error" (12.10.0).
+Planned: `documentation/plans/2026-11-10-dream-app-roadmap.md`. Next, 12.10.0: the golden set
+(questions with the notes that should answer them, kept in the vault) and "explain this error".
+
+## [12.9.0] — 2026-11-10
+
+Trust: the app checks its own AI, asks Google for less, keeps the private journal out of the AI
+unless you let it in, and locks what it is built from.
+
+### Added
+
+- **A self-test for the on-device AI.** Settings → Intelligence → Run a test sends one real
+  request and one streamed answer through the app's own path, and shows how long each took, why
+  it stopped (stop or max tokens) or the exact error. It also runs by itself when Gemini Nano
+  finishes downloading, and when it fails, Daily says so in one line with a link to the details.
+  "Ready" alone once hid a model that failed every request (11.1.0).
+- **Private notes in AI answers, your choice.** Settings → Knowledge Vault has a switch, off by
+  default: your private vault is never embedded and Chat never reads it. Switched on, it works as
+  before: embedded while its password is saved, read only while the vault is unlocked. Switching
+  it off drops the private vectors already made.
+- **A note's history in Connections:** since when it is in the vault, when it last changed and
+  how many commits touched it, from the git history the app already reads.
+- **A saved answer keeps its sources.** Chat's "Save to Inbox" now ends the note with the notes
+  the answer came from, as links — never a private one.
+
+### Changed
+
+- **Google access is read-only.** The app only ever imported your calendar and tasks, yet it asked
+  Google for full access. It now asks for read-only access, and Google asks you to confirm once at
+  the next sign-in. To drop the old, wider grant, remove the app's access in your Google Account
+  once.
+- **Every dependency version is locked** (`app/gradle.lockfile`): an upgrade or a downgrade now
+  shows up as a change to review. A test checks that each version has its changelog section.
+- Bottom sheets, list rows, the top bar and two icons moved off deprecated Material3 calls, with
+  no visible change. A new `AGENTS.md` points every coding agent to the project's settled
+  decisions.
 
 ## [12.8.0] — 2026-11-10
 

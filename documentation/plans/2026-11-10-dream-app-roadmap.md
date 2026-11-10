@@ -52,22 +52,27 @@ Principles:
 Versions are indicative; one release is one concern with its own CHANGELOG section. Sizes:
 S ≤ 2 h, M ≤ 1 day, L > 1 day.
 
+**Version codes.** `versionCode` is major×100 + minor×10 + patch (12.9.0 = 1290). It still
+climbs through 12.10 (1300) and 12.18 (1380), but 13.0.0 would then come out at 1300, lower than
+1380, and Android refuses a lower code. Before 12.10.0: either renumber the train (the companion
+as 13.x) or move to major×10000 + minor×100 + patch (12.10.0 = 121000). The owner's call.
+
 ### 12.9.0 — Trust (all S, no new dependency)
 
-- [ ] **T1 AI self-test.** Settings → Intelligence → "Run a test": one `generateContent` through
+- [x] **T1 AI self-test.** *(12.9.0)* Settings → Intelligence → "Run a test": one `generateContent` through
       the production request builder, then one streaming call. It shows the latency, the finish
       reason and the exact error. It runs after every (re)download, and Daily shows a one-line
       banner when it fails. *(V12 11.2-A: the 11.1.0 "Ready, but every request fails" class.)*
-- [ ] **T2 Read-only Google scopes.** `CALENDAR_READONLY` + `TASKS_READONLY` in
+- [x] **T2 Read-only Google scopes.** *(12.9.0)* `CALENDAR_READONLY` + `TASKS_READONLY` in
       `GoogleAuthRepository.authorize`, since both syncs only import. Drop the stale "bidirectional
       sync needs read+write scopes" comment. Google asks for consent once more at the next
       sign-in. *(Oct 17 S4, D5 and 3.5; D4.)*
-- [ ] **T3 Private notes reach the AI only when switched on.** A row in Knowledge Vault (RAG), off
+- [x] **T3 Private notes reach the AI only when switched on.** *(12.9.0)* A row in Knowledge Vault (RAG), off
       by default. When off, `IndexingWorker` never embeds `99_Private`, their vectors are dropped
       the way `neverEmbedded` drops Claude's memory (no re-index), and retrieval never decrypts a
       private chunk. When on, the app behaves as it does today. Add settled decision #20 in the
       same commit. *(RFC-008 §1: "invisible to the AI"; D3.)*
-- [ ] **T4 Guardrails.**
+- [x] **T4 Guardrails.** *(12.9.0: 19 of the 20 compiler deprecations; the last one is in §4)*
   - Gradle dependency locking (`dependencyLocking { lockAllConfigurations() }`, lockfiles
     committed), so any upgrade or downgrade shows up as a diff: settled decision #9, made
     mechanical.
@@ -77,11 +82,12 @@ S ≤ 2 h, M ≤ 1 day, L > 1 day.
     `documentation/explanation/settled-decisions.md` and `documentation/plans/`.
 
   *(Oct 17 4.3, 4.4, 4.8; the 2026-10-22 review.)*
-- [ ] **T5 Authorship timeline (C15).** Connections shows a note's first appearance, its commit
-      count and its active months, from `GitFileAges.history()`, which already feeds Vault activity
-      and Leave. *(v11 C15.)*
-- [ ] **T6 Chat answers saved with their sources.** "Save to Inbox" passes only the text today.
-      The note gets `sources:`, the notes the model saw, as `[[links]]`. *(V12 E13.)*
+- [x] **T5 Authorship timeline (C15).** *(12.9.0)* Connections shows a note's first appearance,
+      its last change and its commit count, from `GitFileAges.history()`, which already feeds Vault
+      activity and Leave. *(v11 C15.)*
+- [x] **T6 Chat answers saved with their sources.** *(12.9.0)* "Save to Inbox" passed only the
+      text. The note now ends with a `## Sources` section: the notes the model saw, as path
+      `[[links]]`, never a private one. *(V12 E13.)*
 
 ### 12.10.0 — Explain this error (C8), on measured retrieval
 
@@ -294,6 +300,9 @@ S ≤ 2 h, M ≤ 1 day, L > 1 day.
 - The hotspots (`MainScreen` 1,515 lines, `DailyNoteScreen` 1,388, `MainViewModel` 1,188) are
   split behind tests when an item touches them (K2 and K5 the editor, D1 and D8 the Daily screen),
   never as a release of their own.
+- The last compiler deprecation, `FileListPane`'s swipe (`confirmValueChange`, deprecated without
+  a replacement), moves to `onDismiss` the same way: when an item touches the file list, with a
+  device check, since the row would then slide out and back.
 
 ## 5. Decisions (owner, 2026-11-10)
 
