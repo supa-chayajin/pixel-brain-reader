@@ -155,7 +155,7 @@ class IndexingWorker @AssistedInject constructor(
 
     private suspend fun purgeNeverEmbedded() {
         try {
-            val stale = neverEmbedded(embeddingDao.fileIds())
+            val stale = neverEmbedded(embeddingDao.fileIds(), includePrivate = userPrefs.privateNotesInAi.first())
             stale.forEach { embeddingDao.deleteByFileId(it) }
             if (stale.isNotEmpty()) Log.i("RAG_DEBUG", "IndexingWorker: dropped the vectors of ${stale.size} note(s) kept out of the index")
         } catch (e: kotlinx.coroutines.CancellationException) {
@@ -165,14 +165,16 @@ class IndexingWorker @AssistedInject constructor(
         }
     }
 
-    private fun filterEmbeddingCandidates(
+    private suspend fun filterEmbeddingCandidates(
         files: List<cloud.wafflecommons.pixelbrainreader.data.local.entity.FileEntity>
     ): List<cloud.wafflecommons.pixelbrainreader.data.local.entity.FileEntity> {
         val today = java.time.LocalDate.now()
         val todayPath = todayJournalPath(today)
-        val hasVaultPassword = !secretManager.getVaultPassword().isNullOrBlank()
+        // Settled decision #20: private notes only when the owner switched them on, and only with a
+        // saved password to decrypt them (checked before the model is loaded).
+        val includePrivate = userPrefs.privateNotesInAi.first() && !secretManager.getVaultPassword().isNullOrBlank()
 
-        val candidates = embeddingCandidates(files, today, hasVaultPassword)
+        val candidates = embeddingCandidates(files, today, includePrivate)
 
         if (candidates.isEmpty() && files.isNotEmpty()) {
             val byType = files.groupingBy { it.type }.eachCount()
@@ -326,7 +328,8 @@ class IndexingWorker @AssistedInject constructor(
          * Notes worth embedding. Settled decision #3 (CLAUDE.md): today's journal is NOT embedded —
          * it changes all day, so its vectors would be stale within minutes and every run would pay
          * a model load for it — and neither is `99_System` (machine JSON, noise for retrieval).
-         * Private notes only when a vault password is stored, checked BEFORE the model is loaded.
+         * Private notes only with [includePrivate]: the owner's switch is on and a vault password is
+         * stored (settled decision #20), checked BEFORE the model is loaded.
          * People notes never: what is written about a person is not something to retrieve into an
          * AI answer. Nor the encrypted mission log: work content outside any work folder would
          * reach AI answers in every mode. Nor Claude's memory mirrored from the desktop (settled
@@ -335,7 +338,7 @@ class IndexingWorker @AssistedInject constructor(
         internal fun embeddingCandidates(
             files: List<cloud.wafflecommons.pixelbrainreader.data.local.entity.FileEntity>,
             today: java.time.LocalDate,
-            hasVaultPassword: Boolean
+            includePrivate: Boolean
         ): List<cloud.wafflecommons.pixelbrainreader.data.local.entity.FileEntity> {
             val todayPath = todayJournalPath(today)
             return files.filter { entity ->
@@ -349,16 +352,23 @@ class IndexingWorker @AssistedInject constructor(
                     !cloud.wafflecommons.pixelbrainreader.data.vault.VaultSchema.isPeopleNote(entity.path) &&
                     !entity.path.startsWith(cloud.wafflecommons.pixelbrainreader.data.work.MissionLogSettings.ENCRYPTED_FOLDER + "/") &&
                     !cloud.wafflecommons.pixelbrainreader.data.vault.MirrorNotes.isClaudeMemory(entity.path) &&
-                    (!isPrivate || hasVaultPassword)
+                    (!isPrivate || includePrivate)
             }
         }
 
+        /** A private-vault path: under `99_Private/`, or an encrypted note anywhere. */
+        internal fun isPrivatePath(path: String): Boolean =
+            path.startsWith("99_Private/") || path.endsWith(".md.enc", ignoreCase = true)
+
         /**
          * The embedded notes to drop: those a rule added after they were embedded keeps out of the
-         * index (Claude's mirrored memory). Today's journal is not one of them: it is embedded once
-         * it is no longer today.
+         * index (Claude's mirrored memory), and the private notes while the owner keeps them out of
+         * the AI (settled decision #20, [includePrivate] false). Today's journal is not one of them:
+         * it is embedded once it is no longer today.
          */
-        internal fun neverEmbedded(fileIds: List<String>): List<String> =
-            fileIds.filter { cloud.wafflecommons.pixelbrainreader.data.vault.MirrorNotes.isClaudeMemory(it) }
+        internal fun neverEmbedded(fileIds: List<String>, includePrivate: Boolean = true): List<String> =
+            fileIds.filter {
+                cloud.wafflecommons.pixelbrainreader.data.vault.MirrorNotes.isClaudeMemory(it) || (!includePrivate && isPrivatePath(it))
+            }
     }
 }

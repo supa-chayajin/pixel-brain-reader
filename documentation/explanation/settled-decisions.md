@@ -180,3 +180,20 @@ A version tag never reaches GitHub on its own. Pushing `vX.Y.Z` and creating its
 *Why:* the owner asked for it on 2026-11-09. Tags `v10.1.0`, `v11.1.0`, `v12.1.0` and `v12.6.0`
 had reached GitHub without a release, so the releases page — where versions and their R8
 mappings are archived (decision 13) — stopped at `v10.0.0`.
+
+## 20. Private notes reach the AI only when switched on
+
+Settings → Knowledge Vault (RAG) → **Private notes in AI answers**, off by default and kept on the
+device. Off: nothing under `99_Private/` (and no `.md.enc` note) is embedded, the vectors already
+embedded are dropped at the next indexing run, and retrieval never ranks nor decrypts a private
+chunk. On: private notes are embedded while the vault password is saved, and reach Chat only
+while the private vault is unlocked in the session. People notes and the encrypted mission log
+are never embedded either way. A brief the owner sends on purpose — Beautify in the private
+journal, Ask Coach, a report's optional summary — stays an explicit, visible choice.
+
+*Why:* RFC-008 wanted the private journal invisible to the AI, with its password unlockable only
+by fingerprint. The app had drifted: the stored password let the background indexer decrypt and
+embed private notes, and no decision recorded it. The owner chose the opt-in on 2026-11-10 (the
+RFC triage, `documentation/plans/2026-11-10-dream-app-roadmap.md`). With the switch off, nothing
+in the background needs the stored password, so binding it to the fingerprint (V3) becomes
+possible.

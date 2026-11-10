@@ -12,6 +12,7 @@ import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -57,7 +58,8 @@ class VectorSearchEngine @Inject constructor(
     private val embeddingDao: EmbeddingDao,
     private val cryptoManager: CryptoManager,
     private val secretManager: SecretManager,
-    private val modesRepository: dagger.Lazy<cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository>
+    private val modesRepository: dagger.Lazy<cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository>,
+    private val userPreferences: dagger.Lazy<cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository>
 ) {
     private data class Engine(
         val interpreter: Interpreter,
@@ -433,9 +435,16 @@ class VectorSearchEngine @Inject constructor(
         }
 
         // Notes the current mode hides (work outside Work mode, private while sharing the screen)
-        // are never candidates — not even as sources the answer could quote.
+        // are never candidates — not even as sources the answer could quote. Nor private notes
+        // while the owner keeps them out of the AI (settled decision #20): vectors the indexer has
+        // not purged yet still never reach an answer.
         val visibility = modesRepository.get().visibility.value
-        val chunks = loadChunkIndex().let { all -> if (visibility.hideWork || visibility.hidePrivate) all.filter { visibility.isVisible(it.fileId) } else all }
+        val includePrivate = userPreferences.get().privateNotesInAi.first()
+        val chunks = RagRanking.eligible(
+            loadChunkIndex(),
+            isVisible = if (visibility.hideWork || visibility.hidePrivate) visibility::isVisible else null,
+            includePrivate = includePrivate
+        )
         val ranking = RagRanking.rank(queryVector, chunks)
         if (ranking.scored.isNotEmpty()) {
             val best = ranking.scored.first().similarity

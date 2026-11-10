@@ -33,6 +33,15 @@ internal object RagRanking {
      */
     const val MIN_SCORE_SPREAD = 0.01f
 
+    /**
+     * The chunks a search may rank: those [isVisible] keeps (the current mode; null = all), and
+     * private ones only with [includePrivate] — the owner's switch (settled decision #20). Filtered
+     * BEFORE ranking, so a private chunk never takes a place, nor moves the collapse guards.
+     */
+    fun eligible(chunks: List<IndexedChunk>, isVisible: ((String) -> Boolean)?, includePrivate: Boolean): List<IndexedChunk> =
+        if (includePrivate && isVisible == null) chunks
+        else chunks.filter { (includePrivate || !it.isPrivate) && (isVisible == null || isVisible(it.fileId)) }
+
     class Scored(val chunk: IndexedChunk, val similarity: Float)
 
     class Ranking(

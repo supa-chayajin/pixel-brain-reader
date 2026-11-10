@@ -16,6 +16,7 @@ import cloud.wafflecommons.pixelbrainreader.data.workers.IndexingWorker
 import cloud.wafflecommons.pixelbrainreader.data.ai.LocalAiManager
 import cloud.wafflecommons.pixelbrainreader.data.ai.NanoState
 import cloud.wafflecommons.pixelbrainreader.data.auth.GoogleAuthRepository
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.repository.AppThemeConfig
 import cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
 import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
@@ -82,7 +83,9 @@ class SettingsViewModel @Inject constructor(
         // Google Sync
         val isGoogleSyncEnabled: Boolean = false,
         val isGoogleAccountLinked: Boolean = false,
-        val soundEffectsEnabled: Boolean = false
+        val soundEffectsEnabled: Boolean = false,
+        // Settled decision #20: the private vault reaches the AI only when switched on.
+        val privateNotesInAi: Boolean = false
     )
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -223,6 +226,10 @@ class SettingsViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(isGoogleSyncEnabled = enabled)
         }.launchIn(viewModelScope)
 
+        userPrefs.privateNotesInAi.onEach { enabled ->
+            _uiState.value = _uiState.value.copy(privateNotesInAi = enabled)
+        }.launchIn(viewModelScope)
+
         userPrefs.soundEffectsEnabled.onEach { enabled ->
             _uiState.value = _uiState.value.copy(soundEffectsEnabled = enabled)
         }.launchIn(viewModelScope)
@@ -357,6 +364,19 @@ class SettingsViewModel @Inject constructor(
             if (!enabled) {
                 googleAuthManager.signOut()
             }
+        }
+    }
+
+    /**
+     * The private vault in the AI, on or off (settled decision #20). Retrieval follows at once; an
+     * indexing run follows too, so switching off drops the private vectors and switching on embeds
+     * the private notes now rather than at the next manual run.
+     */
+    fun setPrivateNotesInAi(enabled: Boolean) {
+        if (VaultWriteGate.readOnly) return // no AI on a read-only device
+        viewModelScope.launch {
+            userPrefs.setPrivateNotesInAi(enabled)
+            triggerVaultIndexing()
         }
     }
 

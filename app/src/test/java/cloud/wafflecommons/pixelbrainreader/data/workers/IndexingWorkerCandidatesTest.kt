@@ -29,19 +29,19 @@ class IndexingWorkerCandidatesTest {
 
     @Test
     fun `today's journal, system files, attachments and folders are skipped`() {
-        val candidates = IndexingWorker.embeddingCandidates(vault, today, hasVaultPassword = false)
+        val candidates = IndexingWorker.embeddingCandidates(vault, today, includePrivate = false)
         assertEquals(listOf("10_Journal/2026-10-16.md", "20_Projects/plan.md"), candidates.map { it.path })
     }
 
     @Test
     fun `people notes are never embedded, even with the vault password stored`() {
-        val candidates = IndexingWorker.embeddingCandidates(vault, today, hasVaultPassword = true)
+        val candidates = IndexingWorker.embeddingCandidates(vault, today, includePrivate = true)
         assertEquals(false, candidates.any { it.path.startsWith("99_Private/People/") })
     }
 
     @Test
-    fun `private notes join only when a vault password is stored`() {
-        val candidates = IndexingWorker.embeddingCandidates(vault, today, hasVaultPassword = true)
+    fun `private notes join only when the owner lets them in (#20) and a password is stored`() {
+        val candidates = IndexingWorker.embeddingCandidates(vault, today, includePrivate = true)
         assertEquals(
             listOf("10_Journal/2026-10-16.md", "20_Projects/plan.md", "99_Private/diary.md.enc"),
             candidates.map { it.path }
@@ -55,7 +55,7 @@ class IndexingWorkerCandidatesTest {
             file("20_Projects/21_Demo/Repo/Roadmaps/Roadmap_v2.md"),
             file("20_Projects/21_Demo/Claude/Reports/2026-11-06_Audit.md")
         )
-        val candidates = IndexingWorker.embeddingCandidates(mirrors, today, hasVaultPassword = true)
+        val candidates = IndexingWorker.embeddingCandidates(mirrors, today, includePrivate = true)
         assertEquals(
             listOf("20_Projects/21_Demo/Repo/Roadmaps/Roadmap_v2.md", "20_Projects/21_Demo/Claude/Reports/2026-11-06_Audit.md"),
             candidates.map { it.path }
@@ -70,5 +70,18 @@ class IndexingWorkerCandidatesTest {
             "10_Journal/2026-10-17.md" // today: not embedded today, but never purged
         )
         assertEquals(listOf("20_Projects/21_Demo/Claude/Memory/feedback.md"), IndexingWorker.neverEmbedded(embedded))
+    }
+
+    @Test
+    fun `switched off, private notes stay out of the index whatever the password`() {
+        val candidates = IndexingWorker.embeddingCandidates(vault, today, includePrivate = false)
+        assertEquals(false, candidates.any { IndexingWorker.isPrivatePath(it.path) })
+    }
+
+    @Test
+    fun `switched off, the private vectors already embedded are purged, switched on they stay`() {
+        val embedded = listOf("99_Private/diary.md.enc", "20_Projects/plan.md", "10_Journal/2026-10-16.md")
+        assertEquals(listOf("99_Private/diary.md.enc"), IndexingWorker.neverEmbedded(embedded, includePrivate = false))
+        assertEquals(emptyList<String>(), IndexingWorker.neverEmbedded(embedded, includePrivate = true))
     }
 }

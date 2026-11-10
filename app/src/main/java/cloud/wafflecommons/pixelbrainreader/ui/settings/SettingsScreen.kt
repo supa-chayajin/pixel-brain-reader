@@ -400,11 +400,37 @@ fun SettingsScreen(
                     text = if (VaultWriteGate.readOnly) {
                         "The AI is off on this read-only device: the vault is not embedded. Search and the link check still work."
                     } else {
-                        "Embedding the vault is now manual. Tap below to embed only the files that changed since your last index. Private notes are included if the vault has been unlocked."
+                        "Embedding the vault is manual: tap below to embed the files that changed since your last index."
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+
+                Spacer(Modifier.height(12.dp))
+
+                // Settled decision #20: the private vault reaches the AI only when switched on.
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Private notes in AI answers", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            text = if (uiState.privateNotesInAi) {
+                                "On: your private vault is embedded while its password is saved, and Chat reads it while the vault is unlocked."
+                            } else {
+                                "Off: your private vault is never embedded, and Chat never reads it."
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = uiState.privateNotesInAi,
+                        onCheckedChange = { checked ->
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            viewModel.setPrivateNotesInAi(checked)
+                        },
+                        enabled = !VaultWriteGate.readOnly
+                    )
+                }
 
                 Spacer(Modifier.height(12.dp))
 

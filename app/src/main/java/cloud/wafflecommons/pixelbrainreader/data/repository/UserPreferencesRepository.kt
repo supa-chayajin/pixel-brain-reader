@@ -167,6 +167,21 @@ class UserPreferencesRepository @Inject constructor(
         }
     }
 
+    // --- Private notes and the AI (settled decision #20) ---
+    private val KEY_PRIVATE_NOTES_IN_AI = booleanPreferencesKey("private_notes_in_ai")
+
+    /**
+     * Whether the private vault reaches the AI: embedded while its password is saved, and handed
+     * to Chat while it is unlocked. Off by default (owner, 2026-11-10): a device-only choice.
+     */
+    val privateNotesInAi: Flow<Boolean> = setting { it[KEY_PRIVATE_NOTES_IN_AI] ?: false }
+
+    suspend fun setPrivateNotesInAi(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_PRIVATE_NOTES_IN_AI] = enabled
+        }
+    }
+
     // --- Reminders (Phase 3) ---
     private val KEY_VAULT_REMINDER_ENABLED = booleanPreferencesKey("vault_reminder_enabled")
     private val KEY_VAULT_REMINDER_TIME = stringPreferencesKey("vault_reminder_time")

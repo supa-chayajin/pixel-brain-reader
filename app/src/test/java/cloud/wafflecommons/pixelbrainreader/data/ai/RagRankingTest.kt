@@ -83,4 +83,19 @@ class RagRankingTest {
         val ranking = RagRanking.rank(query, listOf(chunk("old", "a.md", FloatArray(100) { 1f }), chunk("new", "b.md", unit(0.0))))
         assertEquals(listOf("new"), ranking.relevant.map { it.chunk.id })
     }
+
+    @Test
+    fun `private chunks never enter the pool while the owner keeps them out of the AI (#20)`() {
+        val chunks = listOf(
+            chunk("work", "20_Projects/a.md", unit(0.0)),
+            IndexedChunk("diary", "99_Private/2026-11-10.md.enc", true, unit(0.0)),
+            chunk("home", "30_Areas/b.md", unit(0.0))
+        )
+        assertEquals(listOf("work", "home"), RagRanking.eligible(chunks, isVisible = null, includePrivate = false).map { it.id })
+        assertEquals(listOf("work", "diary", "home"), RagRanking.eligible(chunks, isVisible = null, includePrivate = true).map { it.id })
+        // The mode's visibility still applies on top.
+        val hideWork: (String) -> Boolean = { !it.startsWith("20_Projects/") }
+        assertEquals(listOf("diary", "home"), RagRanking.eligible(chunks, hideWork, includePrivate = true).map { it.id })
+        assertEquals(listOf("home"), RagRanking.eligible(chunks, hideWork, includePrivate = false).map { it.id })
+    }
 }
