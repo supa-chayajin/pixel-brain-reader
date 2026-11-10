@@ -378,6 +378,16 @@ fun SettingsScreen(
                             onDownload = viewModel::onDownloadNanoModel,
                             onManageStorage = viewModel::onOpenNanoModelSettings
                         )
+                        if (!VaultWriteGate.readOnly) {
+                            val selfTest by viewModel.nanoSelfTest.collectAsStateWithLifecycle()
+                            val isSelfTestRunning by viewModel.isSelfTestRunning.collectAsStateWithLifecycle()
+                            NanoSelfTestRow(
+                                result = selfTest,
+                                isRunning = isSelfTestRunning,
+                                enabled = nanoState is NanoState.Ready,
+                                onRun = viewModel::runNanoSelfTest
+                            )
+                        }
                     }
                 }
             }

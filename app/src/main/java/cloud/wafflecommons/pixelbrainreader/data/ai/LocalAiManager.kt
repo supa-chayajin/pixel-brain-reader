@@ -10,6 +10,7 @@ import android.util.Log
 import com.google.mlkit.genai.common.DownloadStatus
 import com.google.mlkit.genai.common.FeatureStatus
 import com.google.mlkit.genai.common.GenAiException
+import com.google.mlkit.genai.prompt.Candidate
 import com.google.mlkit.genai.prompt.GenerativeModel
 import com.google.mlkit.genai.prompt.Generation
 import com.google.mlkit.genai.prompt.GenerateContentRequest
@@ -59,6 +60,10 @@ class LocalAiManager @Inject constructor(
 
     private val _nanoState = MutableStateFlow<NanoState>(NanoState.Unknown)
     val nanoState: StateFlow<NanoState> = _nanoState.asStateFlow()
+
+    private val _selfTest = MutableStateFlow<NanoSelfTest?>(null)
+    /** The latest [runSelfTest] in this process, or null when none ran. */
+    val selfTest: StateFlow<NanoSelfTest?> = _selfTest.asStateFlow()
 
     private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val sessionMutex = Mutex()
@@ -329,6 +334,94 @@ class LocalAiManager @Inject constructor(
         }
     }.flowOn(Dispatchers.IO)
 
+    /**
+     * Settings' "Run a test", and by itself after each completed download: one request through the
+     * production builder ([request]), then one streamed answer, each timed. Never downloads
+     * (contract 2): when the model isn't Ready the test fails at once with the reason.
+     */
+    suspend fun runSelfTest(): NanoSelfTest = withContext(Dispatchers.IO) {
+        val notReady = modelNotReadyReason()
+        val result = if (notReady != null) {
+            NanoSelfTest(System.currentTimeMillis(), NanoSelfTest.Step(millis = 0, error = notReady), stream = null)
+        } else {
+            NanoSelfTest(System.currentTimeMillis(), selfTestOneShot(), selfTestStream())
+        }
+        Log.i(tag, "Self-test: ${result.summary()}")
+        _selfTest.value = result
+        result
+    }
+
+    private suspend fun selfTestOneShot(): NanoSelfTest.Step = sessionMutex.withLock {
+        val start = System.currentTimeMillis()
+        try {
+            val response = withTimeoutOrNull(SELF_TEST_TIMEOUT_MS) { ensureModel().generateContent(request(NanoSelfTest.PROMPT)) }
+            val candidate = response?.candidates?.firstOrNull()
+            val text = candidate?.text.orEmpty()
+            NanoSelfTest.Step(
+                millis = System.currentTimeMillis() - start,
+                finishReason = finishReasonName(candidate?.finishReason),
+                chars = text.length,
+                error = when {
+                    response == null -> "no answer within ${SELF_TEST_TIMEOUT_MS / 1000} s"
+                    text.isBlank() -> "an empty answer"
+                    else -> null
+                }
+            )
+        } catch (e: GenAiException) {
+            logGenAiException("selfTest", e)
+            NanoSelfTest.Step(millis = System.currentTimeMillis() - start, error = describe(e))
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            NanoSelfTest.Step(millis = System.currentTimeMillis() - start, error = e.message ?: e.javaClass.simpleName)
+        }
+    }
+
+    private suspend fun selfTestStream(): NanoSelfTest.Step = sessionMutex.withLock {
+        val start = System.currentTimeMillis()
+        var firstChunk: Long? = null
+        var chars = 0
+        var finish: Int? = null
+        try {
+            val finished = withTimeoutOrNull(SELF_TEST_TIMEOUT_MS) {
+                ensureModel().generateContentStream(request(NanoSelfTest.PROMPT)).collect { response ->
+                    val candidate = response.candidates.firstOrNull()
+                    val text = candidate?.text
+                    if (firstChunk == null && !text.isNullOrEmpty()) firstChunk = System.currentTimeMillis() - start
+                    chars += text?.length ?: 0
+                    candidate?.finishReason?.let { finish = it }
+                }
+                true
+            }
+            NanoSelfTest.Step(
+                millis = System.currentTimeMillis() - start,
+                firstChunkMillis = firstChunk,
+                finishReason = finishReasonName(finish),
+                chars = chars,
+                error = when {
+                    finished == null -> "the stream did not finish within ${SELF_TEST_TIMEOUT_MS / 1000} s"
+                    chars == 0 -> "an empty stream"
+                    else -> null
+                }
+            )
+        } catch (e: GenAiException) {
+            logGenAiException("selfTestStream", e)
+            NanoSelfTest.Step(millis = System.currentTimeMillis() - start, error = describe(e))
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            NanoSelfTest.Step(millis = System.currentTimeMillis() - start, error = e.message ?: e.javaClass.simpleName)
+        }
+    }
+
+    private fun finishReasonName(reason: Int?): String? = when (reason) {
+        null -> null
+        Candidate.FinishReason.STOP -> "stop"
+        Candidate.FinishReason.MAX_TOKENS -> "max tokens"
+        Candidate.FinishReason.OTHER -> "other"
+        else -> "reason $reason"
+    }
+
     /** One request shape for both paths; ML Kit rejects any maxOutputTokens outside 1..256. */
     private fun request(prompt: String): GenerateContentRequest =
         GenerateContentRequest.Builder(TextPart(prompt)).apply {
@@ -392,6 +485,8 @@ class LocalAiManager @Inject constructor(
         // stall a real user query that arrives during launch. On a healthy device the cold model
         // load is a few seconds; if it can't finish in this window, prewarm gives up and releases.
         const val PREWARM_TIMEOUT_MS = 30_000L
+        // Each self-test call: generous enough for the first inference after a (re)download.
+        const val SELF_TEST_TIMEOUT_MS = 60_000L
         const val AICORE_PACKAGE = "com.google.android.aicore"
     }
 
@@ -514,6 +609,9 @@ class LocalAiManager @Inject constructor(
                             Log.i(tag, "ML Kit GenAI download completed — marking Ready (pre-loading in background)")
                             _nanoState.value = NanoState.Ready
                             prewarmAsync()
+                            // A fresh model gets its self-test (after the pre-load, which holds the
+                            // session lock): Ready alone proved nothing in 11.1.0.
+                            ioScope.launch { runSelfTest() }
                         }
                         is DownloadStatus.DownloadFailed -> {
                             logGenAiException("download", event.e)

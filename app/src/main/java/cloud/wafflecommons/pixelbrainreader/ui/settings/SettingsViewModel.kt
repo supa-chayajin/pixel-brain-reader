@@ -14,6 +14,7 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import cloud.wafflecommons.pixelbrainreader.data.workers.IndexingWorker
 import cloud.wafflecommons.pixelbrainreader.data.ai.LocalAiManager
+import cloud.wafflecommons.pixelbrainreader.data.ai.NanoSelfTest
 import cloud.wafflecommons.pixelbrainreader.data.ai.NanoState
 import cloud.wafflecommons.pixelbrainreader.data.auth.GoogleAuthRepository
 import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
@@ -93,6 +94,24 @@ class SettingsViewModel @Inject constructor(
 
     /** Mirrors [LocalAiManager.nanoState] for the Settings UI. */
     val nanoState: StateFlow<NanoState> = localAiManager.nanoState
+
+    /** The latest self-test (Settings → Intelligence → Run a test). */
+    val nanoSelfTest: StateFlow<NanoSelfTest?> = localAiManager.selfTest
+
+    private val _isSelfTestRunning = MutableStateFlow(false)
+    val isSelfTestRunning: StateFlow<Boolean> = _isSelfTestRunning.asStateFlow()
+
+    fun runNanoSelfTest() {
+        if (_isSelfTestRunning.value) return
+        viewModelScope.launch {
+            _isSelfTestRunning.value = true
+            try {
+                localAiManager.runSelfTest()
+            } finally {
+                _isSelfTestRunning.value = false
+            }
+        }
+    }
 
     private val _nanoModelEvents = MutableSharedFlow<NanoModelEvent>(extraBufferCapacity = 4)
     val nanoModelEvents = _nanoModelEvents.asSharedFlow()

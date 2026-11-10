@@ -88,6 +88,7 @@ fun DailyNoteScreen(
     viewModel: DailyNoteViewModel = hiltViewModel(),
     modesViewModel: cloud.wafflecommons.pixelbrainreader.ui.modes.ModesViewModel = hiltViewModel(),
     guardStatus: cloud.wafflecommons.pixelbrainreader.ui.guard.GuardStatusViewModel = hiltViewModel(),
+    aiSelfTest: AiSelfTestViewModel = hiltViewModel(),
     leaveViewModel: cloud.wafflecommons.pixelbrainreader.ui.work.LeaveViewModel = hiltViewModel(),
     activityViewModel: cloud.wafflecommons.pixelbrainreader.ui.work.ActivityViewModel = hiltViewModel(),
     layoutViewModel: DailyLayoutViewModel = hiltViewModel(),
@@ -98,6 +99,7 @@ fun DailyNoteScreen(
     val sectionOrder by layoutViewModel.order.collectAsStateWithLifecycle()
     val moreExpanded by layoutViewModel.moreExpanded.collectAsStateWithLifecycle()
     val guardHeld by guardStatus.held.collectAsStateWithLifecycle()
+    val selfTest by aiSelfTest.selfTest.collectAsStateWithLifecycle()
     val readOnlyDrift by viewModel.readOnlyDrift.collectAsStateWithLifecycle()
     val leaveReturn by leaveViewModel.returning.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { leaveViewModel.loadReturn() }
@@ -357,6 +359,13 @@ fun DailyNoteScreen(
                                 held = guardHeld,
                                 onReview = onOpenConfidentiality
                             )
+                        }
+                    }
+
+                    // The on-device AI failed its latest self-test (after a download, or from Settings).
+                    selfTest?.takeIf { !it.passed }?.let { failed ->
+                        item(key = "ai-self-test", span = StaggeredGridItemSpan.FullLine) {
+                            AiSelfTestBanner(result = failed, onDetails = onNavigateToSettings)
                         }
                     }
 
