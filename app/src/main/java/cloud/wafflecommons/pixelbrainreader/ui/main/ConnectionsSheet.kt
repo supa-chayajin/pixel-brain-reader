@@ -37,6 +37,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.time.ZoneId
 import javax.inject.Inject
 
 @HiltViewModel
@@ -91,6 +92,13 @@ fun ConnectionsSheet(path: String, onOpen: (String) -> Unit, onDismiss: () -> Un
                 action = "Link" to { ref -> viewModel.link(ref, path) }
             )
             Section("Related", c.related, empty = "Nothing close enough in meaning (on-device search).", onOpen = onOpen)
+            // C15: the note's life in git, from the cached history walk.
+            Text("History", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 8.dp))
+            Text(
+                c.history?.summary(ZoneId.systemDefault()) ?: "Not in the vault's history yet: it starts with this note's first commit.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

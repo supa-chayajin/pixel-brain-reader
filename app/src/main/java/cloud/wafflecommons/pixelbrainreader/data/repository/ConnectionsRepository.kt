@@ -3,6 +3,8 @@ package cloud.wafflecommons.pixelbrainreader.data.repository
 import cloud.wafflecommons.pixelbrainreader.data.ai.VectorSearchEngine
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.FileContentDao
 import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
+import cloud.wafflecommons.pixelbrainreader.data.remote.FileHistory
+import cloud.wafflecommons.pixelbrainreader.data.remote.GitFileAges
 import cloud.wafflecommons.pixelbrainreader.data.sync.VaultPushScheduler
 import cloud.wafflecommons.pixelbrainreader.data.utils.FrontmatterManager
 import cloud.wafflecommons.pixelbrainreader.data.vault.FrontmatterLines
@@ -10,13 +12,47 @@ import cloud.wafflecommons.pixelbrainreader.data.vault.MentionFinder
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 
 data class NoteRef(val path: String, val title: String, val excerpt: String?)
 
-/** A note's connections (E2): who links to it, who names it without linking, what reads close to it. */
-data class Connections(val backlinks: List<NoteRef>, val mentions: List<NoteRef>, val related: List<NoteRef>)
+/**
+ * A note's connections (E2): who links to it, who names it without linking, what reads close to
+ * it, and its life in git (C15) — null while it has never been committed.
+ */
+data class Connections(
+    val backlinks: List<NoteRef>,
+    val mentions: List<NoteRef>,
+    val related: List<NoteRef>,
+    val history: NoteHistory? = null
+)
+
+/** A note's life in git (C15): when it first appeared, when it last changed, how many commits touched it. */
+data class NoteHistory(val firstSeen: Long, val lastChanged: Long, val commits: Int) {
+
+    /** One line for the Connections sheet, dates in [zone]. */
+    fun summary(zone: ZoneId): String {
+        val first = DATE.format(Instant.ofEpochMilli(firstSeen).atZone(zone))
+        val last = DATE.format(Instant.ofEpochMilli(lastChanged).atZone(zone))
+        val count = if (commits == 1) "1 commit" else "$commits commits"
+        return if (first == last) "Since $first · $count" else "Since $first · last changed $last · $count"
+    }
+
+    companion object {
+        private val DATE: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)
+
+        /** From the cached git walk ([GitFileAges]); null while [path] has never been committed. */
+        fun of(path: String, history: FileHistory): NoteHistory? {
+            val first = history.firstSeen[path] ?: return null
+            return NoteHistory(first, history.lastChanged[path] ?: first, history.changes[path] ?: 1)
+        }
+    }
+}
 
 @Singleton
 class ConnectionsRepository @Inject constructor(
@@ -26,7 +62,8 @@ class ConnectionsRepository @Inject constructor(
     private val vectorSearchEngine: VectorSearchEngine,
     private val modesRepository: ModesRepository,
     private val fileRepository: FileRepository,
-    private val pushScheduler: VaultPushScheduler
+    private val pushScheduler: VaultPushScheduler,
+    private val gitFileAges: GitFileAges
 ) {
 
     suspend fun connections(path: String): Connections = withContext(Dispatchers.IO) {
@@ -62,7 +99,15 @@ class ConnectionsRepository @Inject constructor(
         } catch (e: Exception) {
             emptyList()
         }
-        Connections(backlinks, mentions, related)
+        // The git walk is cached (incremental after the first one); a failure only hides the line.
+        val history = try {
+            NoteHistory.of(path, gitFileAges.history())
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        }
+        Connections(backlinks, mentions, related, history)
     }
 
     /** Turns the first unlinked mention in [mention] into a link to [path]. */
