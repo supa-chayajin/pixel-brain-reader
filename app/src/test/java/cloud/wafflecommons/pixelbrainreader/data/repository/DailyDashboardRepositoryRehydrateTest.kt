@@ -12,6 +12,9 @@ import cloud.wafflecommons.pixelbrainreader.data.local.entity.TimelineEntryEntit
 import cloud.wafflecommons.pixelbrainreader.data.utils.DailyMarkdownParser
 import cloud.wafflecommons.pixelbrainreader.data.utils.DailyHealthSection
 import cloud.wafflecommons.pixelbrainreader.data.health.DailyHealthMetrics
+import cloud.wafflecommons.pixelbrainreader.data.health.RecoveryDay
+import cloud.wafflecommons.pixelbrainreader.data.health.RecoveryHistory
+import cloud.wafflecommons.pixelbrainreader.data.health.RecoveryRepository
 import cloud.wafflecommons.pixelbrainreader.data.sync.VaultPushScheduler
 import io.mockk.Called
 import io.mockk.coEvery
@@ -91,6 +94,9 @@ class DailyDashboardRepositoryRehydrateTest {
         val healthMetricsRepository: HealthMetricsRepository = mockk {
             coEvery { getMetrics(any()) } returns null
         }
+        val recoveryRepository: RecoveryRepository = mockk {
+            coEvery { history(any(), any()) } returns RecoveryHistory(emptyList(), needsPermission = false)
+        }
         val repository = DailyDashboardRepository(
             dashboardDao = dashboardDao,
             scratchDao = scratchDao,
@@ -100,7 +106,8 @@ class DailyDashboardRepositoryRehydrateTest {
             gratitudeDao = gratitudeDao,
             widgetUpdateManager = mockk(relaxed = true),
             pushScheduler = pushScheduler,
-            healthMetricsRepository = healthMetricsRepository
+            healthMetricsRepository = healthMetricsRepository,
+            recoveryRepository = recoveryRepository
         )
     }
 
@@ -395,6 +402,23 @@ class DailyDashboardRepositoryRehydrateTest {
 
         assertEquals("Persist this note", dashSlot.captured.notesContent)
         assertEquals("Persist this idea", dashSlot.captured.ideasContent)
+    }
+
+    @Test
+    fun `the section ends with last night's recovery verdict once there is a baseline`() = runTest {
+        val h = Harness()
+        val written = stubPopulatedBurn(h)
+        coEvery { h.healthMetricsRepository.getMetrics(today) } returns todayHealth
+        // Ten usual nights, then last night just as usual.
+        val nights = (1..10).map { i ->
+            val wobble = if (i % 2 == 0) 1 else -1
+            RecoveryDay(today.minusDays(i.toLong()), restingHeartRate = 57 + wobble, hrvMs = 42.0 + 2 * wobble)
+        } + RecoveryDay(today, restingHeartRate = 57, hrvMs = 42.0)
+        coEvery { h.recoveryRepository.history(today, any()) } returns RecoveryHistory(nights, needsPermission = false)
+
+        h.repository.burnToDisk(today)
+
+        assertTrue(written.captured.trimEnd().endsWith("- Resting heart rate: 57 bpm\n- Recovery: in your usual range"))
     }
 
     @Test

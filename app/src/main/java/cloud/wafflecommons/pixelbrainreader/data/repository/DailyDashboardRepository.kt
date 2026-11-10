@@ -28,7 +28,8 @@ class DailyDashboardRepository @Inject constructor(
     private val gratitudeDao: cloud.wafflecommons.pixelbrainreader.data.local.dao.GratitudeDao,
     private val widgetUpdateManager: cloud.wafflecommons.pixelbrainreader.widget.ui.WidgetUpdateManager,
     private val pushScheduler: cloud.wafflecommons.pixelbrainreader.data.sync.VaultPushScheduler,
-    private val healthMetricsRepository: HealthMetricsRepository
+    private val healthMetricsRepository: HealthMetricsRepository,
+    private val recoveryRepository: cloud.wafflecommons.pixelbrainreader.data.health.RecoveryRepository
 ) {
 
     // --- Live Data Access (Separated Sections) ---
@@ -256,8 +257,9 @@ class DailyDashboardRepository @Inject constructor(
         // RFC 009: Gratitude Express
         val gratitudes = gratitudeDao.getGratitudesForDateOneShot(date.format(DateTimeFormatter.ISO_DATE))
         
-        // 12.11.0: the day's measured health, derived from its health file at each burn.
-        val health = DailyHealthSection.lines(healthMetricsRepository.getMetrics(date))
+        // 12.11.0: the day's measured health, derived from its health file at each burn, and last
+        // night's recovery verdict (Health Connect when it answers, else the vault's health files).
+        val health = DailyHealthSection.lines(healthMetricsRepository.getMetrics(date), recoveryReadout(date))
 
         val newContent = MarkdownBurner.burn(dashboard, timeline, tasks, activeScraps, gratitudes, frontmatter, health)
         fileRepository.saveFileLocally(path, newContent)
@@ -267,6 +269,16 @@ class DailyDashboardRepository @Inject constructor(
             pushScheduler.requestPush()
         }
     }
+
+    private suspend fun recoveryReadout(date: LocalDate): cloud.wafflecommons.pixelbrainreader.data.health.RecoveryReadout? =
+        try {
+            val nights = recoveryRepository.history(date, cloud.wafflecommons.pixelbrainreader.data.health.RecoveryMath.BASELINE_NIGHTS + 1).nights
+            cloud.wafflecommons.pixelbrainreader.data.health.RecoveryMath.readout(nights, date)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null // no verdict line: the rest of the section doesn't depend on it
+        }
 
     suspend fun performRetroactiveExport() = withContext(Dispatchers.IO) {
         val allDashboards = dashboardDao.getAllDashboards()

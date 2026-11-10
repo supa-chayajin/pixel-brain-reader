@@ -261,7 +261,14 @@ class MarkdownBurnerRoundTripTest {
     // Health section (12.11.0): derived, never in Room
     // ---------------------------------------------------------------------------------
 
-    private val healthLines = listOf("- Sleep: 7 h 12 min", "- Steps: 8,421", "- HRV: 42 ms", "- Resting heart rate: 57 bpm")
+    private val healthLines = listOf(
+        "- Sleep: 7 h 12 min",
+        "- Sleep stages: deep 1 h 05 min · REM 1 h 30 min · light 4 h 10 min",
+        "- Steps: 8,421",
+        "- HRV: 42 ms",
+        "- Resting heart rate: 57 bpm",
+        "- Recovery: in your usual range"
+    )
 
     private fun burnWithHealth(
         dash: DailyDashboardEntity = dashboard,

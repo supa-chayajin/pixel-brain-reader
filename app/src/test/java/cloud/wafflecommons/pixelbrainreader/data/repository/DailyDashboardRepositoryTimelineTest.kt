@@ -23,7 +23,8 @@ class DailyDashboardRepositoryTimelineTest {
         gratitudeDao = mockk(relaxed = true),
         widgetUpdateManager = mockk(relaxed = true),
         pushScheduler = mockk(relaxed = true),
-        healthMetricsRepository = mockk(relaxed = true)
+        healthMetricsRepository = mockk(relaxed = true),
+        recoveryRepository = mockk(relaxed = true)
     )
     private val date = LocalDate.of(2026, 10, 17)
 
