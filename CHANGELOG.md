@@ -19,6 +19,9 @@ error" (next), people & 1:1s, security watch, the workshop kit and the authorshi
   They now open like the desktop mirrors: a banner ("Worklog, written by the desktop: rewritten
   on its next run"), no Edit button, no Time Machine restore, nothing dropped into them. They stay
   listed, searched, linkable and in the project's recent notes.
+- **A project page's TODO row says which list it opens.** "Live TODO" for the list kept in the
+  vault, "Punch list (mirrored)" for a TODO a desktop script copies from a repository. It used to
+  read "Session punch list (TODO)" for both.
 
 ## [12.7.1] — 2026-11-10
 

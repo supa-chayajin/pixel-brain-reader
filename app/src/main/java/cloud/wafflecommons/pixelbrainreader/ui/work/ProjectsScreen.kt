@@ -792,7 +792,9 @@ fun ProjectScreen(
             }
             p.todoNote?.let { todo ->
                 HorizontalDivider(Modifier.padding(vertical = 6.dp))
-                NoteRow("Session punch list (TODO)", todo.updated?.let { "updated ${it.format(DAY)}" }) { onOpenNote(todo.path) }
+                // The vault-kept TODO.md is the live list; a TODO a desktop script copies from a
+                // repository is that repository's punch list, only linked (settled decision #15).
+                NoteRow(if (todo.isMirror) "Punch list (mirrored)" else "Live TODO", todo.updated?.let { "updated ${it.format(DAY)}" }) { onOpenNote(todo.path) }
             }
         }
         if (p.claudeQueue.isNotEmpty()) {
