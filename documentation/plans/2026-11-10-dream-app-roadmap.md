@@ -112,16 +112,18 @@ climbs through 12.10 (1300) and 12.18 (1380), but 13.0.0 would then come out at 
 
 ### 12.11.0 — The companion: the day
 
-- [ ] **D1 Task rollover.** Yesterday's unfinished tasks are offered on today's board (bring or
-      drop), never moved silently; identities go through `DailyMarkers` (#7).
-      *(RFC-002 "Reporter à demain"; V12 6.3.)*
+- [ ] **D1 Task rollover.** Yesterday's unfinished tasks are offered on today's board: Bring adds
+      the task to today, Dismiss is remembered on the phone. Yesterday's note is never rewritten
+      (owner, 2026-11-10), so the burn format does not change. *(RFC-002 "Reporter à demain"; V12 6.3.)*
 - [ ] **D2 Due today.** A Daily block listing objective milestones and `@moi` actions due today or
       overdue, plus the chores due; the recovery verdict joins Mood & health. It arrives in "More
       today". *(V12 6.1, the deterministic part of the morning brief.)*
-- [ ] **D3 Physio line.** At the 23:50 burn, one line goes into the day's note: sleep, steps, HRV
-      and resting heart rate ("not measured" when missing). Chat and Obsidian can then answer "why
-      was I tired last week?". It round-trips through `MarkdownBurner` and `DailyMarkdownParser`
-      (#7). Today's note stays unembedded (#3), so a day becomes searchable the day after.
+- [ ] **D3 Health section.** Each burn ends the day's note with a `## 🩺 Health` section (owner,
+      2026-11-10): sleep, steps, HRV and resting heart rate, measured values only. It is derived:
+      rewritten from the day's health file at each burn, and `DailyMarkdownParser` knows the
+      section and skips it, so nothing enters Room and the round trip holds (#7); an unknown `##`
+      would otherwise be read as the previous section's content and grow at every burn. Today's
+      note stays unembedded (#3), so a day becomes searchable the day after.
       *(RFC-006 §4 "Physio-context".)*
 
 ### 12.12.0 — The companion: meetings and the watch
