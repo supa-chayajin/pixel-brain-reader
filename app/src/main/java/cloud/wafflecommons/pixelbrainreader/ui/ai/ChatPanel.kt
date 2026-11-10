@@ -61,7 +61,7 @@ import java.time.format.DateTimeFormatter
 fun ChatPanel(
     modifier: Modifier = Modifier,
     viewModel: ChatViewModel = hiltViewModel(),
-    onInsertContent: (String) -> Unit = {},
+    onInsertContent: (text: String, sources: List<String>) -> Unit = { _, _ -> },
     onSourceClick: (String) -> Unit = {}
 ) {
     // rememberSaveable so an unsent draft survives process death (config changes are
@@ -332,7 +332,7 @@ fun BrainModeSwitch(
 @Composable
 fun ChatBubble(
     message: ChatMessage,
-    onInsert: ((String) -> Unit)?,
+    onInsert: ((text: String, sources: List<String>) -> Unit)?,
     onSourceClick: ((String) -> Unit)? = null,
     accentColor: Color
 ) {
@@ -454,7 +454,7 @@ fun ChatBubble(
             Spacer(Modifier.height(4.dp))
             @OptIn(ExperimentalLayoutApi::class)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                TextButton(onClick = { onInsert(message.content) }) {
+                TextButton(onClick = { onInsert(message.content, message.sources) }) {
                     Icon(Icons.Outlined.SaveAlt, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
                     Text("Save to Inbox")

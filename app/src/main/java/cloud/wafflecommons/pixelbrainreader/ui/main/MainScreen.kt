@@ -1327,10 +1327,7 @@ fun MainScreen(
                 ) { padding ->
                     Box(modifier = Modifier.padding(padding)) {
                          cloud.wafflecommons.pixelbrainreader.ui.ai.ChatPanel(
-                            onInsertContent = { text ->
-                                android.util.Log.d("PixelBrain", "ChatPanel onInsertContent triggered. Saving to Inbox.")
-                                viewModel.saveChatToInbox(text)
-                            },
+                            onInsertContent = { text, sources -> viewModel.saveChatToInbox(text, sources) },
                             onSourceClick = { path -> viewModel.openVaultFile(path) }
                         )
                     }

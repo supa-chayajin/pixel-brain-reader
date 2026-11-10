@@ -30,6 +30,7 @@ import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
 import cloud.wafflecommons.pixelbrainreader.data.modes.Visibility
 import cloud.wafflecommons.pixelbrainreader.data.utils.TemplateEngine
 import cloud.wafflecommons.pixelbrainreader.data.vault.MirrorNotes
+import cloud.wafflecommons.pixelbrainreader.data.ai.SavedAnswer
 import cloud.wafflecommons.pixelbrainreader.data.vault.VaultSchema
 import cloud.wafflecommons.pixelbrainreader.di.ApplicationScope
 import cloud.wafflecommons.pixelbrainreader.ui.components.SaveState
@@ -1109,7 +1110,8 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    fun saveChatToInbox(content: String) {
+    /** A chat answer as an inbox note, with the notes the model saw as a `## Sources` section (E13). */
+    fun saveChatToInbox(content: String, sources: List<String> = emptyList()) {
         if (VaultWriteGate.refuses()) return
         viewModelScope.launch {
             val folderName = "00_Inbox"
@@ -1119,7 +1121,7 @@ class MainViewModel @Inject constructor(
             val path = "$folderName/AI_Note_$timestamp.md"
             val title = "AI note " + SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.ROOT).format(Date())
             val note = VaultSchema.frontmatter(title = title, path = path, date = LocalDate.now(), tags = listOf("inbox", "ai")) +
-                "\n# $title\n\n" + content.trim() + "\n"
+                "\n# $title\n\n" + content.trim() + "\n" + SavedAnswer.sourcesSection(sources)
             repository.saveFileLocally(path, note)
             pushScheduler.requestPush()
             _userMessage.value = "Saved to $folderName"
