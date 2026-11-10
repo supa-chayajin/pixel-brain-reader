@@ -1434,7 +1434,8 @@ fun MainScreen(
                     onOpenConfidentiality = { navController.navigate(V11Routes.CONFIDENTIALITY) },
                     onOpenWork = { navController.navigate(V11Routes.WORK_HUB) },
                     onOpenActivity = { navController.navigate(V11Routes.ACTIVITY) },
-                    onOpenProject = { root -> navController.navigate(V11Routes.project(root)) }
+                    onOpenProject = { root -> navController.navigate(V11Routes.project(root)) },
+                    onOpenChores = { navigateToTab(Screen.HomeOS) }
                 )
             }
             

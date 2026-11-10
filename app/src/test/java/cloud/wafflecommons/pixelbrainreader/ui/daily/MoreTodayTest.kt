@@ -23,6 +23,15 @@ class MoreTodayTest {
     }
 
     @Test
+    fun `what is due counts in the fold it arrives in`() {
+        val withDue = moreTodaySummary(
+            fold = setOf(DailySection.DUE, DailySection.MANTRA), moments = 0, tasks = 0, gratitude = 0,
+            echoes = 0, scraps = 0, hasIdeas = false, countdowns = 0, due = 3
+        )
+        assertEquals("3 due", withDue)
+    }
+
+    @Test
     fun `an empty fold still says what it holds`() {
         assertEquals("Gratitude, ideas, mantra and more", summary(setOf(DailySection.MANTRA, DailySection.SCRATCHPAD)))
     }

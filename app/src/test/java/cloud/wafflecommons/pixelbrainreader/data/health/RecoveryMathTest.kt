@@ -138,4 +138,14 @@ class RecoveryMathTest {
         assertEquals(listOf(night.minusDays(1), night), merged.map { it.date })
         assertEquals(RecoveryDay(night, restingHeartRate = 50, hrvMs = 42.0, sleepMinutes = 400), merged.last())
     }
+
+    @Test
+    fun `the verdict is given only once there is one`() {
+        fun readout(status: RecoveryStatus) = RecoveryReadout(null, null, null, null, status)
+        assertEquals("In your usual range", readout(RecoveryStatus.IN_RANGE).verdict)
+        assertEquals("Below your usual recovery", readout(RecoveryStatus.STRAINED).verdict)
+        assertEquals("Better recovered than usual", readout(RecoveryStatus.RESTED).verdict)
+        assertEquals(null, readout(RecoveryStatus.NO_DATA).verdict)
+        assertEquals(null, readout(RecoveryStatus.BUILDING_BASELINE).verdict)
+    }
 }

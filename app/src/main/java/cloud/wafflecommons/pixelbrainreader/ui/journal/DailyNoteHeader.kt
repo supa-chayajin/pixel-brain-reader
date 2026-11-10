@@ -33,6 +33,8 @@ fun DailyNoteHeader(
     modifier: Modifier = Modifier,
     healthMetrics: DailyHealthMetrics? = null,
     moodTrend: List<DailyMoodPoint> = emptyList(),
+    /** Last night's recovery against the usual (12.11.0); null when there is no verdict to give. */
+    recovery: String? = null,
     /** Space above and below the card; the two-column Daily screen sets 0 so its top lines up with its neighbour's. */
     verticalMargin: Dp = 8.dp
 ) {
@@ -148,6 +150,17 @@ fun DailyNoteHeader(
                         }
                     }
                 }
+            }
+
+            if (recovery != null) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "Recovery · $recovery",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
 
             Column {

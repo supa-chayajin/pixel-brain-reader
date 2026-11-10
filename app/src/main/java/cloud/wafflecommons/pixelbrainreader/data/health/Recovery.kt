@@ -99,6 +99,15 @@ data class RecoveryReadout(
             val rhr = night?.restingHeartRate ?: return null
             return rhr - (restingBaseline?.mean ?: return null)
         }
+
+    /** The verdict in a few words (Daily's Mood & health), or null while there is none to give. */
+    val verdict: String?
+        get() = when (status) {
+            RecoveryStatus.IN_RANGE -> "In your usual range"
+            RecoveryStatus.STRAINED -> "Below your usual recovery"
+            RecoveryStatus.RESTED -> "Better recovered than usual"
+            RecoveryStatus.NO_DATA, RecoveryStatus.BUILDING_BASELINE -> null
+        }
 }
 
 object RecoveryMath {

@@ -85,6 +85,7 @@ fun DailyNoteScreen(
     onOpenWork: () -> Unit = {},
     onOpenActivity: () -> Unit = {},
     onOpenProject: (String) -> Unit = {},
+    onOpenChores: () -> Unit = {},
     viewModel: DailyNoteViewModel = hiltViewModel(),
     modesViewModel: cloud.wafflecommons.pixelbrainreader.ui.modes.ModesViewModel = hiltViewModel(),
     guardStatus: cloud.wafflecommons.pixelbrainreader.ui.guard.GuardStatusViewModel = hiltViewModel(),
@@ -93,7 +94,9 @@ fun DailyNoteScreen(
     activityViewModel: cloud.wafflecommons.pixelbrainreader.ui.work.ActivityViewModel = hiltViewModel(),
     layoutViewModel: DailyLayoutViewModel = hiltViewModel(),
     projectsViewModel: DailyProjectsViewModel = hiltViewModel(),
-    rolloverViewModel: TaskRolloverViewModel = hiltViewModel()
+    rolloverViewModel: TaskRolloverViewModel = hiltViewModel(),
+    dueTodayViewModel: DueTodayViewModel = hiltViewModel(),
+    recoveryViewModel: cloud.wafflecommons.pixelbrainreader.ui.lifestats.RecoveryViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val shownSections by layoutViewModel.shown.collectAsStateWithLifecycle()
@@ -110,6 +113,9 @@ fun DailyNoteScreen(
     LaunchedEffect(Unit) { projectsViewModel.reload() }
     val syncDigest by activityViewModel.digest.collectAsStateWithLifecycle()
     val rolloverOffer by rolloverViewModel.offer.collectAsStateWithLifecycle()
+    val dueToday by dueTodayViewModel.due.collectAsStateWithLifecycle()
+    // Only today's page lists what is due today.
+    val dueItems = dueToday?.takeIf { it.first == state.date }?.second.orEmpty()
     val visibility by modesViewModel.visibility.collectAsStateWithLifecycle()
     val countdowns by modesViewModel.countdowns.collectAsStateWithLifecycle()
     var showModeSheet by remember { mutableStateOf(false) }
@@ -406,6 +412,7 @@ fun DailyNoteScreen(
                             DailySection.ECHOES -> memoryEchoes.isNotEmpty()
                             DailySection.SCRATCHPAD -> state.scratchNotes.isNotEmpty()
                             DailySection.PROJECTS -> dailyProjects.isNotEmpty()
+                            DailySection.DUE -> dueItems.isNotEmpty()
                             else -> true
                         }
                     }
@@ -425,12 +432,15 @@ fun DailyNoteScreen(
                                     val lastUpdate = remember(moodData) { moodData?.entries?.firstOrNull()?.time }
                                     // Screen-share safe: no mood or health figures on screen.
                                     val hideHealth = visibility.hideHealth
+                                    val recovery by recoveryViewModel.state.collectAsStateWithLifecycle()
                                     DailyNoteHeader(
                                         emoji = if (hideHealth) null else moodData?.summary?.mainEmoji,
                                         lastUpdate = if (hideHealth) null else lastUpdate,
                                         topDailyTags = if (hideHealth) emptyList() else state.topDailyTags,
                                         healthMetrics = if (hideHealth) null else state.healthMetrics,
                                         moodTrend = if (hideHealth) emptyList() else state.moodTrend,
+                                        // Last night's verdict, on today's page only.
+                                        recovery = recovery.readout?.verdict?.takeIf { !hideHealth && state.date == recovery.readout?.night?.date },
                                         // Beside another block, its top lines up with that block's.
                                         verticalMargin = if (twoColumns) 0.dp else 8.dp
                                     )
@@ -515,6 +525,17 @@ fun DailyNoteScreen(
                                     )
                                 }
                             }
+                            DailySection.DUE -> item(key = "due") {
+                                cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = index) {
+                                    DueTodaySection(
+                                        items = dueItems,
+                                        today = state.date,
+                                        onOpenNote = onOpenNote,
+                                        onOpenChores = onOpenChores,
+                                        modifier = Modifier.padding(bottom = 16.dp)
+                                    )
+                                }
+                            }
                             DailySection.SCRATCHPAD -> item(key = "scratchpad") {
                                 cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = index) {
                                     ScratchpadWidget(
@@ -580,7 +601,8 @@ fun DailyNoteScreen(
                                     scraps = state.scratchNotes.size,
                                     hasIdeas = viewModel.ideasText.isNotBlank() || viewModel.notesText.isNotBlank(),
                                     countdowns = countdowns.size,
-                                    projects = dailyProjects.size
+                                    projects = dailyProjects.size,
+                                    due = dueItems.size
                                 ),
                                 expanded = moreExpanded,
                                 onToggle = { layoutViewModel.setMoreExpanded(!moreExpanded) }

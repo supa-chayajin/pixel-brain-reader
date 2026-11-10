@@ -17,7 +17,10 @@ enum class DailySection(val key: String, val label: String, val description: Str
     MANTRA("mantra", "Mantra", "The line of the day"),
     ECHOES("echoes", "Memory echoes", "Older notes worth a second look"),
     SECOND_BRAIN("second_brain", "Ideas & notes", "The day's free-form ideas and notes"),
-    SCRATCHPAD("scratchpad", "Scratchpad", "Quick scraps waiting to be filed");
+    SCRATCHPAD("scratchpad", "Scratchpad", "Quick scraps waiting to be filed"),
+    // 12.11.0. Added by an update, so it joins a saved order at its end and stays in "More today"
+    // until the owner places it. Never rename a key: it is persisted.
+    DUE("due", "Due today", "Objective milestones, your @moi actions and the chores due today or overdue");
 
     companion object {
         /** Shown by default: what a busy day needs at a glance. Everything else is in the fold. */

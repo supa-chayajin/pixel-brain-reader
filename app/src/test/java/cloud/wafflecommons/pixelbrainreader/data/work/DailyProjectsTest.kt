@@ -36,7 +36,8 @@ class DailyProjectsTest {
     fun `the Projects block joins a saved order at its end, outside the shown set`() {
         // An install that ordered and chose its blocks before the Projects block existed.
         val order = DailySection.orderFromKeys("tasks,weather,vitals,timeline,gratitude,countdowns,mantra,echoes,second_brain,scratchpad")
-        assertEquals(DailySection.PROJECTS, order.last())
+        // The blocks added since (Projects in 12.8.0, Due today in 12.11.0) follow the saved ones, in their default order.
+        assertEquals(listOf(DailySection.PROJECTS, DailySection.DUE), order.takeLast(2))
         assertEquals(DailySection.TASKS, order.first())
         assertEquals(false, DailySection.PROJECTS in DailySection.fromKeys(setOf("tasks", "weather")))
     }
