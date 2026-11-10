@@ -1,6 +1,7 @@
 package cloud.wafflecommons.pixelbrainreader.data.device
 
 import java.io.IOException
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runCurrent
@@ -13,6 +14,7 @@ import org.junit.Assert.fail
 import org.junit.Test
 
 /** The read-only device's one switch (VaultWriteGate) and the login's repository match (LocalCopyReset). */
+@OptIn(ExperimentalCoroutinesApi::class) // UnconfinedTestDispatcher, runCurrent
 class VaultWriteGateTest {
 
     @After
