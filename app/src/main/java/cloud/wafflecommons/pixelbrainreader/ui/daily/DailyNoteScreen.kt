@@ -92,7 +92,8 @@ fun DailyNoteScreen(
     leaveViewModel: cloud.wafflecommons.pixelbrainreader.ui.work.LeaveViewModel = hiltViewModel(),
     activityViewModel: cloud.wafflecommons.pixelbrainreader.ui.work.ActivityViewModel = hiltViewModel(),
     layoutViewModel: DailyLayoutViewModel = hiltViewModel(),
-    projectsViewModel: DailyProjectsViewModel = hiltViewModel()
+    projectsViewModel: DailyProjectsViewModel = hiltViewModel(),
+    rolloverViewModel: TaskRolloverViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val shownSections by layoutViewModel.shown.collectAsStateWithLifecycle()
@@ -108,6 +109,7 @@ fun DailyNoteScreen(
     val projectsPinned by projectsViewModel.isPinned.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { projectsViewModel.reload() }
     val syncDigest by activityViewModel.digest.collectAsStateWithLifecycle()
+    val rolloverOffer by rolloverViewModel.offer.collectAsStateWithLifecycle()
     val visibility by modesViewModel.visibility.collectAsStateWithLifecycle()
     val countdowns by modesViewModel.countdowns.collectAsStateWithLifecycle()
     var showModeSheet by remember { mutableStateOf(false) }
@@ -380,6 +382,20 @@ fun DailyNoteScreen(
                     if (leaveReturn != null && !visibility.hideWork) {
                         item(key = "back-from-leave", span = StaggeredGridItemSpan.FullLine) {
                             cloud.wafflecommons.pixelbrainreader.ui.work.BackFromLeaveCard(onOpenNote = onOpenNote, viewModel = leaveViewModel)
+                        }
+                    }
+
+                    // An earlier day's unfinished tasks, offered on today's page only (12.11.0): Bring adds one
+                    // to today's board, Dismiss forgets it on this phone. The earlier note is never rewritten.
+                    rolloverOffer?.takeIf { it.to == state.date && !VaultWriteGate.readOnly }?.let { offer ->
+                        item(key = "rollover", span = StaggeredGridItemSpan.FullLine) {
+                            TaskRolloverCard(
+                                offer = offer,
+                                onBring = rolloverViewModel::bring,
+                                onDismiss = rolloverViewModel::dismiss,
+                                onBringAll = { rolloverViewModel.bringAll() },
+                                onDismissAll = { rolloverViewModel.dismissAll() }
+                            )
                         }
                     }
 

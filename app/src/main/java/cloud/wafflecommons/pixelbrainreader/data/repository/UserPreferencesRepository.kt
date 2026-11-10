@@ -264,6 +264,21 @@ class UserPreferencesRepository @Inject constructor(
         context.dataStore.edit { it[KEY_CHECKIN_TIME] = hhmm }
     }
 
+    // --- Task rollover (12.11.0): the earlier days' tasks brought or dismissed on this phone ---
+    private val KEY_ROLLOVER_HANDLED = androidx.datastore.preferences.core.stringSetPreferencesKey("rollover_handled")
+
+    /** Keys from [cloud.wafflecommons.pixelbrainreader.data.daily.TaskRollover.key]; device-only. */
+    val rolloverHandled: Flow<Set<String>> = setting { it[KEY_ROLLOVER_HANDLED] ?: emptySet() }
+
+    /** Adds [keys] and drops the ones too old to be offered again, in one edit. */
+    suspend fun markRolloverHandled(keys: Collection<String>, today: java.time.LocalDate) {
+        context.dataStore.edit { prefs ->
+            val current = prefs[KEY_ROLLOVER_HANDLED] ?: emptySet()
+            prefs[KEY_ROLLOVER_HANDLED] =
+                cloud.wafflecommons.pixelbrainreader.data.daily.TaskRollover.prune(current + keys, today)
+        }
+    }
+
     // --- Simpler screens (v12): what the Daily screen shows, the fold, pinned tools ---
     private val KEY_DAILY_SHOWN = androidx.datastore.preferences.core.stringSetPreferencesKey("daily_shown_sections")
     private val KEY_DAILY_MORE_EXPANDED = booleanPreferencesKey("daily_more_expanded")
