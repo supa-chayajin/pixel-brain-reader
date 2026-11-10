@@ -1435,7 +1435,8 @@ fun MainScreen(
                     onOpenModesSettings = { navController.navigate(V11Routes.MODES_SETTINGS) },
                     onOpenConfidentiality = { navController.navigate(V11Routes.CONFIDENTIALITY) },
                     onOpenWork = { navController.navigate(V11Routes.WORK_HUB) },
-                    onOpenActivity = { navController.navigate(V11Routes.ACTIVITY) }
+                    onOpenActivity = { navController.navigate(V11Routes.ACTIVITY) },
+                    onOpenProject = { root -> navController.navigate(V11Routes.project(root)) }
                 )
             }
             

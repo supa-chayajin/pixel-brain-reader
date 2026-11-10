@@ -4,6 +4,7 @@ import cloud.wafflecommons.pixelbrainreader.data.model.DailySection.COUNTDOWNS
 import cloud.wafflecommons.pixelbrainreader.data.model.DailySection.ECHOES
 import cloud.wafflecommons.pixelbrainreader.data.model.DailySection.GRATITUDE
 import cloud.wafflecommons.pixelbrainreader.data.model.DailySection.MANTRA
+import cloud.wafflecommons.pixelbrainreader.data.model.DailySection.PROJECTS
 import cloud.wafflecommons.pixelbrainreader.data.model.DailySection.SCRATCHPAD
 import cloud.wafflecommons.pixelbrainreader.data.model.DailySection.SECOND_BRAIN
 import cloud.wafflecommons.pixelbrainreader.data.model.DailySection.TASKS
@@ -39,17 +40,17 @@ class DailySectionTest {
     @Test
     fun `a move skips the blocks of the other group`() {
         val shown = DailySection.DEFAULT_SHOWN + MANTRA
-        // Mantra is after Gratitude and Countdowns (folded): up swaps it with Timeline, the last shown block.
+        // Mantra is after Projects, Gratitude and Countdowns (folded): up swaps it with Timeline, the last shown block.
         val moved = DailySection.moved(default, shown, MANTRA, up = true)
         assertEquals(listOf(WEATHER, VITALS, TASKS, MANTRA, TIMELINE), moved.filter { it in shown })
-        assertEquals(listOf(GRATITUDE, COUNTDOWNS, ECHOES, SECOND_BRAIN, SCRATCHPAD), moved.filter { it !in shown })
+        assertEquals(listOf(PROJECTS, GRATITUDE, COUNTDOWNS, ECHOES, SECOND_BRAIN, SCRATCHPAD), moved.filter { it !in shown })
     }
 
     @Test
     fun `folded blocks move among themselves`() {
         val shown = DailySection.DEFAULT_SHOWN
         val moved = DailySection.moved(default, shown, COUNTDOWNS, up = true)
-        assertEquals(listOf(COUNTDOWNS, GRATITUDE, MANTRA, ECHOES, SECOND_BRAIN, SCRATCHPAD), moved.filter { it !in shown })
+        assertEquals(listOf(PROJECTS, COUNTDOWNS, GRATITUDE, MANTRA, ECHOES, SECOND_BRAIN, SCRATCHPAD), moved.filter { it !in shown })
         assertEquals(listOf(WEATHER, VITALS, TASKS, TIMELINE), moved.filter { it in shown })
     }
 
@@ -60,6 +61,7 @@ class DailySectionTest {
         // Timeline is the last block on screen: the folded blocks after it don't count.
         assertEquals(default, DailySection.moved(default, shown, TIMELINE, up = false))
         assertEquals(default, DailySection.moved(default, shown, SCRATCHPAD, up = false))
-        assertEquals(default, DailySection.moved(default, shown, GRATITUDE, up = true))
+        // Projects (12.8.0) is the first folded block by default.
+        assertEquals(default, DailySection.moved(default, shown, PROJECTS, up = true))
     }
 }

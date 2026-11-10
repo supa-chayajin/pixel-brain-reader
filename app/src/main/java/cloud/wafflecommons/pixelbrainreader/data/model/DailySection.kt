@@ -11,6 +11,7 @@ enum class DailySection(val key: String, val label: String, val description: Str
     VITALS("vitals", "Mood & health", "Today's mood, tags and health figures"),
     TASKS("tasks", "Tasks", "Today's to-dos"),
     TIMELINE("timeline", "Timeline", "What happened today, hour by hour"),
+    PROJECTS("projects", "Projects", "A card per pinned project: its next action, Claude's queue, the last 14 days"),
     GRATITUDE("gratitude", "Gratitude", "Three good things"),
     COUNTDOWNS("countdowns", "Countdowns", "Key dates coming up"),
     MANTRA("mantra", "Mantra", "The line of the day"),

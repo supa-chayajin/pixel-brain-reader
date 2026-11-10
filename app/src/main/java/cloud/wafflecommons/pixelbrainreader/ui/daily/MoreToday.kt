@@ -32,7 +32,8 @@ internal fun moreTodaySummary(
     echoes: Int,
     scraps: Int,
     hasIdeas: Boolean,
-    countdowns: Int
+    countdowns: Int,
+    projects: Int = 0
 ): String {
     val parts = buildList {
         if (DailySection.TASKS in fold && tasks > 0) add(plural(tasks, "task"))
@@ -42,6 +43,7 @@ internal fun moreTodaySummary(
         if (DailySection.SCRATCHPAD in fold && scraps > 0) add(plural(scraps, "scrap"))
         if (DailySection.ECHOES in fold && echoes > 0) add(plural(echoes, "echo", "echoes"))
         if (DailySection.COUNTDOWNS in fold && countdowns > 0) add(plural(countdowns, "countdown"))
+        if (DailySection.PROJECTS in fold && projects > 0) add(plural(projects, "project"))
     }
     return if (parts.isEmpty()) "Gratitude, ideas, mantra and more" else parts.joinToString(" · ")
 }

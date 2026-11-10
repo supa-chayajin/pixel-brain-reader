@@ -10,6 +10,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Still planned (`documentation/plans/2026-10-18-v11-work-and-dev-toolkit.md`): "explain this
 error" (next), people & 1:1s, security watch, the workshop kit and the authorship timeline.
 
+## [12.8.0] — 2026-11-10
+
+### Added
+
+- **Projects on the Daily screen.** A new Projects block shows a card per project: its name,
+  its last 14 days ("3 commits · active today"), its next action and how many lines wait in
+  Claude's queue. A tap opens the project's page. The cards are your pinned projects, in their
+  order: pin, unpin and move them in the Projects tab (the tune button), up to six. With none
+  pinned, the three most recently active show, and the block says how to choose. The block
+  moves and folds like the others in Settings → Daily screen; it starts in "More today",
+  where the fold's summary counts it, so your arrangement stays as it was until you place it.
+
 ## [12.7.2] — 2026-11-10
 
 ### Changed

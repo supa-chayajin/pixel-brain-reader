@@ -84,12 +84,14 @@ fun DailyNoteScreen(
     onOpenConfidentiality: () -> Unit = {},
     onOpenWork: () -> Unit = {},
     onOpenActivity: () -> Unit = {},
+    onOpenProject: (String) -> Unit = {},
     viewModel: DailyNoteViewModel = hiltViewModel(),
     modesViewModel: cloud.wafflecommons.pixelbrainreader.ui.modes.ModesViewModel = hiltViewModel(),
     guardStatus: cloud.wafflecommons.pixelbrainreader.ui.guard.GuardStatusViewModel = hiltViewModel(),
     leaveViewModel: cloud.wafflecommons.pixelbrainreader.ui.work.LeaveViewModel = hiltViewModel(),
     activityViewModel: cloud.wafflecommons.pixelbrainreader.ui.work.ActivityViewModel = hiltViewModel(),
-    layoutViewModel: DailyLayoutViewModel = hiltViewModel()
+    layoutViewModel: DailyLayoutViewModel = hiltViewModel(),
+    projectsViewModel: DailyProjectsViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val shownSections by layoutViewModel.shown.collectAsStateWithLifecycle()
@@ -99,6 +101,10 @@ fun DailyNoteScreen(
     val readOnlyDrift by viewModel.readOnlyDrift.collectAsStateWithLifecycle()
     val leaveReturn by leaveViewModel.returning.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { leaveViewModel.loadReturn() }
+    // The Projects block: read each time Daily shows, so a pin or a sync made meanwhile is there.
+    val dailyProjects by projectsViewModel.projects.collectAsStateWithLifecycle()
+    val projectsPinned by projectsViewModel.isPinned.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { projectsViewModel.reload() }
     val syncDigest by activityViewModel.digest.collectAsStateWithLifecycle()
     val visibility by modesViewModel.visibility.collectAsStateWithLifecycle()
     val countdowns by modesViewModel.countdowns.collectAsStateWithLifecycle()
@@ -374,6 +380,7 @@ fun DailyNoteScreen(
                             DailySection.COUNTDOWNS -> countdowns.isNotEmpty()
                             DailySection.ECHOES -> memoryEchoes.isNotEmpty()
                             DailySection.SCRATCHPAD -> state.scratchNotes.isNotEmpty()
+                            DailySection.PROJECTS -> dailyProjects.isNotEmpty()
                             else -> true
                         }
                     }
@@ -473,6 +480,16 @@ fun DailyNoteScreen(
                                     )
                                 }
                             }
+                            DailySection.PROJECTS -> item(key = "projects") {
+                                cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = index) {
+                                    DailyProjectsSection(
+                                        projects = dailyProjects,
+                                        isPinned = projectsPinned,
+                                        onOpenProject = onOpenProject,
+                                        modifier = Modifier.padding(bottom = 16.dp)
+                                    )
+                                }
+                            }
                             DailySection.SCRATCHPAD -> item(key = "scratchpad") {
                                 cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = index) {
                                     ScratchpadWidget(
@@ -537,7 +554,8 @@ fun DailyNoteScreen(
                                     echoes = memoryEchoes.size,
                                     scraps = state.scratchNotes.size,
                                     hasIdeas = viewModel.ideasText.isNotBlank() || viewModel.notesText.isNotBlank(),
-                                    countdowns = countdowns.size
+                                    countdowns = countdowns.size,
+                                    projects = dailyProjects.size
                                 ),
                                 expanded = moreExpanded,
                                 onToggle = { layoutViewModel.setMoreExpanded(!moreExpanded) }
