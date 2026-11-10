@@ -22,15 +22,16 @@ The companion's day: what was left unfinished, what is due today, and the day's 
   Dismiss forgets it, and Bring all / Dismiss all handle the lot. The earlier note is never
   changed, Google tasks stay with the Google import, and your choices stay on the phone.
 - **Due today**, a new Daily block: objective milestones and your `@moi` actions due today or
-  overdue, and the chores past their frequency, the most overdue first. A tap opens the note or
-  Chores. It starts in "More today" (Settings → Daily screen places it), and work notes stay
-  hidden outside Work mode.
+  overdue, the most overdue first, then the chores past their frequency in one line ("6 chores
+  due" and their rooms). A tap opens the note or Chores. It starts in "More today" (Settings →
+  Daily screen places it), and work notes stay hidden outside Work mode.
 - **Recovery in Mood & health:** last night against your usual ("In your usual range", "Below
   your usual recovery", "Better recovered than usual"), once the baseline is built.
-- **The day's health in its note.** Each daily note now ends with a `🩺 Health` section: sleep,
-  steps, HRV and resting heart rate, only what was measured. It is rewritten from the day's
-  health file each time the day is saved and never read back into the board. A change in these
-  lines alone sends no commit of its own: they go up with the next one.
+- **The day's health in its note.** Each daily note now ends with a `🩺 Health` section: sleep
+  and its stages, steps, HRV and resting heart rate, only what was measured, then last night's
+  recovery verdict. It is rewritten from the day's health data each time the day is saved and
+  never read back into the board. A change in these lines alone sends no commit of its own: they
+  go up with the next one.
 
 ## [12.10.0] — 2026-11-10
 
