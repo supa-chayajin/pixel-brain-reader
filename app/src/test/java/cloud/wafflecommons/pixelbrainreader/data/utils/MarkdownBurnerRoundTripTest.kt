@@ -257,6 +257,83 @@ class MarkdownBurnerRoundTripTest {
         assertEquals(burn1, burn2)
     }
 
+    // ---------------------------------------------------------------------------------
+    // Health section (12.11.0): derived, never in Room
+    // ---------------------------------------------------------------------------------
+
+    private val healthLines = listOf("- Sleep: 7 h 12 min", "- Steps: 8,421", "- HRV: 42 ms", "- Resting heart rate: 57 bpm")
+
+    private fun burnWithHealth(
+        dash: DailyDashboardEntity = dashboard,
+        scrapList: List<ScratchNoteEntity> = scraps,
+        gratitudeList: List<GratitudeEntity> = gratitudes,
+        health: List<String> = healthLines
+    ): String = MarkdownBurner.burn(dash, timeline, tasks, scrapList, gratitudeList, "", health)
+
+    @Test
+    fun `the health section ends the note and nothing of it enters the board`() {
+        val md = burnWithHealth()
+        assertTrue(md.endsWith("\n${DailyHealthSection.HEADING}\n\n" + healthLines.joinToString("\n") + "\n"))
+
+        val withHealth = DailyMarkdownParser.parse(date, md)
+        val without = DailyMarkdownParser.parse(date, burnMaximal())
+        assertEquals(boardOf(without), boardOf(withHealth))
+    }
+
+    /** What a parse puts in Room, without the entities' random ids. */
+    private fun boardOf(parsed: DailyMarkdownParser.ParsedDaily): List<Any?> = listOf(
+        parsed.timeline.map { Triple(it.time, it.content, it.googleEventId) },
+        parsed.tasks.map { listOf(it.label, it.isDone, it.priority, it.scheduledTime, it.googleTaskId, it.source) },
+        parsed.ideas, parsed.notes, parsed.scraps, parsed.gratitude, parsed.mantra
+    )
+
+    @Test
+    fun `burn parse burn with a health section is byte-identical`() {
+        // Notes last on screen too: no scraps nor gratitude between Notes and Health.
+        listOf(burnWithHealth(), burnWithHealth(scrapList = emptyList(), gratitudeList = emptyList())).forEach { burn1 ->
+            val parsed = DailyMarkdownParser.parse(date, burn1)
+            val dashboard2 = DailyDashboardEntity(date = date, ideasContent = parsed.ideas, notesContent = parsed.notes)
+            val burn2 = MarkdownBurner.burn(
+                dashboard2, parsed.timeline, parsed.tasks,
+                parsed.scraps.map { ScratchNoteEntity(content = it) },
+                parsed.gratitude.map { GratitudeEntity(date = dateStr, content = it) },
+                "", healthLines
+            )
+            assertEquals(burn1, burn2)
+        }
+    }
+
+    @Test
+    fun `the health section is rewritten, never stacked`() {
+        val first = burnWithHealth()
+        val parsed = DailyMarkdownParser.parse(date, first)
+        val dashboard2 = DailyDashboardEntity(date = date, ideasContent = parsed.ideas, notesContent = parsed.notes)
+        val later = MarkdownBurner.burn(
+            dashboard2, parsed.timeline, parsed.tasks,
+            parsed.scraps.map { ScratchNoteEntity(content = it) },
+            parsed.gratitude.map { GratitudeEntity(date = dateStr, content = it) },
+            "", listOf("- Steps: 9,900")
+        )
+        assertEquals(1, Regex(Regex.escape(DailyHealthSection.HEADING)).findAll(later).count())
+        assertFalse(later.contains("8,421"))
+        assertTrue(later.contains("- Steps: 9,900"))
+    }
+
+    @Test
+    fun `a user's own Health heading inside Notes stays in Notes`() {
+        val notes = "Morning walk\n\n## Health\n\n- Steps: 8,000\nFelt fine"
+        val md = burnWithHealth(dash = dashboard.copy(notesContent = notes))
+        assertEquals(notes, DailyMarkdownParser.parse(date, md).notes)
+    }
+
+    @Test
+    fun `a line added after the health section moves into Notes instead of being lost`() {
+        val md = burnWithHealth(scrapList = emptyList(), gratitudeList = emptyList()) + "\nEvening thought\n## Later\nMore\n"
+        val parsed = DailyMarkdownParser.parse(date, md)
+        assertEquals(dashboard.notesContent + "\n\nEvening thought\n## Later\nMore", parsed.notes)
+        assertFalse(parsed.notes.contains("Steps"))
+    }
+
     @Test
     fun `burn parse burn is idempotent for an empty board too`() {
         val emptyDash = DailyDashboardEntity(date = date)

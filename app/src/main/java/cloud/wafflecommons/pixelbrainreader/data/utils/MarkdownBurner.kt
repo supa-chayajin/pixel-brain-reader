@@ -30,7 +30,8 @@ object MarkdownBurner {
         tasks: List<DailyTaskEntity>,
         scratchNotes: List<cloud.wafflecommons.pixelbrainreader.data.local.entity.ScratchNoteEntity> = emptyList(),
         gratitudes: List<cloud.wafflecommons.pixelbrainreader.data.local.entity.GratitudeEntity> = emptyList(),
-        existingFrontmatter: String = "" 
+        existingFrontmatter: String = "",
+        health: List<String> = emptyList()
     ): String {
         val sb = StringBuilder()
 
@@ -128,6 +129,12 @@ object MarkdownBurner {
             gratitudes.forEach { entry ->
                 sb.append("- [x] ${singleLine(entry.content)}\n")
             }
+        }
+
+        // 10. Health (12.11.0): derived from the day's health file, skipped by the parser.
+        if (health.isNotEmpty()) {
+            sb.append("\n${DailyHealthSection.HEADING}\n\n")
+            health.forEach { sb.append(it).append("\n") }
         }
 
         return sb.toString()

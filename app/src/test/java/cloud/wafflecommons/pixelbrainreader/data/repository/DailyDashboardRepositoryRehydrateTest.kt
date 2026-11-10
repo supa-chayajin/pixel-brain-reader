@@ -10,6 +10,9 @@ import cloud.wafflecommons.pixelbrainreader.data.local.entity.GratitudeEntity
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.ScratchNoteEntity
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.TimelineEntryEntity
 import cloud.wafflecommons.pixelbrainreader.data.utils.DailyMarkdownParser
+import cloud.wafflecommons.pixelbrainreader.data.utils.DailyHealthSection
+import cloud.wafflecommons.pixelbrainreader.data.health.DailyHealthMetrics
+import cloud.wafflecommons.pixelbrainreader.data.sync.VaultPushScheduler
 import io.mockk.Called
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -84,6 +87,10 @@ class DailyDashboardRepositoryRehydrateTest {
         val scratchDao: ScratchDao = mockk()
         val fileRepository: FileRepository = mockk()
         val gratitudeDao: GratitudeDao = mockk()
+        val pushScheduler: VaultPushScheduler = mockk(relaxed = true)
+        val healthMetricsRepository: HealthMetricsRepository = mockk {
+            coEvery { getMetrics(any()) } returns null
+        }
         val repository = DailyDashboardRepository(
             dashboardDao = dashboardDao,
             scratchDao = scratchDao,
@@ -92,7 +99,8 @@ class DailyDashboardRepositoryRehydrateTest {
             weatherRepository = mockk<WeatherRepository>(relaxed = true),
             gratitudeDao = gratitudeDao,
             widgetUpdateManager = mockk(relaxed = true),
-            pushScheduler = mockk(relaxed = true)
+            pushScheduler = pushScheduler,
+            healthMetricsRepository = healthMetricsRepository
         )
     }
 
@@ -353,5 +361,71 @@ class DailyDashboardRepositoryRehydrateTest {
         assertEquals(p1.notes, p2.notes)
         assertEquals(p1.scraps, p2.scraps)
         assertEquals(p1.gratitude, p2.gratitude)
+    }
+
+    // --- 5. The Health section (12.11.0) --------------------------------------------------
+
+    private val todayHealth = DailyHealthMetrics(
+        date = todayStr, steps = 8_421, sleepDurationMinutes = 432, averageHeartRate = 66,
+        restingHeartRate = 57, hrvRmssdMs = 41.6
+    )
+
+    @Test
+    fun `burnToDisk ends the note with the day's measured health and rehydrate keeps it out of Room`() = runTest {
+        val h = Harness()
+        val written = stubPopulatedBurn(h)
+        coEvery { h.healthMetricsRepository.getMetrics(today) } returns todayHealth
+
+        h.repository.burnToDisk(today)
+
+        val md = written.captured
+        assertTrue(md.trimEnd().endsWith(
+            "${DailyHealthSection.HEADING}\n\n- Sleep: 7 h 12 min\n- Steps: 8,421\n- HRV: 42 ms\n- Resting heart rate: 57 bpm"
+        ))
+
+        val h2 = Harness()
+        coEvery { h2.dashboardDao.getDashboard(today) } returns null
+        coEvery { h2.fileRepository.readFile(journalPath) } returns md
+        val dashSlot = slot<DailyDashboardEntity>()
+        coEvery { h2.dashboardDao.ingestDailyData(capture(dashSlot), any(), any()) } returns Unit
+        coEvery { h2.scratchDao.insertScrap(any()) } returns Unit
+        coEvery { h2.gratitudeDao.insertGratitude(any()) } returns Unit
+
+        h2.repository.rehydrateTodayFromDiskIfEmpty()
+
+        assertEquals("Persist this note", dashSlot.captured.notesContent)
+        assertEquals("Persist this idea", dashSlot.captured.ideasContent)
+    }
+
+    @Test
+    fun `a burn that only changes the health lines writes the note but requests no push`() = runTest {
+        // The note as the previous burn left it, with fewer steps.
+        val before = Harness().let { h ->
+            val slot = stubPopulatedBurn(h)
+            coEvery { h.healthMetricsRepository.getMetrics(today) } returns todayHealth.copy(steps = 5_000)
+            h.repository.burnToDisk(today)
+            slot.captured
+        }
+
+        val h = Harness()
+        val written = stubPopulatedBurn(h, existingFileContent = before)
+        coEvery { h.healthMetricsRepository.getMetrics(today) } returns todayHealth
+
+        h.repository.burnToDisk(today)
+
+        assertTrue(written.captured.contains("- Steps: 8,421"))
+        coVerify(exactly = 0) { h.pushScheduler.requestPush() }
+    }
+
+    @Test
+    fun `a burn that changes the board still requests a push, health section or not`() = runTest {
+        val h = Harness()
+        // An older note: the same day before the last edit, without any health section.
+        stubPopulatedBurn(h, existingFileContent = "---\ndate: $todayStr\n---\n\n# $todayStr\n")
+        coEvery { h.healthMetricsRepository.getMetrics(today) } returns todayHealth
+
+        h.repository.burnToDisk(today)
+
+        coVerify(exactly = 1) { h.pushScheduler.requestPush() }
     }
 }

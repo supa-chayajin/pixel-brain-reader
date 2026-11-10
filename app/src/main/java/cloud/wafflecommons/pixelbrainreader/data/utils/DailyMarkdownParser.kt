@@ -25,7 +25,7 @@ object DailyMarkdownParser {
         val mantra: String = ""
     )
 
-    private enum class Section { HEADER, TIMELINE, JOURNAL, IDEAS, NOTES, SCRAPS, GRATITUDE }
+    private enum class Section { HEADER, TIMELINE, JOURNAL, IDEAS, NOTES, SCRAPS, GRATITUDE, HEALTH }
 
     /**
      * Section titles as [MarkdownBurner] writes them — current and legacy spellings (the French
@@ -74,7 +74,9 @@ object DailyMarkdownParser {
                 return@forEach
             }
             // Any other heading is the user's own: kept inside the free-text sections, skipped elsewhere.
-            if (trimmed.startsWith("##") && section != Section.IDEAS && section != Section.NOTES) return@forEach
+            if (trimmed.startsWith("##") && section != Section.IDEAS && section != Section.NOTES &&
+                section != Section.HEALTH
+            ) return@forEach
 
             when (section) {
                 Section.TIMELINE -> {
@@ -147,6 +149,16 @@ object DailyMarkdownParser {
                         if (g.isNotBlank()) gratitude.add(g)
                     }
                 }
+                Section.HEALTH -> {
+                    // Derived lines are rewritten at each burn and never enter Room. Anything else
+                    // written there (a line added at the end of the note) moves into Notes.
+                    if (DailyHealthSection.isDerivedLine(trimmed)) return@forEach
+                    if (line.isBlank()) {
+                        if (notes.isNotEmpty() && !notes.endsWith("\n\n")) notes.append("\n")
+                    } else {
+                        notes.append(line).append("\n")
+                    }
+                }
                 Section.HEADER -> {
                     if (mantra.isBlank() &&
                         trimmed.length > 2 &&
@@ -174,6 +186,7 @@ object DailyMarkdownParser {
     /** The section a `## ` line opens, or null when it isn't one of the burner's section headers. */
     private fun sectionOf(trimmedLine: String): Section? {
         if (!trimmedLine.startsWith("## ")) return null
+        if (trimmedLine == DailyHealthSection.HEADING) return Section.HEALTH
         val title = trimmedLine.removePrefix("## ").trim()
         // Drop the decorative emoji (and its variation selector) in front of the title.
         val start = title.indexOfFirst { it.isLetterOrDigit() }

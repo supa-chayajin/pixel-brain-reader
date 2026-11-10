@@ -6,6 +6,7 @@ import cloud.wafflecommons.pixelbrainreader.data.local.dao.DailyDashboardDao
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyDashboardEntity
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyTaskEntity
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.TimelineEntryEntity
+import cloud.wafflecommons.pixelbrainreader.data.utils.DailyHealthSection
 import cloud.wafflecommons.pixelbrainreader.data.utils.FrontmatterManager
 import cloud.wafflecommons.pixelbrainreader.data.utils.MarkdownBurner
 import kotlinx.coroutines.Dispatchers
@@ -26,7 +27,8 @@ class DailyDashboardRepository @Inject constructor(
     private val weatherRepository: WeatherRepository,
     private val gratitudeDao: cloud.wafflecommons.pixelbrainreader.data.local.dao.GratitudeDao,
     private val widgetUpdateManager: cloud.wafflecommons.pixelbrainreader.widget.ui.WidgetUpdateManager,
-    private val pushScheduler: cloud.wafflecommons.pixelbrainreader.data.sync.VaultPushScheduler
+    private val pushScheduler: cloud.wafflecommons.pixelbrainreader.data.sync.VaultPushScheduler,
+    private val healthMetricsRepository: HealthMetricsRepository
 ) {
 
     // --- Live Data Access (Separated Sections) ---
@@ -254,9 +256,14 @@ class DailyDashboardRepository @Inject constructor(
         // RFC 009: Gratitude Express
         val gratitudes = gratitudeDao.getGratitudesForDateOneShot(date.format(DateTimeFormatter.ISO_DATE))
         
-        val newContent = MarkdownBurner.burn(dashboard, timeline, tasks, activeScraps, gratitudes, frontmatter)
+        // 12.11.0: the day's measured health, derived from its health file at each burn.
+        val health = DailyHealthSection.lines(healthMetricsRepository.getMetrics(date))
+
+        val newContent = MarkdownBurner.burn(dashboard, timeline, tasks, activeScraps, gratitudes, frontmatter, health)
         fileRepository.saveFileLocally(path, newContent)
-        if (newContent != currentFileContent) {
+        // A change in the health lines alone requests no push (the health file never does): it goes
+        // up with the next commit, so leaving the app after a step-count refresh adds no commit.
+        if (DailyHealthSection.strip(newContent) != DailyHealthSection.strip(currentFileContent)) {
             pushScheduler.requestPush()
         }
     }
