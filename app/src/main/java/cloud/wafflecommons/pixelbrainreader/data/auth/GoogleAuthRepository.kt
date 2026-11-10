@@ -43,12 +43,22 @@ private const val TOKEN_SKEW_MS = 60L * 1000L
 private const val AUTHORIZE_TIMEOUT_MS = 20_000L
 
 /**
+ * The Google access the app asks for: read-only. Both syncs only import (Calendar events onto the
+ * timeline, Tasks onto today's board) and `/event` stays on the phone, so write access would be
+ * a privilege nothing uses (owner, 2026-11-10). A user who granted the older read-write scopes is
+ * asked once more; removing the app's access in their Google Account drops the old grant.
+ */
+internal object GoogleScopes {
+    val READ_ONLY: List<String> = listOf(CalendarScopes.CALENDAR_READONLY, TasksScopes.TASKS_READONLY)
+}
+
+/**
  * Modern Google auth, two-step:
  *
  *  1. **Identity** via [androidx.credentials.CredentialManager] + [GetGoogleIdOption].
  *     Returns the user's email; persisted to [SecretManager].
- *  2. **Authorization** via [Identity.getAuthorizationClient] requesting Calendar +
- *     Tasks scopes. If the user has previously consented to these scopes for our
+ *  2. **Authorization** via [Identity.getAuthorizationClient] requesting the read-only
+ *     Calendar + Tasks scopes ([GoogleScopes]). If the user has previously consented to these scopes for our
  *     Web Client ID, [AuthorizationRequest] returns silently with a fresh access
  *     token — this is the silent-refresh mechanism on mobile (no client_secret,
  *     no backend exchange). Otherwise it returns an [IntentSender] the UI must
@@ -179,15 +189,8 @@ class GoogleAuthRepository @Inject constructor(
 
     suspend fun authorize(): Result<AuthorizationOutcome> {
         return try {
-            // V6 bidirectional sync needs read+write scopes.
-            // Users who consented to *_READONLY in V5 will be re-prompted for the wider scope.
             val request = AuthorizationRequest.Builder()
-                .setRequestedScopes(
-                    listOf(
-                        Scope(CalendarScopes.CALENDAR),
-                        Scope(TasksScopes.TASKS)
-                    )
-                )
+                .setRequestedScopes(GoogleScopes.READ_ONLY.map(::Scope))
                 .build()
             // Bounded: an authorization that never answered used to hang the whole sync cycle
             // (which holds the git lock) in its Google phase.

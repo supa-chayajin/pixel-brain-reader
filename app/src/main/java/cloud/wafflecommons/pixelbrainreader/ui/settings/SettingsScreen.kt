@@ -326,7 +326,7 @@ fun SettingsScreen(
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = if (isLinked) "Synced (Calendar & Tasks)" else "Connect your Google account",
+                                text = if (isLinked) "Synced, read-only (Calendar & Tasks)" else "Connect your Google account (read-only access)",
                                 style = MaterialTheme.typography.bodyMedium
                             )
                         }
