@@ -13,6 +13,8 @@ Unless a path starts with `app/` or `gradle`, it is relative to `app/src/main/ja
 
 **Verdict: Changes required.** Fix forward (keep the commit). About 20 of the small fixes in it are good.
 
+> **Status 2026-11-10:** phases 0 and 1 shipped in 10.2.0, 4.1 and 4.2 with them, and 2.1, 2.3, 2.6 and 2.7 in 11.0.0. Every other item points to its place in `2026-11-10-dream-app-roadmap.md` (➡️ and its ID), is parked or on hold (⏸️), or is not planned (✂️).
+
 ---
 
 ## 1. Verification run
@@ -345,61 +347,61 @@ Order: data safety → main thread → AI → health → gamification → UI →
 
 ### Phase 2 — v10.3.0 "Make the new features real"
 
-- [ ] **2.1 (M) Full-text index**
+- [x] **2.1 (M) Full-text index** *(shipped in 11.0.0 (v11 A2))*
   - A Room `@Fts4(contentEntity = FileContentEntity::class)` table. Use the unicode61 tokenizer with diacritics removed, so French accents are ignored.
   - Room triggers keep it in sync with the `file_contents` mirror that the scan now fills.
   - Rank with `matchinfo()` (BM25).
   - It powers in-app search (replacing the `LIKE`) and the lexical half of RAG.
-- [ ] **2.2 (M) Hybrid retrieval and an eval harness**
+- ➡️ **2.2 (M) Hybrid retrieval and an eval harness** *(R1, R2)*
   - Reciprocal-rank fusion of vector top-20 and FTS top-20, with the 0.35 floor applied to the vector side.
   - A golden set of ~30 questions from your vault, run from a debug Settings action that logs recall@6 and precision.
   - Recalibrate the floor only against this set.
-- [ ] **2.3 (L) Links index, backlinks and Graph Health v2**
+- [x] **2.3 (L) Links index, backlinks and Graph Health v2** *(shipped in 11.0.0 (v11 A3, C2))*
   - A `links(source, target, kind)` table maintained by the scan.
   - A backlinks and unlinked-mentions panel in the note view.
   - Dead link → "Create note from template".
   - The graph report becomes a few queries instead of a full scan.
-- [ ] **2.4 (M) Time Machine v2**
+- ➡️ **2.4 (M) Time Machine v2** *(K3; the vault activity screen shipped in 11.0.0 (v11 C4))*
   - A vault activity screen: commits with their changed files.
   - Word-level highlights.
   - Follow renames (`FollowFilter`).
   - "What changed since the last sync".
-- [ ] **2.5 (M) Memory Echoes v2**
+- ➡️ **2.5 (M) Memory Echoes v2** *(K6)*
   - Opt-in scope (folders, or a `#review` tag).
   - SM-2-lite scheduling stored in the vault.
   - An "Echo of the day" Glance widget.
-- [ ] **2.6 (M) Capture → Inbox → Triage**
+- [x] **2.6 (M) Capture → Inbox → Triage** *(shipped: voice to the inbox (1.2), inbox filing (v11 C6); swipe triage → W4)*
   - Voice and share go to an `00_Inbox/` note (tasks are extracted heuristically first, Nano optional).
   - An Inbox screen where you swipe a note into a folder.
   - Folder suggestions from **embedding centroids**: deterministic, offline, no LLM.
-- [ ] **2.7 (S) Prompt presets**
+- [x] **2.7 (S) Prompt presets** *(shipped in 11.0.0 (v11 A9))*
   - Generalize Boardroom: presets (persona plus format) live in `99_System/presets.md`, so you can edit them in Obsidian. Each output is short enough for Nano.
 
 ### Phase 3 — v10.4+ new features
 
-- [ ] **3.1 (M) Weekly and monthly review notes**
+- ➡️ **3.1 (M) Weekly and monthly review notes** *(D6, D7)*
   - Burn `10_Journal/Weekly/YYYY-Www.md` on Sunday evening, pinned with `DailyWorkScheduler`.
   - Deterministic stats: habits, mood trend, sleep and steps averages, tasks and chores done, XP gained, notes created or edited (from `git log`).
   - Optional French reflection from Nano.
-- [ ] **3.2 (M) "Ask this note / this folder"**
+- ➡️ **3.2 (M) "Ask this note / this folder"** *(K2)*
   - RAG scoped by `fileId` or folder.
   - Map-reduce summaries for notes larger than the 4K window.
-- [ ] **3.3 (M) Honest health insights**
+- ➡️ **3.3 (M) Honest health insights** *(L1)*
   - Lagged Spearman correlations (sleep → next-day mood and task completion).
   - Show N, and hide below N = 14.
   - Vico charts (already a dependency).
-- [ ] **3.4 (M) Sync conflict resolution screen**
+- ➡️ **3.4 (M) Sync conflict resolution screen** *(S1)*
   - List the backups made by `ConflictResolver`.
   - Side-by-side diff, with keep mine / keep theirs / edit.
-- [ ] **3.5 (M) Google Tasks two-way**
+- ➡️ **3.5 (M) Google Tasks two-way** *(T2: read-only scopes (owner, 2026-11-10))*
   - Push local completion back to Google. Otherwise switch to `*_READONLY` scopes (S4).
-- [ ] **3.6 (M) Private vault: change password and auto-lock**
+- ➡️ **3.6 (M) Private vault: change password and auto-lock** *(V1, V2)*
   - "Change password" re-encrypts every note with a new salt.
   - Auto-lock after N minutes in the background.
-- [ ] **3.7 (M) Quantize the embedder**
+- ➡️ **3.7 (M) Quantize the embedder** *(K1)*
   - int8 dynamic range in `scripts/convert_minilm.py` (~470 MB → ~120 MB APK asset, faster inference).
   - Gate it on the 2.2 golden set, and bump `EMBEDDER_SCHEMA_VERSION`.
-- [ ] **3.8 (S) A one-tap voice-capture widget** (Glance).
+- ➡️ **3.8 (S) A one-tap voice-capture widget** *(X4)* (Glance).
 
 ### Phase 4 — Guardrails (start alongside Phase 1)
 
@@ -408,12 +410,12 @@ Order: data safety → main thread → AI → health → gamification → UI →
   - LFS is not needed (tests never load the model).
   - `google-services.json` is committed, so no secret is needed. Installs the API 37 platform if the runner lacks it.
 - [x] **4.2 (S)** `lint { warningsAsErrors = true }` to lock 0/0.
-- [ ] **4.3 (S)** Gradle dependency locking (`dependencyLocking { lockAllConfigurations() }`), so any upgrade or downgrade shows up as a lockfile diff.
-- [ ] **4.4 (S)** Guard tests: UI language (1.8), prompt directive (1.5), and version/CHANGELOG consistency (`versionName` must appear in CHANGELOG).
-- [ ] **4.5 (L)** Split the hotspots behind tests: `MainScreen.kt` (1,274 lines), `DailyNoteScreen.kt` (1,239) and `MainViewModel.kt` (1,124).
-- [ ] **4.6 (L)** Externalize strings into `strings.xml` (v10 backlog).
-- [ ] **4.8 (S)** Clear the 7 pre-existing Kotlin deprecation warnings (material3 alpha: `ListItem` overloads, `rememberModalBottomSheetState`, `rememberSwipeToDismissBoxState` `confirmValueChange`, `centerAlignedTopAppBarColors`, `Icons.Filled.VolumeUp`).
-- [ ] **4.7 (M, optional)** A baseline profile for cold start and Daily scrolling. It needs a `:baselineprofile` module, which breaks the single-module rule — your call.
+- ➡️ **4.3 (S)** *(T4)* Gradle dependency locking (`dependencyLocking { lockAllConfigurations() }`), so any upgrade or downgrade shows up as a lockfile diff.
+- ➡️ **4.4 (S)** *(T4; the UI-language guard and the per-prompt directive tests shipped)* Guard tests: UI language (1.8), prompt directive (1.5), and version/CHANGELOG consistency (`versionName` must appear in CHANGELOG).
+- ✂️ **4.5 (L)** *(no release of its own: split when an item touches them, §4 of the new plan)* Split the hotspots behind tests: `MainScreen.kt` (1,274 lines), `DailyNoteScreen.kt` (1,239) and `MainViewModel.kt` (1,124).
+- ✂️ **4.6 (L)** *(not planned, §6 of the new plan)* Externalize strings into `strings.xml` (v10 backlog).
+- ➡️ **4.8 (S)** *(T4)* Clear the 7 pre-existing Kotlin deprecation warnings (material3 alpha: `ListItem` overloads, `rememberModalBottomSheetState`, `rememberSwipeToDismissBoxState` `confirmValueChange`, `centerAlignedTopAppBarColors`, `Icons.Filled.VolumeUp`).
+- ⏸️ **4.7 (M, optional)** *(parked)* A baseline profile for cold start and Daily scrolling. It needs a `:baselineprofile` module, which breaks the single-module rule — your call.
 
 ### Product thesis for Phases 5–6
 
@@ -427,13 +429,13 @@ The edge is a combination no other app has: on-device AI, a git-versioned Obsidi
 
 ### Phase 5 — v11.0.0 "Signature" (the showcase)
 
-- [ ] **5.1 (M+M) Contextual recall**
+- ➡️ **5.1 (M+M) Contextual recall** *(D4, K5)*
   - **Meeting prep.** Ten minutes before a calendar event, a notification shows the top vault notes about its title and attendees, with one line from Nano ("Last time with Camille you agreed…").
     - Built on the Google Calendar import, hybrid retrieval and `DailyWorkScheduler`/AlarmManager.
     - Respect quiet hours, and add an opt-in toggle in Settings.
   - **Related while writing.** A live "Related" rail in the editor shows the top 3 semantically close notes, based on the current paragraph's embedding (debounced around 1.5 s and computed off the main thread). It is a side pane on the unfolded screen and a bottom chip row when folded.
   - *Tests:* event-to-query building, rail debouncing and cancellation, and the paragraph extractor.
-- [ ] **5.2 (L) "Days like this"**
+- ➡️ **5.2 (L) "Days like this"** *(L3)*
   - Each day becomes one embedded **day document** combining the daily note, mood entries, sleep/steps/HR, habits done and calendar titles. It is stored in a `day_embeddings` table and rebuilt by the indexer.
   - Queries:
     - "Find days like today" (vector kNN over days).
@@ -441,14 +443,14 @@ The edge is a combination no other app has: on-device AI, a git-versioned Obsidi
     - The UI shows the matched days, what differed (sleep delta, habits, notes) and an optional 3-line Nano summary.
   - Opt-in for private notes. Never embed `99_Private` content unless the vault session is unlocked.
   - *Tests:* the day-document builder (deterministic text) and similarity ranking with fake vectors.
-- [ ] **5.3 (M-L) "How has my thinking changed?" (time-travel questions)**
+- ➡️ **5.3 (M-L) "How has my thinking changed?" (time-travel questions)** *(K4)*
   - "What did I think about X a year ago?":
     - Hybrid retrieval finds today's top notes on X.
     - For each one, JGit reads the version at the target date (`RevWalk` up to that date, then `TreeWalk`), embedded on demand and cached.
     - The UI shows "then vs now" with a real diff (1.1 engine) and a 3-line Nano summary of the shift.
   - Also: "When did X first appear?" (the earliest commit whose blob mentions X, through FTS over historical snapshots of the top candidates).
   - *Tests:* JGit temp repo with dated commits, checking the version-at-date resolution.
-- [ ] **5.4 (L) PixelBrain Wrapped (monthly + yearly)**
+- ➡️ **5.4 (L) PixelBrain Wrapped (monthly + yearly)** *(X5)*
   - A story-format recap generated on-device:
     - mood journey, best streaks, sleep/steps trends, XP and level-ups
     - top topics (embedding clusters from 6.5, or folder-level as a fallback)
@@ -456,7 +458,7 @@ The edge is a combination no other app has: on-device AI, a git-versioned Obsidi
   - Shareable cards rendered from Compose to a bitmap, exported through the share sheet.
   - Nothing private by default: `99_Private` is excluded, and a preview is required before sharing.
   - *Tests:* the stats aggregation over a fixture vault and git history.
-- [ ] **5.5 (M) Foldable postures**
+- ➡️ **5.5 (M) Foldable postures** *(the tabletop layouts shipped in 11.0.0 (v11 C5); the unfolded panes come with K3, K5)*
   - Jetpack WindowManager `FoldingFeature`:
     - **Tabletop** (half-opened, horizontal hinge): the answer, note or chart on the top half, and controls or voice capture on the bottom half (chat, capture, Time Machine).
     - **Unfolded:** a side-by-side Time Machine diff, and the editor with the Related pane.
@@ -464,29 +466,29 @@ The edge is a combination no other app has: on-device AI, a git-versioned Obsidi
 
 ### Phase 6 — v11.x "Platform & knowledge"
 
-- [ ] **6.1 (S-M) The system Notes app + a Quick Settings tile**
+- ➡️ **6.1 (S-M) The system Notes app + a Quick Settings tile** *(X4)*
   - Hold Android's Notes role (`RoleManager.ROLE_NOTES`, `Intent.ACTION_CREATE_NOTE`, Android 14+) so the system can launch quick capture, from the lock screen where the platform allows (`showWhenLocked` on a dedicated capture activity that never shows vault content).
   - Add a `TileService` for one-tap voice capture into the Inbox.
-- [ ] **6.2 (S-M) Live Updates**
+- ➡️ **6.2 (S-M) Live Updates** *(D9)*
   - Android 16 `Notification.ProgressStyle` / promoted ongoing notifications.
   - Focus sessions (timer). At the end, "what you worked on" comes from git diff stats of the notes edited during the session, plus XP.
   - Optionally, today's habits and tasks progress.
-- [ ] **6.3 (M, stretch) App Functions**
+- ⏸️ **6.3 (M, stretch) App Functions** *(parked)*
   - `androidx.appfunctions`, Android 16+.
   - Expose `captureNote`, `logMood`, `addTask` and `askVault` to system agents (Gemini).
   - The API is very early and its callers are platform-gated: prototype behind a flag, and don't promise it.
-- [ ] **6.4 (L) Personal experiments (N-of-1)**
+- ➡️ **6.4 (L) Personal experiments (N-of-1)** *(L2)*
   - A hypothesis ("No screens after 22:00"), an intervention habit, and a baseline of 14 days or more followed by a trial of 14 days or more.
   - The effect on sleep, mood and steps comes with a bootstrap 95% CI and N, with the verdict "likely helps / no clear effect / likely hurts".
   - This is the honest successor of the removed chrono card. The stats are pure Kotlin with heavy unit tests.
-- [ ] **6.5 (L) Brain map**
+- ⏸️ **6.5 (L) Brain map** *(parked)*
   - k-means over note embeddings, with a PCA 2D projection (pure Kotlin, off the main thread). Nano labels each cluster from its titles.
   - An interactive canvas on the unfolded screen: tap a node to open the note, with wiki-link edges from 2.3.
   - A time slider (git history) shows topics appearing and growing.
-- [ ] **6.6 (M) Capture anything**
+- ➡️ **6.6 (M) Capture anything** *(X2)*
   - A photo of a whiteboard, book page or receipt goes through ML Kit Text Recognition (on-device). An optional on-device image description comes from ML Kit GenAI if the device supports it.
   - The result is an `00_Inbox/` note with the image attached under the vault's attachments folder, indexed by FTS and embeddings.
-- [ ] **6.7 (M) Privacy ledger**
+- ➡️ **6.7 (M) Privacy ledger** *(X3)*
   - Every network boundary records host, bytes, purpose and timestamp (never content) in a small Room table:
     - OkHttp `EventListener` (weather, RSS, imports)
     - JGit push/pull wrappers
@@ -498,15 +500,15 @@ The edge is a combination no other app has: on-device AI, a git-versioned Obsidi
 
 > **ON HOLD (owner's decision, 2026-10-17):** no public version — store listing, showcase or announcement — until the owner says so explicitly (settled decision #13). Phases 5–6 proceed as product work for the owner's own use. Releases on the public GitHub repo continue as usual.
 
-- [ ] **7.1 (M) Demo mode**
+- ⏸️ **7.1 (M) Demo mode** *(on hold, settled decision #13)*
   - A synthetic bilingual demo vault (git repo) plus fake health and mood generators behind a debug or `demo` flavor.
   - Never record the real vault: it holds private and health data.
-- [ ] **7.2 (M) Ship size**
+- ⏸️ **7.2 (M) Ship size** *(on hold, #13; K1 shrinks the APK anyway)*
   - The APK is about 600 MB because of the 470 MB model. Quantize it (3.7) or download the model on first launch with SHA-256 verification.
-- [ ] **7.3 (M) Story**
+- ⏸️ **7.3 (M) Story** *(on hold, #13)*
   - An English README with an architecture diagram, a privacy page (the ledger plus "what runs where"), and a 60–90 s video on the Fold built around 3 moments: Related-while-writing, Days like this, Wrapped.
   - Plus a CI badge (4.1).
-- [ ] **7.4 (S) Distribution**
+- ⏸️ **7.4 (S) Distribution** *(on hold, #13)*
   - GitHub Releases first. The Play Store needs Health Connect declarations, a privacy policy and a sensitive-permission review.
   - Before publishing the repo, scrub personal defaults: RSS feed list, names in prompts, Google client IDs.
 

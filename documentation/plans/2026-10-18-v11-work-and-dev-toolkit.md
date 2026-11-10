@@ -83,15 +83,17 @@ Unless a path starts with `app/` or `documentation/`, it is relative to
 
 C7–C15 move to 11.x: 11.0.0 shipped early for dogfooding (2026-10-18, owner's call).
 
-- [ ] **C7** AI pairing dashboard (N2) from the auto-generated worklogs.
-- [ ] **C8** Explain this error (N3): shared stack trace → past occurrences, explanation, bug note.
-- [ ] **C9** Decision records (N4).
-- [ ] **C10** People & 1:1s (N5), encrypted; pre-meeting reminders.
+**Status 2026-11-10:** C7, C9, C11 and C13 shipped in 12.1–12.4. C8, C10, C12, C14 and C15 continue in `2026-11-10-dream-app-roadmap.md` (➡️ and its ID).
+
+- [x] **C7** *(shipped in 12.3.0: the AI-pairing figures)* AI pairing dashboard (N2) from the auto-generated worklogs.
+- ➡️ **C8** *(W1)* Explain this error (N3): shared stack trace → past occurrences, explanation, bug note.
+- [x] **C9** *(shipped in 12.3.0: decision notes from the mission log)* Decision records (N4).
+- ➡️ **C10** *(P1)* People & 1:1s (N5), encrypted; pre-meeting reminders.
 - [x] **C11** Project dashboard + next actions + widget (N6). — shipped in 12.1.0.
-- [ ] **C12** Security watch (N7): public feeds, matched on the device.
+- ➡️ **C12** *(W3)* Security watch (N7): public feeds, matched on the device.
 - [x] **C13** Hand-off to desktop sessions (N8) + the desktop hook how-to. — shipped in 12.1.0 (desktop side in the vault: `scripts/handoff.sh`, per-machine allow-list).
-- [ ] **C14** Workshop kit (N10).
-- [ ] **C15** Authorship timeline (N11).
+- ➡️ **C14** *(W2)* Workshop kit (N10).
+- ➡️ **C15** *(T5)* Authorship timeline (N11).
 
 ### D — Release 11.0.0
 - [x] **D1** `versionCode 1100` / `versionName "11.0.0"`, CHANGELOG section, CLAUDE.md facts,
