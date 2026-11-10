@@ -7,8 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Planned: `documentation/plans/2026-11-10-dream-app-roadmap.md`. Next, 12.10.0: the golden set
-(questions with the notes that should answer them, kept in the vault) and "explain this error".
+Planned: `documentation/plans/2026-11-10-dream-app-roadmap.md`. Next, 12.11.0, the companion's
+day: tasks offered again the next day, a "Due today" block, a health line in each daily note.
+Hybrid search waits for the golden set's numbers, measured on the phone.
+
+## [12.10.0] — 2026-11-10
+
+Explain this error: where your notes met an error before, offline.
+
+### Added
+
+- **Explain an error** (toolkit → All tools, or share an error to the app: text that reads as an
+  error gets "Explain this error" first). Paste a stack trace or an error line, from Kotlin, Java,
+  Python, PHP, JavaScript, .NET or Go, or a bare code such as `SQLSTATE[23000]`. The app shows
+  the notes and runbooks that met it before (the error's own words first, then its meaning),
+  Gemini Nano's short explanation grounded on them, and **Create bug note** from your
+  `T_Bug_Report` template: in the project's `Bugs/` folder when the error belongs to a project,
+  otherwise the inbox, with the notes that met it and the trace. When no note matches, it says
+  so and offers "Ask Gemini Nano anyway", an answer marked as general knowledge.
+- **Measure retrieval** (Settings → Knowledge Vault): runs the golden set kept in your vault
+  (`99_System/rag_golden_set.md`) and shows how often the search by meaning, by words, or both,
+  finds the right notes, and whether off-topic questions stay empty. Nothing about the search
+  changes until these numbers say so.
+
+### Changed
+
+- The version code now counts major×10000 + minor×100 + patch (12.10.0 = 121000), so a later
+  13.0 still updates in place.
 
 ## [12.9.0] — 2026-11-10
 

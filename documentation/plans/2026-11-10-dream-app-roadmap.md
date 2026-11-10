@@ -54,8 +54,8 @@ S ≤ 2 h, M ≤ 1 day, L > 1 day.
 
 **Version codes.** `versionCode` is major×100 + minor×10 + patch (12.9.0 = 1290). It still
 climbs through 12.10 (1300) and 12.18 (1380), but 13.0.0 would then come out at 1300, lower than
-1380, and Android refuses a lower code. Before 12.10.0: either renumber the train (the companion
-as 13.x) or move to major×10000 + minor×100 + patch (12.10.0 = 121000). The owner's call.
+1380, and Android refuses a lower code. Decided (owner, 2026-11-10): major×10000 + minor×100 + patch from 12.10.0 (= 121000), so
+13.0.0 = 130000 still updates in place.
 
 ### 12.9.0 — Trust (all S, no new dependency)
 
@@ -91,12 +91,12 @@ as 13.x) or move to major×10000 + minor×100 + patch (12.10.0 = 121000). The ow
 
 ### 12.10.0 — Explain this error (C8), on measured retrieval
 
-- [ ] **R1 Golden set and harness.** Claude drafts ~30 questions from the vault, each with the
+- [x] **R1 Golden set and harness.** *(12.10.0; the set's draft is in the vault for the owner to validate)* Claude drafts ~30 questions from the vault, each with the
       notes that should answer it (error lookups for C8 among them); the owner validates them. The
       set lives in the private vault (e.g. `99_System/rag_golden_set.md`, never embedded per #3),
       never in this repo. A debug action runs it and logs recall@6 and precision.
       *(Oct 17 2.2; V12 11.2-D; D2.)*
-- [ ] **W1 Explain this error (C8).** Share a stack trace or a log excerpt and get, offline:
+- [x] **W1 Explain this error (C8).** *(12.10.0)* Share a stack trace or a log excerpt and get, offline:
   - its past occurrences in the vault (FTS first, because exception names and error codes are
     lexical), with the runbooks and notes that mention them;
   - a short French explanation grounded on them (the trace's middle cut to fit Nano's window,
