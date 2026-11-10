@@ -7,9 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Planned: `documentation/plans/2026-11-10-dream-app-roadmap.md`. Next, 12.11.0, the companion's
-day: tasks offered again the next day, a "Due today" block, a health line in each daily note.
-Hybrid search waits for the golden set's numbers, measured on the phone.
+Planned: `documentation/plans/2026-11-10-dream-app-roadmap.md`. Next, 12.12.0: a meeting's prep
+from its timeline entry, and a tech-watch block on Daily. Hybrid search waits for the golden
+set's numbers, measured on the phone.
+
+## [12.11.0] — 2026-11-10
+
+The companion's day: what was left unfinished, what is due today, and the day's health in its note.
+
+### Added
+
+- **Unfinished tasks, offered again.** Daily shows the tasks left open on the last day with a
+  note (a week back at most, so a weekend away still offers Friday's). Bring adds one to today,
+  Dismiss forgets it, and Bring all / Dismiss all handle the lot. The earlier note is never
+  changed, Google tasks stay with the Google import, and your choices stay on the phone.
+- **Due today**, a new Daily block: objective milestones and your `@moi` actions due today or
+  overdue, and the chores past their frequency, the most overdue first. A tap opens the note or
+  Chores. It starts in "More today" (Settings → Daily screen places it), and work notes stay
+  hidden outside Work mode.
+- **Recovery in Mood & health:** last night against your usual ("In your usual range", "Below
+  your usual recovery", "Better recovered than usual"), once the baseline is built.
+- **The day's health in its note.** Each daily note now ends with a `🩺 Health` section: sleep,
+  steps, HRV and resting heart rate, only what was measured. It is rewritten from the day's
+  health file each time the day is saved and never read back into the board. A change in these
+  lines alone sends no commit of its own: they go up with the next one.
 
 ## [12.10.0] — 2026-11-10
 

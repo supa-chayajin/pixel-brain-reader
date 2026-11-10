@@ -112,13 +112,15 @@ climbs through 12.10 (1300) and 12.18 (1380), but 13.0.0 would then come out at 
 
 ### 12.11.0 — The companion: the day
 
-- [ ] **D1 Task rollover.** Yesterday's unfinished tasks are offered on today's board: Bring adds
+Built in 12.11.0 (2026-11-10). The design, written for the owner's review, is `2026-11-10-12.11-companion-day.md`.
+
+- [x] **D1 Task rollover.** Yesterday's unfinished tasks are offered on today's board: Bring adds
       the task to today, Dismiss is remembered on the phone. Yesterday's note is never rewritten
       (owner, 2026-11-10), so the burn format does not change. *(RFC-002 "Reporter à demain"; V12 6.3.)*
-- [ ] **D2 Due today.** A Daily block listing objective milestones and `@moi` actions due today or
+- [x] **D2 Due today.** A Daily block listing objective milestones and `@moi` actions due today or
       overdue, plus the chores due; the recovery verdict joins Mood & health. It arrives in "More
       today". *(V12 6.1, the deterministic part of the morning brief.)*
-- [ ] **D3 Health section.** Each burn ends the day's note with a `## 🩺 Health` section (owner,
+- [x] **D3 Health section.** Each burn ends the day's note with a `## 🩺 Health` section (owner,
       2026-11-10): sleep, steps, HRV and resting heart rate, measured values only. It is derived:
       rewritten from the day's health file at each burn, and `DailyMarkdownParser` knows the
       section and skips it, so nothing enters Room and the round trip holds (#7); an unknown `##`
