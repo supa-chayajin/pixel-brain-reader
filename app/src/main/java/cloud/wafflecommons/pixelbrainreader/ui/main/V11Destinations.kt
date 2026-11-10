@@ -44,6 +44,7 @@ object V11Routes {
     const val ACTIVITY = "activity"
     const val INBOX = "inbox_filing"
     const val RUNBOOKS = "runbooks"
+    const val EXPLAIN_ERROR = "explain_error"
     const val RUNBOOK = "runbook?path={path}"
 
     fun runbook(path: String) = "runbook?path=" + android.net.Uri.encode(path)
@@ -149,6 +150,9 @@ fun NavGraphBuilder.v11Destinations(navController: NavHostController, openNote: 
             onOpenNote = openNote,
             onOpenRunbooks = { navController.navigate(V11Routes.RUNBOOKS) }
         )
+    }
+    composable(V11Routes.EXPLAIN_ERROR) {
+        cloud.wafflecommons.pixelbrainreader.ui.work.ExplainErrorScreen(onBack = { navController.popBackStack() }, onOpenNote = openNote)
     }
     composable(V11Routes.RUNBOOKS) {
         HubListDetail(

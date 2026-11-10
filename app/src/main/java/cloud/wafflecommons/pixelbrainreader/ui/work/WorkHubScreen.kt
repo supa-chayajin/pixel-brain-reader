@@ -9,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.automirrored.rounded.EventNote
 import androidx.compose.material.icons.rounded.BarChart
 import androidx.compose.material.icons.rounded.BeachAccess
+import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.Flag
 import androidx.compose.material.icons.rounded.Groups
@@ -216,7 +217,10 @@ enum class HubTool(
         cloud.wafflecommons.pixelbrainreader.ui.main.V11Routes.LOAD),
     LEAVE("leave", "Leave & handover", Icons.Rounded.BeachAccess,
         "A handover draft before you leave, a briefing of what changed when you're back.",
-        cloud.wafflecommons.pixelbrainreader.ui.main.V11Routes.LEAVE);
+        cloud.wafflecommons.pixelbrainreader.ui.main.V11Routes.LEAVE),
+    EXPLAIN_ERROR("explain_error", "Explain an error", Icons.Rounded.BugReport,
+        "Paste an error: where your notes and runbooks met it before, a short explanation, a bug note.",
+        cloud.wafflecommons.pixelbrainreader.ui.main.V11Routes.EXPLAIN_ERROR);
 
     companion object {
         /** Pinned until the user chooses: the everyday ones. */

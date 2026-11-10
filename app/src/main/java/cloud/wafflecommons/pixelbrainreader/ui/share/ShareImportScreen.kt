@@ -106,8 +106,15 @@ import kotlin.math.roundToInt
 class ShareImportViewModel @Inject constructor(
     private val repository: ShareImportRepository,
     private val vaultDiscoveryRepository: VaultDiscoveryRepository,
+    private val errorExplainRepository: cloud.wafflecommons.pixelbrainreader.data.work.ErrorExplainRepository,
     localAiManager: LocalAiManager
 ) : ViewModel() {
+
+    /** C8: hand a shared error to "Explain an error", which looks it up on arrival. */
+    fun explainError(text: String) {
+        errorExplainRepository.offer(text)
+        repository.dismiss()
+    }
 
     val state: StateFlow<ShareImport?> = repository.state
     val generation: StateFlow<Int> = repository.generation
@@ -168,7 +175,13 @@ class ShareImportViewModel @Inject constructor(
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun ShareImportScreen(viewModel: ShareImportViewModel, onClose: () -> Unit, onSaved: (String) -> Unit, onHandOff: (String) -> Unit = {}) {
+fun ShareImportScreen(
+    viewModel: ShareImportViewModel,
+    onClose: () -> Unit,
+    onSaved: (String) -> Unit,
+    onHandOff: (String) -> Unit = {},
+    onExplainError: () -> Unit = {}
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val saving by viewModel.saving.collectAsStateWithLifecycle()
     val canSummarize by viewModel.canSummarize.collectAsStateWithLifecycle()
@@ -255,6 +268,14 @@ fun ShareImportScreen(viewModel: ShareImportViewModel, onClose: () -> Unit, onSa
                 current.passage?.let { PassageCard(it) }
             }
             is ShareImport.Text -> {
+                // C8: shared text that reads as an error gets "Explain this error" first.
+                val isError = remember(current.markdown) { cloud.wafflecommons.pixelbrainreader.data.work.ErrorTrace.parse(current.markdown) != null }
+                if (isError && !saving) {
+                    Button(onClick = {
+                        viewModel.explainError(current.markdown)
+                        onExplainError()
+                    }) { Text("Explain this error") }
+                }
                 NoteFields(title, { title = it }, folder, { folder = it }, onPickFolder = { pickingFolder = true })
                 PreviewOrEdit(markdown, editing, onEditingChange = { editing = it }) {
                     markdown = it

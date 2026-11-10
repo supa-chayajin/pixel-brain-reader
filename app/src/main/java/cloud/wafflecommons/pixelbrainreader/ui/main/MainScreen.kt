@@ -1410,6 +1410,7 @@ fun MainScreen(
                         if (launchedForShare) (context as? android.app.Activity)?.finish() else navController.popBackStack()
                     },
                     onHandOff = { text -> navController.navigate(V11Routes.handoff(text = text)) },
+                    onExplainError = { navController.navigate(V11Routes.EXPLAIN_ERROR) },
                     onSaved = { path ->
                         android.widget.Toast.makeText(context, "Saved to $path", android.widget.Toast.LENGTH_SHORT).show()
                         if (launchedForShare) {
