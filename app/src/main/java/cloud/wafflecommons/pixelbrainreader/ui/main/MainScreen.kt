@@ -1022,8 +1022,8 @@ fun MainScreen(
                                     // VIEW MODE ACTIONS
                                     // 1. Existing Actions
                                     if (uiState.selectedFileName != null) {
-                                        // Edit/View Toggle — none on a desktop mirror or a read-only device.
-                                        if (!uiState.isMirrorNote && !VaultWriteGate.readOnly) {
+                                        // Edit/View Toggle — none on a desktop mirror, a worklog or a read-only device.
+                                        if (!uiState.isGeneratedNote && !VaultWriteGate.readOnly) {
                                             FilledTonalIconButton(
                                                 onClick = { viewModel.toggleEditMode() },
                                                 colors = IconButtonDefaults.filledTonalIconButtonColors(
@@ -1250,8 +1250,9 @@ fun MainScreen(
                                             onRefresh = { viewModel.refreshCurrentFile() },
                                             isExpandedScreen = isLargeScreen,
                                             isEditing = uiState.isEditing,
-                                            isReadOnly = uiState.isMirrorNote || VaultWriteGate.readOnly,
-                                            readOnlyDevice = !uiState.isMirrorNote && VaultWriteGate.readOnly,
+                                            isReadOnly = uiState.isGeneratedNote || VaultWriteGate.readOnly,
+                                            readOnlyDevice = !uiState.isGeneratedNote && VaultWriteGate.readOnly,
+                                            isWorklog = uiState.isWorklogNote,
                                             hasUnsavedChanges = viewModel.hasUnsavedChanges,
                                             saveState = uiState.saveState,
                                             onWikiLinkClick = { target -> viewModel.onWikiLinkClick(target) },

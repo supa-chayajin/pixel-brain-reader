@@ -7,9 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Still planned (`documentation/plans/2026-10-18-v11-work-and-dev-toolkit.md`): the AI-pairing
-dashboard, "explain this error", decision records, people & 1:1s, security watch, the workshop
-kit and the authorship timeline.
+Still planned (`documentation/plans/2026-10-18-v11-work-and-dev-toolkit.md`): "explain this
+error" (next), people & 1:1s, security watch, the workshop kit and the authorship timeline.
+
+## [12.7.2] — 2026-11-10
+
+### Changed
+
+- **Worklog notes open read-only.** The daily worklogs the desktop writes into a project's
+  `Worklog/` folder are rewritten on its next run, so an edit made on the phone would be lost.
+  They now open like the desktop mirrors: a banner ("Worklog, written by the desktop: rewritten
+  on its next run"), no Edit button, no Time Machine restore, nothing dropped into them. They stay
+  listed, searched, linkable and in the project's recent notes.
 
 ## [12.7.1] — 2026-11-10
 

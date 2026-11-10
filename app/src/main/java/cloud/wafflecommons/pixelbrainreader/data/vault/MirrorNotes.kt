@@ -7,10 +7,15 @@ package cloud.wafflecommons.pixelbrainreader.data.vault
  * "Mirrored automatically from …" banner right after the frontmatter). An edit made on the phone
  * would be overwritten, so they are read-only here: no editor, no lint, no board move, and they
  * stay out of a project's actions and recent notes. They are still listed, searched and linked.
+ *
+ * The desktop's worklogs ([isWorklog]) are generated too, and read-only in the editor the same way,
+ * but they stay in a project's notes: they are the record of the work. [isGenerated] is either.
  */
 object MirrorNotes {
 
     private val MIRROR_KEY = Regex("""^mirror_of\s*:\s*\S""")
+    /** Same rule as `VaultLint` and `ProjectFormat.isWorklog`. */
+    private val WORKLOG = Regex("""(^|/)Worklog/\d{4}-\d{2}-\d{2}\.md$""")
     private const val TODO_BANNER = "> Mirrored automatically from "
     private const val INDEX_SUFFIX = ":__index__"
     private const val PROJECTS = "20_Projects/"
@@ -21,6 +26,16 @@ object MirrorNotes {
         val head = head(content)
         return head.mirrorOf != null || head.firstBodyLine?.startsWith(TODO_BANNER) == true
     }
+
+    /**
+     * A worklog (`<project>/Worklog/yyyy-MM-dd.md`): the desktop's worktrace writes it at session end
+     * and rewrites it on its next run, so an edit made here would be lost. Read from the path alone.
+     */
+    fun isWorklog(path: String?): Boolean = path != null && WORKLOG.containsMatchIn(path)
+
+    /** Read-only in the editor: a desktop mirror (from its head) or a worklog (from its path). */
+    fun isGenerated(path: String?, content: String?): Boolean =
+        isWorklog(path) || (content != null && isMirror(content))
 
     /** The index `repo_mirror.py` writes next to its copies (`mirror_of: "<manifest>:__index__"`). */
     fun isMirrorIndex(content: String): Boolean = head(content).mirrorOf?.endsWith(INDEX_SUFFIX) == true

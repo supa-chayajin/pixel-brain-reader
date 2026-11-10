@@ -126,10 +126,12 @@ fun FileDetailPane(
     onRefresh: () -> Unit,
     isExpandedScreen: Boolean,
     isEditing: Boolean,
-    /** A desktop mirror: shown with a banner, never in the editor, nothing dropped into it. */
+    /** A desktop mirror or a worklog: shown with a banner, never in the editor, nothing dropped into it. */
     isReadOnly: Boolean = false,
-    /** Read-only because the whole device is (DeviceRole), not because the note is a mirror. */
+    /** Read-only because the whole device is (DeviceRole), not because the note is generated. */
     readOnlyDevice: Boolean = false,
+    /** The read-only note is a desktop worklog: the banner says so. */
+    isWorklog: Boolean = false,
     onContentChange: (String) -> Unit,
     saveState: cloud.wafflecommons.pixelbrainreader.ui.components.SaveState,
     hasUnsavedChanges: Boolean,
@@ -432,7 +434,7 @@ fun FileDetailPane(
                                             )
                                         }
 
-                                        if (isReadOnly) MirrorNoteBanner(Modifier.padding(top = 16.dp), readOnlyDevice)
+                                        if (isReadOnly) MirrorNoteBanner(Modifier.padding(top = 16.dp), readOnlyDevice, isWorklog)
 
                                         if (parsed.metadata.isNotEmpty() || parsed.tags.isNotEmpty()) {
                                             MetadataHeader(parsed.metadata, parsed.tags)
@@ -635,10 +637,11 @@ fun WelcomeState(onCreateNew: () -> Unit) {
 
 /**
  * Above a desktop mirror, in place of the editor: the copy is rewritten from its source on the desktop.
+ * A worklog ([isWorklog]) is rewritten by the desktop's worktrace on its next run.
  * On a read-only device ([readOnlyDevice]) every note opens this way: it is edited on the phone.
  */
 @Composable
-private fun MirrorNoteBanner(modifier: Modifier = Modifier, readOnlyDevice: Boolean = false) {
+private fun MirrorNoteBanner(modifier: Modifier = Modifier, readOnlyDevice: Boolean = false, isWorklog: Boolean = false) {
     Surface(
         color = MaterialTheme.colorScheme.secondaryContainer,
         shape = MaterialTheme.shapes.small,
@@ -655,7 +658,11 @@ private fun MirrorNoteBanner(modifier: Modifier = Modifier, readOnlyDevice: Bool
                 tint = MaterialTheme.colorScheme.onSecondaryContainer
             )
             Text(
-                text = if (readOnlyDevice) "Read-only device: edit this note on your phone" else "Generated, edit the source on the desktop",
+                text = when {
+                    readOnlyDevice -> "Read-only device: edit this note on your phone"
+                    isWorklog -> "Worklog, written by the desktop: rewritten on its next run"
+                    else -> "Generated, edit the source on the desktop"
+                },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSecondaryContainer
             )

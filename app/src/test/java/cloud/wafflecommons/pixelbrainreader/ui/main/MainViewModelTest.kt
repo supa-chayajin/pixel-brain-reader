@@ -179,7 +179,7 @@ class MainViewModelTest {
             )
         )
         val state = withContext(Dispatchers.Default) {
-            withTimeout(5_000) { viewModel.uiState.first { it.isMirrorNote } }
+            withTimeout(5_000) { viewModel.uiState.first { it.isGeneratedNote } }
         }
         assertEquals(false, state.isEditing)
 
@@ -188,6 +188,32 @@ class MainViewModelTest {
         advanceUntilIdle()
 
         // Entering the editor would have copied the note into the editor buffer.
+        assertEquals(null, viewModel.unsavedContent)
+        coVerify(exactly = 0) { fileRepository.saveFileLocally(any(), any()) }
+    }
+
+    @Test
+    fun aDesktopWorklog_NeverOpensInTheEditor_NorTakesARestore() = runTest {
+        // A plain note by its content: only its path says the desktop's worktrace rewrites it.
+        val path = "20_Projects/21_Demo/Worklog/2026-11-10.md"
+        val worklog = "---\ntitle: \"Worklog 2026-11-10\"\n---\n## 🧬 Commits\n\n- demo: abc123 feat: x\n"
+        every { fileRepository.getFileContentFlow(path) } returns flowOf(worklog)
+        viewModel.loadFile(
+            cloud.wafflecommons.pixelbrainreader.data.remote.model.GithubFileDto(
+                name = "2026-11-10.md", path = path, type = "file",
+                downloadUrl = null, sha = null, lastModified = 0L
+            )
+        )
+        val state = withContext(Dispatchers.Default) {
+            withTimeout(5_000) { viewModel.uiState.first { it.isGeneratedNote && it.selectedFileContent != null } }
+        }
+        assertEquals(true, state.isWorklogNote)
+        assertEquals(false, state.isEditing)
+
+        viewModel.toggleEditMode()
+        viewModel.restoreRevision("---\ntitle: \"Worklog\"\n---\n## 🧬 Commits\n")
+        advanceUntilIdle()
+
         assertEquals(null, viewModel.unsavedContent)
         coVerify(exactly = 0) { fileRepository.saveFileLocally(any(), any()) }
     }
