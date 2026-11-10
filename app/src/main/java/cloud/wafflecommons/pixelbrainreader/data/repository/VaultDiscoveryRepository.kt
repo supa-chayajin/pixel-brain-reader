@@ -82,10 +82,12 @@ class VaultDiscoveryRepository @Inject constructor(
     }
 
     /** Ranked full-text hits with an excerpt (`«…»` marks the matched words). */
-    suspend fun fullTextHits(query: String, limit: Int = BODY_MATCH_LIMIT): List<FullTextHit> = withContext(Dispatchers.IO) {
-        val match = FtsQuery.build(query) ?: return@withContext emptyList()
+    /** [anyTerm]: the words OR-ed and ranked (the golden-set harness), instead of all required. */
+    suspend fun fullTextHits(query: String, limit: Int = BODY_MATCH_LIMIT, anyTerm: Boolean = false): List<FullTextHit> = withContext(Dispatchers.IO) {
+        val match = (if (anyTerm) FtsQuery.buildAny(query) else FtsQuery.build(query)) ?: return@withContext emptyList()
         val rows = try {
-            fileSearchDao.match(match, FTS_CANDIDATES)
+            // OR-ed words match much of the vault: rank them all (BM25 runs after the SQL LIMIT).
+            fileSearchDao.match(match, if (anyTerm) ANY_TERM_CANDIDATES else FTS_CANDIDATES)
         } catch (e: android.database.sqlite.SQLiteException) {
             Log.w("VaultDiscovery", "Full-text query failed: ${e.message}")
             return@withContext emptyList()
@@ -389,6 +391,7 @@ class VaultDiscoveryRepository @Inject constructor(
         const val BODY_MATCH_LIMIT = 50
         /** Full-text rows fetched before BM25 ranking (the MATCH itself is unordered). */
         const val FTS_CANDIDATES = 300
+        const val ANY_TERM_CANDIDATES = 5_000
         /** `file_contents_fts` columns: path (≈ the title) counts double, the body once. */
         val FTS_COLUMN_WEIGHTS = doubleArrayOf(2.0, 1.0)
 

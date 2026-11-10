@@ -19,6 +19,18 @@ object FtsQuery {
         if (terms.isEmpty()) return null
         return terms.joinToString(" ") { "$it*" }
     }
+
+    /**
+     * A question's words OR-ed (`ostrom* OR veto* OR gouvernance*`), for ranked retrieval rather
+     * than narrowing: a note matching more of them, and rarer ones, ranks higher through BM25. Words
+     * under three letters are left out (articles and particles would match everything). Same
+     * sanitising as [build]. Null when nothing searchable is left.
+     */
+    fun buildAny(raw: String, maxTerms: Int = 12): String? {
+        val terms = TERM.findAll(raw.lowercase()).map { it.value }.filter { it.length >= 3 }.distinct().take(maxTerms).toList()
+        if (terms.isEmpty()) return null
+        return terms.joinToString(" OR ") { "$it*" }
+    }
 }
 
 /**

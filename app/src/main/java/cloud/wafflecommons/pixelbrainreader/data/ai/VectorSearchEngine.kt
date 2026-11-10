@@ -408,7 +408,7 @@ class VectorSearchEngine @Inject constructor(
      * Private chunks are decrypted just-in-time using the cached vault password;
      * if the vault is locked, those hits are dropped from the result.
      */
-    suspend fun search(query: String, limit: Int = 6): List<SearchHit> = withContext(Dispatchers.IO) {
+    suspend fun search(query: String, limit: Int = 6, ignoreVisibility: Boolean = false): List<SearchHit> = withContext(Dispatchers.IO) {
         Log.d("RAG_DEBUG", "search: query='${query.take(80).replace("\n", " ")}' (len=${query.length})")
         ensureSchemaVersion()
 
@@ -442,7 +442,8 @@ class VectorSearchEngine @Inject constructor(
         val includePrivate = userPreferences.get().privateNotesInAi.first()
         val chunks = RagRanking.eligible(
             loadChunkIndex(),
-            isVisible = if (visibility.hideWork || visibility.hidePrivate) visibility::isVisible else null,
+            // The golden-set harness measures the retriever, not the mode: it asks with every folder visible.
+            isVisible = if (!ignoreVisibility && (visibility.hideWork || visibility.hidePrivate)) visibility::isVisible else null,
             includePrivate = includePrivate
         )
         val ranking = RagRanking.rank(queryVector, chunks)

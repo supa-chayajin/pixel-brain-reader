@@ -91,7 +91,8 @@ class SettingsViewModelTest {
         choreRepository = choreRepository,
         googleAuthManager = googleAuthManager,
         localAiManager = localAiManager,
-        vaultGraphAnalyzer = vaultGraphAnalyzer
+        vaultGraphAnalyzer = vaultGraphAnalyzer,
+        goldenSetRunner = io.mockk.mockk(relaxed = true)
     ).also { viewModel = it }
 
     @Test

@@ -47,8 +47,33 @@ class SettingsViewModel @Inject constructor(
     private val choreRepository: cloud.wafflecommons.pixelbrainreader.data.repository.ChoreRepository,
     val googleAuthManager: GoogleAuthRepository,
     private val localAiManager: LocalAiManager,
-    private val vaultGraphAnalyzer: cloud.wafflecommons.pixelbrainreader.data.utils.VaultGraphAnalyzer
+    private val vaultGraphAnalyzer: cloud.wafflecommons.pixelbrainreader.data.utils.VaultGraphAnalyzer,
+    private val goldenSetRunner: cloud.wafflecommons.pixelbrainreader.data.ai.GoldenSetRunner
 ) : ViewModel() {
+
+    /** The golden set's last result (R1): one line, or why it could not run. */
+    private val _goldenSummary = MutableStateFlow<String?>(null)
+    val goldenSummary: StateFlow<String?> = _goldenSummary.asStateFlow()
+
+    private val _isGoldenRunning = MutableStateFlow(false)
+    val isGoldenRunning: StateFlow<Boolean> = _isGoldenRunning.asStateFlow()
+
+    fun runGoldenSet() {
+        if (_isGoldenRunning.value) return
+        viewModelScope.launch {
+            _isGoldenRunning.value = true
+            try {
+                _goldenSummary.value = goldenSetRunner.run()?.summary()
+                    ?: "No question found in ${cloud.wafflecommons.pixelbrainreader.data.ai.GoldenSet.PATH}"
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _goldenSummary.value = "The golden set could not run: ${e.message}"
+            } finally {
+                _isGoldenRunning.value = false
+            }
+        }
+    }
 
     sealed class GoogleAuthEvent {
         data class ConsentRequired(val intentSender: IntentSender) : GoogleAuthEvent()

@@ -520,6 +520,27 @@ fun SettingsScreen(
                     Spacer(Modifier.width(8.dp))
                     Text("Check links & orphan notes")
                 }
+
+                // R1: the retrieval harness, on the vault's golden set (read-only, on the device).
+                if (!VaultWriteGate.readOnly) {
+                    val goldenSummary by viewModel.goldenSummary.collectAsStateWithLifecycle()
+                    val isGoldenRunning by viewModel.isGoldenRunning.collectAsStateWithLifecycle()
+                    Spacer(Modifier.height(12.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Measure retrieval", style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                "Runs the golden set (99_System/rag_golden_set.md): how often meaning, words or both find the right notes",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        OutlinedButton(onClick = viewModel::runGoldenSet, enabled = !isGoldenRunning) {
+                            Text(if (isGoldenRunning) "Measuring…" else "Run")
+                        }
+                    }
+                    goldenSummary?.let { Text(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp)) }
+                }
             }
             }
 
