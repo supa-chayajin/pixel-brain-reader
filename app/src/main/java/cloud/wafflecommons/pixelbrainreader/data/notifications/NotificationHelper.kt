@@ -31,6 +31,7 @@ object NotificationHelper {
     const val CHANNEL_SYNC = "sync_alerts"
     const val CHANNEL_WORK = "work_nudges"
     const val CHANNEL_CHECKIN = "evening_checkin"
+    const val CHANNEL_REVIEWS = "reviews"
 
     // Groups both reminder channels under one "Reminders" category in system settings.
     private const val GROUP_REMINDERS = "reminders"
@@ -40,6 +41,8 @@ object NotificationHelper {
     private const val NOTIF_GUARD = 2003
     private const val NOTIF_OBJECTIVES = 2004
     private const val NOTIF_CHECKIN = 2005
+    private const val NOTIF_WEEKLY_REVIEW = 2006
+    private const val NOTIF_MONTHLY_REPORTS = 2007
     /** One per meeting: this base plus a hash of the entry, so two meetings never replace each other. */
     private const val NOTIF_MEETING_BASE = 2100
 
@@ -97,6 +100,41 @@ object NotificationHelper {
                 group = GROUP_REMINDERS
             }
         )
+        nm.createNotificationChannel(
+            NotificationChannel(
+                CHANNEL_REVIEWS,
+                "Weekly review & monthly reports",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "When the weekly review or a monthly report is written. Quiet."
+                group = GROUP_REMINDERS
+            }
+        )
+    }
+
+    /** The weekly review is written (12.13, opt-in): opens it. */
+    fun postWeeklyReview(context: Context, week: Int) {
+        ensureChannels(context)
+        val builder = baseBuilder(
+            context,
+            CHANNEL_REVIEWS,
+            title = "Week $week's review is ready",
+            text = "Your habits, mood, sleep and notes of the week. Plan the next one at its end."
+        ).setContentIntent(activityPending(context, 5, WidgetNav.openIntent(context, WidgetNav.SCREEN_WEEKLY_REVIEW)))
+        notify(context, NOTIF_WEEKLY_REVIEW, builder)
+    }
+
+    /** Last month's reports are written (12.13, opt-in): opens the one the mode shows. */
+    fun postMonthlyReports(context: Context, month: java.time.YearMonth) {
+        ensureChannels(context)
+        val name = month.month.getDisplayName(java.time.format.TextStyle.FULL_STANDALONE, java.util.Locale.ENGLISH)
+        val builder = baseBuilder(
+            context,
+            CHANNEL_REVIEWS,
+            title = "$name's reports are ready",
+            text = "Drafts from your log, projects and objectives, to check before you use them."
+        ).setContentIntent(activityPending(context, 6, WidgetNav.openIntent(context, WidgetNav.SCREEN_MONTHLY_REPORT)))
+        notify(context, NOTIF_MONTHLY_REPORTS, builder)
     }
 
     /** Deep-links to [PrivateJournalActivity]. */

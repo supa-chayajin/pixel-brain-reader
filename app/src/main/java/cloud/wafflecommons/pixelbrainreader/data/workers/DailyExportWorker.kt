@@ -10,11 +10,14 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import cloud.wafflecommons.pixelbrainreader.data.repository.DailyDashboardRepository
+import cloud.wafflecommons.pixelbrainreader.data.review.MonthlyReports
 import cloud.wafflecommons.pixelbrainreader.data.review.MonthlyReportsRepository
+import cloud.wafflecommons.pixelbrainreader.data.review.ReviewNotifier
 import cloud.wafflecommons.pixelbrainreader.data.review.WeeklyReviewRepository
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.CancellationException
+import java.time.LocalDateTime
 import java.time.LocalTime
 import java.util.concurrent.TimeUnit
 
@@ -24,7 +27,8 @@ class DailyExportWorker @AssistedInject constructor(
     @Assisted workerParams: WorkerParameters,
     private val dashboardRepository: DailyDashboardRepository,
     private val weeklyReviewRepository: WeeklyReviewRepository,
-    private val monthlyReportsRepository: MonthlyReportsRepository
+    private val monthlyReportsRepository: MonthlyReportsRepository,
+    private val reviewNotifier: ReviewNotifier
 ) : CoroutineWorker(appContext, workerParams) {
 
     override suspend fun doWork(): Result {
@@ -58,15 +62,16 @@ class DailyExportWorker @AssistedInject constructor(
      * Never fails the burn: what can't be written is logged and tried again the next night.
      */
     private suspend fun writeReviews() {
+        val now = LocalDateTime.now()
         try {
-            weeklyReviewRepository.writeDue()
+            weeklyReviewRepository.writeDue(now)?.let { reviewNotifier.weeklyWritten(it) }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             Log.w("DailyExportWorker", "Weekly review not written (non-fatal)", e)
         }
         try {
-            monthlyReportsRepository.writeDue()
+            reviewNotifier.monthlyWritten(MonthlyReports.lastDue(now), monthlyReportsRepository.writeDue(now))
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

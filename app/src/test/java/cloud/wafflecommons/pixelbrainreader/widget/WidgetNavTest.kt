@@ -27,4 +27,14 @@ class WidgetNavTest {
         assertNull(WidgetNav.screenToRoute(WidgetNav.SCREEN_MEETING_PREP, "$id&root=../x"))
         assertNull(WidgetNav.screenToRoute(WidgetNav.SCREEN_MEETING_PREP, "3f0c1d2e-4b5a-4c6d-8e7f-90123456789")) // too short
     }
+
+    @Test
+    fun `a review notification opens a fixed route, never a path`() {
+        assertEquals("review_note/weekly", WidgetNav.screenToRoute(WidgetNav.SCREEN_WEEKLY_REVIEW))
+        assertEquals("review_note/monthly", WidgetNav.screenToRoute(WidgetNav.SCREEN_MONTHLY_REPORT))
+        // A parameter is ignored: the app finds the note itself.
+        assertEquals("review_note/weekly", WidgetNav.screenToRoute(WidgetNav.SCREEN_WEEKLY_REVIEW, "3f0c1d2e-4b5a-4c6d-8e7f-901234567890"))
+        assertNull(WidgetNav.screenToRoute("review_note/../settings"))
+        assertNull(WidgetNav.screenToRoute("review_note/weekly"))
+    }
 }

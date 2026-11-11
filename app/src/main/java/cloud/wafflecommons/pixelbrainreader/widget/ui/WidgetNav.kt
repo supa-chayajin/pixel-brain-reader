@@ -41,6 +41,10 @@ object WidgetNav {
     const val SCREEN_OBJECTIVES = "objectives"
     const val SCREEN_PROJECTS = "projects"
     const val SCREEN_HANDOFF = "handoff"
+    /** A review notification's note (12.13): the app finds the note itself, no parameter. */
+    const val SCREEN_WEEKLY_REVIEW = "weekly_review"
+    const val SCREEN_MONTHLY_REPORT = "monthly_report"
+
     /** A meeting's prep (12.12): the only key that takes a parameter, [QUERY_ENTRY], a timeline entry's UUID. */
     const val SCREEN_MEETING_PREP = "meeting_prep"
     const val QUERY_ENTRY = "entry"
@@ -83,6 +87,8 @@ object WidgetNav {
         SCREEN_OBJECTIVES -> "objectives"
         SCREEN_PROJECTS -> "projects"
         SCREEN_HANDOFF -> "handoff"
+        SCREEN_WEEKLY_REVIEW -> "review_note/weekly"
+        SCREEN_MONTHLY_REPORT -> "review_note/monthly"
         else -> null
     }
 

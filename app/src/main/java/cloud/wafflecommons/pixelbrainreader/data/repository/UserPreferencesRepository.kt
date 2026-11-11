@@ -209,6 +209,15 @@ class UserPreferencesRepository @Inject constructor(
         context.dataStore.edit { preferences -> preferences[KEY_MONTHLY_REPORTS_WRITTEN] = month }
     }
 
+    // --- Review notifications (12.13): off by default, nothing notifies unless switched on ---
+    private val KEY_REVIEW_NOTIFICATIONS = booleanPreferencesKey("review_notifications")
+
+    val reviewNotifications: Flow<Boolean> = setting { it[KEY_REVIEW_NOTIFICATIONS] ?: false }
+
+    suspend fun setReviewNotifications(enabled: Boolean) {
+        context.dataStore.edit { preferences -> preferences[KEY_REVIEW_NOTIFICATIONS] = enabled }
+    }
+
     // --- Reminders (Phase 3) ---
     private val KEY_VAULT_REMINDER_ENABLED = booleanPreferencesKey("vault_reminder_enabled")
     private val KEY_VAULT_REMINDER_TIME = stringPreferencesKey("vault_reminder_time")

@@ -4,7 +4,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
 import androidx.compose.material.icons.rounded.RocketLaunch
 import androidx.compose.material.icons.rounded.ViewKanban
+import androidx.compose.runtime.LaunchedEffect
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavGraphBuilder
+import cloud.wafflecommons.pixelbrainreader.ui.review.ReviewNoteViewModel
 import cloud.wafflecommons.pixelbrainreader.ui.components.HubEmptyPane
 import cloud.wafflecommons.pixelbrainreader.ui.components.HubListDetail
 import androidx.navigation.NavHostController
@@ -69,6 +72,9 @@ object V11Routes {
     const val MEETING_PREP = "meeting_prep?entry={entry}"
 
     fun meetingPrep(entryId: String) = "meeting_prep?entry=" + android.net.Uri.encode(entryId)
+
+    /** Where a review notification leads (12.13): `weekly` or `monthly`, the note found by the app. */
+    const val REVIEW_NOTE = "review_note/{kind}"
 }
 
 /**
@@ -76,6 +82,16 @@ object V11Routes {
  * hand-off composer (back, or out of the app when it came from another app's share sheet).
  */
 fun NavGraphBuilder.v11Destinations(navController: NavHostController, openNote: (String) -> Unit, onHandoffSent: () -> Unit) {
+    // A review notification's tap: open the note it announced, or Daily when there is none (12.13).
+    composable(V11Routes.REVIEW_NOTE) { entry ->
+        val kind = entry.arguments?.getString("kind")
+        val viewModel: ReviewNoteViewModel = hiltViewModel()
+        LaunchedEffect(kind) {
+            val path = viewModel.resolve(kind)
+            navController.popBackStack()
+            if (path != null) openNote(path) else navController.navigate("daily_note")
+        }
+    }
     composable(
         V11Routes.HANDOFF,
         arguments = listOf(

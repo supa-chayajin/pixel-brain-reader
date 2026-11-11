@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.rounded.CleaningServices
+import androidx.compose.material.icons.rounded.EditCalendar
 import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Mood
@@ -81,6 +82,7 @@ fun RemindersScreen(
     val checkInEnabled by viewModel.checkInEnabled.collectAsStateWithLifecycle()
     val checkInTime by viewModel.checkInTime.collectAsStateWithLifecycle()
     val meetingPrepEnabled by viewModel.meetingPrepEnabled.collectAsStateWithLifecycle()
+    val reviewNotificationsEnabled by viewModel.reviewNotificationsEnabled.collectAsStateWithLifecycle()
     val workLabel by viewModel.workLabel.collectAsStateWithLifecycle()
     val haptic = LocalHapticFeedback.current
 
@@ -155,6 +157,17 @@ fun RemindersScreen(
                     "about it. In $workLabel mode only; Do Not Disturb silences it.",
                 checked = meetingPrepEnabled,
                 onCheckedChange = viewModel::setMeetingPrepEnabled
+            ) {}
+
+            // --- Weekly review & monthly reports (12.13) ---
+            ReminderSection(
+                icon = Icons.Rounded.EditCalendar,
+                iconTint = MaterialTheme.colorScheme.secondary,
+                title = "Weekly review & monthly reports",
+                subtitle = "One quiet notification when Sunday night's review or last month's reports are written, " +
+                    "opening them. The work report's only in $workLabel mode.",
+                checked = reviewNotificationsEnabled,
+                onCheckedChange = viewModel::setReviewNotificationsEnabled
             ) {}
 
             // --- Chores & habits reminder ---

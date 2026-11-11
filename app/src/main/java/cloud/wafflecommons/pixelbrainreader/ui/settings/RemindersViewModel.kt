@@ -39,6 +39,15 @@ class RemindersViewModel @Inject constructor(
         }
     }
 
+    /** A notification when the weekly review or a monthly report is written (12.13): off until switched on. */
+    val reviewNotificationsEnabled: StateFlow<Boolean> =
+        userPrefs.reviewNotifications.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    /** Nothing to schedule: the nightly burn writes the notes and posts when this is on. */
+    fun setReviewNotificationsEnabled(enabled: Boolean) {
+        viewModelScope.launch { userPrefs.setReviewNotifications(enabled) }
+    }
+
     val vaultEnabled: StateFlow<Boolean> =
         userPrefs.vaultReminderEnabled.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
     val vaultTime: StateFlow<String> =
