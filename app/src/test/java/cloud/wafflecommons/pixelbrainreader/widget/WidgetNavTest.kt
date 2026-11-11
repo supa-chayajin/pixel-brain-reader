@@ -17,4 +17,14 @@ class WidgetNavTest {
         assertNull(WidgetNav.screenToRoute("project?root=20_Projects/x"))
         assertNull(WidgetNav.screenToRoute(null))
     }
+
+    @Test
+    fun `a meeting's prep opens only on a timeline entry's id`() {
+        val id = "3f0c1d2e-4b5a-4c6d-8e7f-901234567890"
+        assertEquals("meeting_prep?entry=$id", WidgetNav.screenToRoute(WidgetNav.SCREEN_MEETING_PREP, id))
+        assertNull(WidgetNav.screenToRoute(WidgetNav.SCREEN_MEETING_PREP, null))
+        assertNull(WidgetNav.screenToRoute(WidgetNav.SCREEN_MEETING_PREP, "settings"))
+        assertNull(WidgetNav.screenToRoute(WidgetNav.SCREEN_MEETING_PREP, "$id&root=../x"))
+        assertNull(WidgetNav.screenToRoute(WidgetNav.SCREEN_MEETING_PREP, "3f0c1d2e-4b5a-4c6d-8e7f-90123456789")) // too short
+    }
 }

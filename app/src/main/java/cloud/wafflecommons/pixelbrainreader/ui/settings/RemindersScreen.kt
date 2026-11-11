@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.rounded.CleaningServices
+import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Mood
 import androidx.compose.material.icons.rounded.Schedule
@@ -79,6 +80,8 @@ fun RemindersScreen(
     val choresWindows by viewModel.choresWindows.collectAsStateWithLifecycle()
     val checkInEnabled by viewModel.checkInEnabled.collectAsStateWithLifecycle()
     val checkInTime by viewModel.checkInTime.collectAsStateWithLifecycle()
+    val meetingPrepEnabled by viewModel.meetingPrepEnabled.collectAsStateWithLifecycle()
+    val workLabel by viewModel.workLabel.collectAsStateWithLifecycle()
     val haptic = LocalHapticFeedback.current
 
     // When set, holds the initial "HH:mm" and the callback to run on confirm.
@@ -142,6 +145,17 @@ fun RemindersScreen(
                     }
                 )
             }
+
+            // --- Meeting prep (12.12) ---
+            ReminderSection(
+                icon = Icons.Rounded.Groups,
+                iconTint = MaterialTheme.colorScheme.primary,
+                title = "Meeting prep",
+                subtitle = "Ten minutes before a meeting from your calendar: what your notes and the mission log hold " +
+                    "about it. In $workLabel mode only; Do Not Disturb silences it.",
+                checked = meetingPrepEnabled,
+                onCheckedChange = viewModel::setMeetingPrepEnabled
+            ) {}
 
             // --- Chores & habits reminder ---
             ReminderSection(

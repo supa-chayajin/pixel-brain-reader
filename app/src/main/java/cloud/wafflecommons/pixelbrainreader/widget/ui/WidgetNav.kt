@@ -41,14 +41,19 @@ object WidgetNav {
     const val SCREEN_OBJECTIVES = "objectives"
     const val SCREEN_PROJECTS = "projects"
     const val SCREEN_HANDOFF = "handoff"
+    /** A meeting's prep (12.12): the only key that takes a parameter, [QUERY_ENTRY], a timeline entry's UUID. */
+    const val SCREEN_MEETING_PREP = "meeting_prep"
+    const val QUERY_ENTRY = "entry"
 
     /**
      * Maps a public screen key to the internal NavHost route, or null if unknown (→ reject). A
      * read-only device (VaultWriteGate) has no chat and no hand-off composer, and opens the mission
      * log without its add dialog.
      */
-    fun screenToRoute(screen: String?): String? {
+    fun screenToRoute(screen: String?, entry: String? = null): String? {
         val key = screen?.lowercase()?.trim()
+        // Its parameter is a UUID or nothing: no caller reaches another route through it.
+        if (key == SCREEN_MEETING_PREP) return entry?.trim()?.takeIf(::isEntryId)?.let { "meeting_prep?entry=$it" }
         if (VaultWriteGate.readOnly) {
             when (key) {
                 SCREEN_CHAT, SCREEN_HANDOFF -> return null
@@ -57,6 +62,10 @@ object WidgetNav {
         }
         return routeOf(key)
     }
+
+    /** A timeline entry's id: a UUID in its canonical form, nothing else. */
+    internal fun isEntryId(value: String): Boolean =
+        value.length == 36 && runCatching { java.util.UUID.fromString(value).toString() == value.lowercase() }.getOrDefault(false)
 
     private fun routeOf(key: String?): String? = when (key) {
         SCREEN_DAILY -> "daily_note"
@@ -82,10 +91,11 @@ object WidgetNav {
      * app. Explicit targeting means only in-app callers (widgets/shortcuts) can fire it — it is not
      * exposed to the browser, so no BROWSABLE manifest filter is added for these hosts.
      */
-    fun openIntent(context: Context, screen: String): Intent =
+    fun openIntent(context: Context, screen: String, entry: String? = null): Intent =
         Intent(context, MainActivity::class.java).apply {
             action = Intent.ACTION_VIEW
-            data = "$SCHEME://$HOST_OPEN?$QUERY_SCREEN=$screen".toUri()
+            val extra = if (entry != null && isEntryId(entry)) "&$QUERY_ENTRY=$entry" else ""
+            data = "$SCHEME://$HOST_OPEN?$QUERY_SCREEN=$screen$extra".toUri()
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         }
 

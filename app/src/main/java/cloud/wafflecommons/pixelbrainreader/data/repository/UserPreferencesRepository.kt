@@ -182,6 +182,15 @@ class UserPreferencesRepository @Inject constructor(
         }
     }
 
+    // --- Meeting prep (12.12, D4): off by default, nothing notifies unless switched on ---
+    private val KEY_MEETING_PREP_REMINDERS = booleanPreferencesKey("meeting_prep_reminders")
+
+    val meetingPrepReminders: Flow<Boolean> = setting { it[KEY_MEETING_PREP_REMINDERS] ?: false }
+
+    suspend fun setMeetingPrepReminders(enabled: Boolean) {
+        context.dataStore.edit { preferences -> preferences[KEY_MEETING_PREP_REMINDERS] = enabled }
+    }
+
     // --- Reminders (Phase 3) ---
     private val KEY_VAULT_REMINDER_ENABLED = booleanPreferencesKey("vault_reminder_enabled")
     private val KEY_VAULT_REMINDER_TIME = stringPreferencesKey("vault_reminder_time")

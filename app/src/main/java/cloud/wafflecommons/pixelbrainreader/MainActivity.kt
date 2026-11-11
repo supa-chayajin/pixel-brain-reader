@@ -256,7 +256,8 @@ class MainActivity : FragmentActivity() {
             when (intent.data?.host) {
                 WidgetNav.HOST_OPEN -> {
                     val route = WidgetNav.screenToRoute(
-                        try { intent.data?.getQueryParameter(WidgetNav.QUERY_SCREEN) } catch (e: Exception) { null }
+                        try { intent.data?.getQueryParameter(WidgetNav.QUERY_SCREEN) } catch (e: Exception) { null },
+                        try { intent.data?.getQueryParameter(WidgetNav.QUERY_ENTRY) } catch (e: Exception) { null }
                     )
                     if (route != null) pendingDestination = route
                 }

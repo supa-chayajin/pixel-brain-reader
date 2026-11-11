@@ -84,7 +84,8 @@ class SyncOrchestrator @Inject constructor(
     private val modesRepository: dagger.Lazy<cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository>,
     private val syncDigestRepository: dagger.Lazy<SyncDigestRepository>,
     private val healthMetricsRepository: dagger.Lazy<cloud.wafflecommons.pixelbrainreader.data.repository.HealthMetricsRepository>,
-    private val historyFetcher: dagger.Lazy<VaultHistoryFetcher>
+    private val historyFetcher: dagger.Lazy<VaultHistoryFetcher>,
+    private val meetingReminders: dagger.Lazy<cloud.wafflecommons.pixelbrainreader.data.meetings.MeetingReminderScheduler>
 ) {
     companion object {
         private const val TAG = "SyncOrchestrator"
@@ -276,6 +277,8 @@ class SyncOrchestrator @Inject constructor(
                 onSuccess = { Log.i(TAG, "Phase 2.5: Calendar import returned $it event(s)") },
                 onFailure = { Log.w(TAG, "Phase 2.5: Calendar import failed", it) }
             )
+            // Today's meetings still to come get their prep notification (when switched on).
+            if (calRes.isSuccess) meetingReminders.get().reschedule()
             taskRes.fold(
                 onSuccess = { Log.i(TAG, "Phase 2.5: Tasks import returned $it task(s)") },
                 onFailure = { Log.w(TAG, "Phase 2.5: Tasks import failed", it) }

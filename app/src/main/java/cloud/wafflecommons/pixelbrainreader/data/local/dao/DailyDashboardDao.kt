@@ -54,6 +54,10 @@ interface DailyDashboardDao {
     @Query("SELECT * FROM timeline_entries WHERE id = :id")
     suspend fun getTimelineEntry(id: String): TimelineEntryEntity?
 
+    /** A calendar event's row: the import replaces today's rows (new ids), the event id stays. */
+    @Query("SELECT * FROM timeline_entries WHERE googleEventId = :eventId LIMIT 1")
+    suspend fun getTimelineEntryByEvent(eventId: String): TimelineEntryEntity?
+
     @Query("DELETE FROM timeline_entries WHERE date = :date")
     suspend fun clearTimeline(date: LocalDate)
 

@@ -2,12 +2,15 @@ package cloud.wafflecommons.pixelbrainreader.ui.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import cloud.wafflecommons.pixelbrainreader.data.meetings.MeetingReminderScheduler
+import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
 import cloud.wafflecommons.pixelbrainreader.data.notifications.ReminderScheduler
 import cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -15,8 +18,26 @@ import javax.inject.Inject
 @HiltViewModel
 class RemindersViewModel @Inject constructor(
     private val userPrefs: UserPreferencesRepository,
-    private val reminderScheduler: ReminderScheduler
+    private val reminderScheduler: ReminderScheduler,
+    private val meetingReminderScheduler: MeetingReminderScheduler,
+    modesRepository: ModesRepository
 ) : ViewModel() {
+
+    /** Meeting prep notifications (12.12, D4): off until switched on. */
+    val meetingPrepEnabled: StateFlow<Boolean> =
+        userPrefs.meetingPrepReminders.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    /** The owner's name for Work mode, for the copy. */
+    val workLabel: StateFlow<String> = modesRepository.visibility.map { it.workLabel }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), modesRepository.visibility.value.workLabel)
+
+    /** Today's meetings still to come get their notification at once, or every one is cancelled. */
+    fun setMeetingPrepEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            userPrefs.setMeetingPrepReminders(enabled)
+            meetingReminderScheduler.reschedule()
+        }
+    }
 
     val vaultEnabled: StateFlow<Boolean> =
         userPrefs.vaultReminderEnabled.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)

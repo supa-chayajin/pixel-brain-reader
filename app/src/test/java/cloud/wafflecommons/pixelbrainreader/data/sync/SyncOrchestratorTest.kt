@@ -88,7 +88,8 @@ class SyncOrchestratorTest {
             modesRepository = { mockk(relaxed = true) },
             syncDigestRepository = { mockk(relaxed = true) },
             healthMetricsRepository = { mockk(relaxed = true) },
-            historyFetcher = { mockk(relaxed = true) }
+            historyFetcher = { mockk(relaxed = true) },
+            meetingReminders = { mockk(relaxed = true) }
         )
     }
 

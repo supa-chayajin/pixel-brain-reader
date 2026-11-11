@@ -40,6 +40,8 @@ object NotificationHelper {
     private const val NOTIF_GUARD = 2003
     private const val NOTIF_OBJECTIVES = 2004
     private const val NOTIF_CHECKIN = 2005
+    /** One per meeting: this base plus a hash of the entry, so two meetings never replace each other. */
+    private const val NOTIF_MEETING_BASE = 2100
 
     fun ensureChannels(context: Context) {
         val nm = context.getSystemService(NotificationManager::class.java) ?: return
@@ -157,6 +159,21 @@ object NotificationHelper {
             .setStyle(NotificationCompat.BigTextStyle().bigText(parts.joinToString("\n")))
             .setContentIntent(activityPending(context, 3, intent))
         notify(context, NOTIF_OBJECTIVES, builder)
+    }
+
+    /** A meeting starts in 10 minutes (D4): what the vault holds about it, counts only; opens the prep. */
+    fun postMeetingPrep(context: Context, entryId: String, topic: String, notes: Int, decisions: Int) {
+        ensureChannels(context)
+        val intent = WidgetNav.openIntent(context, WidgetNav.SCREEN_MEETING_PREP, entry = entryId)
+        val parts = buildList {
+            if (notes > 0) add(if (notes == 1) "1 note" else "$notes notes")
+            if (decisions > 0) add(if (decisions == 1) "1 decision" else "$decisions decisions")
+        }
+        val text = if (parts.isEmpty()) "Nothing in your notes about it yet" else parts.joinToString(" · ")
+        val slot = entryId.hashCode() and 0x7FF
+        val builder = baseBuilder(context, CHANNEL_WORK, title = "$topic in 10 min", text = text)
+            .setContentIntent(activityPending(context, 100 + slot, intent))
+        notify(context, NOTIF_MEETING_BASE + slot, builder)
     }
 
     /**
