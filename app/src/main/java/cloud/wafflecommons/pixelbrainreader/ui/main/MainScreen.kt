@@ -788,6 +788,15 @@ fun MainScreen(
         }
     }
     
+    // A pull that stopped on a sync conflict, or was paused by one, opens the screen that resolves
+    // it (12.15, S1): one-shot events, so a recreation never reopens it.
+    val pendingConflicts: cloud.wafflecommons.pixelbrainreader.ui.sync.PendingConflictViewModel = hiltViewModel()
+    LaunchedEffect(Unit) {
+        pendingConflicts.stops.collect {
+            navController.navigate(V11Routes.SYNC_CONFLICTS) { launchSingleTop = true }
+        }
+    }
+
     // A share from another app opens the import screen (also when an older one is still parked).
     val shareGeneration by shareImportViewModel.generation.collectAsStateWithLifecycle()
     LaunchedEffect(shareGeneration) {
@@ -1352,6 +1361,7 @@ fun MainScreen(
                     onNavigateToGamificationSettings = { navController.navigate("gamification_settings") },
                     onNavigateToModes = { navController.navigate(V11Routes.MODES_SETTINGS) },
                     onNavigateToConfidentiality = { navController.navigate(V11Routes.CONFIDENTIALITY) },
+                    onOpenSyncConflicts = { navController.navigate(V11Routes.SYNC_CONFLICTS) },
                     onOpenNote = { path ->
                         viewModel.openVaultFile(path)
                         navController.popBackStack()
@@ -1450,6 +1460,7 @@ fun MainScreen(
                     onOpenChores = { navigateToTab(Screen.HomeOS) },
                     onOpenReader = { navController.navigate(Screen.Import) },
                     onOpenMeetingPrep = { id -> navController.navigate(V11Routes.meetingPrep(id)) },
+                    onOpenSyncConflicts = { navController.navigate(V11Routes.SYNC_CONFLICTS) },
                     onOpenInbox = { navController.navigate(V11Routes.INBOX) }
                 )
             }

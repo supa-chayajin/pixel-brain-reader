@@ -80,4 +80,44 @@ class LineDiffTest {
             shown.map { it.text }
         )
     }
+
+    @Test
+    fun `side by side pairs each change's removed lines with its added ones`() {
+        val old = "a\nb\nc\nd\ne\n"
+        val new = "a\nB\nc\ne\nf\ng\n"
+
+        val sides = LineDiff.sideBySide(LineDiff.compute(old, new))
+
+        assertEquals(
+            listOf(
+                LineDiff.SideRow.Same("a"),
+                LineDiff.SideRow.Changed("b", "B"),
+                LineDiff.SideRow.Same("c"),
+                LineDiff.SideRow.Changed("d", null),
+                LineDiff.SideRow.Same("e"),
+                LineDiff.SideRow.Changed(null, "f"),
+                LineDiff.SideRow.Changed(null, "g")
+            ),
+            sides
+        )
+    }
+
+    @Test
+    fun `side by side keeps the folded gaps`() {
+        val old = (1..20).joinToString("\n") { "line $it" }
+        val new = old.replace("line 10", "line ten")
+
+        val sides = LineDiff.sideBySide(LineDiff.fold(LineDiff.compute(old, new), context = 1))
+
+        assertEquals(
+            listOf(
+                LineDiff.SideRow.Gap(8),
+                LineDiff.SideRow.Same("line 9"),
+                LineDiff.SideRow.Changed("line 10", "line ten"),
+                LineDiff.SideRow.Same("line 11"),
+                LineDiff.SideRow.Gap(9)
+            ),
+            sides
+        )
+    }
 }

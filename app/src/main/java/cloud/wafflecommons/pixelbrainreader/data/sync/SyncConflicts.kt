@@ -53,8 +53,9 @@ object SyncConflicts {
 
     const val MARKER_FILE = "pixelbrain-sync-conflict"
     const val PHONE_COPY = "téléphone"
-    const val STOPPED_MESSAGE = "Sync stopped: files changed both here and on GitHub. Resolve them from Daily."
-    const val PAUSED_MESSAGE = "Sync paused until the conflict is resolved: open it from Daily."
+    // The conflict screen opens on its own when a pull stops or pauses (JGitProvider.conflictStops).
+    const val STOPPED_MESSAGE = "Sync stopped: files changed both here and on GitHub."
+    const val PAUSED_MESSAGE = "Resolve the sync conflict first."
     private val LABELS = listOf("base", PHONE_COPY, "GitHub")
 
     // --- The remembered conflict ---

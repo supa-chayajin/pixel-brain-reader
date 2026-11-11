@@ -91,6 +91,7 @@ fun DailyNoteScreen(
     onOpenChores: () -> Unit = {},
     onOpenReader: () -> Unit = {},
     onOpenMeetingPrep: (String) -> Unit = {},
+    onOpenSyncConflicts: () -> Unit = {},
     viewModel: DailyNoteViewModel = hiltViewModel(),
     modesViewModel: cloud.wafflecommons.pixelbrainreader.ui.modes.ModesViewModel = hiltViewModel(),
     guardStatus: cloud.wafflecommons.pixelbrainreader.ui.guard.GuardStatusViewModel = hiltViewModel(),
@@ -105,7 +106,8 @@ fun DailyNoteScreen(
     recoveryViewModel: cloud.wafflecommons.pixelbrainreader.ui.lifestats.RecoveryViewModel = hiltViewModel(),
     weeklyPlanViewModel: WeeklyPlanViewModel = hiltViewModel(),
     shutdownViewModel: ShutdownViewModel = hiltViewModel(),
-    focusViewModel: FocusViewModel = hiltViewModel()
+    focusViewModel: FocusViewModel = hiltViewModel(),
+    syncConflictViewModel: cloud.wafflecommons.pixelbrainreader.ui.sync.PendingConflictViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val shownSections by layoutViewModel.shown.collectAsStateWithLifecycle()
@@ -129,6 +131,9 @@ fun DailyNoteScreen(
     val shutdown by shutdownViewModel.state.collectAsStateWithLifecycle()
     val shutdownOffer by shutdownViewModel.offer.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { shutdownViewModel.reload() }
+    // A sync stopped on a conflict (12.15, S1): re-read each time Daily shows, so a resolution clears it.
+    val syncConflict by syncConflictViewModel.pending.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { syncConflictViewModel.reload() }
     val dueToday by dueTodayViewModel.due.collectAsStateWithLifecycle()
     // Only today's page lists what is due today.
     val dueItems = dueToday?.takeIf { it.first == state.date }?.second.orEmpty()
@@ -382,6 +387,13 @@ fun DailyNoteScreen(
                     if (readOnlyDrift.isNotEmpty()) {
                         item(key = "read-only-drift", span = StaggeredGridItemSpan.FullLine) {
                             ReadOnlyDriftBanner(changes = readOnlyDrift, onReset = viewModel::resetToGitHub)
+                        }
+                    }
+
+                    // A sync stopped on files changed both here and on GitHub: the pulls wait for a choice
+                    syncConflict?.let { pending ->
+                        item(key = "sync-conflict", span = StaggeredGridItemSpan.FullLine) {
+                            cloud.wafflecommons.pixelbrainreader.ui.sync.SyncConflictBanner(pending = pending, onResolve = onOpenSyncConflicts)
                         }
                     }
 

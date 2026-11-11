@@ -20,6 +20,9 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -551,8 +554,18 @@ class JGitProvider @Inject constructor(
         }
     }
 
+    private val _conflictStops = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
+    /**
+     * One event per pull that stopped on a conflict or was paused by one (S1): the app opens the
+     * conflict screen. Pulls run only when the owner asks for a sync, so this follows their action.
+     */
+    val conflictStops: SharedFlow<Unit> = _conflictStops.asSharedFlow()
+
     /** The conflict the last pull stopped on, waiting for the owner's choices (S1); null when none. */
-    fun pendingConflict(): PendingConflict? = if (isReady()) SyncConflicts.read(File(rootDir, ".git")) else null
+    suspend fun pendingConflict(): PendingConflict? = withContext(Dispatchers.IO) {
+        if (isReady()) SyncConflicts.read(File(rootDir, ".git")) else null
+    }
 
     /** The pending conflict's files, read in core against the GitHub state the stopped pull fetched. */
     suspend fun conflictFiles(remoteName: String = "origin"): Result<List<ConflictFile>> = withContext(Dispatchers.IO) {
@@ -642,7 +655,10 @@ class JGitProvider @Inject constructor(
         // A read-only device never rebases nor merges: it only fast-forwards.
         if (VaultWriteGate.readOnly) return@withContext pullFastForwardOnly(remoteName)
         // A conflict waits for the owner's choices (S1): the pull pauses, no new backup per try.
-        SyncConflicts.read(File(rootDir, ".git"))?.let { return@withContext SyncResult.ConflictPending(it.paths) }
+        SyncConflicts.read(File(rootDir, ".git"))?.let {
+            _conflictStops.tryEmit(Unit)
+            return@withContext SyncResult.ConflictPending(it.paths)
+        }
 
         gitMutex.withLock {
             cleanStaleLocksIfNeeded()
@@ -717,12 +733,19 @@ class JGitProvider @Inject constructor(
                             val backedUpCount = backups.size
                             Log.i("JGitProvider", "$backedUpCount clean local file(s) backed up.")
 
+                            // A rebase that failed with no file in conflict (a lock, say) has nothing
+                            // to choose: no pause, the next pull tries again.
+                            if (conflicts.isEmpty()) {
+                                return@withContext SyncResult.Error(Exception("The pull didn't apply (${rebaseResult.status}); nothing was changed."))
+                            }
+
                             // Remember it (S1): the next pulls pause until the owner resolves it.
                             val upstream = git.repository.resolve("refs/remotes/$remoteName/${git.repository.branch}")
                             SyncConflicts.write(
                                 git.repository.directory,
                                 PendingConflict(upstream?.name.orEmpty(), conflicts.distinct(), backups)
                             )
+                            _conflictStops.tryEmit(Unit)
 
                             return@withContext SyncResult.ResolvedWithConflicts(backedUpCount)
                         }

@@ -7,11 +7,16 @@ import cloud.wafflecommons.pixelbrainreader.data.guard.CommitGuard
 import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
 import cloud.wafflecommons.pixelbrainreader.data.sync.ConflictChangedException
 import cloud.wafflecommons.pixelbrainreader.data.sync.ConflictChoice
+import cloud.wafflecommons.pixelbrainreader.data.sync.ConflictFile
 import cloud.wafflecommons.pixelbrainreader.data.sync.ConflictResolver
 import cloud.wafflecommons.pixelbrainreader.data.sync.SyncConflicts
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.lib.ObjectId
 import org.eclipse.jgit.lib.RepositoryState
@@ -28,6 +33,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * The sync conflict screen's git side (12.15, S1), on REAL JGit repositories: a phone clone (the
@@ -83,6 +89,8 @@ class JGitProviderResolveTest {
 
     @Test
     fun `a conflict is remembered, and later pulls pause without a new backup`() = runBlocking {
+        val stops = AtomicInteger()
+        val listening = launch(Dispatchers.Unconfined) { provider.conflictStops.collect { stops.incrementAndGet() } }
         conflictOnStory()
 
         val pending = provider.pendingConflict()
@@ -95,6 +103,27 @@ class JGitProviderResolveTest {
         assertTrue("got $again", again is SyncResult.ConflictPending)
         assertEquals(listOf(STORY), (again as SyncResult.ConflictPending).paths)
         assertEquals(1, conflictBackups().size)
+
+        // The stop, then the pause: each opens the conflict screen.
+        withTimeout(5_000) { while (stops.get() < 2) delay(10) }
+        listening.cancel()
+        assertEquals(2, stops.get())
+    }
+
+    @Test
+    fun `once GitHub's side matches the phone's, nothing conflicts and resolving just resumes`() = runBlocking {
+        conflictOnStory()
+        pushRemoteEdit(STORY, LOCAL) // the desktop took the phone's version
+        Git.open(vaultDir).use { it.fetch().setRemote("origin").call() } // a history step fetched it meanwhile
+
+        assertEquals(emptyList<ConflictFile>(), provider.conflictFiles().getOrThrow())
+
+        assertTrue(provider.resolveConflicts(emptyMap()).getOrThrow())
+        assertEquals(LOCAL, vaultFile(STORY).readText())
+        assertEquals(remoteHead(), vaultHead())
+        assertNull(provider.pendingConflict())
+        assertEquals(emptyList<File>(), conflictBackups())
+        assertTrue("the next pull runs again", provider.pull() is SyncResult.Success)
     }
 
     @Test

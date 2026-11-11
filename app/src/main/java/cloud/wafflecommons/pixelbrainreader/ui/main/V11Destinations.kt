@@ -75,6 +75,9 @@ object V11Routes {
 
     /** Where a review notification leads (12.13): `weekly` or `monthly`, the note found by the app. */
     const val REVIEW_NOTE = "review_note/{kind}"
+
+    /** The sync conflict a pull stopped on, a choice per file (12.15, S1). */
+    const val SYNC_CONFLICTS = "sync_conflicts"
 }
 
 /**
@@ -174,6 +177,9 @@ fun NavGraphBuilder.v11Destinations(navController: NavHostController, openNote: 
     }
     composable(V11Routes.MEETING_PREP, arguments = listOf(navArgument("entry") { type = NavType.StringType; defaultValue = "" })) {
         cloud.wafflecommons.pixelbrainreader.ui.meetings.MeetingPrepScreen(onBack = { navController.popBackStack() }, onOpenNote = openNote)
+    }
+    composable(V11Routes.SYNC_CONFLICTS) {
+        cloud.wafflecommons.pixelbrainreader.ui.sync.SyncConflictScreen(onBack = { navController.popBackStack() })
     }
     composable(V11Routes.EXPLAIN_ERROR) {
         cloud.wafflecommons.pixelbrainreader.ui.work.ExplainErrorScreen(onBack = { navController.popBackStack() }, onOpenNote = openNote)

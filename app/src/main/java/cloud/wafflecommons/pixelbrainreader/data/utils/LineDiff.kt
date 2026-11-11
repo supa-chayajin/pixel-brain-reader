@@ -70,6 +70,50 @@ object LineDiff {
         return rows
     }
 
+    /** A row of a side-by-side view: the old version on the left, the new one on the right. */
+    sealed interface SideRow {
+        /** A line both versions share. */
+        data class Same(val text: String) : SideRow
+
+        /** A changed line: [old] removed beside [new] added; null where that side has fewer lines. */
+        data class Changed(val old: String?, val new: String?) : SideRow
+
+        data class Gap(val count: Int) : SideRow
+    }
+
+    /** [rows] as two columns: each change's removed lines beside its added lines, in order. */
+    fun sideBySide(rows: List<Row>): List<SideRow> {
+        val out = mutableListOf<SideRow>()
+        val removed = mutableListOf<String>()
+        val added = mutableListOf<String>()
+        fun flush() {
+            for (i in 0 until maxOf(removed.size, added.size)) out += SideRow.Changed(removed.getOrNull(i), added.getOrNull(i))
+            removed.clear()
+            added.clear()
+        }
+        for (row in rows) {
+            when (row) {
+                is Row.Gap -> {
+                    flush()
+                    out += SideRow.Gap(row.count)
+                }
+                is Row.Line -> when (row.kind) {
+                    Kind.UNCHANGED -> {
+                        flush()
+                        out += SideRow.Same(row.text)
+                    }
+                    Kind.REMOVED -> {
+                        if (added.isNotEmpty()) flush()
+                        removed += row.text
+                    }
+                    Kind.ADDED -> added += row.text
+                }
+            }
+        }
+        flush()
+        return out
+    }
+
     /** CRLF and a missing final newline are not content changes worth showing in a note. */
     private fun normalize(text: String): String {
         val unix = text.replace("\r\n", "\n")

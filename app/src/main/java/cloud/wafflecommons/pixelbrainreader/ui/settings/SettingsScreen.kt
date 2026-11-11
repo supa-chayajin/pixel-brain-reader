@@ -60,6 +60,7 @@ import androidx.compose.material.icons.rounded.Work
 import androidx.compose.material.icons.rounded.DateRange
 import androidx.compose.material.icons.rounded.Mood
 import androidx.compose.material.icons.rounded.RssFeed
+import androidx.compose.material.icons.rounded.SyncProblem
 import androidx.compose.material.icons.rounded.ViewAgenda
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.SleepSessionRecord
@@ -94,9 +95,14 @@ fun SettingsScreen(
     onNavigateToGamificationSettings: () -> Unit = {},
     onOpenNote: (String) -> Unit = {},
     onLogout: () -> Unit = {},
-    viewModel: SettingsViewModel = hiltViewModel()
+    onOpenSyncConflicts: () -> Unit = {},
+    viewModel: SettingsViewModel = hiltViewModel(),
+    pendingConflictViewModel: cloud.wafflecommons.pixelbrainreader.ui.sync.PendingConflictViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    // A sync stopped on a conflict (12.15, S1): About lists it while it waits.
+    val pendingConflict by pendingConflictViewModel.pending.collectAsStateWithLifecycle()
+    androidx.compose.runtime.LaunchedEffect(Unit) { pendingConflictViewModel.reload() }
     val nanoState by viewModel.nanoState.collectAsStateWithLifecycle()
     val vaultGraphReport by viewModel.vaultGraphReport.collectAsStateWithLifecycle()
     val isAnalyzingGraph by viewModel.isAnalyzingGraph.collectAsStateWithLifecycle()
@@ -773,6 +779,23 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+                pendingConflict?.let { pending ->
+                    ListItem(
+                        modifier = Modifier.clickable {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onOpenSyncConflicts()
+                        },
+                        leadingContent = { Icon(Icons.Rounded.SyncProblem, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                        supportingContent = {
+                            Text(
+                                (if (pending.paths.size == 1) "1 file" else "${pending.paths.size} files") +
+                                    " changed both here and on GitHub: syncing waits for your choice"
+                            )
+                        }
+                    ) {
+                        Text("Sync conflict")
+                    }
                 }
                 ListItem(
                     modifier = Modifier.clickable {
