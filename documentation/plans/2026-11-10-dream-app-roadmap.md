@@ -137,11 +137,13 @@ Built in 12.11.0 (2026-11-10). The design, written for the owner's review, is `2
 
 ### 12.12.0 — The companion: meetings and the watch
 
-- [ ] **D4 Meeting prep.** A calendar entry on the timeline opens its prep: the vault notes about
+Built in 12.12.0 (2026-11-11). The design, reviewed by the owner: `2026-11-11-12.12-meetings-and-watch.md`.
+
+- [x] **D4 Meeting prep.** A calendar entry on the timeline opens its prep: the vault notes about
       its title (hybrid retrieval when R2 has shipped) and the last decisions about it. An opt-in
       notification comes 10 min before, in Work mode only, silent in quiet hours. People's open
       points join with P1. *(Oct 17 5.1; V12 6.1.)*
-- [ ] **D5 Tech watch (RFC-003 revived).** A Daily block of headlines grouped by feed, each with
+- [x] **D5 Tech watch (RFC-003 revived).** A Daily block of headlines grouped by feed, each with
       Read (in the app) and Import (the share reader, to the inbox).
   - The feeds move from the hard-coded personal list in `NewsRepository` to a vault config file
     edited in Settings.

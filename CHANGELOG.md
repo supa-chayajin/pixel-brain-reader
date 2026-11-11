@@ -7,9 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Planned: `documentation/plans/2026-11-10-dream-app-roadmap.md`. Next, 12.12.0: a meeting's prep
-from its timeline entry, and a tech-watch block on Daily. Hybrid search waits for the golden
-set's numbers, measured on the phone.
+Planned: `documentation/plans/2026-11-10-dream-app-roadmap.md`. Next, 12.13.0: the weekly review
+note and the monthly evidence draft. Hybrid search waits for the golden set's numbers, measured on
+the phone.
+
+## [12.12.0] — 2026-11-11
+
+The companion: meetings and the watch.
+
+### Added
+
+- **Meeting prep.** Tap a meeting the Google import put on today's timeline: the notes about it
+  (found by its words and by their meaning), the last decisions the mission log holds about it,
+  and **Write the meeting note**: the toolkit's own meeting note, in its folder, with the prep
+  before the agenda and a line on the day linking to it. Work notes and the mission log stay
+  hidden outside Work mode; a read-only device shows the prep and writes nothing.
+- **A notification 10 minutes before a meeting** (Settings → Reminders → Meeting prep, off by
+  default): "Standup in 10 min · 3 notes, 1 decision", opening the prep. In Work mode only, and
+  Do Not Disturb silences it. It is set up by each sync's calendar import and can come a few
+  minutes late while the phone dozes.
+- **Tech watch,** a new Daily block: the latest headlines of your feeds, three per feed, grouped
+  by feed. A tap opens the article in the app's reader (Import is there); the inbox button imports
+  it straight away. It refreshes when you come back to the app, at most every two hours, and
+  arrives in "More today".
+- **Your feeds live in the vault** (`10_Journal/data/config/feeds.json`), edited in Settings →
+  Integrations → Tech watch feeds; a feed marked Work hides outside Work mode. The list the app
+  used to carry in its code was moved there.
+
+### Removed
+
+- The unused news and morning-briefing code.
 
 ## [12.11.1] — 2026-11-11
 
