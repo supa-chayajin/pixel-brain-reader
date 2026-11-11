@@ -86,9 +86,9 @@ class NoteEmbedderTest {
         var outcome: NoteEmbedder.Outcome
         do {
             runs++
-            // Each run is cut after 5 batches, as the system's job limit cut every run on the Fold.
-            var batches = 0
-            val budget = RunBudget(limitMs = 5) { (batches++).toLong() }
+            // Each run is cut after ~40 passages, as the job limit cut every run on the Fold.
+            var checks = 0
+            val budget = RunBudget(limitMs = 40) { (checks++).toLong() }
             outcome = NoteEmbedder(store, model::embed, batchSize = 8).embedNote("todo.md", false, note, PassageCodec.Plain, budget, stamp = 9L)
             assertTrue("no progress: a run starting over would loop forever", runs < 100)
         } while (outcome is NoteEmbedder.Outcome.Stopped)
@@ -100,17 +100,17 @@ class NoteEmbedderTest {
     }
 
     @Test
-    fun `a stopped run keeps every batch it finished`() = runTest {
+    fun `a run out of time keeps every passage it embedded, a part batch included`() = runTest {
         val store = FakeStore()
-        var batches = 0
-        val budget = RunBudget(limitMs = 3) { (batches++).toLong() }
+        var checks = 0
+        val budget = RunBudget(limitMs = 12) { (checks++).toLong() } // 11 passages: a batch and a part
 
         val outcome = NoteEmbedder(store, CountingModel()::embed, batchSize = 8)
             .embedNote("todo.md", false, passages(100), PassageCodec.Plain, budget, stamp = 9L)
 
         assertTrue(outcome is NoteEmbedder.Outcome.Stopped)
-        assertEquals(outcome.embedded, store.rows.getValue("todo.md").size)
-        assertTrue(outcome.embedded > 0)
+        assertEquals(11, outcome.embedded)
+        assertEquals(11, store.rows.getValue("todo.md").size)
         assertEquals(null, store.stamps["todo.md"]) // not done: still pending for the next run
     }
 

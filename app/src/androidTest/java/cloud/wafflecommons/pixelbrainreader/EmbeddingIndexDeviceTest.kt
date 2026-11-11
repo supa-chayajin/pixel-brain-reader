@@ -99,7 +99,7 @@ class EmbeddingIndexDeviceTest {
         // The first run is cut after two batches, as the job limit cut every run on the Fold.
         var checks = 0
         val first = NoteEmbedder(store, embed, batchSize = 8)
-            .embedNote("big.md", false, passages, PassageCodec.Plain, RunBudget(limitMs = 3) { (checks++).toLong() }, stamp = 1_000L)
+            .embedNote("big.md", false, passages, PassageCodec.Plain, RunBudget(limitMs = 17) { (checks++).toLong() }, stamp = 1_000L)
         assertTrue(first is NoteEmbedder.Outcome.Stopped)
         assertEquals(16, db.embeddingDao().rowsFor("big.md").size)
         assertEquals(setOf("big.md"), needing())

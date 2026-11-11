@@ -50,8 +50,9 @@ class EmbedderUnavailableException(message: String) : IllegalStateException(mess
  *
  * - A passage whose exact text already has a vector for this note (an unchanged part of an edited
  *   note, or one a stopped run kept) reuses it: only new text goes through the model.
- * - New vectors are kept [batchSize] at a time as they come, pending: a stop costs at most one
- *   batch, and the next run finds them as known passages.
+ * - New vectors are kept [batchSize] at a time as they come, pending, and the time is checked
+ *   before each passage: a run out of time keeps everything it embedded, a crash or a system stop
+ *   costs one batch at most, and the next run finds them as known passages.
  * - Once every passage has its vector, the note's rows are swapped for the final set in one step.
  * - A passage the model rejects is left out instead of being retried on every run.
  */
@@ -90,9 +91,14 @@ class NoteEmbedder(
         var embedded = 0
 
         for (batch in passages.distinct().filterNot { it in known }.chunked(batchSize)) {
-            if (budget.exhausted()) return Outcome.Stopped(embedded)
             val fresh = ArrayList<Pair<String, StoredPassage>>(batch.size)
+            var outOfTime = false
             for (text in batch) {
+                // Before each passage, not each batch: on a slow device a batch is minutes.
+                if (budget.exhausted()) {
+                    outOfTime = true
+                    break
+                }
                 val vector = try {
                     embed(text)
                 } catch (e: CancellationException) {
@@ -105,11 +111,13 @@ class NoteEmbedder(
                 }
                 fresh += text to StoredPassage(codec.encode(text), vector.toList())
             }
-            if (fresh.isEmpty()) continue
-            store.savePending(path, isPrivate, fresh.map { it.second })
-            fresh.forEach { (text, passage) -> known[text] = passage }
-            embedded += fresh.size
-            onEmbedded(fresh.size)
+            if (fresh.isNotEmpty()) {
+                store.savePending(path, isPrivate, fresh.map { it.second })
+                fresh.forEach { (text, passage) -> known[text] = passage }
+                embedded += fresh.size
+                onEmbedded(fresh.size)
+            }
+            if (outOfTime) return Outcome.Stopped(embedded)
         }
 
         store.replace(path, isPrivate, passages.mapNotNull { known[it] }, stamp)
