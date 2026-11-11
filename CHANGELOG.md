@@ -7,9 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Planned: `documentation/plans/2026-11-10-dream-app-roadmap.md`. Next, 12.13.0: the weekly review
-note and the monthly evidence draft. Hybrid search waits for the golden set's numbers, measured on
-the phone.
+Planned: `documentation/plans/2026-11-10-dream-app-roadmap.md`. Next, 12.14.0: the end-of-work
+ritual and focus sessions as Live Updates. Hybrid search waits for the golden set's numbers,
+measured on the phone.
+
+## [12.13.0] — 2026-11-11
+
+The companion: the week and the month.
+
+### Added
+
+- **A weekly review note** every Sunday night, right after the day's burn:
+  `10_Journal/Weekly/2026-W46.md`, in French like the vault's other generated notes. Your habits
+  (days done out of the days planned), the mood trend, sleep and steps, the tasks and chores done,
+  the XP, the notes you created and edited (work notes only counted), your work week as counts
+  (mission log, decisions without an ADR, objectives, meetings, the overload signal), last week's
+  plan, three prompts to reflect on, and an empty "Semaine prochaine". It is written once: a note
+  you delete stays deleted, and a missed Sunday catches up the next night.
+- **Plan your week.** From Sunday night, a Daily banner opens the review until its "Semaine
+  prochaine" is filled in; next Sunday's review brings that plan back.
+- **Ask Coach about this week,** on an open weekly review: the week's measured facts go to the
+  Coach in Chat. Gemini Nano can't write in the background, so the reflection is a conversation you
+  start.
+- **Monthly reports** after a month's last night: the work report in your first work folder's
+  `Rapports/` (hidden outside Work mode) and the personal one in the inbox; without work folders,
+  one report in the inbox. With an encrypted mission log, the work report is encrypted beside it.
+  They are the Evidence screen's reports without the AI summary, and a month with nothing measured
+  gets none.
+- **A notification when they are written** (Settings → Reminders → Weekly review & monthly
+  reports, off by default): quiet, and opening the note. The work report's comes in Work mode only.
 
 ## [12.12.0] — 2026-11-11
 

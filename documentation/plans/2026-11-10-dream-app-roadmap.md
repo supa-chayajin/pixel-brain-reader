@@ -155,10 +155,12 @@ Built in 12.12.0 (2026-11-11). The design, reviewed by the owner: `2026-11-11-12
 
 ### 12.13.0 — The companion: the week and the month
 
-The design, reviewed by the owner in an interview on 2026-11-11: `2026-11-11-12.13-week-and-month.md`
-(seven decisions; it supersedes the details below where they differ).
+Built in 12.13.0 (2026-11-11). The design, reviewed by the owner in an interview on 2026-11-11:
+`2026-11-11-12.13-week-and-month.md` (seven decisions; it supersedes the details below where they
+differ: written right after Sunday's burn, the reflection is "Ask Coach about this week", work as
+counts and links, both monthly reports, the work one in the first work folder).
 
-- [ ] **D6 Weekly review note.** `10_Journal/Weekly/YYYY-Www.md`, burned on Sunday evening (pinned
+- [x] **D6 Weekly review note.** `10_Journal/Weekly/YYYY-Www.md`, burned on Sunday evening (pinned
       with `DailyWorkScheduler`). It never overwrites an existing note (the " (2)" rule). It holds:
   - habits, the mood trend, sleep and steps averages, and the tasks and chores done;
   - XP, plus the notes created and edited (from git);
@@ -168,7 +170,7 @@ The design, reviewed by the owner in an interview on 2026-11-11: `2026-11-11-12.
   - a "Next week" section, filled in on Monday.
 
   *(Oct 17 3.1; V12 6.4 and E5.)*
-- [ ] **D7 Monthly evidence draft.** On the 1st, last month's evidence report lands in the inbox
+- [x] **D7 Monthly evidence draft.** On the 1st, last month's evidence report lands in the inbox
       (work content stays hidden outside Work). *(V12 6.4.)*
 
 ### 12.14.0 — The companion: the end of work
