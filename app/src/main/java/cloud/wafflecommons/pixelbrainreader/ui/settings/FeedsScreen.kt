@@ -30,6 +30,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
+import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
 import cloud.wafflecommons.pixelbrainreader.data.utils.ImportUrlValidator
 import cloud.wafflecommons.pixelbrainreader.data.watch.Feed
 import cloud.wafflecommons.pixelbrainreader.data.watch.FeedConfig
@@ -40,15 +41,24 @@ import cloud.wafflecommons.pixelbrainreader.ui.components.SectionCard
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /** The tech watch's feeds (D5), kept in the vault's `feeds.json`: every change reads the file first. */
 @HiltViewModel
 class FeedsViewModel @Inject constructor(
-    private val repository: FeedConfigRepository
+    private val repository: FeedConfigRepository,
+    modesRepository: ModesRepository
 ) : ViewModel() {
+
+    /** The owner's name for Work mode: never "Work" in the copy. */
+    val workLabel: StateFlow<String> = modesRepository.visibility
+        .map { it.workLabel }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), modesRepository.visibility.value.workLabel)
 
     private val _config = MutableStateFlow<FeedConfig?>(null)
     val config: StateFlow<FeedConfig?> = _config.asStateFlow()
@@ -93,6 +103,7 @@ class FeedsViewModel @Inject constructor(
 fun FeedsScreen(onNavigateBack: () -> Unit, viewModel: FeedsViewModel = hiltViewModel()) {
     val config by viewModel.config.collectAsStateWithLifecycle()
     val problem by viewModel.problem.collectAsStateWithLifecycle()
+    val workLabel by viewModel.workLabel.collectAsStateWithLifecycle()
     val readOnly = VaultWriteGate.readOnly
     var address by rememberSaveable { mutableStateOf("") }
     var name by rememberSaveable { mutableStateOf("") }
@@ -100,7 +111,7 @@ fun FeedsScreen(onNavigateBack: () -> Unit, viewModel: FeedsViewModel = hiltView
     FormScaffold(title = "Tech watch feeds", onBack = onNavigateBack) {
         Text(
             text = "The Daily block shows the latest headlines of these feeds. The list lives in your vault, " +
-                "so every device reads the same one. A Work feed hides outside Work mode.",
+                "so every device reads the same one. A feed marked $workLabel hides outside $workLabel mode.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -113,6 +124,7 @@ fun FeedsScreen(onNavigateBack: () -> Unit, viewModel: FeedsViewModel = hiltView
                 if (index > 0) HorizontalDivider()
                 FeedRow(
                     feed = feed,
+                    workLabel = workLabel,
                     editable = !readOnly,
                     onWork = { viewModel.setWork(feed.url, it) },
                     onRemove = { viewModel.remove(feed.url) }
@@ -152,7 +164,7 @@ fun FeedsScreen(onNavigateBack: () -> Unit, viewModel: FeedsViewModel = hiltView
 }
 
 @Composable
-private fun FeedRow(feed: Feed, editable: Boolean, onWork: (Boolean) -> Unit, onRemove: () -> Unit) {
+private fun FeedRow(feed: Feed, workLabel: String, editable: Boolean, onWork: (Boolean) -> Unit, onRemove: () -> Unit) {
     var confirming by remember { mutableStateOf(false) }
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -161,7 +173,7 @@ private fun FeedRow(feed: Feed, editable: Boolean, onWork: (Boolean) -> Unit, on
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Switch(checked = feed.work, onCheckedChange = onWork, enabled = editable)
-            Text("Work", style = MaterialTheme.typography.labelSmall)
+            Text(workLabel, style = MaterialTheme.typography.labelSmall, maxLines = 1)
         }
         if (editable) {
             TextButton(onClick = { if (confirming) onRemove() else confirming = true }) {
