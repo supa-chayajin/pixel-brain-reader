@@ -175,6 +175,9 @@ counts and links, both monthly reports, the work one in the first work folder).
 
 ### 12.14.0 — The companion: the end of work
 
+The design, reviewed by the owner in an interview on 2026-11-11: `2026-11-11-12.14-end-of-work.md`
+(eight decisions; it supersedes the details below where they differ).
+
 - [ ] **D8 Shutdown ritual.** At the end of Work hours (the Modes schedule), one Daily banner:
   - unfinished tasks go to tomorrow, someday or nowhere (D1);
   - the win of the day becomes a mission-log fact;
