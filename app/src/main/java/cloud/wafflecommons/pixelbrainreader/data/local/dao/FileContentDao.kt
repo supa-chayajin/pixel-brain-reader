@@ -15,6 +15,10 @@ interface FileContentDao {
     @Query("SELECT path, content FROM file_contents WHERE substr(path, 1, length(:prefix)) = :prefix")
     suspend fun contentsUnder(prefix: String): List<PathContent>
 
+    /** The paths only, for a count that needn't read every note (the shutdown's inbox count). */
+    @Query("SELECT path FROM file_contents WHERE substr(path, 1, length(:prefix)) = :prefix")
+    suspend fun pathsUnder(prefix: String): List<String>
+
     /** Changes whenever a row under [prefix] is added, removed or rewritten: a cheap cache key. */
     @Query(
         "SELECT COUNT(*) || ':' || COALESCE(MAX(lastSyncedAt), 0) || ':' || COALESCE(SUM(LENGTH(content)), 0) " +

@@ -209,6 +209,15 @@ class UserPreferencesRepository @Inject constructor(
         context.dataStore.edit { preferences -> preferences[KEY_MONTHLY_REPORTS_WRITTEN] = month }
     }
 
+    // --- Shutdown ritual (12.14, D8): the last day closed ("2026-11-11"), so its banner stays away ---
+    private val KEY_SHUTDOWN_CLOSED_DAY = stringPreferencesKey("shutdown_closed_day")
+
+    val shutdownClosedDay: Flow<String?> = setting { it[KEY_SHUTDOWN_CLOSED_DAY] }
+
+    suspend fun setShutdownClosedDay(day: java.time.LocalDate) {
+        context.dataStore.edit { preferences -> preferences[KEY_SHUTDOWN_CLOSED_DAY] = day.toString() }
+    }
+
     // --- Review notifications (12.13): off by default, nothing notifies unless switched on ---
     private val KEY_REVIEW_NOTIFICATIONS = booleanPreferencesKey("review_notifications")
 

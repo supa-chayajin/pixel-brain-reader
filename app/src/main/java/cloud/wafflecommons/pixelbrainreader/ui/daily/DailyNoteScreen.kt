@@ -85,6 +85,7 @@ fun DailyNoteScreen(
     onOpenConfidentiality: () -> Unit = {},
     onOpenWork: () -> Unit = {},
     onOpenActivity: () -> Unit = {},
+    onOpenInbox: () -> Unit = {},
     onOpenProject: (String) -> Unit = {},
     onOpenChores: () -> Unit = {},
     onOpenReader: () -> Unit = {},
@@ -101,7 +102,8 @@ fun DailyNoteScreen(
     dueTodayViewModel: DueTodayViewModel = hiltViewModel(),
     watchViewModel: WatchViewModel = hiltViewModel(),
     recoveryViewModel: cloud.wafflecommons.pixelbrainreader.ui.lifestats.RecoveryViewModel = hiltViewModel(),
-    weeklyPlanViewModel: WeeklyPlanViewModel = hiltViewModel()
+    weeklyPlanViewModel: WeeklyPlanViewModel = hiltViewModel(),
+    shutdownViewModel: ShutdownViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val shownSections by layoutViewModel.shown.collectAsStateWithLifecycle()
@@ -121,6 +123,10 @@ fun DailyNoteScreen(
     // The weekly review's plan: re-read each time Daily shows, so a plan just written clears the banner.
     val weeklyPlan by weeklyPlanViewModel.prompt.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { weeklyPlanViewModel.reload() }
+    // The end of the workday (12.14, D8): re-read each time Daily shows.
+    val shutdown by shutdownViewModel.state.collectAsStateWithLifecycle()
+    val shutdownOffer by shutdownViewModel.offer.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { shutdownViewModel.reload() }
     val dueToday by dueTodayViewModel.due.collectAsStateWithLifecycle()
     // Only today's page lists what is due today.
     val dueItems = dueToday?.takeIf { it.first == state.date }?.second.orEmpty()
@@ -420,6 +426,26 @@ fun DailyNoteScreen(
                     weeklyPlan?.takeIf { it.day == state.date && !VaultWriteGate.readOnly }?.let { prompt ->
                         item(key = "weekly-plan", span = StaggeredGridItemSpan.FullLine) {
                             WeeklyPlanBanner(prompt = prompt, onOpen = { onOpenNote(prompt.week.path) })
+                        }
+                    }
+
+                    // The end of the workday (12.14, D8): today's page only, a banner, not a block.
+                    shutdown?.takeIf { it.day == state.date && !VaultWriteGate.readOnly }?.let { wrapUp ->
+                        item(key = "shutdown", span = StaggeredGridItemSpan.FullLine) {
+                            ShutdownBanner(
+                                state = wrapUp,
+                                onTomorrow = shutdownViewModel::tomorrow,
+                                onSomeday = shutdownViewModel::someday,
+                                onLetGo = shutdownViewModel::letGo,
+                                onLogWin = shutdownViewModel::logWin,
+                                onOpenInbox = onOpenInbox,
+                                onCloseDay = shutdownViewModel::closeDay
+                            )
+                        }
+                    }
+                    shutdownOffer?.let { offer ->
+                        item(key = "shutdown-offer", span = StaggeredGridItemSpan.FullLine) {
+                            ShutdownOfferCard(offer = offer, onSwitch = shutdownViewModel::acceptOffer, onDismiss = shutdownViewModel::dismissOffer)
                         }
                     }
 
