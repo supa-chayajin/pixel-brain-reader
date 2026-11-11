@@ -4,9 +4,10 @@ import cloud.wafflecommons.pixelbrainreader.data.vault.VaultSchema
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.TextStyle
+import java.time.temporal.IsoFields
 import java.util.Locale
 
-/** A reporting period: a month or a quarter. */
+/** A reporting period: a month or a quarter (a week only inside the weekly review). */
 sealed class ReportPeriod {
     abstract val start: LocalDate
     abstract val end: LocalDate
@@ -22,6 +23,17 @@ sealed class ReportPeriod {
         override val frenchLabel: String get() = month.month.getDisplayName(TextStyle.FULL_STANDALONE, Locale.FRENCH) + " " + month.year
         override fun previous() = Month(month.minusMonths(1))
         override fun next() = Month(month.plusMonths(1))
+    }
+
+    /** An ISO week (Monday to Sunday), for the weekly review's work counts (D6); never a report of its own. */
+    data class Week(val monday: LocalDate) : ReportPeriod() {
+        override val start: LocalDate get() = monday
+        override val end: LocalDate get() = monday.plusDays(6)
+        override val key: String
+            get() = "${monday.get(IsoFields.WEEK_BASED_YEAR)}-W" + monday.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR).toString().padStart(2, '0')
+        override val frenchLabel: String get() = "semaine ${monday.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR)} ${monday.get(IsoFields.WEEK_BASED_YEAR)}"
+        override fun previous() = Week(monday.minusDays(7))
+        override fun next() = Week(monday.plusDays(7))
     }
 
     data class Quarter(val year: Int, val quarter: Int) : ReportPeriod() {

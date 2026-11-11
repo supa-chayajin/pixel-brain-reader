@@ -10,6 +10,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import cloud.wafflecommons.pixelbrainreader.data.repository.DailyDashboardRepository
+import cloud.wafflecommons.pixelbrainreader.data.review.WeeklyReviewRepository
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.CancellationException
@@ -20,7 +21,8 @@ import java.util.concurrent.TimeUnit
 class DailyExportWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted workerParams: WorkerParameters,
-    private val dashboardRepository: DailyDashboardRepository
+    private val dashboardRepository: DailyDashboardRepository,
+    private val weeklyReviewRepository: WeeklyReviewRepository
 ) : CoroutineWorker(appContext, workerParams) {
 
     override suspend fun doWork(): Result {
@@ -30,6 +32,7 @@ class DailyExportWorker @AssistedInject constructor(
             // Full retroactive export: burns today and any past day whose markdown is missing.
             dashboardRepository.performRetroactiveExport()
             Log.i("DailyExportWorker", "Daily Burn and Retroactive Recovery completed successfully.")
+            writeReviews()
             repinNextRun()
             Result.success()
         } catch (e: CancellationException) {
@@ -45,6 +48,20 @@ class DailyExportWorker @AssistedInject constructor(
                 repinNextRun()
                 Result.failure()
             }
+        }
+    }
+
+    /**
+     * The weekly review (D6) once the week's last board is burned. Never fails the burn: a review
+     * that can't be written is logged and tried again the next night.
+     */
+    private suspend fun writeReviews() {
+        try {
+            weeklyReviewRepository.writeDue()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w("DailyExportWorker", "Weekly review not written (non-fatal)", e)
         }
     }
 

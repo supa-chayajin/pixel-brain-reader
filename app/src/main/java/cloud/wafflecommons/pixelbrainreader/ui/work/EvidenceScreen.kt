@@ -145,6 +145,7 @@ class EvidenceViewModel @Inject constructor(
 private fun ReportPeriod.label(): String = when (this) {
     is ReportPeriod.Month -> start.format(DateTimeFormatter.ofPattern("LLLL yyyy"))
     is ReportPeriod.Quarter -> "Q$quarter $year"
+    is ReportPeriod.Week -> "Week of " + start.format(DateTimeFormatter.ofPattern("d MMMM yyyy"))
 }
 
 /** The evidence report (#2): a month or a quarter of the mission log, as a French draft. */

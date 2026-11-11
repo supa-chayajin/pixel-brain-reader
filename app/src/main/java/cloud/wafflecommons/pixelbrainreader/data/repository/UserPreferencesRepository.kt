@@ -191,6 +191,15 @@ class UserPreferencesRepository @Inject constructor(
         context.dataStore.edit { preferences -> preferences[KEY_MEETING_PREP_REMINDERS] = enabled }
     }
 
+    // --- Weekly review (12.13, D6): the last week written, so a deleted note isn't written again ---
+    private val KEY_WEEKLY_REVIEW_WRITTEN = stringPreferencesKey("weekly_review_written")
+
+    val weeklyReviewWritten: Flow<String?> = setting { it[KEY_WEEKLY_REVIEW_WRITTEN] }
+
+    suspend fun setWeeklyReviewWritten(weekKey: String) {
+        context.dataStore.edit { preferences -> preferences[KEY_WEEKLY_REVIEW_WRITTEN] = weekKey }
+    }
+
     // --- Reminders (Phase 3) ---
     private val KEY_VAULT_REMINDER_ENABLED = booleanPreferencesKey("vault_reminder_enabled")
     private val KEY_VAULT_REMINDER_TIME = stringPreferencesKey("vault_reminder_time")
