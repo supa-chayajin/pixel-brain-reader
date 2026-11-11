@@ -6,6 +6,8 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- A focus session shows as a Live Update (12.14, D9; owner 2026-11-11): a normal permission, no prompt. -->
+    <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.health.READ_STEPS" />
     <uses-permission android:name="android.permission.health.READ_SLEEP" />
     <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
@@ -246,6 +248,22 @@
             android:exported="true"
             android:icon="@drawable/ic_tile_log"
             android:label="@string/tile_log_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+        <!-- Focus sessions (12.14, D9): Stop and "Log it" from the app's own notifications only. -->
+        <receiver
+            android:name=".data.focus.FocusReceiver"
+            android:exported="false" />
+
+        <!-- Quick Settings: start or stop a focus session. -->
+        <service
+            android:name=".ui.focus.FocusTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_tile_focus"
+            android:label="@string/tile_focus_label"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
             <intent-filter>
                 <action android:name="android.service.quicksettings.action.QS_TILE" />

@@ -209,6 +209,18 @@ class UserPreferencesRepository @Inject constructor(
         context.dataStore.edit { preferences -> preferences[KEY_MONTHLY_REPORTS_WRITTEN] = month }
     }
 
+    // --- Focus session (12.14, D9): the running one ("startMillis|minutes"), so it outlives the app ---
+    private val KEY_FOCUS_SESSION = stringPreferencesKey("focus_session")
+
+    val focusSession: Flow<String?> = setting { it[KEY_FOCUS_SESSION] }
+
+    /** Keeps [encoded] as the running session; null ends it. */
+    suspend fun setFocusSession(encoded: String?) {
+        context.dataStore.edit { preferences ->
+            if (encoded == null) preferences.remove(KEY_FOCUS_SESSION) else preferences[KEY_FOCUS_SESSION] = encoded
+        }
+    }
+
     // --- Shutdown ritual (12.14, D8): the last day closed ("2026-11-11"), so its banner stays away ---
     private val KEY_SHUTDOWN_CLOSED_DAY = stringPreferencesKey("shutdown_closed_day")
 

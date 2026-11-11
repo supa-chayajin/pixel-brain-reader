@@ -38,4 +38,5 @@
     <!-- Quick Settings tiles -->
     <string name="tile_mode_label">Mode</string>
     <string name="tile_log_label">Log</string>
+    <string name="tile_focus_label">Focus</string>
 </resources>

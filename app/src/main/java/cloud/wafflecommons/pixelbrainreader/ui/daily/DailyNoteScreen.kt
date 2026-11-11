@@ -69,6 +69,7 @@ import androidx.compose.material.icons.rounded.Event
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Mood
 import androidx.compose.material.icons.rounded.TextFields
+import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material.icons.sharp.AddCircle
 import androidx.compose.material.icons.sharp.CheckCircle
 import androidx.compose.material.icons.sharp.Lightbulb
@@ -103,7 +104,8 @@ fun DailyNoteScreen(
     watchViewModel: WatchViewModel = hiltViewModel(),
     recoveryViewModel: cloud.wafflecommons.pixelbrainreader.ui.lifestats.RecoveryViewModel = hiltViewModel(),
     weeklyPlanViewModel: WeeklyPlanViewModel = hiltViewModel(),
-    shutdownViewModel: ShutdownViewModel = hiltViewModel()
+    shutdownViewModel: ShutdownViewModel = hiltViewModel(),
+    focusViewModel: FocusViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val shownSections by layoutViewModel.shown.collectAsStateWithLifecycle()
@@ -156,6 +158,8 @@ fun DailyNoteScreen(
     var showAddTimelineDialog by remember { mutableStateOf(false) }
     var editTimelineEntry by remember { mutableStateOf<TimelineEntryEntity?>(null) }
     var showAddTaskDialog by remember { mutableStateOf(false) }
+    var showFocusDialog by remember { mutableStateOf(false) }
+    val focusSession by focusViewModel.session.collectAsStateWithLifecycle()
     var editTaskEntry by remember { mutableStateOf<DailyTaskEntity?>(null) }
     var showQuickCaptureSheet by remember { mutableStateOf(false) }
     var fabExpanded by remember { mutableStateOf(false) }
@@ -282,6 +286,10 @@ fun DailyNoteScreen(
                 FabActionItem(icon = Icons.Rounded.TextFields, label = "Scratchpad") {
                     fabExpanded = false
                     showQuickCaptureSheet = true
+                },
+                FabActionItem(icon = Icons.Rounded.Timer, label = "Focus") {
+                    fabExpanded = false
+                    showFocusDialog = true
                 }
             )
 
@@ -715,6 +723,16 @@ fun DailyNoteScreen(
                 viewModel.addTimelineEntry(content, time)
                 showAddTimelineDialog = false
             }
+        )
+    }
+
+    // A focus session (12.14, D9): start one, or stop the running one.
+    if (showFocusDialog) {
+        FocusDialog(
+            session = focusSession,
+            onStart = { minutes -> focusViewModel.start(minutes); showFocusDialog = false },
+            onStop = { focusViewModel.stop(); showFocusDialog = false },
+            onDismiss = { showFocusDialog = false }
         )
     }
 
