@@ -9,7 +9,12 @@ import cloud.wafflecommons.pixelbrainreader.data.guard.CommitHeldException
 import cloud.wafflecommons.pixelbrainreader.data.guard.GuardFinding
 import cloud.wafflecommons.pixelbrainreader.data.guard.StagedText
 import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
+import cloud.wafflecommons.pixelbrainreader.data.sync.ConflictChangedException
+import cloud.wafflecommons.pixelbrainreader.data.sync.ConflictChoice
+import cloud.wafflecommons.pixelbrainreader.data.sync.ConflictFile
 import cloud.wafflecommons.pixelbrainreader.data.sync.ConflictResolver
+import cloud.wafflecommons.pixelbrainreader.data.sync.PendingConflict
+import cloud.wafflecommons.pixelbrainreader.data.sync.SyncConflicts
 import cloud.wafflecommons.pixelbrainreader.data.sync.SemanticCommitMessageGenerator
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
@@ -21,6 +26,7 @@ import kotlinx.coroutines.withContext
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.api.MergeCommand
 import org.eclipse.jgit.lib.BranchTrackingStatus
+import org.eclipse.jgit.lib.PersonIdent
 import org.eclipse.jgit.api.errors.EmptyCommitException
 import org.eclipse.jgit.api.errors.RefNotAdvertisedException
 import org.eclipse.jgit.lib.TextProgressMonitor
@@ -35,6 +41,8 @@ import javax.inject.Singleton
 sealed class SyncResult {
     object Success : SyncResult()
     data class ResolvedWithConflicts(val backedUpFilesCount: Int) : SyncResult()
+    /** A conflict is waiting for the owner's choices (12.15, S1): the pull didn't run. */
+    data class ConflictPending(val paths: List<String>) : SyncResult()
     data class Error(val exception: Exception) : SyncResult()
 }
 
@@ -543,6 +551,88 @@ class JGitProvider @Inject constructor(
         }
     }
 
+    /** The conflict the last pull stopped on, waiting for the owner's choices (S1); null when none. */
+    fun pendingConflict(): PendingConflict? = if (isReady()) SyncConflicts.read(File(rootDir, ".git")) else null
+
+    /** The pending conflict's files, read in core against the GitHub state the stopped pull fetched. */
+    suspend fun conflictFiles(remoteName: String = "origin"): Result<List<ConflictFile>> = withContext(Dispatchers.IO) {
+        if (pendingConflict() == null) return@withContext Result.success(emptyList())
+        gitMutex.withLock {
+            try {
+                Git.open(rootDir).use { git ->
+                    val upstream = git.repository.resolve("refs/remotes/$remoteName/${git.repository.branch}")
+                        ?: return@withLock Result.failure(Exception("GitHub's branch isn't known yet"))
+                    Result.success(SyncConflicts.inspect(git.repository, upstream))
+                }
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.e("JGitProvider", "Reading the conflict failed", e)
+                Result.failure(e)
+            }
+        }
+    }
+
+    /**
+     * Resolves the pending conflict (S1, owner 2026-11-11): fetch, fold the phone's unpushed commits
+     * into one, replay it on top of GitHub's with each file's [choices], the confidentiality guard
+     * on the result, delete the conflict's backups, push. Success carries whether the push went
+     * through (a refused one waits for the next sync, the conflict is resolved either way). A new
+     * conflict without a choice fails with [ConflictChangedException] and keeps the conflict pending.
+     */
+    suspend fun resolveConflicts(choices: Map<String, ConflictChoice>, remoteName: String = "origin"): Result<Boolean> =
+        withContext(Dispatchers.IO) {
+            if (VaultWriteGate.readOnly) return@withContext Result.failure(ReadOnlyDeviceException())
+            val pending = pendingConflict() ?: return@withContext Result.success(true)
+            gitMutex.withLock {
+                cleanStaleLocksIfNeeded()
+                try {
+                    val provider = getCredentialsProvider() ?: return@withLock Result.failure(Exception("No API Token found"))
+                    repairShallowBoundaryIfShallow()
+                    Git.open(rootDir).use { git ->
+                        recoverRepositoryStateIfNeeded(git)
+                        git.fetch()
+                            .setRemote(remoteName)
+                            .setCredentialsProvider(provider)
+                            .setTimeout(NETWORK_TIMEOUT_SECONDS)
+                            .call()
+                        val upstream = git.repository.resolve("refs/remotes/$remoteName/${git.repository.branch}")
+                            ?: return@withLock Result.failure(Exception("GitHub's branch isn't known yet"))
+                        SyncConflicts.resolve(
+                            git = git,
+                            upstream = upstream,
+                            choices = choices,
+                            backups = pending.backups,
+                            message = RESOLUTION_MESSAGE,
+                            author = PersonIdent("PixelBrain User", "user@pixelbrain.local")
+                        ) { repo ->
+                            val held = commitGuard.review(stagedTexts(repo))
+                            if (held.isNotEmpty()) throw CommitHeldException(held)
+                        }
+                        SyncConflicts.clear(git.repository.directory)
+                        val results = git.push()
+                            .setRemote(remoteName)
+                            .setCredentialsProvider(provider)
+                            .setTimeout(NETWORK_TIMEOUT_SECONDS)
+                            .call()
+                        val rejection = describeRejectedUpdates(results)
+                        if (rejection != null) Log.w("JGitProvider", "Resolution pushed later: $rejection")
+                        Result.success(rejection == null)
+                    }
+                } catch (e: ConflictChangedException) {
+                    Log.w("JGitProvider", "New conflicts while resolving: ${e.paths.size}")
+                    Result.failure(e)
+                } catch (e: CommitHeldException) {
+                    Log.w("JGitProvider", "Resolution held by the confidentiality guard: ${e.findings.size} finding(s)")
+                    Result.failure(e)
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                    onGitFailure(e)
+                    Log.e("JGitProvider", "Resolving the conflict failed", e)
+                    Result.failure(e)
+                }
+            }
+        }
+
     /**
      * Pulls from remote using REBASE strategy (no merge commits allowed).
      * Handles rebase conflicts gracefully: backs up local changes, aborts rebase, and reports.
@@ -551,6 +641,8 @@ class JGitProvider @Inject constructor(
         if (!isReady()) return@withContext SyncResult.Error(Exception("Repository not initialized"))
         // A read-only device never rebases nor merges: it only fast-forwards.
         if (VaultWriteGate.readOnly) return@withContext pullFastForwardOnly(remoteName)
+        // A conflict waits for the owner's choices (S1): the pull pauses, no new backup per try.
+        SyncConflicts.read(File(rootDir, ".git"))?.let { return@withContext SyncResult.ConflictPending(it.paths) }
 
         gitMutex.withLock {
             cleanStaleLocksIfNeeded()
@@ -617,12 +709,20 @@ class JGitProvider @Inject constructor(
 
                             // Now snapshot the (restored, clean) local versions so the
                             // user has a recoverable copy of their diverged work.
-                            var backedUpCount = 0
+                            val backups = mutableListOf<String>()
                             for (relativePath in conflicts) {
                                 val backup = conflictResolver.secureLocalBackup(relativePath)
-                                if (backup != null) backedUpCount++
+                                if (backup != null) backups += backup.relativeTo(rootDir).invariantSeparatorsPath
                             }
+                            val backedUpCount = backups.size
                             Log.i("JGitProvider", "$backedUpCount clean local file(s) backed up.")
+
+                            // Remember it (S1): the next pulls pause until the owner resolves it.
+                            val upstream = git.repository.resolve("refs/remotes/$remoteName/${git.repository.branch}")
+                            SyncConflicts.write(
+                                git.repository.directory,
+                                PendingConflict(upstream?.name.orEmpty(), conflicts.distinct(), backups)
+                            )
 
                             return@withContext SyncResult.ResolvedWithConflicts(backedUpCount)
                         }
@@ -1147,6 +1247,8 @@ class JGitProvider @Inject constructor(
 
         /** Used when a commit message would name a protected term. */
         const val NEUTRAL_COMMIT_MESSAGE = "vault: update notes"
+        /** The one commit a resolved sync conflict lands as (S1). */
+        const val RESOLUTION_MESSAGE = "vault: resolve a sync conflict"
 
         /**
          * Socket inactivity timeout for clone/pull/push. JGit defaults to 0 = none, and Android's

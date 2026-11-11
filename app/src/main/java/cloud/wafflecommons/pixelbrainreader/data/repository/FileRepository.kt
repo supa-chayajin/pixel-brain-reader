@@ -9,6 +9,7 @@ import cloud.wafflecommons.pixelbrainreader.data.local.entity.FileEntity
 import cloud.wafflecommons.pixelbrainreader.data.remote.GitCommitDto
 import cloud.wafflecommons.pixelbrainreader.data.remote.JGitProvider
 import cloud.wafflecommons.pixelbrainreader.data.remote.SyncResult
+import cloud.wafflecommons.pixelbrainreader.data.sync.SyncConflicts
 import cloud.wafflecommons.pixelbrainreader.data.sync.GitSyncCoordinator
 import cloud.wafflecommons.pixelbrainreader.data.sync.SyncStep
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -106,6 +107,7 @@ class FileRepository @Inject constructor(
                    is SyncResult.Success -> syncDigestRepository.get().recordPull(headBefore)
                    is SyncResult.Error -> return@withLock Result.failure(pull.exception)
                    is SyncResult.ResolvedWithConflicts -> return@withLock Result.failure(Exception("Pull stopped on a conflict."))
+                   is SyncResult.ConflictPending -> return@withLock Result.failure(Exception(SyncConflicts.PAUSED_MESSAGE))
                }
                _syncStatus.value = SyncStep.INDEXING.label
                vaultDiscoveryRepository.reindexAll()
@@ -130,8 +132,10 @@ class FileRepository @Inject constructor(
                // push rejection downstream.
                Log.w("FileRepository", "Sync stopped: ${pullResult.backedUpFilesCount} conflict(s), local copies backed up.")
                return@withLock Result.failure(
-                   Exception("Sync conflict: your local changes were saved. Manual merge required.")
+                   Exception(SyncConflicts.STOPPED_MESSAGE)
                )
+           } else if (pullResult is SyncResult.ConflictPending) {
+               return@withLock Result.failure(Exception(SyncConflicts.PAUSED_MESSAGE))
            } else if (pullResult is SyncResult.Error) {
                Log.e("FileRepository", "Pull failed during sync", pullResult.exception)
                return@withLock Result.failure(pullResult.exception)

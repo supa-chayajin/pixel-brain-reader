@@ -224,9 +224,14 @@ class SyncOrchestrator @Inject constructor(
                 // local now DIVERGES from remote, so a push could never fast-forward. Stop with
                 // an actionable state instead of pushing into diverged history.
                 Log.w(TAG, "Phase 1: Pull hit ${pullResult.backedUpFilesCount} conflict(s); local backed up, manual merge needed")
-                _syncState.value = SyncState.Error(
-                    "Sync conflict: your local changes were saved. Manual merge required."
-                )
+                _syncState.value = SyncState.Error(SyncConflicts.STOPPED_MESSAGE)
+                lastSyncTimestamp = System.currentTimeMillis()
+                return false
+            }
+            is SyncResult.ConflictPending -> {
+                // A conflict waits for the owner's choices (S1): nothing pulled, nothing pushed.
+                Log.w(TAG, "Phase 1: Pull paused, ${pullResult.paths.size} conflicted file(s) wait for a choice")
+                _syncState.value = SyncState.Error(SyncConflicts.PAUSED_MESSAGE)
                 lastSyncTimestamp = System.currentTimeMillis()
                 return false
             }
@@ -363,6 +368,7 @@ class SyncOrchestrator @Inject constructor(
                 null
             }
             is SyncResult.ResolvedWithConflicts -> "Pull stopped on a conflict."
+            is SyncResult.ConflictPending -> SyncConflicts.PAUSED_MESSAGE
             is SyncResult.Error -> pullResult.exception.message ?: "Pull failed"
         }
         checkReadOnlyDrift()

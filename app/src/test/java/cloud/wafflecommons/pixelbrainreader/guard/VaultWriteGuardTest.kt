@@ -38,7 +38,9 @@ class VaultWriteGuardTest {
         "data/sync/ConflictResolver.kt",
         "data/work/MissionLogRepository.kt",
         // git itself: every command that writes is gated; the clone and its deletion are the login's.
-        "data/remote/JGitProvider.kt"
+        "data/remote/JGitProvider.kt",
+        // the sync conflict's resolution (12.15, S1): called by JGitProvider under its lock, gated itself.
+        "data/sync/SyncConflicts.kt"
     )
 
     /** Files that write only outside the vault (filesDir caches, the export target). */
