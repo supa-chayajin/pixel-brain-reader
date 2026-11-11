@@ -11,6 +11,37 @@ Planned: `documentation/plans/2026-11-10-dream-app-roadmap.md`. Next, 12.12.0: a
 from its timeline entry, and a tech-watch block on Daily. Hybrid search waits for the golden
 set's numbers, measured on the phone.
 
+## [12.11.1] — 2026-11-11
+
+Indexing that always finishes, and a first login that always gets through.
+
+### Fixed
+
+- **Indexing no longer loops.** A note too long to embed within Android's 10-minute limit for
+  background work (a long mirrored TODO) was started over by every run and never finished, all
+  night long. Each passage is now kept as soon as it is embedded, a stopped run resumes the note
+  where it was, each run ends itself before the limit and hands over to the next, and the notes
+  missing from search come first, smallest first.
+- **An edited note costs only what changed.** A changed note keeps its vectors until it is
+  embedded again, and every passage whose text is unchanged keeps its vector: after a desktop run
+  rewrites a long note, only its new lines go through the model. A note rewritten with the same
+  content (a pull, a rebase, a save without changes) is not embedded again at all.
+- **A first login gets through a slow or flaky connection.** The first clone takes the notes as
+  they are now (the newest commit) and retries a dropped attempt; the history follows in the
+  background, 1,000 commits at a time, each step kept even if the next one drops, and the next sync
+  carries on. A copy left broken by a dropped step repairs itself before the next pull. Until the
+  history is complete, "last changed" dates, the activity view and a note's revisions leave out
+  what isn't known yet.
+- A vault you just logged into is embedded right away, not at the next app start.
+- CI: two ViewModel tests failed at random on GitHub's runners.
+
+### Changed
+
+- **Embedding is twice as fast:** the model runs on four threads instead of two (measured on a
+  Snapdragon 865: 224 → 110 ms per passage).
+- Settings → Knowledge Vault shows how many notes are left to embed, and a long index reads as one
+  across its runs.
+
 ## [12.11.0] — 2026-11-10
 
 The companion's day: what was left unfinished, what is due today, and the day's health in its note.

@@ -128,6 +128,13 @@ Built in 12.11.0 (2026-11-10). The design, written for the owner's review, is `2
       note stays unembedded (#3), so a day becomes searchable the day after.
       *(RFC-006 §4 "Physio-context".)*
 
+### 12.11.1 — Fixes (2026-11-11)
+
+- [x] **Indexing always finishes.** Resumable per passage (`NoteEmbedder`), a changed note keeps
+      its vectors for reuse, runs hand over before the 10-minute job limit, four inference threads.
+- [x] **The first clone gets through.** Newest commit first, the history in resumable steps
+      (`VaultHistoryFetcher`), a boundary broken by a dropped step repaired from the objects here.
+
 ### 12.12.0 — The companion: meetings and the watch
 
 - [ ] **D4 Meeting prep.** A calendar entry on the timeline opens its prep: the vault notes about
@@ -212,6 +219,10 @@ Built in 12.11.0 (2026-11-10). The design, written for the owner's review, is `2
 - [ ] **K1 Smaller embedder.** int8 MiniLM (`scripts/convert_minilm.py`): the ~448 MB asset
       drops to ~120 MB and the APK from ~600 MB to ~170 MB, and indexing gets faster. Bump
       `EMBEDDER_SCHEMA_VERSION`. It ships only if R1's recall holds. *(Oct 17 3.7.)*
+      Measured 2026-11-11: passages are ~99 tokens (median, p90 156) but every inference pays the
+      full 256, because the export hard-codes the shape (`resizeInput` fails on a RESHAPE). A
+      dynamic-length export of the same weights would keep today's vectors (no re-index) at ~2.5×
+      less compute, before any int8 gain.
 - [ ] **K2 Ask this note / this folder.** Chat scoped to one note or a folder, with chained
       summaries for notes longer than Nano's window, and a Continue chip when an answer stops at
       the 256-token cap. *(Oct 17 3.2; V12 E12 and 11.2-B.)*
