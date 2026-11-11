@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Upgrade
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.*
+import androidx.core.net.toUri
 import androidx.compose.runtime.*
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -86,6 +87,7 @@ fun DailyNoteScreen(
     onOpenActivity: () -> Unit = {},
     onOpenProject: (String) -> Unit = {},
     onOpenChores: () -> Unit = {},
+    onOpenReader: () -> Unit = {},
     viewModel: DailyNoteViewModel = hiltViewModel(),
     modesViewModel: cloud.wafflecommons.pixelbrainreader.ui.modes.ModesViewModel = hiltViewModel(),
     guardStatus: cloud.wafflecommons.pixelbrainreader.ui.guard.GuardStatusViewModel = hiltViewModel(),
@@ -96,6 +98,7 @@ fun DailyNoteScreen(
     projectsViewModel: DailyProjectsViewModel = hiltViewModel(),
     rolloverViewModel: TaskRolloverViewModel = hiltViewModel(),
     dueTodayViewModel: DueTodayViewModel = hiltViewModel(),
+    watchViewModel: WatchViewModel = hiltViewModel(),
     recoveryViewModel: cloud.wafflecommons.pixelbrainreader.ui.lifestats.RecoveryViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -116,6 +119,9 @@ fun DailyNoteScreen(
     val dueToday by dueTodayViewModel.due.collectAsStateWithLifecycle()
     // Only today's page lists what is due today.
     val dueItems = dueToday?.takeIf { it.first == state.date }?.second.orEmpty()
+    // The tech watch is about now: today's page only.
+    val watch by watchViewModel.watch.collectAsStateWithLifecycle()
+    val watchFeeds = watch?.takeIf { it.first == state.date }?.second.orEmpty()
     val visibility by modesViewModel.visibility.collectAsStateWithLifecycle()
     val countdowns by modesViewModel.countdowns.collectAsStateWithLifecycle()
     var showModeSheet by remember { mutableStateOf(false) }
@@ -413,6 +419,7 @@ fun DailyNoteScreen(
                             DailySection.SCRATCHPAD -> state.scratchNotes.isNotEmpty()
                             DailySection.PROJECTS -> dailyProjects.isNotEmpty()
                             DailySection.DUE -> dueItems.isNotEmpty()
+                            DailySection.WATCH -> watchFeeds.isNotEmpty()
                             else -> true
                         }
                     }
@@ -525,6 +532,33 @@ fun DailyNoteScreen(
                                     )
                                 }
                             }
+                            DailySection.WATCH -> item(key = "watch") {
+                                cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = index) {
+                                    val context = androidx.compose.ui.platform.LocalContext.current
+                                    val readOnly = VaultWriteGate.readOnly
+                                    WatchSection(
+                                        feeds = watchFeeds,
+                                        now = remember(watchFeeds) { System.currentTimeMillis() },
+                                        onRead = { headline ->
+                                            if (readOnly) {
+                                                // A read-only device imports nothing: the article opens outside the app.
+                                                runCatching {
+                                                    context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, headline.url.toUri()))
+                                                }
+                                            } else {
+                                                watchViewModel.read(headline)
+                                                onOpenReader()
+                                            }
+                                        },
+                                        onImport = if (readOnly) null else { headline ->
+                                            if (watchViewModel.import(headline)) {
+                                                android.widget.Toast.makeText(context, "Importing to the inbox…", android.widget.Toast.LENGTH_SHORT).show()
+                                            }
+                                        },
+                                        modifier = Modifier.padding(bottom = 16.dp)
+                                    )
+                                }
+                            }
                             DailySection.DUE -> item(key = "due") {
                                 cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry(index = index) {
                                     DueTodaySection(
@@ -602,7 +636,8 @@ fun DailyNoteScreen(
                                     hasIdeas = viewModel.ideasText.isNotBlank() || viewModel.notesText.isNotBlank(),
                                     countdowns = countdowns.size,
                                     projects = dailyProjects.size,
-                                    due = dueItems.size
+                                    due = dueItems.size,
+                                    headlines = watchFeeds.sumOf { it.headlines.size }
                                 ),
                                 expanded = moreExpanded,
                                 onToggle = { layoutViewModel.setMoreExpanded(!moreExpanded) }

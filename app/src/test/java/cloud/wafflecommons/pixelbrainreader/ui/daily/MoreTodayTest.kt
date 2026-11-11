@@ -32,6 +32,16 @@ class MoreTodayTest {
     }
 
     @Test
+    fun `the tech watch's headlines count in the fold it arrives in`() {
+        val withWatch = moreTodaySummary(
+            fold = setOf(DailySection.WATCH), moments = 0, tasks = 0, gratitude = 0,
+            echoes = 0, scraps = 0, hasIdeas = false, countdowns = 0, headlines = 7
+        )
+        assertEquals("7 headlines", withWatch)
+        assertEquals(DailySection.WATCH, DailySection.entries.last()) // added by an update: it arrives last, in the fold
+    }
+
+    @Test
     fun `an empty fold still says what it holds`() {
         assertEquals("Gratitude, ideas, mantra and more", summary(setOf(DailySection.MANTRA, DailySection.SCRATCHPAD)))
     }

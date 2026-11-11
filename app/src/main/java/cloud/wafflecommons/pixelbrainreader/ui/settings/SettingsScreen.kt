@@ -59,6 +59,7 @@ import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.Work
 import androidx.compose.material.icons.rounded.DateRange
 import androidx.compose.material.icons.rounded.Mood
+import androidx.compose.material.icons.rounded.RssFeed
 import androidx.compose.material.icons.rounded.ViewAgenda
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.SleepSessionRecord
@@ -82,6 +83,7 @@ private fun Context.findActivity(): Activity? {
 fun SettingsScreen(
     onBack: () -> Unit,
     onNavigateToDailyLayout: () -> Unit = {},
+    onNavigateToFeeds: () -> Unit = {},
     onNavigateToHabitConfig: () -> Unit = {},
     onNavigateToHomeConfig: () -> Unit = {},
     onNavigateToReminders: () -> Unit = {},
@@ -289,6 +291,17 @@ fun SettingsScreen(
                          }
                      }
                  }
+
+                ListItem(
+                    modifier = Modifier.clickable {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onNavigateToFeeds()
+                    },
+                    leadingContent = { Icon(Icons.Rounded.RssFeed, contentDescription = null) },
+                    supportingContent = { Text("The feeds behind the Daily screen's Tech watch, kept in your vault") }
+                ) {
+                    Text("Tech watch feeds")
+                }
             }
             }
 

@@ -1338,6 +1338,7 @@ fun MainScreen(
                 SettingsScreen(
                     onBack = { navController.popBackStack() },
                     onNavigateToDailyLayout = { navController.navigate("daily_layout") },
+                    onNavigateToFeeds = { navController.navigate("watch_feeds") },
                     onNavigateToHabitConfig = { navController.navigate("habit_config") },
                     onNavigateToHomeConfig = { navController.navigate(Screen.ROUTE_HOME_CONFIG) },
                     onNavigateToReminders = { navController.navigate("reminders") },
@@ -1374,6 +1375,12 @@ fun MainScreen(
 
             composable("daily_layout") {
                 cloud.wafflecommons.pixelbrainreader.ui.settings.DailyLayoutScreen(
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
+
+            composable("watch_feeds") {
+                cloud.wafflecommons.pixelbrainreader.ui.settings.FeedsScreen(
                     onNavigateBack = { navController.popBackStack() }
                 )
             }
@@ -1435,7 +1442,8 @@ fun MainScreen(
                     onOpenWork = { navController.navigate(V11Routes.WORK_HUB) },
                     onOpenActivity = { navController.navigate(V11Routes.ACTIVITY) },
                     onOpenProject = { root -> navController.navigate(V11Routes.project(root)) },
-                    onOpenChores = { navigateToTab(Screen.HomeOS) }
+                    onOpenChores = { navigateToTab(Screen.HomeOS) },
+                    onOpenReader = { navController.navigate(Screen.Import) }
                 )
             }
             

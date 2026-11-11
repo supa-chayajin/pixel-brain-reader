@@ -74,8 +74,22 @@ class ImportWorker @AssistedInject constructor(
         return title to WebClipNote.linkOnly(clean, title, VaultSchema.INBOX_FOLDER, reason, null, null, today)
     }
 
-    private companion object {
-        const val TAG = "ImportWorker"
-        const val MAX_RETRIES = 3
+    companion object {
+        private const val TAG = "ImportWorker"
+        private const val MAX_RETRIES = 3
+
+        /**
+         * Imports [url] to the inbox in the background, once connected: the confirmed
+         * `pixelbrain://import` link and the tech watch's Import. The worker checks the address.
+         */
+        fun enqueue(context: android.content.Context, url: String) {
+            val request = androidx.work.OneTimeWorkRequestBuilder<ImportWorker>()
+                .setInputData(androidx.work.workDataOf("url" to url))
+                .setConstraints(
+                    androidx.work.Constraints.Builder().setRequiredNetworkType(androidx.work.NetworkType.CONNECTED).build()
+                )
+                .build()
+            androidx.work.WorkManager.getInstance(context).enqueue(request)
+        }
     }
 }

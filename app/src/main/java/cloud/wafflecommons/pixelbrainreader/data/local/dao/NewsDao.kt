@@ -20,4 +20,19 @@ interface NewsDao {
 
     @Query("DELETE FROM news_articles WHERE fetchDate >= :startOfDay")
     suspend fun deleteTodayNews(startOfDay: Long)
+
+    // The tech watch (12.12): `sourceName` holds the feed's address, stable when the feed is renamed.
+
+    @Query("SELECT * FROM news_articles WHERE sourceName IN (:sources)")
+    suspend fun bySources(sources: List<String>): List<NewsArticleEntity>
+
+    @Query("DELETE FROM news_articles WHERE sourceName = :source")
+    suspend fun deleteSource(source: String)
+
+    /** Articles of feeds no longer in the list. */
+    @Query("DELETE FROM news_articles WHERE sourceName NOT IN (:sources)")
+    suspend fun deleteOtherSources(sources: List<String>)
+
+    @Query("SELECT MAX(fetchDate) FROM news_articles")
+    suspend fun lastFetch(): Long?
 }

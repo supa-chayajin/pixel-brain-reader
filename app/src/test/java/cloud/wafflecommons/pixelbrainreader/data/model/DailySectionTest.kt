@@ -2,6 +2,7 @@ package cloud.wafflecommons.pixelbrainreader.data.model
 
 import cloud.wafflecommons.pixelbrainreader.data.model.DailySection.COUNTDOWNS
 import cloud.wafflecommons.pixelbrainreader.data.model.DailySection.DUE
+import cloud.wafflecommons.pixelbrainreader.data.model.DailySection.WATCH
 import cloud.wafflecommons.pixelbrainreader.data.model.DailySection.ECHOES
 import cloud.wafflecommons.pixelbrainreader.data.model.DailySection.GRATITUDE
 import cloud.wafflecommons.pixelbrainreader.data.model.DailySection.MANTRA
@@ -44,14 +45,14 @@ class DailySectionTest {
         // Mantra is after Projects, Gratitude and Countdowns (folded): up swaps it with Timeline, the last shown block.
         val moved = DailySection.moved(default, shown, MANTRA, up = true)
         assertEquals(listOf(WEATHER, VITALS, TASKS, MANTRA, TIMELINE), moved.filter { it in shown })
-        assertEquals(listOf(PROJECTS, GRATITUDE, COUNTDOWNS, ECHOES, SECOND_BRAIN, SCRATCHPAD, DUE), moved.filter { it !in shown })
+        assertEquals(listOf(PROJECTS, GRATITUDE, COUNTDOWNS, ECHOES, SECOND_BRAIN, SCRATCHPAD, DUE, WATCH), moved.filter { it !in shown })
     }
 
     @Test
     fun `folded blocks move among themselves`() {
         val shown = DailySection.DEFAULT_SHOWN
         val moved = DailySection.moved(default, shown, COUNTDOWNS, up = true)
-        assertEquals(listOf(PROJECTS, COUNTDOWNS, GRATITUDE, MANTRA, ECHOES, SECOND_BRAIN, SCRATCHPAD, DUE), moved.filter { it !in shown })
+        assertEquals(listOf(PROJECTS, COUNTDOWNS, GRATITUDE, MANTRA, ECHOES, SECOND_BRAIN, SCRATCHPAD, DUE, WATCH), moved.filter { it !in shown })
         assertEquals(listOf(WEATHER, VITALS, TASKS, TIMELINE), moved.filter { it in shown })
     }
 
@@ -61,8 +62,8 @@ class DailySectionTest {
         assertEquals(default, DailySection.moved(default, shown, WEATHER, up = true))
         // Timeline is the last block on screen: the folded blocks after it don't count.
         assertEquals(default, DailySection.moved(default, shown, TIMELINE, up = false))
-        // Due today (12.11.0) is the last block of all by default.
-        assertEquals(default, DailySection.moved(default, shown, DUE, up = false))
+        // The tech watch (12.12.0) is the last block of all by default.
+        assertEquals(default, DailySection.moved(default, shown, WATCH, up = false))
         // Projects (12.8.0) is the first folded block by default.
         assertEquals(default, DailySection.moved(default, shown, PROJECTS, up = true))
     }
@@ -75,5 +76,15 @@ class DailySectionTest {
         assertEquals(false, DUE in DailySection.DEFAULT_SHOWN)
         // The key is persisted: never renamed.
         assertEquals("due", DUE.key)
+    }
+
+    @Test
+    fun `the tech watch joins a saved order at its end and starts in the fold`() {
+        val saved = DailySection.toKeys(DailySection.entries - WATCH)
+        assertEquals(WATCH, DailySection.orderFromKeys(saved).last())
+        assertEquals(false, WATCH in DailySection.fromKeys(setOf("weather", "tasks")))
+        assertEquals(false, WATCH in DailySection.DEFAULT_SHOWN)
+        // The key is persisted: never renamed.
+        assertEquals("watch", WATCH.key)
     }
 }

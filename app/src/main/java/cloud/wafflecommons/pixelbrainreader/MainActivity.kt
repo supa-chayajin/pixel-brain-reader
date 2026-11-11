@@ -275,15 +275,8 @@ class MainActivity : FragmentActivity() {
 
     /** Enqueue the confirmed import. Kept separate from validation so the dialog gates it. */
     private fun enqueueImport(url: String) {
-        // Wait for connectivity rather than failing the import when offline.
-        val constraints = androidx.work.Constraints.Builder()
-            .setRequiredNetworkType(androidx.work.NetworkType.CONNECTED)
-            .build()
-        val workRequest = androidx.work.OneTimeWorkRequestBuilder<cloud.wafflecommons.pixelbrainreader.data.workers.ImportWorker>()
-            .setInputData(androidx.work.workDataOf("url" to url))
-            .setConstraints(constraints)
-            .build()
-        androidx.work.WorkManager.getInstance(this).enqueue(workRequest)
+        // Waits for connectivity rather than failing the import when offline.
+        cloud.wafflecommons.pixelbrainreader.data.workers.ImportWorker.enqueue(this, url)
         android.widget.Toast.makeText(this, "Importing Article...", android.widget.Toast.LENGTH_SHORT).show()
     }
 }
