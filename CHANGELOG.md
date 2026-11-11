@@ -7,9 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Planned: `documentation/plans/2026-11-10-dream-app-roadmap.md`. Next, 12.14.0: the end-of-work
-ritual and focus sessions as Live Updates. Hybrid search waits for the golden set's numbers,
-measured on the phone.
+Planned: `documentation/plans/2026-11-10-dream-app-roadmap.md`. Next, 12.15.0: sync safety (a
+conflict screen, read-only polish for the tablet). Hybrid search waits for the golden set's
+numbers, measured on the phone.
+
+## [12.14.0] — 2026-11-11
+
+The companion: the end of work.
+
+### Added
+
+- **Wrap up your workday.** From 30 minutes before work ends on a work day (your Modes hours), a
+  Daily banner: each unfinished task goes to tomorrow's board, to the someday note
+  (`00_Inbox/Un jour.md`) or nowhere, and tomorrow's rollover leaves it alone; today's win goes to
+  the mission log (Work mode); the inbox count opens the inbox; **Close the day** burns today's
+  note at once and offers your evening mode with one tap, never on its own.
+- **Focus sessions,** from Daily's + menu (25, 50 or 90 minutes) or a new Quick Settings tile: a
+  Live Update with the countdown in the status bar and a progress bar. A session that runs to its
+  end earns XP, and its "Focus done" notification can log the notes you edited as a mission-log
+  fact (Work mode). Stopping early ends quietly.
+- **A new permission,** `POST_PROMOTED_NOTIFICATIONS`, for the Live Update: granted at install,
+  no prompt. Live Updates can be turned off for the app in Android settings, and the session then
+  shows as an ordinary notification.
+
+### Fixed
+
+- **The weekly review's XP** counted only the last 50 gains and missed flat grants such as
+  gratitude. Each review now keeps the XP total in its frontmatter, and next week's gain is the
+  difference; until a review has last week's total, the gain shows as a lower bound.
 
 ## [12.13.0] — 2026-11-11
 

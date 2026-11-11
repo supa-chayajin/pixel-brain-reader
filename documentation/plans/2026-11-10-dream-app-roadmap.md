@@ -175,17 +175,19 @@ counts and links, both monthly reports, the work one in the first work folder).
 
 ### 12.14.0 — The companion: the end of work
 
-The design, reviewed by the owner in an interview on 2026-11-11: `2026-11-11-12.14-end-of-work.md`
-(eight decisions; it supersedes the details below where they differ).
+Built in 12.14.0 (2026-11-11). The design, reviewed by the owner in an interview on 2026-11-11:
+`2026-11-11-12.14-end-of-work.md` (eight decisions; it supersedes the details below where they
+differ: from 30 minutes before work ends, someday is `00_Inbox/Un jour.md`, the bar steps every 5
+minutes through WorkManager, XP for every finished session and the log on a tap).
 
-- [ ] **D8 Shutdown ritual.** At the end of Work hours (the Modes schedule), one Daily banner:
+- [x] **D8 Shutdown ritual.** At the end of Work hours (the Modes schedule), one Daily banner:
   - unfinished tasks go to tomorrow, someday or nowhere (D1);
   - the win of the day becomes a mission-log fact;
   - the inbox count;
   - "Close the day" burns the note and *suggests* the evening mode, never forces it.
 
   It is the Work-end counterpart of the 21:00 check-in. *(V12 6.3.)*
-- [ ] **D9 Focus sessions.** A focus block shows as a promoted ongoing notification with a
+- [x] **D9 Focus sessions.** A focus block shows as a promoted ongoing notification with a
       progress bar (a Live Update). At the end, the notes edited during it (from the git diff)
       become an optional mission-log fact and XP. Stop and ask if this needs a library bump (#9).
       *(Oct 17 6.2; V12 6.2.)*
