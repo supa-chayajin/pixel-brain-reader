@@ -155,6 +155,9 @@ Built in 12.12.0 (2026-11-11). The design, reviewed by the owner: `2026-11-11-12
 
 ### 12.13.0 — The companion: the week and the month
 
+The design, reviewed by the owner in an interview on 2026-11-11: `2026-11-11-12.13-week-and-month.md`
+(seven decisions; it supersedes the details below where they differ).
+
 - [ ] **D6 Weekly review note.** `10_Journal/Weekly/YYYY-Www.md`, burned on Sunday evening (pinned
       with `DailyWorkScheduler`). It never overwrites an existing note (the " (2)" rule). It holds:
   - habits, the mood trend, sleep and steps averages, and the tasks and chores done;
