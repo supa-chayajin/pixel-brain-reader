@@ -194,6 +194,9 @@ minutes through WorkManager, XP for every finished session and the log on a tap)
 
 ### 12.15.0 — Sync safety
 
+The design, reviewed by the owner in an interview on 2026-11-11: `2026-11-11-12.15-sync-safety.md`
+(six decisions; it supersedes the details below where they differ).
+
 - [ ] **S1 Conflict screen.** It lists the `*_sync_conflict_*` backups that `ConflictResolver`
       leaves in the vault, with a side-by-side diff (the Time Machine HISTOGRAM engine) and keep
       mine / keep theirs / edit; resolving removes the backup. The new risk is the phone's TODO
