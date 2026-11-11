@@ -100,7 +100,8 @@ fun DailyNoteScreen(
     rolloverViewModel: TaskRolloverViewModel = hiltViewModel(),
     dueTodayViewModel: DueTodayViewModel = hiltViewModel(),
     watchViewModel: WatchViewModel = hiltViewModel(),
-    recoveryViewModel: cloud.wafflecommons.pixelbrainreader.ui.lifestats.RecoveryViewModel = hiltViewModel()
+    recoveryViewModel: cloud.wafflecommons.pixelbrainreader.ui.lifestats.RecoveryViewModel = hiltViewModel(),
+    weeklyPlanViewModel: WeeklyPlanViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val shownSections by layoutViewModel.shown.collectAsStateWithLifecycle()
@@ -117,6 +118,9 @@ fun DailyNoteScreen(
     LaunchedEffect(Unit) { projectsViewModel.reload() }
     val syncDigest by activityViewModel.digest.collectAsStateWithLifecycle()
     val rolloverOffer by rolloverViewModel.offer.collectAsStateWithLifecycle()
+    // The weekly review's plan: re-read each time Daily shows, so a plan just written clears the banner.
+    val weeklyPlan by weeklyPlanViewModel.prompt.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { weeklyPlanViewModel.reload() }
     val dueToday by dueTodayViewModel.due.collectAsStateWithLifecycle()
     // Only today's page lists what is due today.
     val dueItems = dueToday?.takeIf { it.first == state.date }?.second.orEmpty()
@@ -409,6 +413,13 @@ fun DailyNoteScreen(
                                 onBringAll = { rolloverViewModel.bringAll() },
                                 onDismissAll = { rolloverViewModel.dismissAll() }
                             )
+                        }
+                    }
+
+                    // The weekly review waits for next week's plan (12.13, D6): today's page only, a banner, not a block.
+                    weeklyPlan?.takeIf { it.day == state.date && !VaultWriteGate.readOnly }?.let { prompt ->
+                        item(key = "weekly-plan", span = StaggeredGridItemSpan.FullLine) {
+                            WeeklyPlanBanner(prompt = prompt, onOpen = { onOpenNote(prompt.week.path) })
                         }
                     }
 

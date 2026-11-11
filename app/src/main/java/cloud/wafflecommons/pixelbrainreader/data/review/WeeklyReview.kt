@@ -381,7 +381,7 @@ object WeeklyReviewFormat {
     private fun day(date: LocalDate) = if (date.dayOfMonth == 1) "1er" else date.dayOfMonth.toString()
     private fun month(date: LocalDate) = MONTHS[date.monthValue - 1]
     /** French takes the plural from 2 on: "0 jour", "1 jour", "2 jours". */
-    private fun count(n: Int, singular: String, plural: String) = "$n " + if (n < 2) singular else plural
+    internal fun count(n: Int, singular: String, plural: String) = "$n " + if (n < 2) singular else plural
     private fun hours(minutes: Int) = "${(minutes / 60.0).roundToInt()} h"
 
     /** "7 h 05". */

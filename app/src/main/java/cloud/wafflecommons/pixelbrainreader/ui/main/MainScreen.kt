@@ -573,7 +573,8 @@ fun MainScreen(
     launchedForShare: Boolean = false,
     viewModel: MainViewModel = hiltViewModel(),
     shareImportViewModel: cloud.wafflecommons.pixelbrainreader.ui.share.ShareImportViewModel = hiltViewModel(),
-    moodViewModel: cloud.wafflecommons.pixelbrainreader.ui.mood.MoodViewModel = hiltViewModel()
+    moodViewModel: cloud.wafflecommons.pixelbrainreader.ui.mood.MoodViewModel = hiltViewModel(),
+    weeklyCoachViewModel: cloud.wafflecommons.pixelbrainreader.ui.review.WeeklyCoachViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -1276,7 +1277,11 @@ fun MainScreen(
                                                         // The note's folder: the composer picks the project holding it (a sub-project first).
                                                         navController.navigate(V11Routes.handoff(path.substringBeforeLast('/'), link))
                                                     }
-                                                }
+                                                },
+                                            // A weekly review asks the Coach about its week (12.13, D6), then opens Chat.
+                                            onAskCoach = uiState.selectedFilePath
+                                                ?.takeIf(weeklyCoachViewModel::canAsk)
+                                                ?.let { path -> { weeklyCoachViewModel.askCoach(path) { navController.navigate(Screen.Chat) } } }
                                         )
                                     } else {
                                         cloud.wafflecommons.pixelbrainreader.ui.components.WelcomeScreen()

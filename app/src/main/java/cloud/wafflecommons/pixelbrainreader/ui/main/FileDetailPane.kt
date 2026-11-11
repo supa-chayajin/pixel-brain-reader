@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.rounded.Computer
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Hub
+import androidx.compose.material.icons.rounded.Psychology
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
@@ -145,7 +146,9 @@ fun FileDetailPane(
     filePath: String? = null,
     onOpenNote: (String) -> Unit = {},
     /** Hands the note off to a desktop session (a link to it); null when it can't be. */
-    onHandOff: (() -> Unit)? = null
+    onHandOff: (() -> Unit)? = null,
+    /** Asks the Coach about the week a weekly review covers (12.13, D6); null for any other note. */
+    onAskCoach: (() -> Unit)? = null
 ) {
     var showTimeMachine by rememberSaveable { mutableStateOf(false) }
     var showConnections by rememberSaveable { mutableStateOf(false) }
@@ -243,6 +246,15 @@ fun FileDetailPane(
                         Spacer(Modifier.weight(1f))
                         if (filePath != null && content != null && !isReadOnly) {
                             VaultRulesBadge(path = filePath, content = content, onFix = onContentChange)
+                        }
+                        if (onAskCoach != null) {
+                            IconButton(onClick = onAskCoach, modifier = Modifier.size(36.dp)) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Psychology,
+                                    contentDescription = "Ask Coach about this week",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                         if (onHandOff != null) {
                             IconButton(onClick = onHandOff, modifier = Modifier.size(36.dp)) {
