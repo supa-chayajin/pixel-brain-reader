@@ -3,6 +3,7 @@ package cloud.wafflecommons.pixelbrainreader.data.review
 import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.gamification.GamificationRepository
 import cloud.wafflecommons.pixelbrainreader.data.gamification.GamificationState
+import cloud.wafflecommons.pixelbrainreader.data.gamification.PlayerProfile
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.DailyDashboardDao
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.FileContentDao
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.MoodEntity
@@ -113,6 +114,19 @@ class WeeklyReviewRepositoryTest {
         coVerify { userPrefs.setWeeklyReviewWritten("2026-W46") }
         assertTrue(written.captured.contains("week: 2026-W46\n"))
         assertTrue(written.captured.contains(WeeklyReviewFormat.LAST_PLAN_HEADING + "\n\n- Finir la refonte\n"))
+    }
+
+    @Test
+    fun `the week's XP is the total now minus the one last week's note kept`() = runTest {
+        coEvery { noteRepository.getNoteContent("10_Journal/Weekly/2026-W45.md") } returns
+            WeeklyReviewFormat.render(ReviewWeek(2026, 45), WeeklyFacts(xpTotal = 100))
+        coEvery { gamificationRepository.getStateSnapshot() } returns
+            GamificationState(profile = PlayerProfile(level = 2, currentXp = 20.0))
+
+        repository.writeDue(sundayNight, zone)
+
+        assertTrue(written.captured.contains("\nxp_total: 120\n"))
+        assertTrue(written.captured.contains("- +20 XP · niveau 2\n"))
     }
 
     @Test

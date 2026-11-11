@@ -92,6 +92,15 @@ class WeeklyReviewRepository @Inject constructor(
             val isWork: (String) -> Boolean = { path -> workFolders.any { path == it || path.startsWith("$it/") } }
             val tasks = optional(0 to 0) { WeeklyActivity.tasks(week.days.map { tasksOf(it) }) }
             val gamification = optional(null) { gamificationRepository.getStateSnapshot() }
+            val lastWeek = optional(null) { noteRepository.getNoteContent(week.previous().path) }
+            // The XP total each review keeps makes the next week's gain exact (the gain history keeps
+            // only the last 50 gains, and a flat grant such as gratitude isn't in it).
+            val xpTotal = gamification?.profile?.let { WeeklyActivity.cumulativeXp(it.level, it.currentXp) }
+            val (xpGained, xpExact) = if (gamification != null && xpTotal != null) {
+                WeeklyActivity.xpGain(xpTotal, lastWeek?.let(WeeklyReviewFormat::xpTotalOf), gamification.history, week, zone)
+            } else {
+                null to true
+            }
             WeeklyFacts(
                 habits = optional(emptyList()) {
                     val logs = habitRepository.getLogsBetweenFlow(week.monday, week.sunday).first().values.flatten()
@@ -113,13 +122,13 @@ class WeeklyReviewRepository @Inject constructor(
                 tasksDone = tasks.first,
                 tasksTotal = tasks.second,
                 choresDone = optional(emptyList()) { WeeklyActivity.chores(choreRepository.getAllChoresStream().first(), week) },
-                xpGained = gamification?.let { WeeklyActivity.xp(it.history, week, zone) },
+                xpGained = xpGained,
                 level = gamification?.profile?.level,
+                xpTotal = xpTotal,
+                xpExact = xpExact,
                 notes = optional(null) { notesOf(week, zone, isWork) },
                 work = optional(null) { workOf(week, today) },
-                lastWeekPlan = optional(emptyList()) {
-                    noteRepository.getNoteContent(week.previous().path)?.let(WeeklyReviewFormat::planLines).orEmpty()
-                }
+                lastWeekPlan = lastWeek?.let(WeeklyReviewFormat::planLines).orEmpty()
             )
         }
 

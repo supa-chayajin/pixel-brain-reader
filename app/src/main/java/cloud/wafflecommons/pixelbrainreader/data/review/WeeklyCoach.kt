@@ -34,7 +34,7 @@ object WeeklyCoach {
                 )
             }
             if (facts.choresDone.isNotEmpty()) add("Corvées faites : ${facts.choresDone.size}.")
-            facts.xpGained?.takeIf { it > 0 }?.let { add("XP gagnée : $it.") }
+            facts.xpGained?.takeIf { it > 0 }?.let { add(if (facts.xpExact) "XP gagnée : $it." else "XP gagnée : au moins $it.") }
             facts.notes?.takeIf { !it.isEmpty }?.let { notes ->
                 add(
                     "Notes : ${f.count(notes.created.size + notes.workCreated, "créée", "créées")}, " +

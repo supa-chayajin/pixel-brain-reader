@@ -1,5 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.data.review
 
+import cloud.wafflecommons.pixelbrainreader.data.gamification.XpCalculator
 import cloud.wafflecommons.pixelbrainreader.data.gamification.XpGainEntry
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.ChoreEntity
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyTaskEntity
@@ -106,6 +107,10 @@ data class WeeklyFacts(
     val choresDone: List<String> = emptyList(),
     val xpGained: Int? = null,
     val level: Int? = null,
+    /** All the XP earned so far, kept in the note (`xp_total`) so next week's gain is exact. */
+    val xpTotal: Int? = null,
+    /** False when [xpGained] comes from the capped gain history: then it is a lower bound. */
+    val xpExact: Boolean = true,
     val notes: NoteActivity? = null,
     val work: WorkWeek? = null,
     val lastWeekPlan: List<String> = emptyList()
@@ -178,6 +183,19 @@ object WeeklyActivity {
     }
 
     /** XP gained inside the week; null when the history holds nothing at all. */
+    /** All the XP earned so far: every level's threshold below [level], plus the progress within it. */
+    fun cumulativeXp(level: Int, currentXp: Double): Int =
+        ((1 until level.coerceAtLeast(1)).sumOf { XpCalculator.getXpForNextLevel(it) } + currentXp).roundToInt()
+
+    /**
+     * The week's gain and whether it is exact: the total now against the one last week's note kept;
+     * without it, the gain history's sum, a lower bound (it keeps the last 50 gains, and a flat
+     * grant such as gratitude isn't in it).
+     */
+    fun xpGain(total: Int, previousTotal: Int?, history: List<XpGainEntry>, week: ReviewWeek, zone: ZoneId): Pair<Int?, Boolean> =
+        if (previousTotal != null) (total - previousTotal).coerceAtLeast(0) to true
+        else xp(history, week, zone) to false
+
     fun xp(history: List<XpGainEntry>, week: ReviewWeek, zone: ZoneId): Int? {
         if (history.isEmpty()) return null
         val from = week.monday.atStartOfDay(zone).toInstant().toEpochMilli()
@@ -258,6 +276,7 @@ object WeeklyReviewFormat {
     const val PLAN_HEADING = "## 🧭 Semaine prochaine"
     const val LAST_PLAN_HEADING = "## ↩️ Le plan de la semaine dernière"
     const val TAG = "revue-hebdo"
+    const val XP_TOTAL_KEY = "xp_total"
     private const val NBSP = ' '
     private const val LISTED = 10
     private val PLACEHOLDERS = setOf("-", "*", "+", "- [ ]", "* [ ]", "-  [ ]")
@@ -270,7 +289,8 @@ object WeeklyReviewFormat {
 
     fun render(week: ReviewWeek, facts: WeeklyFacts): String = buildString {
         val title = title(week)
-        append(VaultSchema.frontmatter(title = title, path = week.path, date = week.sunday, tags = listOf(TAG), extra = listOf("week" to week.key)))
+        val extra = listOf("week" to week.key) + listOfNotNull(facts.xpTotal?.let { XP_TOTAL_KEY to it.toString() })
+        append(VaultSchema.frontmatter(title = title, path = week.path, date = week.sunday, tags = listOf(TAG), extra = extra))
         append('\n').append("# ").append(title).append("\n\n")
 
         section("🔁 Habitudes", facts.habits.map { habit ->
@@ -297,7 +317,7 @@ object WeeklyReviewFormat {
             }
         ))
         section("⭐ XP", listOfNotNull(facts.xpGained?.takeIf { it > 0 }?.let { xp ->
-            "- +${number(xp)} XP" + (facts.level?.let { " · niveau $it" } ?: "")
+            (if (facts.xpExact) "- +" else "- Au moins +") + "${number(xp)} XP" + (facts.level?.let { " · niveau $it" } ?: "")
         }))
         section("📝 Notes", facts.notes?.let { notes ->
             listOfNotNull(
@@ -320,6 +340,16 @@ object WeeklyReviewFormat {
     }
 
     /** The owner's lines under "Semaine prochaine", as written; the empty placeholder isn't a plan. */
+    /** The XP total a review kept in its frontmatter, or null (an older note, or none). */
+    fun xpTotalOf(content: String): Int? {
+        val lines = content.replace("\r\n", "\n").split('\n')
+        if (lines.firstOrNull()?.trim() != "---") return null
+        val end = lines.drop(1).indexOfFirst { it.trim() == "---" }.takeIf { it >= 0 } ?: return null
+        return lines.subList(1, end + 1)
+            .firstOrNull { it.startsWith("$XP_TOTAL_KEY:") }
+            ?.substringAfter(':')?.trim()?.toIntOrNull()
+    }
+
     fun planLines(content: String): List<String> {
         val lines = content.replace("\r\n", "\n").split('\n')
         val start = lines.indexOfFirst { it.trimEnd() == PLAN_HEADING }

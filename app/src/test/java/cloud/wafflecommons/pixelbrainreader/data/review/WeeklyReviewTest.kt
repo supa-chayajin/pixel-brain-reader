@@ -229,6 +229,33 @@ class WeeklyReviewTest {
     }
 
     @Test
+    fun `the XP total is every level's threshold below, plus the progress within`() {
+        assertEquals(30, WeeklyActivity.cumulativeXp(1, 30.0))
+        // 100 (level 1) + 100 × 2^1.5 (level 2) + 10
+        assertEquals(393, WeeklyActivity.cumulativeXp(3, 10.0))
+    }
+
+    @Test
+    fun `the week's gain is exact against last week's total, a lower bound without it`() {
+        fun gain(at: LocalDateTime, amount: Double) = XpGainEntry(millis(at), amount, "test", null)
+        val history = listOf(gain(LocalDateTime.of(2026, 11, 10, 9, 0), 35.0))
+        assertEquals(420 to true, WeeklyActivity.xpGain(1500, 1080, history, w46, zone))
+        assertEquals(0 to true, WeeklyActivity.xpGain(900, 1080, history, w46, zone))
+        assertEquals(35 to false, WeeklyActivity.xpGain(1500, null, history, w46, zone))
+    }
+
+    @Test
+    fun `the XP total travels in the note to next week, and a lower bound says so`() {
+        val note = WeeklyReviewFormat.render(w46, WeeklyFacts(xpGained = 35, level = 9, xpTotal = 1500, xpExact = false))
+        assertTrue(note.contains("\nxp_total: 1500\n"))
+        assertEquals(1500, WeeklyReviewFormat.xpTotalOf(note))
+        assertEquals(1500, WeeklyReviewFormat.xpTotalOf(note.replace("\n", "\r\n")))
+        assertTrue(note.contains("- Au moins +35 XP · niveau 9\n"))
+        assertNull(WeeklyReviewFormat.xpTotalOf("# Semaine 45\n\nxp_total: 3\n"))
+        assertNull(WeeklyReviewFormat.xpTotalOf(WeeklyReviewFormat.render(w46, WeeklyFacts())))
+    }
+
+    @Test
     fun `XP counts the gains inside the week`() {
         fun gain(at: LocalDateTime, amount: Double) = XpGainEntry(millis(at), amount, "test", null)
         val history = listOf(
