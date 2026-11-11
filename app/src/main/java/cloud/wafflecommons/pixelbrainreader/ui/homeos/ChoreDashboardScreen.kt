@@ -29,7 +29,9 @@ import cloud.wafflecommons.pixelbrainreader.ui.theme.NavBarClearance
 import cloud.wafflecommons.pixelbrainreader.ui.utils.CardMinWidth
 import cloud.wafflecommons.pixelbrainreader.ui.utils.isMediumOrWider
 import androidx.hilt.navigation.compose.hiltViewModel
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.sync.SyncState
+import cloud.wafflecommons.pixelbrainreader.ui.components.ReadOnlyNotice
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @Composable
@@ -88,6 +90,10 @@ fun ChoreDashboardScreen(
                 modifier = Modifier
                     .fillMaxSize()
             ) {
+                // A read-only device shows the chores and completes none (12.15, S2).
+                if (VaultWriteGate.readOnly) {
+                    item(span = StaggeredGridItemSpan.FullLine) { ReadOnlyNotice(Modifier.padding(vertical = 8.dp)) }
+                }
                 groupedChores.forEach { group ->
                     val roomName = group.roomName
                     val chores = group.chores
@@ -137,7 +143,8 @@ fun ChoreDashboardScreen(
                                     roomColor = roomColor,
                                     onDoItClick = {
                                         viewModel.doChore(choreModel.entity.id)
-                                    }
+                                    },
+                                    editable = !VaultWriteGate.readOnly
                                 )
                             }
                         }
@@ -191,7 +198,7 @@ fun RoomHeader(roomName: String, roomColor: Color, urgentCount: Int) {
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun ChoreCard(chore: ChoreUiModel, roomColor: Color, onDoItClick: () -> Unit) {
+fun ChoreCard(chore: ChoreUiModel, roomColor: Color, onDoItClick: () -> Unit, editable: Boolean = true) {
     val barColor = when (chore.statusColor) {
         StatusColor.GREEN -> SemanticPalette.Success
         StatusColor.YELLOW -> SemanticPalette.Warning
@@ -254,14 +261,15 @@ fun ChoreCard(chore: ChoreUiModel, roomColor: Color, onDoItClick: () -> Unit) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+                val canDo = editable && targetProgress > 0.1f
                 CortexIconButton(
                     onClick = onDoItClick,
-                    enabled = targetProgress > 0.1f
+                    enabled = canDo
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.CheckCircle,
                         contentDescription = "Done",
-                        tint = if (targetProgress > 0.1f) barColor else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
+                        tint = if (canDo) barColor else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
                         modifier = Modifier.size(32.dp)
                     )
                 }

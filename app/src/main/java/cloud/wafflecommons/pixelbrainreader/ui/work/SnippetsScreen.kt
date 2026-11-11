@@ -46,6 +46,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.vault.CodeBlock
 import cloud.wafflecommons.pixelbrainreader.data.work.RunbookStep
 import cloud.wafflecommons.pixelbrainreader.data.work.SnippetRepository
@@ -54,6 +55,7 @@ import cloud.wafflecommons.pixelbrainreader.data.work.StepStatus
 import cloud.wafflecommons.pixelbrainreader.data.work.WorkNote
 import cloud.wafflecommons.pixelbrainreader.ui.components.EmptyHint
 import cloud.wafflecommons.pixelbrainreader.ui.components.FormScaffold
+import cloud.wafflecommons.pixelbrainreader.ui.components.ReadOnlyNotice
 import cloud.wafflecommons.pixelbrainreader.ui.components.SectionCard
 import cloud.wafflecommons.pixelbrainreader.ui.components.rememberCopyToClipboard
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -248,8 +250,11 @@ fun RunbookPlayerScreen(path: String, onBack: () -> Unit, onOpenNote: (String) -
                 }
             }
             OutlinedTextField(runNotes, { runNotes = it }, label = { Text("Incident notes") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+            // The steps play anywhere; the incident log is a vault note (12.15, S2).
+            val readOnly = VaultWriteGate.readOnly
+            if (readOnly) ReadOnlyNotice()
             Button(
-                enabled = results.isNotEmpty() && note != null,
+                enabled = !readOnly && results.isNotEmpty() && note != null,
                 onClick = { note?.let { viewModel.finish(it, startedAt, results.toList(), runNotes, onOpenNote) } }
             ) { Text(if (index < steps.size) "Stop and write the incident log" else "Write the incident log") }
         }

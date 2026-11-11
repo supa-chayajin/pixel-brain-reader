@@ -86,6 +86,7 @@ import cloud.wafflecommons.pixelbrainreader.data.work.TodoAnswers
 import cloud.wafflecommons.pixelbrainreader.data.work.WorklogDay
 import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
 import cloud.wafflecommons.pixelbrainreader.ui.components.FormScaffold
+import cloud.wafflecommons.pixelbrainreader.ui.components.ReadOnlyNotice
 import cloud.wafflecommons.pixelbrainreader.ui.components.SectionCard
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
@@ -770,6 +771,8 @@ fun ProjectScreen(
         }
         HandoffCard(
             handoffs = handoffs,
+            // Hand-offs and answers are written into the project: not from a read-only device (12.15, S2).
+            editable = !VaultWriteGate.readOnly,
             onSend = { text -> viewModel.addHandoff(p.root, p.title, text) },
             onDone = { viewModel.completeHandoff(p.root, it) }
         )
@@ -801,7 +804,11 @@ fun ProjectScreen(
             ClaudeQueueCard(
                 queue = p.claudeQueue,
                 onOpenTodo = { onOpenNote(p.claudeQueue.first().path) },
-                onAnswer = { question, text -> viewModel.answer(p.root, question, text) }
+                onAnswer = if (VaultWriteGate.readOnly) {
+                    null
+                } else {
+                    { question, text -> viewModel.answer(p.root, question, text) }
+                }
             )
         }
         if (p.keyNotes.isNotEmpty() || p.recentNotes.isNotEmpty()) {
@@ -829,6 +836,7 @@ fun ProjectScreen(
 @Composable
 private fun HandoffCard(
     handoffs: List<cloud.wafflecommons.pixelbrainreader.data.work.DeskHandoffItem>,
+    editable: Boolean,
     onSend: (String) -> Unit,
     onDone: (cloud.wafflecommons.pixelbrainreader.data.work.DeskHandoffItem) -> Unit
 ) {
@@ -838,7 +846,8 @@ private fun HandoffCard(
         icon = Icons.Rounded.Computer,
         subtitle = "Shown when your next desktop session on this project starts."
     ) {
-        androidx.compose.material3.OutlinedTextField(
+        if (!editable) ReadOnlyNotice()
+        if (editable) androidx.compose.material3.OutlinedTextField(
             value = text,
             onValueChange = { text = it },
             modifier = Modifier.fillMaxWidth(),
@@ -861,7 +870,7 @@ private fun HandoffCard(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable(role = androidx.compose.ui.semantics.Role.Checkbox) { onDone(h) }
+                    .clickable(enabled = editable, role = androidx.compose.ui.semantics.Role.Checkbox) { onDone(h) }
                     .padding(vertical = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
@@ -872,7 +881,7 @@ private fun HandoffCard(
                 }
             }
         }
-        if (handoffs.isNotEmpty()) {
+        if (handoffs.isNotEmpty() && editable) {
             Text("Tap one when it's done.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
@@ -883,7 +892,7 @@ private fun HandoffCard(
  * The first few, each group under its `##` heading; the whole card opens the TODO.
  */
 @Composable
-private fun ClaudeQueueCard(queue: List<ProjectAction>, onOpenTodo: () -> Unit, onAnswer: (ProjectAction, String) -> Unit) {
+private fun ClaudeQueueCard(queue: List<ProjectAction>, onOpenTodo: () -> Unit, onAnswer: ((ProjectAction, String) -> Unit)?) {
     // Questions get their own list with an Answer button; the preview shows the rest.
     val questions = queue.filter(TodoAnswers::isQuestion)
     val tasks = queue - questions.toSet()
@@ -928,13 +937,13 @@ private fun ClaudeQueueCard(queue: List<ProjectAction>, onOpenTodo: () -> Unit, 
             questions.take(QUESTIONS_SHOWN).forEach { q ->
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     Text("❓ ${q.text}", style = MaterialTheme.typography.bodyMedium, maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                    TextButton(onClick = { answering = q }) { Text("Answer") }
+                    if (onAnswer != null) TextButton(onClick = { answering = q }) { Text("Answer") }
                 }
             }
         }
     }
     answering?.let { q ->
-        AnswerDialog(question = q.text, onAnswer = { text -> onAnswer(q, text); answering = null }, onDismiss = { answering = null })
+        AnswerDialog(question = q.text, onAnswer = { text -> onAnswer?.invoke(q, text); answering = null }, onDismiss = { answering = null })
     }
 }
 

@@ -28,7 +28,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cloud.wafflecommons.pixelbrainreader.data.model.HabitConfig
 import cloud.wafflecommons.pixelbrainreader.data.model.HabitType
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
+import cloud.wafflecommons.pixelbrainreader.ui.components.ReadOnlyNotice
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.util.UUID
@@ -42,6 +44,8 @@ fun HabitConfigScreen(
     val habits by viewModel.habits.collectAsStateWithLifecycle()
     val activeHabits = habits.filter { !it.archived }.sortedBy { it.sortOrder }
     val haptic = LocalHapticFeedback.current
+    // A read-only device lists the habits and edits none (12.15, S2).
+    val readOnly = VaultWriteGate.readOnly
 
     var editingHabit by remember { mutableStateOf<HabitConfig?>(null) }
     var isSheetOpen by remember { mutableStateOf(false) }
@@ -64,7 +68,7 @@ fun HabitConfigScreen(
         },
         floatingActionButton = {
             // Lift the FAB above the floating ExpressiveNavBar (which overlays content); none beside the rail.
-            Box(modifier = Modifier.padding(bottom = if (LocalNavRail.current) 0.dp else 66.dp)) {
+            if (!readOnly) Box(modifier = Modifier.padding(bottom = if (LocalNavRail.current) 0.dp else 66.dp)) {
                 FloatingActionButton(onClick = {
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     editingHabit = HabitConfig(
@@ -84,6 +88,7 @@ fun HabitConfigScreen(
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = NavBarClearance),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            if (readOnly) item(key = "read-only") { ReadOnlyNotice() }
             items(activeHabits, key = { it.id }) { habit ->
                 ElevatedCard(
                     onClick = {
@@ -91,6 +96,7 @@ fun HabitConfigScreen(
                         editingHabit = habit
                         isSheetOpen = true
                     },
+                    enabled = !readOnly,
                     modifier = Modifier.fillMaxWidth().animateItem()
                 ) {
                     Column(modifier = Modifier.padding(16.dp).fillMaxWidth()) {

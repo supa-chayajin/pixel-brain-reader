@@ -552,7 +552,13 @@ fun DailyNoteScreen(
                                         Spacer(Modifier.height(8.dp))
                                         TimelineList(
                                             events = state.timelineEvents,
-                                            onEdit = { entry -> if (entry.googleEventId != null) onOpenMeetingPrep(entry.id) else editTimelineEntry = entry }
+                                            onEdit = { entry ->
+                                                when {
+                                                    entry.googleEventId != null -> onOpenMeetingPrep(entry.id)
+                                                    // A read-only device edits no entry (12.15, S2).
+                                                    !VaultWriteGate.readOnly -> editTimelineEntry = entry
+                                                }
+                                            }
                                         )
                                     }
                                 }
@@ -841,6 +847,7 @@ private fun SecondBrainSection(
             OutlinedTextField(
                 value = ideas,
                 onValueChange = onIdeasChange,
+                readOnly = VaultWriteGate.readOnly,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(160.dp),
@@ -870,6 +877,7 @@ private fun SecondBrainSection(
             OutlinedTextField(
                 value = notes,
                 onValueChange = onNotesChange,
+                readOnly = VaultWriteGate.readOnly,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(160.dp),
@@ -1029,8 +1037,11 @@ private fun TaskList(tasks: List<DailyTaskEntity>, onToggle: (String, Boolean) -
 
 @Composable
 private fun TaskItem(task: DailyTaskEntity, onToggle: (String, Boolean) -> Unit, onEdit: (DailyTaskEntity) -> Unit) {
+    // A read-only device shows the board and changes nothing on it (12.15, S2).
+    val editable = !VaultWriteGate.readOnly
     Surface(
         onClick = { onEdit(task) },
+        enabled = editable,
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainer,
         modifier = Modifier.fillMaxWidth()
@@ -1041,6 +1052,7 @@ private fun TaskItem(task: DailyTaskEntity, onToggle: (String, Boolean) -> Unit,
         ) {
             CortexIconButton(
                 onClick = { onToggle(task.id, !task.isDone) },
+                enabled = editable,
                 modifier = Modifier.size(24.dp)
             ) {
                 Icon(
@@ -1382,7 +1394,7 @@ private fun ScratchItem(
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                CortexIconButton(onClick = { onDelete(scrap) }) {
+                if (!VaultWriteGate.readOnly) CortexIconButton(onClick = { onDelete(scrap) }) {
                     Icon(
                         imageVector = Icons.Outlined.Delete,
                         contentDescription = "Delete",
@@ -1390,7 +1402,7 @@ private fun ScratchItem(
                         tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                     )
                 }
-                CortexIconButton(onClick = { onPromote(scrap) }) {
+                if (!VaultWriteGate.readOnly) CortexIconButton(onClick = { onPromote(scrap) }) {
                     Icon(
                         imageVector = Icons.Default.Upgrade,
                         contentDescription = "Promote to Ideas",

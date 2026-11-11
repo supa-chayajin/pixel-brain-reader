@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.CardDefaults
@@ -175,6 +176,30 @@ fun SectionCard(
     }
 }
 
+/** [READ_ONLY_NOTICE] with a lock, at the top of a page that changes the vault, on a read-only device. */
+@Composable
+fun ReadOnlyNotice(modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Icon(
+            Icons.Outlined.Lock,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(18.dp)
+        )
+        Text(READ_ONLY_NOTICE, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/**
+ * The line a page that changes the vault shows on a read-only device (12.15, S2; settled decision
+ * #18: a UI that offers no write). The page stays readable; its controls are off or gone.
+ */
+const val READ_ONLY_NOTICE = "Read-only device: change this on your phone."
+
 /** A short centered message for empty lists. */
 @Composable
 fun EmptyHint(text: String, modifier: Modifier = Modifier) {
@@ -188,7 +213,7 @@ fun EmptyHint(text: String, modifier: Modifier = Modifier) {
 
 /** A row with a title, an optional subtitle and a remove button, for the settings lists. */
 @Composable
-fun RemovableRow(title: String, subtitle: String?, onRemove: () -> Unit) {
+fun RemovableRow(title: String, subtitle: String?, onRemove: (() -> Unit)?) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(title, style = MaterialTheme.typography.bodyLarge)
@@ -196,7 +221,8 @@ fun RemovableRow(title: String, subtitle: String?, onRemove: () -> Unit) {
                 Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
-        TextButton(onClick = onRemove) { Text("Remove") }
+        // null: nothing to remove here (a read-only device).
+        if (onRemove != null) TextButton(onClick = onRemove) { Text("Remove") }
     }
 }
 

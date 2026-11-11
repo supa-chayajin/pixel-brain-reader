@@ -37,8 +37,10 @@ import cloud.wafflecommons.pixelbrainreader.data.work.DeskHandoffRepository
 import cloud.wafflecommons.pixelbrainreader.data.work.ProjectFormat
 import cloud.wafflecommons.pixelbrainreader.data.work.ProjectRepository
 import cloud.wafflecommons.pixelbrainreader.data.work.ProjectSummary
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.ui.components.EmptyHint
 import cloud.wafflecommons.pixelbrainreader.ui.components.FormScaffold
+import cloud.wafflecommons.pixelbrainreader.ui.components.ReadOnlyNotice
 import cloud.wafflecommons.pixelbrainreader.ui.components.SectionCard
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
@@ -130,6 +132,9 @@ fun HandoffScreen(
     } ?: list?.firstOrNull()
 
     FormScaffold(title = "Hand off to desktop", onBack = onBack, snackbarHostState = snackbarHostState) {
+        // A hand-off writes the project's Handoff.md: never from a read-only device (12.15, S2).
+        val readOnly = VaultWriteGate.readOnly
+        if (readOnly) ReadOnlyNotice()
         when {
             list == null -> EmptyHint("Reading your projects…")
             list.isEmpty() -> EmptyHint("No project to hand off to: a project is a folder under 20_Projects/.")
@@ -161,7 +166,7 @@ fun HandoffScreen(
                     minLines = 3
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Button(enabled = !sending && chosen != null && text.isNotBlank(), onClick = { chosen?.let { viewModel.send(it, kind, text, onSent) } }) {
+                    Button(enabled = !readOnly && !sending && chosen != null && text.isNotBlank(), onClick = { chosen?.let { viewModel.send(it, kind, text, onSent) } }) {
                         Text("Hand off")
                     }
                     if (sending) CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)

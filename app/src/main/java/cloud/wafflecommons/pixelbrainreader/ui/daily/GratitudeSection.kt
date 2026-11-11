@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.GratitudeEntity
 import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
 import cloud.wafflecommons.pixelbrainreader.ui.utils.HapticHelper
@@ -48,8 +49,8 @@ fun GratitudeSection(
             
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Input
-            OutlinedTextField(
+            // Input: none on a read-only device, which only shows the day's list (12.15, S2).
+            if (!VaultWriteGate.readOnly) OutlinedTextField(
                 value = text,
                 onValueChange = { text = it },
                 modifier = Modifier.fillMaxWidth(),
@@ -93,6 +94,13 @@ fun GratitudeSection(
             )
 
             // List
+            if (gratitudes.isEmpty() && VaultWriteGate.readOnly) {
+                Text(
+                    text = "Nothing yet today.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
             if (gratitudes.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(12.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

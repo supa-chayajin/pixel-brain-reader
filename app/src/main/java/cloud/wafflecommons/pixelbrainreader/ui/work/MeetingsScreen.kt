@@ -42,6 +42,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
 import cloud.wafflecommons.pixelbrainreader.data.modes.Visibility
 import cloud.wafflecommons.pixelbrainreader.data.work.ActionItem
@@ -51,6 +52,7 @@ import cloud.wafflecommons.pixelbrainreader.data.work.WeekLoad
 import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
 import cloud.wafflecommons.pixelbrainreader.ui.components.EmptyHint
 import cloud.wafflecommons.pixelbrainreader.ui.components.FormScaffold
+import cloud.wafflecommons.pixelbrainreader.ui.components.ReadOnlyNotice
 import cloud.wafflecommons.pixelbrainreader.ui.components.PickDateDialog
 import cloud.wafflecommons.pixelbrainreader.ui.components.PickTimeDialog
 import cloud.wafflecommons.pixelbrainreader.ui.components.SectionCard
@@ -134,13 +136,16 @@ fun MeetingsScreen(onBack: () -> Unit, onOpenNote: (String) -> Unit, onOpenActio
     LaunchedEffect(Unit) { viewModel.messages.collect { snackbarHostState.showSnackbar(it) } }
     var creating by remember { mutableStateOf(false) }
     var editingFolder by remember { mutableStateOf(false) }
+    // Meeting notes, logged decisions and the folder setting are vault writes (12.15, S2).
+    val editable = !VaultWriteGate.readOnly
 
     FormScaffold(
         title = "Meetings",
         onBack = onBack,
         snackbarHostState = snackbarHostState,
-        actions = { CortexIconButton(onClick = { creating = true }) { Icon(Icons.Rounded.Add, contentDescription = "New meeting") } }
+        actions = { if (editable) CortexIconButton(onClick = { creating = true }) { Icon(Icons.Rounded.Add, contentDescription = "New meeting") } }
     ) {
+        if (!editable) ReadOnlyNotice()
         val s = state
         if (s == null) {
             EmptyHint("Reading your meetings…")
@@ -172,12 +177,12 @@ fun MeetingsScreen(onBack: () -> Unit, onOpenNote: (String) -> Unit, onOpenActio
                 ).joinToString(" · "),
                 modifier = Modifier.clickable { onOpenNote(meeting.note.path) }
             ) {
-                if (meeting.decisions.isNotEmpty()) {
+                if (meeting.decisions.isNotEmpty() && editable) {
                     TextButton(onClick = { viewModel.logDecisions(meeting) }) { Text("Log the decisions") }
                 }
             }
         }
-        TextButton(onClick = { editingFolder = true }) { Text("New meetings go to ${s.folder}") }
+        TextButton(onClick = { editingFolder = true }, enabled = editable) { Text("New meetings go to ${s.folder}") }
     }
 
     if (creating) {
@@ -280,6 +285,9 @@ fun NextActionsScreen(onBack: () -> Unit, onOpenNote: (String) -> Unit, viewMode
     LaunchedEffect(Unit) { viewModel.messages.collect { snackbarHostState.showSnackbar(it) } }
     val today = LocalDate.now()
     FormScaffold(title = "Next actions", onBack = onBack, snackbarHostState = snackbarHostState) {
+        // Ticking an action rewrites its note's line: not from a read-only device (12.15, S2).
+        val editable = !VaultWriteGate.readOnly
+        if (!editable) ReadOnlyNotice()
         val actions = state?.actions
         when {
             actions == null -> EmptyHint("Reading your actions…")
@@ -293,7 +301,7 @@ fun NextActionsScreen(onBack: () -> Unit, onOpenNote: (String) -> Unit, viewMode
                 )
                 items.forEach { action ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = false, onCheckedChange = { viewModel.complete(action) })
+                        Checkbox(checked = false, onCheckedChange = { viewModel.complete(action) }, enabled = editable)
                         Column(modifier = Modifier.weight(1f)) {
                             Text(action.text, style = MaterialTheme.typography.bodyMedium)
                             action.due?.let { due ->

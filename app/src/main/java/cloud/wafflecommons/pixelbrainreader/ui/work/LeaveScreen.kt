@@ -37,12 +37,14 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
 import cloud.wafflecommons.pixelbrainreader.data.modes.Visibility
 import cloud.wafflecommons.pixelbrainreader.data.repository.VaultDiscoveryRepository
 import cloud.wafflecommons.pixelbrainreader.data.work.LeaveRepository
 import cloud.wafflecommons.pixelbrainreader.data.work.LeaveReturn
 import cloud.wafflecommons.pixelbrainreader.ui.components.FormScaffold
+import cloud.wafflecommons.pixelbrainreader.ui.components.ReadOnlyNotice
 import cloud.wafflecommons.pixelbrainreader.ui.components.PickDateRangeDialog
 import cloud.wafflecommons.pixelbrainreader.ui.components.SectionCard
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -165,6 +167,9 @@ fun LeaveScreen(
     var pickPeriod by remember { mutableStateOf(false) }
 
     FormScaffold(title = "Leave & handover", onBack = onBack, snackbarHostState = snackbarHostState) {
+        // Both documents are inbox notes: never written from a read-only device (12.15, S2).
+        val readOnly = VaultWriteGate.readOnly
+        if (readOnly) ReadOnlyNotice()
         if (visibility.hideWork) {
             Text(
                 "Outside ${visibility.workLabel} mode. The documents are still written to your inbox, to read in ${visibility.workLabel} mode.",
@@ -197,11 +202,11 @@ fun LeaveScreen(
                     Text("Add a summary", style = MaterialTheme.typography.bodyLarge)
                     Text("Written on the device by Gemini Nano, marked as such.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                Switch(checked = withSummary, onCheckedChange = { withSummary = it })
+                Switch(checked = withSummary, onCheckedChange = { withSummary = it }, enabled = !readOnly)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Button(
-                    enabled = !working && scope != null && period != null,
+                    enabled = !readOnly && !working && scope != null && period != null,
                     onClick = {
                         val (start, end) = period ?: return@Button
                         viewModel.createHandover(scope ?: return@Button, start, end, withSummary, onOpenNote)
@@ -219,7 +224,7 @@ fun LeaveScreen(
             } ?: "In the ${cloud.wafflecommons.pixelbrainreader.data.work.LeaveDocuments.RETURN_WINDOW_DAYS} days after a leave, a briefing of what changed in your work folders shows here and on the Daily screen."
         ) {
             if (returning != null) {
-                FilledTonalButton(enabled = !working, onClick = { viewModel.createBriefing(withSummary, onOpenNote) }) { Text("Brief me") }
+                FilledTonalButton(enabled = !readOnly && !working, onClick = { viewModel.createBriefing(withSummary, onOpenNote) }) { Text("Brief me") }
             }
         }
     }
@@ -252,7 +257,9 @@ fun BackFromLeaveCard(onOpenNote: (String) -> Unit, viewModel: LeaveViewModel = 
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onTertiaryContainer
             )
-            FilledTonalButton(enabled = !working, onClick = { viewModel.createBriefing(false, onOpenNote) }) { Text("Brief me") }
+            if (!VaultWriteGate.readOnly) {
+                FilledTonalButton(enabled = !working, onClick = { viewModel.createBriefing(false, onOpenNote) }) { Text("Brief me") }
+            }
         }
     }
 }

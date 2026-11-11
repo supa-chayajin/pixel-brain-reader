@@ -116,7 +116,9 @@ fun TaskTimelineItem(task: DailyTaskEntity, onToggle: (DailyTaskEntity) -> Unit)
 fun HabitCard(
     habit: HabitWithStats,
     onToggle: () -> Unit,
-    onUpdateValue: (Double) -> Unit
+    onUpdateValue: (Double) -> Unit,
+    /** false on a read-only device: the card shows the habit and changes nothing (12.15, S2). */
+    editable: Boolean = true
 ) {
     val config = habit.config
     // Parse Color. Fallback routed through MaterialTheme so an unparseable
@@ -150,6 +152,7 @@ fun HabitCard(
     // Automatic habits are driven by Health Connect (config.autoSource) — their completion is
     // reconciled from health data on every sync, so the user must NOT be able to check/edit them.
     val isAutomatic = !config.autoSource.isNullOrBlank()
+    val locked = isAutomatic || !editable
     // Animate Background
     val containerColor by animateColorAsState(
         if (isDone) themeColor.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceContainer,
@@ -163,7 +166,7 @@ fun HabitCard(
         onClick = {
             // Automatic (Health-Connect) habits are read-only — no manual toggle/edit.
             when {
-                isAutomatic -> Unit
+                locked -> Unit
                 config.type == HabitType.MEASURABLE -> showDialog = true
                 else -> onToggle()
             }
@@ -180,11 +183,11 @@ fun HabitCard(
                 // can't override the Health-Connect-derived state.
                 cloud.wafflecommons.pixelbrainreader.ui.components.CortexBouncyCheckbox(
                     checked = isDone,
-                    enabled = !isAutomatic,
+                    enabled = !locked,
                     onCheckedChange = {
                         // Only toggle if not measurable (measurable needs dialog); automatic = read-only.
                         when {
-                            isAutomatic -> Unit
+                            locked -> Unit
                             config.type != HabitType.MEASURABLE -> onToggle()
                             else -> showDialog = true
                         }

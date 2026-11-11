@@ -76,7 +76,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cloud.wafflecommons.pixelbrainreader.data.work.LogEntry
 import cloud.wafflecommons.pixelbrainreader.data.work.LogKind
 import cloud.wafflecommons.pixelbrainreader.data.work.MissionLogSettings
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
+import cloud.wafflecommons.pixelbrainreader.ui.components.READ_ONLY_NOTICE
+import cloud.wafflecommons.pixelbrainreader.ui.components.ReadOnlyNotice
 import cloud.wafflecommons.pixelbrainreader.ui.components.PickDateDialog
 import cloud.wafflecommons.pixelbrainreader.ui.components.PickTimeDialog
 import cloud.wafflecommons.pixelbrainreader.ui.components.RemovableRow
@@ -120,7 +123,9 @@ fun MissionLogScreen(
     LaunchedEffect(Unit) { viewModel.messages.collect { snackbarHostState.showSnackbar(it) } }
 
     val locale = androidx.compose.ui.platform.LocalLocale.current.platformLocale
-    var adding by rememberSaveable { mutableStateOf(startWithAdd) }
+    // A read-only device reads the log and writes nothing to it (12.15, S2).
+    val editable = !VaultWriteGate.readOnly
+    var adding by rememberSaveable { mutableStateOf(startWithAdd && editable) }
     var editing by remember { mutableStateOf<LogEntry?>(null) }
 
     Scaffold(
@@ -133,7 +138,7 @@ fun MissionLogScreen(
             )
         },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
+            if (editable) ExtendedFloatingActionButton(
                 onClick = { adding = true },
                 icon = { Icon(Icons.Rounded.Add, contentDescription = null) },
                 text = { Text("Log") },
@@ -143,13 +148,14 @@ fun MissionLogScreen(
         snackbarHost = { SnackbarHost(snackbarHostState, modifier = Modifier.padding(bottom = NavBarClearance)) }
     ) { padding ->
         if (visibility.hideWork) {
-            HiddenWork(visibility.workLabel, Modifier.padding(padding))
+            HiddenWork(visibility.workLabel, editable, Modifier.padding(padding))
         } else {
             LazyColumn(
                 modifier = Modifier.padding(padding).fillMaxSize().centeredMaxWidth(),
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = NavBarClearance + 72.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                if (!editable) item(key = "read-only") { ReadOnlyNotice() }
                 item(key = "month") {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                         IconButton(onClick = viewModel::previousMonth) {
@@ -193,10 +199,14 @@ fun MissionLogScreen(
                         )
                     }
                     items(entries, key = { "${it.at}|${it.sourceLine}" }) { entry ->
-                        EntryRow(entry, onClick = { editing = entry })
+                        EntryRow(entry, onClick = if (editable) {
+                            { editing = entry }
+                        } else {
+                            null
+                        })
                     }
                 }
-                item(key = "settings") { LogSettingsCard(settings, viewModel) }
+                item(key = "settings") { LogSettingsCard(settings, viewModel, editable) }
             }
         }
     }
@@ -224,7 +234,7 @@ fun MissionLogScreen(
 }
 
 @Composable
-private fun HiddenWork(workLabel: String, modifier: Modifier) {
+private fun HiddenWork(workLabel: String, editable: Boolean, modifier: Modifier) {
     Column(
         modifier = modifier.fillMaxSize().padding(32.dp),
         verticalArrangement = Arrangement.Center,
@@ -235,7 +245,8 @@ private fun HiddenWork(workLabel: String, modifier: Modifier) {
         Text("Hidden outside $workLabel mode", style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.size(8.dp))
         Text(
-            "You can still log something: it is saved without showing the rest.",
+            // A read-only device can't log at all (12.15, S2).
+            if (editable) "You can still log something: it is saved without showing the rest." else READ_ONLY_NOTICE,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
@@ -269,8 +280,11 @@ private fun KindFilters(state: LogMonthState, filter: LogKind?, onFilter: (LogKi
 }
 
 @Composable
-private fun EntryRow(entry: LogEntry, onClick: () -> Unit) {
-    Row(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 6.dp), verticalAlignment = Alignment.Top) {
+private fun EntryRow(entry: LogEntry, onClick: (() -> Unit)?) {
+    Row(
+        modifier = Modifier.fillMaxWidth().clickable(enabled = onClick != null) { onClick?.invoke() }.padding(vertical = 6.dp),
+        verticalAlignment = Alignment.Top
+    ) {
         Icon(entry.kind.icon(), contentDescription = entry.kind.label, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 2.dp).size(20.dp))
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -292,7 +306,7 @@ private fun EntryRow(entry: LogEntry, onClick: () -> Unit) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun LogSettingsCard(settings: MissionLogSettings, viewModel: MissionLogViewModel) {
+private fun LogSettingsCard(settings: MissionLogSettings, viewModel: MissionLogViewModel, editable: Boolean) {
     var editingFolder by remember { mutableStateOf(false) }
     var addingRole by remember { mutableStateOf(false) }
     SectionCard(
@@ -305,18 +319,24 @@ private fun LogSettingsCard(settings: MissionLogSettings, viewModel: MissionLogV
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Encrypt the log", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-            Switch(checked = settings.encrypted, onCheckedChange = viewModel::setEncrypted)
+            Switch(checked = settings.encrypted, onCheckedChange = viewModel::setEncrypted, enabled = editable)
         }
-        if (!settings.encrypted) {
+        if (!settings.encrypted && editable) {
             TextButton(onClick = { editingFolder = true }) { Text("Change folder") }
         }
         Text("Earlier months stay where they were written.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Roles", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-            TextButton(onClick = { addingRole = true }) { Text("Add") }
+            if (editable) TextButton(onClick = { addingRole = true }) { Text("Add") }
         }
-        settings.roles.forEach { role -> RemovableRow(title = role, subtitle = null, onRemove = { viewModel.removeRole(role) }) }
+        settings.roles.forEach { role ->
+            RemovableRow(title = role, subtitle = null, onRemove = if (editable) {
+                { viewModel.removeRole(role) }
+            } else {
+                null
+            })
+        }
     }
     if (editingFolder) {
         TextPromptDialog(

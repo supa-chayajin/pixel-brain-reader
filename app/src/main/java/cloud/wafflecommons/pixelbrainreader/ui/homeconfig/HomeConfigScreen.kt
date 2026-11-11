@@ -31,7 +31,9 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.ChoreEntity
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.HomeRoomEntity
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
+import cloud.wafflecommons.pixelbrainreader.ui.components.ReadOnlyNotice
 import cloud.wafflecommons.pixelbrainreader.ui.theme.RoomPalette
 import java.time.LocalDate
 import java.util.UUID
@@ -55,6 +57,8 @@ fun HomeConfigScreen(
 
     var roomToDelete by remember { mutableStateOf<HomeRoomEntity?>(null) }
     var choreToDelete by remember { mutableStateOf<ChoreEntity?>(null) }
+    // A read-only device lists the rooms and chores and edits none (12.15, S2).
+    val readOnly = VaultWriteGate.readOnly
 
     Scaffold(
         topBar = {
@@ -69,7 +73,7 @@ fun HomeConfigScreen(
         },
         floatingActionButton = {
             // Lift the stacked FABs above the floating ExpressiveNavBar (which overlays content); none beside the rail.
-            Column(
+            if (!readOnly) Column(
                 horizontalAlignment = Alignment.End,
                 modifier = Modifier.padding(bottom = if (LocalNavRail.current) 0.dp else 66.dp)
             ) {
@@ -100,6 +104,7 @@ fun HomeConfigScreen(
                 .centeredMaxWidth(),
             contentPadding = PaddingValues(bottom = NavBarClearance)
         ) {
+            if (readOnly) item(key = "read-only") { ReadOnlyNotice(Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp)) }
             item {
                 Text(
                     text = "My Rooms",
@@ -115,7 +120,7 @@ fun HomeConfigScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     // "Add Room" Chip
-                    item {
+                    if (!readOnly) item {
                         InputChip(
                             selected = false,
                             onClick = {
@@ -135,9 +140,11 @@ fun HomeConfigScreen(
                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 showRoomDialog = room
                             },
+                            enabled = !readOnly,
                             modifier = Modifier.animateItem(),
                             label = { Text("${room.name} ($choreCount)") },
-                            trailingIcon = {
+                            trailingIcon = if (readOnly) null else {
+                                {
                                 CortexIconButton(
                                     onClick = { roomToDelete = room },
                                     modifier = Modifier.size(18.dp)
@@ -148,6 +155,7 @@ fun HomeConfigScreen(
                                         tint = MaterialTheme.colorScheme.error,
                                         modifier = Modifier.size(14.dp)
                                     )
+                                }
                                 }
                             }
                         )
@@ -190,18 +198,18 @@ fun HomeConfigScreen(
                     items(chores, key = { it.id }) { chore ->
                         ListItem(
                             supportingContent = { Text("Every ${chore.frequencyDays} days • ${chore.baseEffort} XP") },
-                            trailingContent = {
-                                Row {
+                            trailingContent = if (readOnly) null else {
+                                { Row {
                                     CortexIconButton(onClick = { showChoreSheet = chore }) {
                                         Icon(Icons.Rounded.Edit, contentDescription = "Edit Chore")
                                     }
                                     CortexIconButton(onClick = { choreToDelete = chore }) {
                                         Icon(Icons.Rounded.Delete, contentDescription = "Delete Chore", tint = MaterialTheme.colorScheme.error)
                                     }
-                                }
+                                } }
                             },
                             modifier = Modifier
-                                .clickable {
+                                .clickable(enabled = !readOnly) {
                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                     showChoreSheet = chore
                                 }

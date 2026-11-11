@@ -19,7 +19,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.sync.SyncState
+import cloud.wafflecommons.pixelbrainreader.ui.components.ReadOnlyNotice
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -124,6 +126,13 @@ fun HabitDashboardScreen(
                      }
                 }
 
+                // A read-only device shows the habits and ticks none (12.15, S2).
+                if (VaultWriteGate.readOnly) {
+                    item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                        ReadOnlyNotice(Modifier.padding(horizontal = 16.dp))
+                    }
+                }
+
                 // View toggle: today's scheduled habits vs. every habit.
                 item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
                     SingleChoiceSegmentedButtonRow(
@@ -184,7 +193,8 @@ fun HabitDashboardScreen(
                                         haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
                                         viewModel.toggleHabit(habitStats.config.id)
                                     },
-                                    onUpdateValue = { newVal -> viewModel.updateHabitValue(habitStats.config.id, newVal) }
+                                    onUpdateValue = { newVal -> viewModel.updateHabitValue(habitStats.config.id, newVal) },
+                                    editable = !VaultWriteGate.readOnly
                                 )
                             }
                         }

@@ -705,11 +705,16 @@ fun SettingsScreen(
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    enabled = !isSyncingConfigs
+                    // Export writes the vault: a read-only device imports only (12.15, S2).
+                    enabled = !isSyncingConfigs && !VaultWriteGate.readOnly
                 ) {
                     Icon(Icons.Default.Upload, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
                     Text("Export All (App → Vault)")
+                }
+                if (VaultWriteGate.readOnly) {
+                    Spacer(Modifier.height(8.dp))
+                    cloud.wafflecommons.pixelbrainreader.ui.components.ReadOnlyNotice()
                 }
             }
             }

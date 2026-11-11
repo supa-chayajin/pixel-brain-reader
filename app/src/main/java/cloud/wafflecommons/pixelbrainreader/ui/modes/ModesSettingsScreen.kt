@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.modes.ContextMode
 import cloud.wafflecommons.pixelbrainreader.data.modes.KeyDate
 import cloud.wafflecommons.pixelbrainreader.data.modes.LeavePeriod
@@ -51,6 +52,7 @@ import cloud.wafflecommons.pixelbrainreader.ui.components.FormScaffold
 import cloud.wafflecommons.pixelbrainreader.ui.components.PickDateDialog
 import cloud.wafflecommons.pixelbrainreader.ui.components.PickDateRangeDialog
 import cloud.wafflecommons.pixelbrainreader.ui.components.PickTimeDialog
+import cloud.wafflecommons.pixelbrainreader.ui.components.ReadOnlyNotice
 import cloud.wafflecommons.pixelbrainreader.ui.components.RemovableRow
 import cloud.wafflecommons.pixelbrainreader.ui.components.SectionCard
 import cloud.wafflecommons.pixelbrainreader.ui.components.TextPromptDialog
@@ -77,8 +79,12 @@ fun ModesSettingsScreen(onBack: () -> Unit, viewModel: ModesViewModel = hiltView
     var editToolkit by remember { mutableStateOf(false) }
     val appearance = config.appearance()
     val workLabel = appearance.label(ContextMode.WORK)
+    // The modes live in the vault: a read-only device shows them and changes only screen-share safe,
+    // a setting of its own (12.15, S2).
+    val editable = !VaultWriteGate.readOnly
 
     FormScaffold(title = "Modes", onBack = onBack) {
+        if (!editable) ReadOnlyNotice()
         SectionCard(
             title = "Names & icons",
             icon = Icons.Rounded.Edit,
@@ -89,14 +95,14 @@ fun ModesSettingsScreen(onBack: () -> Unit, viewModel: ModesViewModel = hiltView
                     supportingContent = { Text("${ModeAppearance.defaultLabel(mode)} mode") },
                     leadingContent = { Icon(ModeIcons.of(appearance, mode), contentDescription = null) },
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                    modifier = Modifier.clickable { editMode = mode }
+                    modifier = Modifier.clickable(enabled = editable) { editMode = mode }
                 ) { Text(appearance.label(mode)) }
             }
             ListItem(
                 supportingContent = { Text("Tools hub: mission log, boards, meetings, objectives…") },
                 leadingContent = { Icon(Icons.Rounded.Apps, contentDescription = null) },
                 colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                modifier = Modifier.clickable { editToolkit = true }
+                modifier = Modifier.clickable(enabled = editable) { editToolkit = true }
             ) { Text(appearance.toolkitName) }
         }
 
@@ -108,7 +114,7 @@ fun ModesSettingsScreen(onBack: () -> Unit, viewModel: ModesViewModel = hiltView
             if (folders.isEmpty()) EmptyHint("No folders yet — sync the vault first.")
             folders.forEach { folder ->
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                    Checkbox(checked = folder in config.workFolders, onCheckedChange = { viewModel.toggleWorkFolder(folder) })
+                    Checkbox(checked = folder in config.workFolders, onCheckedChange = { viewModel.toggleWorkFolder(folder) }, enabled = editable)
                     Text(folder, style = MaterialTheme.typography.bodyMedium)
                 }
             }
@@ -118,7 +124,7 @@ fun ModesSettingsScreen(onBack: () -> Unit, viewModel: ModesViewModel = hiltView
             title = "Schedule",
             icon = Icons.Rounded.Schedule,
             subtitle = "$workLabel mode during work hours; another mode the rest of the time.",
-            trailing = { Switch(checked = config.scheduleEnabled, onCheckedChange = viewModel::setScheduleEnabled) }
+            trailing = { Switch(checked = config.scheduleEnabled, onCheckedChange = viewModel::setScheduleEnabled, enabled = editable) }
         ) {
             if (config.scheduleEnabled) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -126,15 +132,16 @@ fun ModesSettingsScreen(onBack: () -> Unit, viewModel: ModesViewModel = hiltView
                         FilterChip(
                             selected = day.value in config.workDays,
                             onClick = { viewModel.toggleWorkDay(day.value) },
+                            enabled = editable,
                             label = { Text(day.getDisplayName(TextStyle.SHORT, Locale.ENGLISH)) }
                         )
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(onClick = { timePicker = config.workStart to { t -> viewModel.setWorkHours(t, config.workEnd) } }) {
+                    TextButton(enabled = editable, onClick = { timePicker = config.workStart to { t -> viewModel.setWorkHours(t, config.workEnd) } }) {
                         Text("From ${config.workStart}")
                     }
-                    TextButton(onClick = { timePicker = config.workEnd to { t -> viewModel.setWorkHours(config.workStart, t) } }) {
+                    TextButton(enabled = editable, onClick = { timePicker = config.workEnd to { t -> viewModel.setWorkHours(config.workStart, t) } }) {
                         Text("to ${config.workEnd}")
                     }
                 }
@@ -145,6 +152,7 @@ fun ModesSettingsScreen(onBack: () -> Unit, viewModel: ModesViewModel = hiltView
                         SegmentedButton(
                             selected = config.outsideHoursMode == mode,
                             onClick = { viewModel.setOutsideHoursMode(mode) },
+                            enabled = editable,
                             shape = SegmentedButtonDefaults.itemShape(index, choices.size)
                         ) { Text(appearance.label(mode)) }
                     }
@@ -162,10 +170,14 @@ fun ModesSettingsScreen(onBack: () -> Unit, viewModel: ModesViewModel = hiltView
                 RemovableRow(
                     title = leave.label.ifBlank { "Leave" },
                     subtitle = "${leave.start} → ${leave.end}",
-                    onRemove = { viewModel.removeLeave(leave) }
+                    onRemove = if (editable) {
+                        { viewModel.removeLeave(leave) }
+                    } else {
+                        null
+                    }
                 )
             }
-            FilledTonalButton(onClick = { pickLeave = true }) {
+            if (editable) FilledTonalButton(onClick = { pickLeave = true }) {
                 Icon(Icons.Default.Add, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
                 Text("Add leave")
@@ -182,15 +194,19 @@ fun ModesSettingsScreen(onBack: () -> Unit, viewModel: ModesViewModel = hiltView
                 RemovableRow(
                     title = key.label,
                     subtitle = key.date + if (key.work) " · work" else "",
-                    onRemove = { viewModel.removeKeyDate(key) }
+                    onRemove = if (editable) {
+                        { viewModel.removeKeyDate(key) }
+                    } else {
+                        null
+                    }
                 )
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            if (editable) Row(verticalAlignment = Alignment.CenterVertically) {
                 Switch(checked = pendingKeyDateWork, onCheckedChange = { pendingKeyDateWork = it })
                 Spacer(Modifier.width(8.dp))
                 Text("Next date is a work date", style = MaterialTheme.typography.bodyMedium)
             }
-            FilledTonalButton(onClick = { pickKeyDate = true }) {
+            if (editable) FilledTonalButton(onClick = { pickKeyDate = true }) {
                 Icon(Icons.Default.Add, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
                 Text("Add key date")

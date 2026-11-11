@@ -29,11 +29,13 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.repository.FilingSuggestion
 import cloud.wafflecommons.pixelbrainreader.data.repository.VaultRulesRepository
 import cloud.wafflecommons.pixelbrainreader.data.work.WorkNote
 import cloud.wafflecommons.pixelbrainreader.ui.components.EmptyHint
 import cloud.wafflecommons.pixelbrainreader.ui.components.FormScaffold
+import cloud.wafflecommons.pixelbrainreader.ui.components.ReadOnlyNotice
 import cloud.wafflecommons.pixelbrainreader.ui.components.SectionCard
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
@@ -101,6 +103,9 @@ fun InboxScreen(onBack: () -> Unit, onOpenNote: (String) -> Unit, viewModel: Inb
     }
 
     FormScaffold(title = "Inbox", onBack = onBack, snackbarHostState = snackbarHostState) {
+        // Filing moves the note: a read-only device lists and opens the inbox only (12.15, S2).
+        val readOnly = VaultWriteGate.readOnly
+        if (readOnly) ReadOnlyNotice()
         val list = notes
         when {
             list == null -> LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
@@ -115,7 +120,9 @@ fun InboxScreen(onBack: () -> Unit, onOpenNote: (String) -> Unit, viewModel: Inb
                     subtitle = listOfNotNull(note.created?.toString(), note.tags.takeIf { it.isNotEmpty() }?.joinToString(" ") { "#$it" }).joinToString(" · "),
                     trailing = { TextButton(onClick = { onOpenNote(note.path) }) { Text("Open") } }
                 ) {
-                    if (suggestion == null) {
+                    if (readOnly) {
+                        // Nothing to file from here.
+                    } else if (suggestion == null) {
                         OutlinedButton(onClick = { viewModel.suggest(note) }) { Text("Suggest a folder") }
                     } else {
                         if (suggestion.folders.isEmpty()) {

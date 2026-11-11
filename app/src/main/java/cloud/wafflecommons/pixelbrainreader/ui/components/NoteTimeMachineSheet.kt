@@ -21,6 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.remote.GitCommitDto
 import cloud.wafflecommons.pixelbrainreader.data.utils.LineDiff
 import kotlinx.coroutines.Dispatchers
@@ -187,7 +188,8 @@ fun NoteTimeMachineSheet(
                                 fontWeight = FontWeight.Medium,
                                 modifier = Modifier.weight(1f)
                             )
-                            Button(
+                            // A read-only device reads the history and restores nothing (12.15, S2).
+                            if (!VaultWriteGate.readOnly) Button(
                                 onClick = { confirmRestore = true },
                                 enabled = state.rows.isNotEmpty(),
                                 colors = ButtonDefaults.buttonColors(

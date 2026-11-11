@@ -71,7 +71,9 @@ import cloud.wafflecommons.pixelbrainreader.data.work.StatusColumn
 import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
 import cloud.wafflecommons.pixelbrainreader.ui.components.EmptyHint
 import cloud.wafflecommons.pixelbrainreader.ui.components.FolderPickerDialog
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.ui.components.FormScaffold
+import cloud.wafflecommons.pixelbrainreader.ui.components.ReadOnlyNotice
 import cloud.wafflecommons.pixelbrainreader.ui.components.PickDateDialog
 import cloud.wafflecommons.pixelbrainreader.ui.components.SectionCard
 import cloud.wafflecommons.pixelbrainreader.ui.theme.NavBarClearance
@@ -163,12 +165,15 @@ fun BoardsScreen(onBack: () -> Unit, onOpenBoard: (String) -> Unit, selected: St
     val visibility by viewModel.visibility.collectAsStateWithLifecycle()
     var adding by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { viewModel.loadFolders() }
+    // Boards and their cards live in the vault: a read-only device browses them (12.15, S2).
+    val editable = !VaultWriteGate.readOnly
 
     FormScaffold(
         title = "Boards",
         onBack = onBack,
-        actions = { CortexIconButton(onClick = { adding = true }) { Icon(Icons.Rounded.Add, contentDescription = "Add a board") } }
+        actions = { if (editable) CortexIconButton(onClick = { adding = true }) { Icon(Icons.Rounded.Add, contentDescription = "Add a board") } }
     ) {
+        if (!editable) ReadOnlyNotice()
         Text(
             "Any folder can be a board: its notes are cards in the vault's status columns. Moving a card rewrites only its status and date_updated.",
             style = MaterialTheme.typography.bodyMedium,
@@ -183,7 +188,7 @@ fun BoardsScreen(onBack: () -> Unit, onOpenBoard: (String) -> Unit, selected: St
                 subtitle = board,
                 selected = board == selected,
                 modifier = Modifier.clickable { onOpenBoard(board) },
-                trailing = { TextButton(onClick = { viewModel.removeBoard(board) }) { Text("Remove") } }
+                trailing = { if (editable) TextButton(onClick = { viewModel.removeBoard(board) }) { Text("Remove") } }
             )
         }
     }
@@ -203,6 +208,7 @@ fun BoardScreen(folder: String, onBack: () -> Unit, onOpenNote: (String) -> Unit
     var showArchived by remember { mutableStateOf(false) }
     var selected by remember { mutableStateOf<BoardCard?>(null) }
     val today = LocalDate.now()
+    val editable = !VaultWriteGate.readOnly
 
     val columns: List<Pair<String, List<BoardCard>>> = buildList {
         // The board opened before may still be in the ViewModel shared with the hub's list: none of its cards.
@@ -222,7 +228,7 @@ fun BoardScreen(folder: String, onBack: () -> Unit, onOpenNote: (String) -> Unit
                     CortexIconButton(onClick = { showArchived = !showArchived }) {
                         Icon(Icons.Rounded.Inventory2, contentDescription = if (showArchived) "Hide archived" else "Show archived")
                     }
-                    CortexIconButton(onClick = { viewModel.export(folder, onOpenNote) }) {
+                    if (editable) CortexIconButton(onClick = { viewModel.export(folder, onOpenNote) }) {
                         Icon(Icons.Rounded.IosShare, contentDescription = "Export a synthesis")
                     }
                 }
@@ -264,6 +270,7 @@ fun BoardScreen(folder: String, onBack: () -> Unit, onOpenNote: (String) -> Unit
     selected?.let { card ->
         CardSheet(
             card = card,
+            editable = editable,
             onMove = { column -> viewModel.move(card, column); selected = null },
             onSave = { next, blockers, target -> viewModel.setDetails(card, next, blockers, target); selected = null },
             onOpen = { selected = null; onOpenNote(card.note.path) },
@@ -313,6 +320,7 @@ private fun BoardCardView(card: BoardCard, today: LocalDate, onClick: () -> Unit
 @Composable
 private fun CardSheet(
     card: BoardCard,
+    editable: Boolean,
     onMove: (StatusColumn) -> Unit,
     onSave: (String?, String?, LocalDate?) -> Unit,
     onOpen: () -> Unit,
@@ -330,25 +338,27 @@ private fun CardSheet(
         ) {
             Text(card.note.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Text(card.note.path, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (!editable) ReadOnlyNotice()
             Text("Move to", style = MaterialTheme.typography.labelLarge)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 StatusColumn.entries.forEach { column ->
-                    FilterChip(selected = card.note.column == column, onClick = { if (card.note.column != column) onMove(column) }, label = { Text(column.label) })
+                    FilterChip(selected = card.note.column == column, onClick = { if (card.note.column != column) onMove(column) }, label = { Text(column.label) }, enabled = editable)
                 }
             }
-            OutlinedTextField(nextStep, { nextStep = it }, label = { Text("Next step") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(blockers, { blockers = it }, label = { Text("Blockers") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(nextStep, { nextStep = it }, label = { Text("Next step") }, modifier = Modifier.fillMaxWidth(), enabled = editable)
+            OutlinedTextField(blockers, { blockers = it }, label = { Text("Blockers") }, modifier = Modifier.fillMaxWidth(), enabled = editable)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 AssistChip(
+                    enabled = editable,
                     onClick = { pickTarget = true },
                     label = { Text(target?.let { "Due ${it.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM))}" } ?: "Set a target date") }
                 )
-                if (target != null) TextButton(onClick = { target = null }) { Text("Clear") }
+                if (target != null && editable) TextButton(onClick = { target = null }) { Text("Clear") }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = onOpen) { Text("Open note") }
                 Box(Modifier.weight(1f))
-                Button(onClick = { onSave(nextStep, blockers, target) }) { Text("Save") }
+                if (editable) Button(onClick = { onSave(nextStep, blockers, target) }) { Text("Save") }
             }
         }
     }

@@ -48,6 +48,7 @@ import cloud.wafflecommons.pixelbrainreader.data.work.ObjectiveRepository
 import cloud.wafflecommons.pixelbrainreader.data.work.ObjectiveSettings
 import cloud.wafflecommons.pixelbrainreader.ui.components.EmptyHint
 import cloud.wafflecommons.pixelbrainreader.ui.components.FormScaffold
+import cloud.wafflecommons.pixelbrainreader.ui.components.ReadOnlyNotice
 import cloud.wafflecommons.pixelbrainreader.ui.components.PickTimeDialog
 import cloud.wafflecommons.pixelbrainreader.ui.components.SectionCard
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -134,8 +135,12 @@ fun ObjectivesScreen(
     LaunchedEffect(Unit) { viewModel.messages.collect { snackbarHostState.showSnackbar(it) } }
     val today = LocalDate.now()
 
+    // The slot settings and the milestones live in the vault (12.15, S2).
+    val editable = !VaultWriteGate.readOnly
+
     FormScaffold(title = "Objectives", onBack = onBack, snackbarHostState = snackbarHostState) {
-        SlotCard(settings, visibility.workLabel, viewModel::updateSlot)
+        if (!editable) ReadOnlyNotice()
+        SlotCard(settings, visibility.workLabel, editable, viewModel::updateSlot)
         val list = objectives
         when {
             list == null -> EmptyHint("Reading your objectives…")
@@ -148,7 +153,11 @@ fun ObjectivesScreen(
                 ObjectiveCard(
                     objective,
                     today,
-                    onToggle = { m -> viewModel.toggle(objective, m) },
+                    onToggle = if (editable) {
+                        { m -> viewModel.toggle(objective, m) }
+                    } else {
+                        null
+                    },
                     onOpen = { onOpenNote(objective.note.path) },
                     onOpenNote = onOpenNote,
                     onOpenProject = onOpenProject,
@@ -161,13 +170,13 @@ fun ObjectivesScreen(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun SlotCard(settings: ObjectiveSettings, workLabel: String, update: ((ObjectiveSettings) -> ObjectiveSettings) -> Unit) {
+private fun SlotCard(settings: ObjectiveSettings, workLabel: String, editable: Boolean, update: ((ObjectiveSettings) -> ObjectiveSettings) -> Unit) {
     var pickTime by remember { mutableStateOf(false) }
     SectionCard(
         title = "Weekly slot",
         icon = Icons.Rounded.Schedule,
         subtitle = "Time kept for your objectives. When it starts, a nudge names what is due soon and what stalled — never outside $workLabel mode.",
-        trailing = { Switch(checked = settings.slotEnabled, onCheckedChange = { on -> update { it.copy(slotEnabled = on) } }) }
+        trailing = { Switch(checked = settings.slotEnabled, onCheckedChange = { on -> update { it.copy(slotEnabled = on) } }, enabled = editable) }
     ) {
         if (settings.slotEnabled) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -175,14 +184,15 @@ private fun SlotCard(settings: ObjectiveSettings, workLabel: String, update: ((O
                     FilterChip(
                         selected = settings.slotDay == day.value,
                         onClick = { update { it.copy(slotDay = day.value) } },
+                        enabled = editable,
                         label = { Text(day.getDisplayName(TextStyle.SHORT, androidx.compose.ui.platform.LocalLocale.current.platformLocale)) }
                     )
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                AssistChip(onClick = { pickTime = true }, label = { Text("Starts ${settings.slotStart}") })
+                AssistChip(onClick = { pickTime = true }, label = { Text("Starts ${settings.slotStart}") }, enabled = editable)
                 listOf(60, 90, 120).forEach { minutes ->
-                    FilterChip(selected = settings.slotMinutes == minutes, onClick = { update { it.copy(slotMinutes = minutes) } }, label = { Text("$minutes min") })
+                    FilterChip(selected = settings.slotMinutes == minutes, onClick = { update { it.copy(slotMinutes = minutes) } }, label = { Text("$minutes min") }, enabled = editable)
                 }
             }
         }
@@ -196,7 +206,7 @@ private fun SlotCard(settings: ObjectiveSettings, workLabel: String, update: ((O
 private fun ObjectiveCard(
     objective: Objective,
     today: LocalDate,
-    onToggle: (Milestone) -> Unit,
+    onToggle: ((Milestone) -> Unit)?,
     onOpen: () -> Unit,
     onOpenNote: (String) -> Unit,
     onOpenProject: (String) -> Unit,
@@ -223,7 +233,7 @@ private fun ObjectiveCard(
         if (expanded) {
             objective.milestones.forEach { milestone ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = milestone.done, onCheckedChange = { onToggle(milestone) })
+                    Checkbox(checked = milestone.done, onCheckedChange = { onToggle?.invoke(milestone) }, enabled = onToggle != null)
                     Column(modifier = Modifier.weight(1f)) {
                         Text(milestone.text, style = MaterialTheme.typography.bodyMedium)
                         milestone.due?.let { due ->

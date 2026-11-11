@@ -48,6 +48,7 @@ import cloud.wafflecommons.pixelbrainreader.data.work.EvidenceScope
 import cloud.wafflecommons.pixelbrainreader.data.work.LogKind
 import cloud.wafflecommons.pixelbrainreader.data.work.ReportPeriod
 import cloud.wafflecommons.pixelbrainreader.ui.components.FormScaffold
+import cloud.wafflecommons.pixelbrainreader.ui.components.ReadOnlyNotice
 import cloud.wafflecommons.pixelbrainreader.ui.components.SectionCard
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
@@ -167,6 +168,9 @@ fun EvidenceScreen(
     val work = scope == EvidenceScope.WORK
 
     FormScaffold(title = "Evidence report", onBack = onBack, snackbarHostState = snackbarHostState) {
+        // The figures read anywhere; the report is an inbox note (12.15, S2).
+        val readOnly = VaultWriteGate.readOnly
+        if (readOnly) ReadOnlyNotice()
         // Named after the user's own mode labels: the report follows the same work/personal split.
         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
             listOf(EvidenceScope.WORK to visibility.label(ContextMode.WORK), EvidenceScope.PERSONAL to visibility.label(ContextMode.PERSONAL))
@@ -226,11 +230,11 @@ fun EvidenceScreen(
                 Text("Add a summary", style = MaterialTheme.typography.bodyLarge)
                 Text("Written on the device by Gemini Nano, marked as such.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Switch(checked = withSummary, onCheckedChange = { withSummary = it })
+            Switch(checked = withSummary, onCheckedChange = { withSummary = it }, enabled = !readOnly)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Button(
-                enabled = !working && figures != null && !(work && visibility.hideWork),
+                enabled = !readOnly && !working && figures != null && !(work && visibility.hideWork),
                 onClick = { viewModel.write(withSummary, onOpenNote) }
             ) { Text("Write the report") }
             figures?.takeIf { !(work && visibility.hideWork) }?.let { f ->
