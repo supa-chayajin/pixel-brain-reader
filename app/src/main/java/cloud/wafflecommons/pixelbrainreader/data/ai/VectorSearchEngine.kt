@@ -175,7 +175,7 @@ class VectorSearchEngine @Inject constructor(
             }
 
             val interpreter = try {
-                val options = Interpreter.Options().apply { setNumThreads(2) }
+                val options = Interpreter.Options().apply { setNumThreads(INFERENCE_THREADS) }
                 val modelBuffer = try {
                     loadModelBuffer(MODEL_FILE)
                 } catch (mmapError: Exception) {
@@ -260,7 +260,7 @@ class VectorSearchEngine @Inject constructor(
             Log.d(
                 "Cortex",
                 "Sentence encoder ready (mmap=true, " +
-                    "tokenizer=${tokFile.length() / 1000}KB, seqLen=$MAX_SEQ_LEN, dim=$EMBED_DIM)"
+                    "tokenizer=${tokFile.length() / 1000}KB, seqLen=$MAX_SEQ_LEN, dim=$EMBED_DIM, threads=$INFERENCE_THREADS)"
             )
         }
         engine?.let { runMultilingualProbeOnce(it) }
@@ -376,18 +376,15 @@ class VectorSearchEngine @Inject constructor(
         output[0]
     }
 
+    /**
+     * One passage's vector. Throws [EmbedderUnavailableException] when the model can't start (a
+     * missing asset, a failed init): the indexer then stops instead of failing every passage.
+     */
     suspend fun embed(text: String): FloatArray = withContext(Dispatchers.Default) {
         ensureSchemaVersion()
         val eng = getEngineSafe()
-            ?: throw IllegalStateException("Vector Engine not ready (asset missing or init failed)")
-        val vector = embedInternal(eng, text)
-        val mag = RagRanking.magnitude(vector)
-        Log.d(
-            "RAG_DEBUG",
-            "embed: textLen=${text.length} -> dim=${vector.size} mag=${"%.4f".format(mag)} " +
-                "head=${vector.take(3).map { "%.3f".format(it) }}"
-        )
-        vector
+            ?: throw EmbedderUnavailableException("Vector Engine not ready (asset missing or init failed)")
+        embedInternal(eng, text)
     }
 
     /** The parsed vectors of every stored chunk, re-read only when the embeddings table changed. */
@@ -532,6 +529,13 @@ class VectorSearchEngine @Inject constructor(
 
         /** MiniLM-L12 hidden size; output of the L2-normalized mean-pool. */
         const val EMBED_DIM = 384
+
+        /**
+         * Measured with TFLite's benchmark_model on a Snapdragon 865 (4 big + 4 little cores, like
+         * the Fold's Tensor G4), 2026-11-11: 1 thread 290 ms per passage, 2 → 224 ms, 4 → 110 ms,
+         * 6 → 126 ms, 8 → 122 ms. Four threads keep to the big cores; more spill onto the little ones.
+         */
+        val INFERENCE_THREADS = minOf(4, Runtime.getRuntime().availableProcessors()).coerceAtLeast(1)
 
         /**
          * Bump when the model OR output dimension changes. Mismatch triggers

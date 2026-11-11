@@ -1,155 +1,249 @@
 package cloud.wafflecommons.pixelbrainreader.data.workers
 
-import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import android.content.Context
+import android.util.Base64
 import android.util.Log
 import androidx.hilt.work.HiltWorker
+import androidx.work.Constraints
 import androidx.work.CoroutineWorker
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequest
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import androidx.work.WorkerParameters
-import androidx.room.withTransaction
+import androidx.work.await
+import androidx.work.workDataOf
+import cloud.wafflecommons.pixelbrainreader.data.ai.EmbedderUnavailableException
+import cloud.wafflecommons.pixelbrainreader.data.ai.NoteChunker
+import cloud.wafflecommons.pixelbrainreader.data.ai.NoteEmbedder
+import cloud.wafflecommons.pixelbrainreader.data.ai.PassageCodec
+import cloud.wafflecommons.pixelbrainreader.data.ai.RoomPassageStore
+import cloud.wafflecommons.pixelbrainreader.data.ai.RunBudget
+import cloud.wafflecommons.pixelbrainreader.data.ai.VectorSearchEngine
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
+import cloud.wafflecommons.pixelbrainreader.data.local.AppDatabase
+import cloud.wafflecommons.pixelbrainreader.data.local.dao.EmbeddingDao
+import cloud.wafflecommons.pixelbrainreader.data.local.dao.FileDao
+import cloud.wafflecommons.pixelbrainreader.data.local.entity.FileEntity
 import cloud.wafflecommons.pixelbrainreader.data.local.security.CryptoManager
 import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
+import cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.VaultDiscoveryRepository
+import cloud.wafflecommons.pixelbrainreader.data.vault.MirrorNotes
+import cloud.wafflecommons.pixelbrainreader.data.vault.VaultSchema
+import cloud.wafflecommons.pixelbrainreader.data.work.MissionLogSettings
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import java.io.File
 
 /**
- * RAG embedding worker.
+ * RAG embedding worker: embeds the notes that are new, changed, or not yet embedded.
  *
- * Enqueued by Settings → "Index Knowledge Vault" AND automatically on app start
- * (PixelBrainApplication.scheduleVaultIndexing, unique + KEEP). Each run:
- *   1. Reindexes the vault filesystem into the `files` Room table and returns the
- *      set of files whose content fingerprint changed since the last scan (delta).
- *   2. Unions that delta with markdown files that have no embedding row yet
- *      (getFilesWithoutEmbeddings backfill), and embeds + stores chunks for them.
- *      No mood/habit/chore reconcile — that's handled elsewhere
- *      (PixelBrainApplication.runStartupReconcile + SyncOrchestrator Phase 4).
+ * Enqueued on app start (PixelBrainApplication, unique + KEEP), by Settings → "Index Knowledge
+ * Vault" and by the private-notes switch. Built to always finish (2026-11-11: the Fold re-embedded
+ * the same 231 KB note all night — every run was stopped by the system's 10-minute job limit before
+ * the note's single save, and the next run started it over):
  *
- * When there is nothing to embed it returns early WITHOUT loading the model, so
- * the startup enqueue is a cheap no-op once the index is warm. This is what
- * rebuilds embeddings automatically after a destructive Room migration or an
- * EMBEDDER_SCHEMA_VERSION bump (both wipe the embeddings table).
+ * - **Never repeats work.** A note whose content changed keeps its vectors, marked stale by the
+ *   vault scan, and [NoteEmbedder] reuses each passage whose text is unchanged: an edited note costs
+ *   only its new passages. A content-identical rewrite (a pull, a rebase) never even comes here.
+ * - **Never loses work.** New vectors are kept as they come, a few at a time: a stop, a crash or the
+ *   job limit costs at most one batch, and the next run resumes the note where it was.
+ * - **Ends itself in time.** A run stops after [RUN_BUDGET_MS], before the system's limit, and
+ *   hands over to a new run under the same unique name until the vault is done.
+ * - **Never blocked by one note.** Notes without any vector come first (every search misses them),
+ *   smallest first; a passage the model rejects is left out instead of retried on every run.
+ * - **Loads the model only when a passage needs it**: a run that only reuses never starts it.
+ *
+ * No mood/habit/chore reconcile — that's handled elsewhere (PixelBrainApplication.runStartupReconcile
+ * + SyncOrchestrator Phase 4).
  */
 @HiltWorker
 class IndexingWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted workerParams: WorkerParameters,
     private val vaultDiscoveryRepository: VaultDiscoveryRepository,
-    private val vectorSearchEngine: cloud.wafflecommons.pixelbrainreader.data.ai.VectorSearchEngine,
-    private val embeddingDao: cloud.wafflecommons.pixelbrainreader.data.local.dao.EmbeddingDao,
-    private val fileDao: cloud.wafflecommons.pixelbrainreader.data.local.dao.FileDao,
-    private val database: cloud.wafflecommons.pixelbrainreader.data.local.AppDatabase,
-    private val userPrefs: cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository,
+    private val vectorSearchEngine: VectorSearchEngine,
+    private val embeddingDao: EmbeddingDao,
+    private val fileDao: FileDao,
+    private val database: AppDatabase,
+    private val userPrefs: UserPreferencesRepository,
     private val cryptoManager: CryptoManager,
     private val secretManager: SecretManager
 ) : CoroutineWorker(appContext, workerParams) {
 
+    /** What a run did: the progress Settings shows and the summary the log keeps (counts only, no paths). */
+    private class Tally(val notesTotal: Int) {
+        val startedAt = System.currentTimeMillis()
+        var notesDone = 0
+        var embedded = 0
+        var reused = 0
+        var skipped = 0
+        var failedNotes = 0
+
+        fun progress() = workDataOf(KEY_NOTES_DONE to notesDone, KEY_NOTES_TOTAL to notesTotal, KEY_PASSAGES to embedded)
+
+        fun output(partial: Boolean) = workDataOf(
+            KEY_NOTES_DONE to notesDone, KEY_NOTES_TOTAL to notesTotal, KEY_PASSAGES to embedded, KEY_PARTIAL to partial
+        )
+
+        fun summary(): String {
+            val elapsed = System.currentTimeMillis() - startedAt
+            val perPassage = if (embedded > 0) "${elapsed / embedded} ms per embedded passage" else "no model time"
+            return "notes $notesDone/$notesTotal, passages embedded $embedded, reused $reused, rejected $skipped, " +
+                "notes failed $failedNotes, ${elapsed / 1000} s ($perPassage)"
+        }
+    }
+
+    private var lastProgressAt = 0L
+
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         if (VaultWriteGate.readOnly) return@withContext Result.success() // no embeddings (AI) on a read-only device
+        val budget = RunBudget(RUN_BUDGET_MS)
+        val startTime = System.currentTimeMillis()
         try {
-            val startTime = System.currentTimeMillis()
-            val embeddingsBefore = runCatching { embeddingDao.count() }.getOrDefault(-1)
-            val lastTime = userPrefs.lastIndexTime.first()
-            val lastTimeHuman = if (lastTime == 0L) "never" else java.text.SimpleDateFormat(
-                "yyyy-MM-dd HH:mm:ss",
-                java.util.Locale.US
-            ).format(java.util.Date(lastTime))
-            Log.i(
-                "RAG_DEBUG",
-                "IndexingWorker start: lastTime=$lastTime ($lastTimeHuman) embeddings_in_db=$embeddingsBefore"
-            )
-
-            // Apply any embedder schema-version migration (cheap — a pref check +
-            // table wipe, no model load) BEFORE the backfill query below, so a
-            // bumped EMBEDDER_SCHEMA_VERSION wipes stale embeddings first and
-            // getFilesWithoutEmbeddings then returns everything to re-embed.
+            // Cheap, no model load: a bumped EMBEDDER_SCHEMA_VERSION wipes the table first, and the
+            // notes a rule keeps out of the index lose their old vectors.
             vectorSearchEngine.ensureSchemaVersion()
-
-            // Notes embedded before the rule that keeps them out of the index: drop their
-            // vectors without a full re-embed (also cheap, no model load).
             purgeNeverEmbedded()
 
-            // Vault scan: reindexAll uses content-SHA comparison and returns ONLY
-            // files whose stored fingerprint differs from on-disk content. Files
-            // whose mtime drifted but content matched are absorbed via UPDATE
-            // (no CASCADE) and not returned here.
-            val deltaFiles = try {
-                val changes = vaultDiscoveryRepository.reindexAll(lastTime)
-                embeddingDao.deleteOrphans()
-                changes
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.e("IndexingWorker", "Vault scan failed", e)
-                emptyList()
-            }
-
-            Log.i("RAG_DEBUG", "IndexingWorker: ${deltaFiles.size} file(s) changed since last index")
-
-            // Backfill: union the delta with markdown files that exist in the
-            // `files` table but have NO embedding row. Without this, files
-            // indexed by a previous worker run that died before embedding
-            // (e.g. when the .git walker drowned us in dir entries) stay
-            // permanently unembedded — their mtime never drifts, so the
-            // delta scan keeps skipping them. The DAO query already exists
-            // for exactly this case; it just wasn't wired here.
-            val unembedded = try {
-                fileDao.getFilesNeedingEmbeddings()
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.w("RAG_DEBUG", "getFilesNeedingEmbeddings failed: ${e.message}")
-                emptyList()
-            }
-            val unionFiles = (deltaFiles + unembedded).distinctBy { it.path }
-            val candidates = filterEmbeddingCandidates(unionFiles)
-            Log.i(
-                "RAG_DEBUG",
-                "IndexingWorker: delta=${deltaFiles.size} unembedded-backfill=${unembedded.size} " +
-                    "union=${unionFiles.size} candidates=${candidates.size}"
-            )
-
-            // Nothing to embed → return WITHOUT loading the ~470MB model, so the
-            // now-automatic startup enqueue is a cheap no-op once the index is warm
-            // (including when the only unembedded files are today's active journal,
-            // 99_System/*, or locked 99_Private/* notes).
+            val candidates = findCandidates()
             if (candidates.isEmpty()) {
-                Log.d("IndexingWorker", "No embeddable candidates — skipping model initialization.")
+                Log.d(TAG, "No embeddable candidates — nothing to do, model not loaded.")
                 userPrefs.setLastIndexTime(startTime)
                 return@withContext Result.success()
             }
 
-            // Fail-fast: probe the embedder before embedding. A broken init would
-            // otherwise turn every chunk into a per-chunk catch — the job "succeeds"
-            // but inserts zero embeddings, which looks like "indexing is broken".
-            val probe = try {
-                vectorSearchEngine.embed("vector engine readiness probe")
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.e("RAG_DEBUG", "IndexingWorker ABORT: vector engine init failed: ${e.message}", e)
-                return@withContext Result.failure()
-            }
-            Log.i("RAG_DEBUG", "IndexingWorker: embedder OK (dim=${probe.size})")
+            val vaultRoot = File(applicationContext.filesDir, "vault")
+            val alreadyEmbedded = embeddingDao.fileIds().toHashSet()
+            val ordered = indexingOrder(candidates, alreadyEmbedded) { File(vaultRoot, it).length() }
+            val password = secretManager.getVaultPassword()?.takeIf { it.isNotBlank() }
+            val embedder = NoteEmbedder(RoomPassageStore(database, embeddingDao), vectorSearchEngine::embed)
+            val tally = Tally(ordered.size)
+            Log.i(TAG, "IndexingWorker start: ${ordered.size} note(s) to embed, ${alreadyEmbedded.size} embedded, attempt $runAttemptCount")
 
-            processEmbeddings(candidates)
+            for (entity in ordered) {
+                if (budget.exhausted()) return@withContext handOver(tally)
+                val outcome = embedNote(entity, vaultRoot, password, embedder, budget, tally)
+                if (outcome is NoteEmbedder.Outcome.Stopped) return@withContext handOver(tally)
+                tally.notesDone++
+                reportProgress(tally)
+            }
 
             userPrefs.setLastIndexTime(startTime)
-
-            val embeddingsAfter = runCatching { embeddingDao.count() }.getOrDefault(-1)
-            Log.i(
-                "RAG_DEBUG",
-                "IndexingWorker done: embeddings_in_db ${embeddingsBefore} -> ${embeddingsAfter}"
-            )
-            Result.success()
-        } catch (e: kotlinx.coroutines.CancellationException) {
+            Log.i(TAG, "IndexingWorker done: ${tally.summary()}")
+            Result.success(tally.output(partial = false))
+        } catch (e: EmbedderUnavailableException) {
+            Log.e(TAG, "IndexingWorker ABORT: the embedding model could not start", e)
+            Result.failure(workDataOf(KEY_ERROR to "The embedding model could not start"))
+        } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Log.e("IndexingWorker", "Fatal Indexing Error", e)
-            if (runAttemptCount < 3) Result.retry() else Result.failure()
+            Log.e(TAG, "Fatal Indexing Error", e)
+            if (runAttemptCount < 3) Result.retry() else Result.failure(workDataOf(KEY_ERROR to "Indexing failed"))
+        }
+    }
+
+    /**
+     * The notes to embed: never embedded, stale (their content changed), or left pending by a
+     * stopped run — after a vault scan that records which contents changed.
+     */
+    private suspend fun findCandidates(): List<FileEntity> {
+        val changed = try {
+            vaultDiscoveryRepository.reindexAll().also { embeddingDao.deleteOrphans() }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.e(TAG, "Vault scan failed", e)
+            emptyList()
+        }
+        val needing = try {
+            fileDao.getFilesNeedingEmbeddings()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "getFilesNeedingEmbeddings failed: ${e.message}")
+            emptyList()
+        }
+        return filterEmbeddingCandidates((changed + needing).distinctBy { it.path })
+    }
+
+    /** One note, resumable. Null when the note can't be read (gone, undecryptable): the run moves on. */
+    private suspend fun embedNote(
+        entity: FileEntity,
+        vaultRoot: File,
+        password: String?,
+        embedder: NoteEmbedder,
+        budget: RunBudget,
+        tally: Tally
+    ): NoteEmbedder.Outcome? {
+        val path = entity.path
+        val isPrivate = isPrivatePath(path)
+        return try {
+            val file = File(vaultRoot, path)
+            if (!file.isFile) {
+                Log.d(TAG, "  skip $path: not on disk")
+                return null
+            }
+            // Read BEFORE the content: if the note changes while it is embedded (a sync), its newer
+            // file time leaves it needing the indexer — it can't pass for current with old vectors.
+            val readAt = file.lastModified()
+            val codec: PassageCodec
+            val text: String
+            if (isPrivate) {
+                val secret = password ?: return null // the candidates already need a saved password
+                codec = PrivatePassageCodec(cryptoManager, secret)
+                text = withPassword(secret) { cryptoManager.decrypt(file.readBytes(), it) }
+            } else {
+                codec = PassageCodec.Plain
+                text = file.readText()
+            }
+            val passages = NoteChunker.chunk(text, path)
+            val outcome = embedder.embedNote(path, isPrivate, passages, codec, budget, stamp = readAt) { count ->
+                tally.embedded += count
+                reportProgress(tally)
+            }
+            if (outcome is NoteEmbedder.Outcome.Done) {
+                tally.reused += outcome.reused
+                tally.skipped += outcome.skipped
+            }
+            Log.d(TAG, "  $path: ${passages.size} passage(s), $outcome")
+            outcome
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: EmbedderUnavailableException) {
+            throw e
+        } catch (e: Exception) {
+            Log.d(TAG, "  could not embed $path: ${e.message}")
+            tally.failedNotes++
+            null
+        }
+    }
+
+    /** Time's up: a new run under the same unique name picks up where this one stops. */
+    private suspend fun handOver(tally: Tally): Result {
+        WorkManager.getInstance(applicationContext)
+            .enqueueUniqueWork(UNIQUE_WORK_NAME, ExistingWorkPolicy.APPEND_OR_REPLACE, request())
+            .await()
+        Log.i(TAG, "IndexingWorker: run time spent, a new run continues — ${tally.summary()}")
+        return Result.success(tally.output(partial = true))
+    }
+
+    /** At most once a second: WorkManager keeps each progress update in its database. */
+    private suspend fun reportProgress(tally: Tally) {
+        val now = System.currentTimeMillis()
+        if (now - lastProgressAt < PROGRESS_INTERVAL_MS) return
+        lastProgressAt = now
+        try {
+            setProgress(tally.progress())
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.d(TAG, "progress not recorded: ${e.message}")
         }
     }
 
@@ -157,169 +251,71 @@ class IndexingWorker @AssistedInject constructor(
         try {
             val stale = neverEmbedded(embeddingDao.fileIds(), includePrivate = userPrefs.privateNotesInAi.first())
             stale.forEach { embeddingDao.deleteByFileId(it) }
-            if (stale.isNotEmpty()) Log.i("RAG_DEBUG", "IndexingWorker: dropped the vectors of ${stale.size} note(s) kept out of the index")
-        } catch (e: kotlinx.coroutines.CancellationException) {
+            if (stale.isNotEmpty()) Log.i(TAG, "IndexingWorker: dropped the vectors of ${stale.size} note(s) kept out of the index")
+        } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Log.w("RAG_DEBUG", "Purge of excluded notes skipped: ${e.message}")
+            Log.w(TAG, "Purge of excluded notes skipped: ${e.message}")
         }
     }
 
-    private suspend fun filterEmbeddingCandidates(
-        files: List<cloud.wafflecommons.pixelbrainreader.data.local.entity.FileEntity>
-    ): List<cloud.wafflecommons.pixelbrainreader.data.local.entity.FileEntity> {
+    private suspend fun filterEmbeddingCandidates(files: List<FileEntity>): List<FileEntity> {
         val today = java.time.LocalDate.now()
-        val todayPath = todayJournalPath(today)
         // Settled decision #20: private notes only when the owner switched them on, and only with a
         // saved password to decrypt them (checked before the model is loaded).
         val includePrivate = userPrefs.privateNotesInAi.first() && !secretManager.getVaultPassword().isNullOrBlank()
-
         val candidates = embeddingCandidates(files, today, includePrivate)
-
         if (candidates.isEmpty() && files.isNotEmpty()) {
             val byType = files.groupingBy { it.type }.eachCount()
-            val mdCount = files.count { it.path.endsWith(".md", ignoreCase = true) }
-            val mdEncCount = files.count { it.path.endsWith(".md.enc", ignoreCase = true) }
-            val droppedToday = files.count { it.path == todayPath }
-            val droppedSystem = files.count { it.path.contains("99_System") }
-            val firstFive = files.take(5).map { "${it.type}:${it.path}" }
-            Log.d(
-                "RAG_DEBUG",
-                "filterEmbeddingCandidates: 0 candidates from ${files.size} items.  " +
-                    "byType=$byType  .md=$mdCount  .md.enc=$mdEncCount  todaySkipped=$droppedToday  " +
-                    "systemSkipped=$droppedSystem.  First 5: $firstFive"
-            )
+            Log.d(TAG, "filterEmbeddingCandidates: 0 candidates from ${files.size} items. byType=$byType")
         }
-
         return candidates
     }
 
-    private suspend fun processEmbeddings(candidates: List<cloud.wafflecommons.pixelbrainreader.data.local.entity.FileEntity>) {
-        val vaultRoot = java.io.File(applicationContext.filesDir, "vault")
-        Log.i("RAG_DEBUG", "processEmbeddings: ${candidates.size} embedding candidate(s)")
+    /** A private note's passages are kept encrypted (AES-GCM, the vault password), read back to be reused. */
+    private class PrivatePassageCodec(private val crypto: CryptoManager, private val password: String) : PassageCodec {
+        override suspend fun encode(text: String): String =
+            withPassword(password) { Base64.encodeToString(crypto.encrypt(text, it), Base64.NO_WRAP) }
 
-        // Cache the vault password ONCE per worker run. Returns null when the
-        // user has never unlocked the vault on this install; in that case all
-        // private files are skipped with a log marker (idempotent — they'll
-        // be picked up next time the user re-presses the button after unlock).
-        val vaultPassword = secretManager.getVaultPassword()
-
-        var totalChunks = 0
-        var totalEmbedded = 0
-        var totalInserted = 0
-        var skippedFiles = 0
-        var privateProcessed = 0
-        var privateSkippedLocked = 0
-
-        candidates.forEach { entity ->
-            try {
-                val isPrivate = entity.path.startsWith("99_Private/") ||
-                    entity.path.endsWith(".md.enc", ignoreCase = true)
-
-                if (isPrivate && vaultPassword.isNullOrBlank()) {
-                    Log.d("RAG_DEBUG", "  skip ${entity.path}: vault locked (no password cached)")
-                    privateSkippedLocked++
-                    skippedFiles++
-                    return@forEach
-                }
-
-                val file = java.io.File(vaultRoot, entity.path)
-                if (!file.exists()) {
-                    Log.d("RAG_DEBUG", "  skip ${entity.path}: file not on disk")
-                    skippedFiles++
-                    return@forEach
-                }
-
-                val plaintext = if (isPrivate) {
-                    val pwd = vaultPassword!!.toCharArray()
-                    try {
-                        cryptoManager.decrypt(file.readBytes(), pwd)
-                    } catch (e: kotlinx.coroutines.CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        Log.d("RAG_DEBUG", "  decrypt failed for ${entity.path}: ${e.message}")
-                        skippedFiles++
-                        return@forEach
-                    } finally {
-                        java.util.Arrays.fill(pwd, ' ')
-                    }
-                } else {
-                    file.readText()
-                }
-
-                if (plaintext.isBlank()) {
-                    Log.d("RAG_DEBUG", "  skip ${entity.path}: blank content")
-                    skippedFiles++
-                    return@forEach
-                }
-
-                val chunks = cloud.wafflecommons.pixelbrainreader.data.ai.NoteChunker.chunk(plaintext, entity.path)
-                Log.d("RAG_DEBUG", "  ${entity.path}: ${chunks.size} chunk(s) from ${plaintext.length} chars (private=$isPrivate)")
-                totalChunks += chunks.size
-
-                // Embed OUTSIDE any DB transaction. TFLite inference can take
-                // seconds per chunk; holding the Room write lock open across
-                // dozens of chunks would starve every other DAO call.
-                val embeddingEntities = chunks.mapNotNull { chunk ->
-                    try {
-                        val vector = vectorSearchEngine.embed(chunk)
-                        totalEmbedded++
-
-                        val storedContent = if (isPrivate) {
-                            val pwd = vaultPassword!!.toCharArray()
-                            val ciphertext = try {
-                                cryptoManager.encrypt(chunk, pwd)
-                            } finally {
-                                java.util.Arrays.fill(pwd, ' ')
-                            }
-                            android.util.Base64.encodeToString(ciphertext, android.util.Base64.NO_WRAP)
-                        } else {
-                            chunk
-                        }
-
-                        cloud.wafflecommons.pixelbrainreader.data.local.entity.EmbeddingEntity(
-                            fileId = entity.path,
-                            content = storedContent,
-                            vector = vector.toList(),
-                            isPrivate = isPrivate
-                        )
-                    } catch (e: kotlinx.coroutines.CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        Log.d("RAG_DEBUG", "  embed/encrypt failed for a chunk of ${entity.path}: ${e.message}")
-                        null
-                    }
-                }
-
-                if (embeddingEntities.isEmpty()) {
-                    Log.d("RAG_DEBUG", "  ${entity.path}: 0 embeddings produced — skipping DB write")
-                    return@forEach
-                }
-
-                database.withTransaction {
-                    embeddingDao.deleteByFileId(entity.path)
-                    embeddingEntities.forEach { embeddingDao.insert(it) }
-                }
-                totalInserted += embeddingEntities.size
-                if (isPrivate) privateProcessed++
-                Log.d("RAG_DEBUG", "  ${entity.path}: inserted ${embeddingEntities.size} embedding(s) (private=$isPrivate)")
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.d("RAG_DEBUG", "Failed to embed ${entity.path}", e)
-            }
+        override suspend fun decode(stored: String): String? = try {
+            withPassword(password) { crypto.decrypt(Base64.decode(stored, Base64.NO_WRAP), it) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null // another password, or not ciphertext: re-embedded rather than reused
         }
-
-        Log.i(
-            "RAG_DEBUG",
-            "processEmbeddings done: chunks=$totalChunks embedded=$totalEmbedded inserted=$totalInserted " +
-                "privateProcessed=$privateProcessed privateSkippedLocked=$privateSkippedLocked skippedFiles=$skippedFiles"
-        )
     }
 
     companion object {
-        /** WorkManager unique-work name for the manual indexing button. */
+        private const val TAG = "RAG_DEBUG"
+
+        /** WorkManager unique-work name, shared by every way indexing starts. */
         const val UNIQUE_WORK_NAME = "ManualVaultIndexing"
+
+        /** A run's time. The system stops a background job after 10 minutes; this leaves room to hand over. */
+        const val RUN_BUDGET_MS = 7 * 60_000L
+
+        private const val PROGRESS_INTERVAL_MS = 1_000L
+
+        // Progress and output keys (Settings reads them). "error" is what the failure chip shows.
+        const val KEY_NOTES_DONE = "notesDone"
+        const val KEY_NOTES_TOTAL = "notesTotal"
+        const val KEY_PASSAGES = "passages"
+        const val KEY_PARTIAL = "partial"
+        const val KEY_ERROR = "error"
+
+        /** The one indexing request: app start, Settings, the private-notes switch and every hand-over. */
+        fun request(tag: String? = null): OneTimeWorkRequest =
+            OneTimeWorkRequestBuilder<IndexingWorker>()
+                .setConstraints(Constraints.Builder().setRequiresBatteryNotLow(true).build())
+                .apply { if (tag != null) addTag(tag) }
+                .build()
+
+        /** Notes without any vector first (every search misses them), then the stale ones; smallest first. */
+        internal fun indexingOrder(files: List<FileEntity>, embedded: Set<String>, sizeOf: (String) -> Long): List<FileEntity> =
+            files.map { it to sizeOf(it.path) }
+                .sortedWith(compareBy({ it.first.path in embedded }, { it.second }, { it.first.path }))
+                .map { it.first }
 
         internal fun todayJournalPath(today: java.time.LocalDate): String =
             "10_Journal/${today.format(java.time.format.DateTimeFormatter.ISO_DATE)}.md"
@@ -336,22 +332,21 @@ class IndexingWorker @AssistedInject constructor(
          * decision #16): it repeats the desktop's memory; the mirrored repository documents stay.
          */
         internal fun embeddingCandidates(
-            files: List<cloud.wafflecommons.pixelbrainreader.data.local.entity.FileEntity>,
+            files: List<FileEntity>,
             today: java.time.LocalDate,
             includePrivate: Boolean
-        ): List<cloud.wafflecommons.pixelbrainreader.data.local.entity.FileEntity> {
+        ): List<FileEntity> {
             val todayPath = todayJournalPath(today)
             return files.filter { entity ->
-                val isPrivate = entity.path.startsWith("99_Private/") ||
-                    entity.path.endsWith(".md.enc", ignoreCase = true)
+                val isPrivate = isPrivatePath(entity.path)
                 entity.type == "file" &&
                     (entity.path.endsWith(".md", ignoreCase = true) ||
                         entity.path.endsWith(".md.enc", ignoreCase = true)) &&
                     entity.path != todayPath &&
                     !entity.path.contains("99_System") &&
-                    !cloud.wafflecommons.pixelbrainreader.data.vault.VaultSchema.isPeopleNote(entity.path) &&
-                    !entity.path.startsWith(cloud.wafflecommons.pixelbrainreader.data.work.MissionLogSettings.ENCRYPTED_FOLDER + "/") &&
-                    !cloud.wafflecommons.pixelbrainreader.data.vault.MirrorNotes.isClaudeMemory(entity.path) &&
+                    !VaultSchema.isPeopleNote(entity.path) &&
+                    !entity.path.startsWith(MissionLogSettings.ENCRYPTED_FOLDER + "/") &&
+                    !MirrorNotes.isClaudeMemory(entity.path) &&
                     (!isPrivate || includePrivate)
             }
         }
@@ -367,8 +362,16 @@ class IndexingWorker @AssistedInject constructor(
          * it is embedded once it is no longer today.
          */
         internal fun neverEmbedded(fileIds: List<String>, includePrivate: Boolean = true): List<String> =
-            fileIds.filter {
-                cloud.wafflecommons.pixelbrainreader.data.vault.MirrorNotes.isClaudeMemory(it) || (!includePrivate && isPrivatePath(it))
-            }
+            fileIds.filter { MirrorNotes.isClaudeMemory(it) || (!includePrivate && isPrivatePath(it)) }
+    }
+}
+
+/** Runs [block] with the password as a char array, wiped afterwards. */
+private inline fun <T> withPassword(password: String, block: (CharArray) -> T): T {
+    val chars = password.toCharArray()
+    try {
+        return block(chars)
+    } finally {
+        java.util.Arrays.fill(chars, ' ')
     }
 }

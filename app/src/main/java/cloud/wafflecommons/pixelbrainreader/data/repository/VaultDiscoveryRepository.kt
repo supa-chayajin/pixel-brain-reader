@@ -6,6 +6,7 @@ import androidx.room.withTransaction
 import cloud.wafflecommons.pixelbrainreader.data.local.AppDatabase
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.FileDao
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.FileSearchDao
+import cloud.wafflecommons.pixelbrainreader.data.local.dao.absorbMtimeDrift
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.FileEntity
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.LinkEntity
 import cloud.wafflecommons.pixelbrainreader.data.search.Bm25
@@ -192,7 +193,7 @@ class VaultDiscoveryRepository @Inject constructor(
         val changedFiles = mutableListOf<FileEntity>()
         val newFiles = mutableListOf<FileEntity>()       // Upserted
         val newContents = mutableListOf<cloud.wafflecommons.pixelbrainreader.data.local.entity.FileContentEntity>()
-        val mtimeRefreshes = mutableListOf<Pair<String, Long>>() // UPDATE-only (no CASCADE)
+        val mtimeRefreshes = mutableListOf<Triple<String, Long?, Long>>() // path, stored mtime, disk mtime: UPDATE-only (no CASCADE)
 
         // Prune at descent time, NOT inside the loop. `walkTopDown().forEach`
         // with a name check is `continue`, not `prune` — by the time we react,
@@ -229,12 +230,12 @@ class VaultDiscoveryRepository @Inject constructor(
                 // Content identical — bump stored mtime via UPDATE so we hit the fast path next
                 // time. NOT a REPLACE, so the FK CASCADE on EmbeddingEntity does not fire and the
                 // existing embeddings for this file are preserved.
-                mtimeRefreshes.add(relativePath to onDiskMtime)
+                mtimeRefreshes.add(Triple(relativePath, dbEntity.localModifiedTimestamp, onDiskMtime))
                 return@forEach
             }
 
-            // Content actually changed — upsert row and delete stale embeddings so IndexingWorker
-            // re-embeds it on its next pass.
+            // Content actually changed — upsert the row and mark its embeddings stale: IndexingWorker
+            // re-embeds the note, reusing the vector of every passage that didn't change.
             newFiles.add(newEntity)
             contentEntity?.let { newContents.add(it) }
             changedFiles.add(newEntity)
@@ -258,12 +259,17 @@ class VaultDiscoveryRepository @Inject constructor(
                         newContents.map { it.path }.chunked(DELETE_CHUNK_SIZE).forEach { linkDao?.deleteBySources(it) }
                         if (newLinks.isNotEmpty()) linkDao?.insertAll(newLinks)
                     }
-                    // Clear stale embeddings for files whose content SHA changed.
-                    changedFiles.filter { it.path in dbPaths }.forEach { changed ->
-                        embeddingDao?.deleteByFileId(changed.path)
-                    }
+                    // Content changed: keep the vectors (most passages of an edited note are still
+                    // there) but mark them stale, so the indexer re-embeds only what changed. Deleting
+                    // them made a 231 KB mirrored TODO start from zero after every desktop run.
+                    changedFiles.filter { it.path in dbPaths }.map { it.path }
+                        .chunked(DELETE_CHUNK_SIZE).forEach { embeddingDao?.markStale(it) }
                 }
-                mtimeRefreshes.forEach { (path, mtime) -> fileDao.updateMtime(path, mtime) }
+                mtimeRefreshes.forEach { (path, storedMtime, mtime) ->
+                    fileDao.updateMtime(path, mtime)
+                    // Same content: vectors that were current stay current under the new file time.
+                    if (storedMtime != null) embeddingDao?.absorbMtimeDrift(path, storedMtime, mtime)
+                }
                 toDelete.chunked(DELETE_CHUNK_SIZE).forEach { chunk ->
                     fileDao.deleteFiles(chunk)
                     contentDao?.deleteContents(chunk)
@@ -295,7 +301,20 @@ class VaultDiscoveryRepository @Inject constructor(
         val linkDao = runCatching { database.linkDao() }.getOrNull()
         if (file.exists()) {
             val (entity, contentEntity) = createFileEntityWithContent(file, path)
+            val previous = fileDao.getFile(path)
             fileDao.insertFile(entity) // Upsert (does not cascade-delete embeddings)
+            val embeddingDao = runCatching { database.embeddingDao() }.getOrNull()
+            if (previous != null && embeddingDao != null) {
+                val previousMtime = previous.localModifiedTimestamp
+                val newMtime = entity.localModifiedTimestamp
+                if (previous.sha != null && previous.sha == entity.sha) {
+                    // Saved without a change: the vectors stay current.
+                    if (previousMtime != null && newMtime != null) embeddingDao.absorbMtimeDrift(path, previousMtime, newMtime)
+                } else {
+                    // Edited: re-embedded at the next index, each unchanged passage reused.
+                    embeddingDao.markStale(listOf(path))
+                }
+            }
             if (contentEntity != null) {
                 contentDao?.saveContent(contentEntity)
                 val links = linksOf(path, contentEntity.content)

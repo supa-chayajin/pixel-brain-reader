@@ -40,8 +40,17 @@ data class EmbeddingEntity(
     val content: String,
     val vector: List<Float>,
     val isPrivate: Boolean = false,
+    /**
+     * The note's file time the vector is current for, or [PENDING]: kept by a run before its note
+     * was done, or marked stale when the note changed (the indexer then re-embeds the note).
+     */
     val lastUpdated: Long = System.currentTimeMillis()
 ) {
+    companion object {
+        /** Below any file time: a note with one such row always needs the indexer. */
+        const val PENDING = -1L
+    }
+
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (javaClass != other?.javaClass) return false

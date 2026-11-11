@@ -108,8 +108,9 @@ abstract class FileDao {
     abstract suspend fun getFilesWithoutEmbeddings(): List<FileEntity>
 
     /**
-     * Finds files that either have no embeddings at all, OR have been modified
-     * since their embeddings were last generated.
+     * The notes the indexer must visit: no embedding at all, or one passage older than the note's
+     * file — modified since, marked stale by a content change, or kept pending (-1) by a run that
+     * stopped before the note was done. A note is current only when ALL its passages are (MIN).
      */
     @Query(
         """
@@ -118,7 +119,7 @@ abstract class FileDao {
           AND (f.path LIKE '%.md' OR f.path LIKE '%.md.enc')
           AND (
             f.path NOT IN (SELECT DISTINCT fileId FROM embeddings)
-            OR (f.localModifiedTimestamp IS NOT NULL AND f.localModifiedTimestamp > (SELECT COALESCE(MAX(e.lastUpdated), 0) FROM embeddings e WHERE e.fileId = f.path))
+            OR COALESCE(f.localModifiedTimestamp, 0) > (SELECT COALESCE(MIN(e.lastUpdated), -1) FROM embeddings e WHERE e.fileId = f.path)
           )
         """
     )

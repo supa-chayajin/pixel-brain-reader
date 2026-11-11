@@ -28,7 +28,8 @@ class LoginViewModel @Inject constructor(
     private val syncOrchestrator: SyncOrchestrator,
     private val deviceRole: DeviceRole,
     private val localCopyReset: LocalCopyReset,
-    private val dailyDashboardRepository: DailyDashboardRepository
+    private val dailyDashboardRepository: DailyDashboardRepository,
+    private val indexingScheduler: cloud.wafflecommons.pixelbrainreader.data.workers.IndexingScheduler
 ) : ViewModel() {
 
     private val _token = MutableStateFlow("")
@@ -237,6 +238,8 @@ class LoginViewModel @Inject constructor(
                     dailyDashboardRepository.reloadTodayFromDiskReadOnly()
                     syncOrchestrator.checkReadOnlyDrift()
                 }
+                // The new vault becomes searchable now, not at the next app start (a no-op on a read-only device).
+                indexingScheduler.start()
                 _loginSuccess.value = true
                 Log.d("StartLogin", "Vault sealed and Database primed.")
             } else {

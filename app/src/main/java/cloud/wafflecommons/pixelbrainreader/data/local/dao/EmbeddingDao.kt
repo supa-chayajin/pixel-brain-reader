@@ -23,6 +23,29 @@ interface EmbeddingDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertBlocking(embedding: EmbeddingEntity)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(embeddings: List<EmbeddingEntity>)
+
+    /** A note's stored passages: the indexer reuses every one whose text didn't change. */
+    @Query("SELECT * FROM embeddings WHERE fileId = :fileId")
+    suspend fun rowsFor(fileId: String): List<EmbeddingEntity>
+
+    /**
+     * Notes whose content changed: their vectors stay, so the indexer reuses each passage that is
+     * still there, but they are no longer current (-1 = EmbeddingEntity.PENDING), so the note is
+     * re-embedded.
+     */
+    @Query("UPDATE embeddings SET lastUpdated = -1 WHERE fileId IN (:fileIds)")
+    suspend fun markStale(fileIds: List<String>)
+
+    /** The oldest stamp of a note's passages: EmbeddingEntity.PENDING while any of them is pending or stale. */
+    @Query("SELECT MIN(lastUpdated) FROM embeddings WHERE fileId = :fileId")
+    suspend fun oldestStamp(fileId: String): Long?
+
+    /** Moves a note's stamps up to [stamp]: its vectors are still current for its new file time. */
+    @Query("UPDATE embeddings SET lastUpdated = :stamp WHERE fileId = :fileId AND lastUpdated < :stamp")
+    suspend fun restamp(fileId: String, stamp: Long)
+
     @Query("SELECT * FROM embeddings")
     suspend fun getAllEmbeddings(): List<EmbeddingEntity>
 
@@ -53,4 +76,14 @@ interface EmbeddingDao {
     /** Every embedded note's path, once. */
     @Query("SELECT DISTINCT fileId FROM embeddings")
     suspend fun fileIds(): List<String>
+}
+
+/**
+ * A note's content didn't change but its file time moved on (a pull or a rebase rewrote it): if its
+ * vectors were current for [oldMtime], they stay current for [newMtime] and the indexer never even
+ * opens the note. Pending or stale vectors are left as they are.
+ */
+suspend fun EmbeddingDao.absorbMtimeDrift(fileId: String, oldMtime: Long, newMtime: Long) {
+    val oldest = oldestStamp(fileId) ?: return
+    if (oldest >= oldMtime) restamp(fileId, newMtime)
 }

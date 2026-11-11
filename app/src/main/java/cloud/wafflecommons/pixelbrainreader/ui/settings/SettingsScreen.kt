@@ -410,7 +410,7 @@ fun SettingsScreen(
                     text = if (VaultWriteGate.readOnly) {
                         "The AI is off on this read-only device: the vault is not embedded. Search and the link check still work."
                     } else {
-                        "Embedding the vault is manual: tap below to embed the files that changed since your last index."
+                        "Notes are embedded on this phone in the background each time the app starts, only the passages that changed. Tap below to start now."
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -457,9 +457,14 @@ fun SettingsScreen(
                         )
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            when (indexingState) {
+                            when (val state = indexingState) {
                                 SettingsViewModel.IndexingState.Enqueued -> "Queued…"
-                                SettingsViewModel.IndexingState.Running -> "Indexing…"
+                                // Notes left, not "done / total": each run of a long index counts its own
+                                // total, while what is left only goes down across them.
+                                is SettingsViewModel.IndexingState.Running -> {
+                                    val left = state.notesTotal - state.notesDone
+                                    if (left > 0) "Indexing… $left ${if (left == 1) "note" else "notes"} to go" else "Indexing…"
+                                }
                                 else -> "Working…"
                             }
                         )

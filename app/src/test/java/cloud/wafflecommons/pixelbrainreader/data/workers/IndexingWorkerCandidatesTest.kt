@@ -84,4 +84,14 @@ class IndexingWorkerCandidatesTest {
         assertEquals(listOf("99_Private/diary.md.enc"), IndexingWorker.neverEmbedded(embedded, includePrivate = false))
         assertEquals(emptyList<String>(), IndexingWorker.neverEmbedded(embedded, includePrivate = true))
     }
+
+    @Test
+    fun `notes missing from every search come first, smallest first, so one big note never blocks the rest`() {
+        val sizes = mapOf("big-new.md" to 231_000L, "small-new.md" to 900L, "stale.md" to 10L, "mid-new.md" to 5_000L)
+        val files = sizes.keys.map { file(it) }
+
+        val ordered = IndexingWorker.indexingOrder(files, embedded = setOf("stale.md")) { sizes.getValue(it) }
+
+        assertEquals(listOf("small-new.md", "mid-new.md", "big-new.md", "stale.md"), ordered.map { it.path })
+    }
 }

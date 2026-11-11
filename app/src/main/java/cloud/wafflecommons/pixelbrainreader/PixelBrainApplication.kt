@@ -114,17 +114,10 @@ class PixelBrainApplication : Application(), Configuration.Provider {
      * Shares the manual button's unique name with KEEP so an in-flight index isn't disturbed.
      */
     private fun scheduleVaultIndexing() {
-        val request = androidx.work.OneTimeWorkRequestBuilder<cloud.wafflecommons.pixelbrainreader.data.workers.IndexingWorker>()
-            .setConstraints(
-                androidx.work.Constraints.Builder()
-                    .setRequiresBatteryNotLow(true)
-                    .build()
-            )
-            .build()
         WorkManager.getInstance(this).enqueueUniqueWork(
             cloud.wafflecommons.pixelbrainreader.data.workers.IndexingWorker.UNIQUE_WORK_NAME,
             androidx.work.ExistingWorkPolicy.KEEP,
-            request
+            cloud.wafflecommons.pixelbrainreader.data.workers.IndexingWorker.request()
         )
     }
 

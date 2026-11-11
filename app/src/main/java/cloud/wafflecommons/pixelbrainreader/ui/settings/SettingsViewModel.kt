@@ -7,9 +7,7 @@ import android.content.IntentSender
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.work.Constraints
 import androidx.work.ExistingWorkPolicy
-import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import cloud.wafflecommons.pixelbrainreader.data.workers.IndexingWorker
@@ -152,7 +150,8 @@ class SettingsViewModel @Inject constructor(
     sealed class IndexingState {
         data object Idle : IndexingState()
         data object Enqueued : IndexingState()
-        data object Running : IndexingState()
+        /** [notesDone] of [notesTotal] notes embedded by the current run (0 of 0 before its first report). */
+        data class Running(val notesDone: Int = 0, val notesTotal: Int = 0) : IndexingState()
         data object Succeeded : IndexingState()
         data class Failed(val reason: String) : IndexingState()
     }
@@ -170,19 +169,7 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             WorkManager.getInstance(context)
                 .getWorkInfosForUniqueWorkFlow(IndexingWorker.UNIQUE_WORK_NAME)
-                .collect { infos ->
-                    val latest = infos.firstOrNull()
-                    _indexingState.value = when (latest?.state) {
-                        WorkInfo.State.ENQUEUED -> IndexingState.Enqueued
-                        WorkInfo.State.RUNNING -> IndexingState.Running
-                        WorkInfo.State.SUCCEEDED -> IndexingState.Succeeded
-                        WorkInfo.State.FAILED -> IndexingState.Failed(
-                            latest.outputData.getString("error") ?: "Indexing failed"
-                        )
-                        WorkInfo.State.CANCELLED -> IndexingState.Failed("Indexing cancelled")
-                        WorkInfo.State.BLOCKED, null -> IndexingState.Idle
-                    }
-                }
+                .collect { infos -> _indexingState.value = indexingStateOf(infos) }
         }
     }
 
@@ -192,22 +179,12 @@ class SettingsViewModel @Inject constructor(
      * means a request issued while one is already running is a no-op.
      */
     fun triggerVaultIndexing() {
-        // Manual, user-initiated indexing: gate on battery only. Requiring
-        // device-idle here would defer the job until the phone enters Doze, so
-        // tapping "Index Knowledge Vault" while actively using the device would
-        // appear to do nothing. (The periodic DailyExportWorker keeps deviceIdle.)
-        val constraints = Constraints.Builder()
-            .setRequiresBatteryNotLow(true)
-            .build()
-
-        val request = OneTimeWorkRequestBuilder<IndexingWorker>()
-            .addTag("manual_indexing")
-            .setConstraints(constraints)
-            .build()
+        // Gated on battery only: requiring device-idle would defer the job until the phone enters
+        // Doze, so tapping "Index Knowledge Vault" while using the device would appear to do nothing.
         WorkManager.getInstance(context).enqueueUniqueWork(
             IndexingWorker.UNIQUE_WORK_NAME,
             ExistingWorkPolicy.KEEP,
-            request
+            IndexingWorker.request(tag = "manual_indexing")
         )
     }
 
@@ -420,7 +397,12 @@ class SettingsViewModel @Inject constructor(
         if (VaultWriteGate.readOnly) return // no AI on a read-only device
         viewModelScope.launch {
             userPrefs.setPrivateNotesInAi(enabled)
-            triggerVaultIndexing()
+            // After any run in progress, which read the switch when it started.
+            WorkManager.getInstance(context).enqueueUniqueWork(
+                IndexingWorker.UNIQUE_WORK_NAME,
+                ExistingWorkPolicy.APPEND_OR_REPLACE,
+                IndexingWorker.request(tag = "manual_indexing")
+            )
         }
     }
 
@@ -527,6 +509,31 @@ class SettingsViewModel @Inject constructor(
             } finally {
                 _isSyncingConfigs.value = false
             }
+        }
+    }
+
+    companion object {
+        /**
+         * The indexing state across every run under the unique name. A long index is a chain of runs
+         * (each hands over to the next before the system's job limit): a finished run next to a
+         * queued or running one means indexing is still going.
+         */
+        internal fun indexingStateOf(infos: List<WorkInfo>): IndexingState {
+            infos.firstOrNull { it.state == WorkInfo.State.RUNNING }?.let { running ->
+                return IndexingState.Running(
+                    notesDone = running.progress.getInt(IndexingWorker.KEY_NOTES_DONE, 0),
+                    notesTotal = running.progress.getInt(IndexingWorker.KEY_NOTES_TOTAL, 0)
+                )
+            }
+            if (infos.any { it.state == WorkInfo.State.ENQUEUED || it.state == WorkInfo.State.BLOCKED }) {
+                return IndexingState.Enqueued
+            }
+            infos.firstOrNull { it.state == WorkInfo.State.FAILED }?.let { failed ->
+                return IndexingState.Failed(failed.outputData.getString(IndexingWorker.KEY_ERROR) ?: "Indexing failed")
+            }
+            if (infos.any { it.state == WorkInfo.State.CANCELLED }) return IndexingState.Failed("Indexing cancelled")
+            if (infos.any { it.state == WorkInfo.State.SUCCEEDED }) return IndexingState.Succeeded
+            return IndexingState.Idle
         }
     }
 }
