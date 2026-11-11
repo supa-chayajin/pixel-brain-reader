@@ -38,7 +38,8 @@ class FileRepository @Inject constructor(
     private val gitSyncCoordinator: GitSyncCoordinator,
     private val secretManager: cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager,
     @param:ApplicationContext private val context: Context,
-    private val syncDigestRepository: dagger.Lazy<cloud.wafflecommons.pixelbrainreader.data.sync.SyncDigestRepository>
+    private val syncDigestRepository: dagger.Lazy<cloud.wafflecommons.pixelbrainreader.data.sync.SyncDigestRepository>,
+    private val historyFetcher: dagger.Lazy<cloud.wafflecommons.pixelbrainreader.data.sync.VaultHistoryFetcher>
 ) {
 
     private val vaultRoot: File
@@ -75,7 +76,7 @@ class FileRepository @Inject constructor(
       // interleave in the gap between individual git ops and one side pushes a stale
       // ref → dropped sync. withLock (not tryLock) so an explicit user save waits for
       // an in-flight cycle rather than being silently skipped.
-      return gitSyncCoordinator.mutex.withLock {
+      val result = gitSyncCoordinator.mutex.withLock {
         try {
           // 1. Setup/Clone
            _syncStatus.value = "Connecting to repository…"
@@ -151,6 +152,9 @@ class FileRepository @Inject constructor(
            _syncStatus.value = null
         }
       }
+      // A shallow first clone (the login's) gets its history in steps, once the sync is done.
+      if (result.isSuccess) historyFetcher.get().continueInBackground()
+      return result
     }
 
     // --- Shim Methods ---

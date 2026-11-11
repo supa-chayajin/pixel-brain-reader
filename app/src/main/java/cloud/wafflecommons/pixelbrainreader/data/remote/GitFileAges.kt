@@ -41,14 +41,20 @@ data class FileHistory(
 class GitFileAges @Inject constructor(
     @param:ApplicationContext private val context: Context
 ) {
-    /** [version] below [SNAPSHOT_VERSION]: a cache from before first-seen times — walk it all again. */
+    /**
+     * [version] below [SNAPSHOT_VERSION]: a cache from before first-seen times — walk it all again.
+     * [shallow]: the shallow clone's boundary it was walked at ("" = the whole history). A clone
+     * starts shallow and its history arrives in steps with the same HEAD: a snapshot walked on a
+     * shorter history is walked again, never extended.
+     */
     @Serializable
     private data class Snapshot(
         val head: String,
         val lastChanged: Map<String, Long>,
         val firstSeen: Map<String, Long> = emptyMap(),
         val changes: Map<String, Int> = emptyMap(),
-        val version: Int = 1
+        val version: Int = 1,
+        val shallow: String = ""
     ) {
         fun toHistory() = FileHistory(lastChanged, firstSeen, changes)
     }
@@ -89,7 +95,9 @@ class GitFileAges @Inject constructor(
         Git.open(vaultDir).use { git ->
             val repo = git.repository
             val head = repo.resolve("HEAD") ?: return FileHistory()
-            val cached = (memory ?: readCache())?.takeIf { it.version >= SNAPSHOT_VERSION }
+            val boundary = runCatching { repo.objectDatabase.shallowCommits }.getOrDefault(emptySet())
+            val shallowKey = boundary.map { it.name }.sorted().joinToString(",")
+            val cached = (memory ?: readCache())?.takeIf { it.version >= SNAPSHOT_VERSION && it.shallow == shallowKey }
             if (cached?.head == head.name) {
                 memory = cached
                 return cached.toHistory()
@@ -109,6 +117,9 @@ class GitFileAges @Inject constructor(
                 DiffFormatter(DisabledOutputStream.INSTANCE).use { diff ->
                     diff.setRepository(repo)
                     for (commit in walk) {
+                        // A shallow clone's oldest commit has no parent here: diffed against nothing it
+                        // would date every file to it. Those files have no age until the history comes.
+                        if (commit in boundary) continue
                         val parentTree = if (commit.parentCount > 0) walk.parseCommit(commit.getParent(0)).tree else null
                         // Author time: a rebase (every pull here) rewrites the COMMIT time of local commits.
                         val time = commit.authorIdent.whenAsInstant.toEpochMilli()
@@ -122,7 +133,7 @@ class GitFileAges @Inject constructor(
                     }
                 }
             }
-            val snapshot = Snapshot(head.name, ages, firstSeen, changes, SNAPSHOT_VERSION)
+            val snapshot = Snapshot(head.name, ages, firstSeen, changes, SNAPSHOT_VERSION, shallowKey)
             memory = snapshot
             writeCache(snapshot)
             return snapshot.toHistory()

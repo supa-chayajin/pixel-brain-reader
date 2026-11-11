@@ -87,7 +87,8 @@ class SyncOrchestratorTest {
             appScope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined),
             modesRepository = { mockk(relaxed = true) },
             syncDigestRepository = { mockk(relaxed = true) },
-            healthMetricsRepository = { mockk(relaxed = true) }
+            healthMetricsRepository = { mockk(relaxed = true) },
+            historyFetcher = { mockk(relaxed = true) }
         )
     }
 

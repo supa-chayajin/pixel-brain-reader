@@ -83,7 +83,8 @@ class SyncOrchestrator @Inject constructor(
     @param:ApplicationScope private val appScope: CoroutineScope,
     private val modesRepository: dagger.Lazy<cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository>,
     private val syncDigestRepository: dagger.Lazy<SyncDigestRepository>,
-    private val healthMetricsRepository: dagger.Lazy<cloud.wafflecommons.pixelbrainreader.data.repository.HealthMetricsRepository>
+    private val healthMetricsRepository: dagger.Lazy<cloud.wafflecommons.pixelbrainreader.data.repository.HealthMetricsRepository>,
+    private val historyFetcher: dagger.Lazy<VaultHistoryFetcher>
 ) {
     companion object {
         private const val TAG = "SyncOrchestrator"
@@ -333,6 +334,7 @@ class SyncOrchestrator @Inject constructor(
         }
         Log.i(TAG, "=== Full Sync Cycle Complete ===")
         _syncState.value = SyncState.Success
+        historyFetcher.get().continueInBackground() // the rest of a shallow clone's history, if any
         return true
     }
 
@@ -382,6 +384,7 @@ class SyncOrchestrator @Inject constructor(
             return false
         }
         _syncState.value = SyncState.Success
+        historyFetcher.get().continueInBackground() // the rest of a shallow clone's history, if any
         return true
     }
 

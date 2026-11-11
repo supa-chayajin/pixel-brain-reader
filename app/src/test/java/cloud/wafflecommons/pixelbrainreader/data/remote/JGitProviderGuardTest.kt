@@ -71,7 +71,7 @@ class JGitProviderGuardTest {
     @Test
     fun `a commit adding a protected name is held and records nothing until allowed`() = runBlocking {
         seedRemote(mapOf(NOTE to "Kickoff\n"))
-        assertTrue(provider.setupRepository(remoteUri, "main").isSuccess)
+        cloneWithHistory()
 
         vaultFile(NOTE).writeText("Kickoff\nCall Acme back\n")
         val result = provider.commit("edit note")
@@ -88,7 +88,7 @@ class JGitProviderGuardTest {
     @Test
     fun `what HEAD already holds never holds a later edit`() = runBlocking {
         seedRemote(mapOf(NOTE to "Acme kickoff\n"))
-        assertTrue(provider.setupRepository(remoteUri, "main").isSuccess)
+        cloneWithHistory()
 
         vaultFile(NOTE).writeText("Acme kickoff\nAgenda\n")
         assertTrue(provider.commit("edit note").isSuccess)
@@ -97,7 +97,7 @@ class JGitProviderGuardTest {
     @Test
     fun `a secret in a new note is held`() = runBlocking {
         seedRemote(mapOf(NOTE to "Kickoff\n"))
-        assertTrue(provider.setupRepository(remoteUri, "main").isSuccess)
+        cloneWithHistory()
 
         val inbox = "00_Inbox/env.md"
         vaultFile(inbox).apply { parentFile?.mkdirs() }.writeText("API_KEY=" + "a1b2c3d4e5f6g7h8" + "\n")
@@ -111,7 +111,7 @@ class JGitProviderGuardTest {
     fun `a commit message naming a protected term gets a neutral one`() = runBlocking {
         val clientNote = "20_Projects/Acme.md"
         seedRemote(mapOf(NOTE to "Kickoff\n", clientNote to "old notes\n"))
-        assertTrue(provider.setupRepository(remoteUri, "main").isSuccess)
+        cloneWithHistory()
 
         vaultFile(clientNote).delete()
         assertTrue(provider.commit("Delete $clientNote").isSuccess)
@@ -122,7 +122,7 @@ class JGitProviderGuardTest {
     @Test
     fun `checking pending changes reports what would be held without committing`() = runBlocking {
         seedRemote(mapOf(NOTE to "Kickoff\n"))
-        assertTrue(provider.setupRepository(remoteUri, "main").isSuccess)
+        cloneWithHistory()
 
         vaultFile(NOTE).writeText("Kickoff\nAcme\n")
         val findings = provider.reviewPendingChanges().getOrThrow()
@@ -147,5 +147,11 @@ class JGitProviderGuardTest {
 
     private companion object {
         const val NOTE = "20_Projects/plan.md"
+    }
+
+    /** The login's shallow clone, then its history, as the app fetches it right after (VaultHistoryFetcher). */
+    private suspend fun cloneWithHistory() {
+        assertTrue(provider.setupRepository(remoteUri, "main").isSuccess)
+        while (!provider.deepenHistory().getOrThrow().complete) Unit
     }
 }

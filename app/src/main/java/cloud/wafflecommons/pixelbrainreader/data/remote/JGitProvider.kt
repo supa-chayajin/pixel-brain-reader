@@ -14,6 +14,7 @@ import cloud.wafflecommons.pixelbrainreader.data.sync.SemanticCommitMessageGener
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -171,32 +172,8 @@ class JGitProvider @Inject constructor(
                     // CLONE STRATEGY
                     Log.d("JGitProvider", "Starting fresh clone from $remoteUrl branch: $branch")
                     val provider = getCredentialsProvider() ?: throw Exception("Clone requires API Token")
-
-                    // Ensure clean slate
-                    if (rootDir.exists()) {
-                        rootDir.deleteRecursively()
-                    }
-                    rootDir.mkdirs()
-
-                    try {
-                        Git.cloneRepository()
-                            .setURI(remoteUrl)
-                            .setDirectory(rootDir)
-                            .setBranch(branch)
-                            .setCredentialsProvider(provider)
-                            .setTimeout(NETWORK_TIMEOUT_SECONDS)
-                            .setProgressMonitor(AndroidLogProgressMonitor())
-                            .call()
-                            .close() // Close Git instance
-
-                        Log.i("JGitProvider", "Clone successful.")
-                        Result.success(Unit)
-                    } catch (e: Exception) {
-                        Log.e("JGitProvider", "Clone failed. Cleaning up.", e)
-                        // ATOMICITY: Delete broken repo to avoid "corrupted" state on next run
-                        rootDir.deleteRecursively()
-                        throw e
-                    }
+                    cloneNewestCommit(remoteUrl, branch, provider)
+                    Result.success(Unit)
                 } else {
                     // A read-only device only ever holds a clone of GitHub.
                     if (VaultWriteGate.readOnly) return@withLock Result.failure(ReadOnlyDeviceException())
@@ -213,6 +190,160 @@ class JGitProvider @Inject constructor(
             }
         }
     }
+
+    /**
+     * The first clone takes the newest commit only: the notes as they are now, a small transfer the
+     * slowest connection gets through. A full clone was one transfer of the whole history, and a
+     * network that drops a slow, long transfer (2026-11-11: three logins in a row, reset 7 to 10
+     * minutes in) failed the login and started it over from zero. A dropped attempt is retried;
+     * the history follows in small resumable steps ([deepenHistory]). Call under [gitMutex].
+     */
+    private suspend fun cloneNewestCommit(remoteUrl: String, branch: String, provider: UsernamePasswordCredentialsProvider) {
+        var attempt = 0
+        while (true) {
+            attempt++
+            if (rootDir.exists()) rootDir.deleteRecursively()
+            rootDir.mkdirs()
+            try {
+                val started = System.currentTimeMillis()
+                Git.cloneRepository()
+                    .setURI(remoteUrl)
+                    .setDirectory(rootDir)
+                    .setBranch(branch)
+                    .setDepth(1)
+                    .setCredentialsProvider(provider)
+                    .setTimeout(NETWORK_TIMEOUT_SECONDS)
+                    .setProgressMonitor(AndroidLogProgressMonitor())
+                    .call()
+                    .close()
+                Log.i("JGitProvider", "Clone of the newest commit done in ${(System.currentTimeMillis() - started) / 1000} s (attempt $attempt); the history follows in steps.")
+                return
+            } catch (e: Exception) {
+                // ATOMICITY: never leave a half-cloned repository for the next run to trust.
+                rootDir.deleteRecursively()
+                if (e is CancellationException) throw e
+                if (attempt >= CLONE_ATTEMPTS || !isTransientNetworkError(e)) {
+                    Log.e("JGitProvider", "Clone failed (attempt $attempt).", e)
+                    throw e
+                }
+                Log.w("JGitProvider", "Clone attempt $attempt dropped (${e.message}); retrying.")
+                delay(RETRY_BACKOFF_MS * attempt * attempt)
+            }
+        }
+    }
+
+    /** How far a shallow clone's history has come: [complete] once nothing is missing. */
+    data class HistoryProgress(val complete: Boolean, val commits: Int)
+
+    /**
+     * Fetches the next [step] commits of the history a shallow clone left behind; nothing
+     * when the history is complete. Each step is its own transfer: a dropped connection loses that
+     * step only, never what the steps before brought (they are in the object store, and
+     * `.git/shallow` moves back). Like any fetch it updates `origin/<branch>`, never the branch or
+     * the working tree. A read-only device runs it too: it only adds objects.
+     */
+    suspend fun deepenHistory(remoteName: String = "origin", step: Int = HISTORY_STEP): Result<HistoryProgress> = withContext(Dispatchers.IO) {
+        if (!isReady()) return@withContext Result.failure(Exception("Repository not initialized"))
+        gitMutex.withLock {
+            cleanStaleLocksIfNeeded()
+            try {
+                Git.open(rootDir).use { git ->
+                    val repo = git.repository
+                    if (repo.objectDatabase.shallowCommits.isEmpty()) {
+                        return@withLock Result.success(HistoryProgress(complete = true, commits = localHistory(repo).commits))
+                    }
+                    val provider = getCredentialsProvider() ?: return@withLock Result.failure(Exception("No API Token found"))
+                    val before = repairShallowBoundary(repo)
+                    try {
+                        // Deeper than what is here (the count is at least the current depth): never shortens.
+                        git.fetch()
+                            .setRemote(remoteName)
+                            .setCredentialsProvider(provider)
+                            .setDepth(before.commits + step)
+                            .setTimeout(NETWORK_TIMEOUT_SECONDS)
+                            .setProgressMonitor(AndroidLogProgressMonitor())
+                            .call()
+                    } catch (e: Exception) {
+                        // JGit already wrote the boundary the server announced, for a pack that never
+                        // came: put back the one that matches what is here.
+                        try {
+                            repo.objectDatabase.setShallowCommits(before.edge)
+                        } catch (restore: java.io.IOException) {
+                            Log.w("JGitProvider", "Boundary not restored, the next step repairs it: ${restore.message}")
+                        }
+                        throw e
+                    }
+                    val after = repairShallowBoundary(repo)
+                    Result.success(HistoryProgress(complete = after.edge.isEmpty(), commits = after.commits))
+                }
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.w("JGitProvider", "History step failed", e)
+                onGitFailure(e)
+                Result.failure(e)
+            }
+        }
+    }
+
+    /** The commits actually here: how many, and those whose parents aren't ([edge], a shallow clone's boundary). */
+    private class LocalHistory(val commits: Int, val edge: Set<org.eclipse.jgit.lib.ObjectId>)
+
+    /**
+     * Walks the commits that are here from HEAD and the remote-tracking branches, reading each one
+     * raw: never through `.git/shallow`, which can be wrong (see [repairShallowBoundary]).
+     */
+    private fun localHistory(repo: org.eclipse.jgit.lib.Repository): LocalHistory {
+        val tips = listOfNotNull(repo.resolve("HEAD")) + repo.refDatabase.getRefsByPrefix("refs/remotes/").mapNotNull { it.objectId }
+        val seen = HashSet<org.eclipse.jgit.lib.ObjectId>()
+        val edge = HashSet<org.eclipse.jgit.lib.ObjectId>()
+        val pending = ArrayDeque<org.eclipse.jgit.lib.ObjectId>(tips.map { it.copy() })
+        repo.newObjectReader().use { reader ->
+            // A walk without a reader never reads the shallow file: each commit keeps its real parents.
+            val parser = org.eclipse.jgit.revwalk.RevWalk(null as org.eclipse.jgit.lib.ObjectReader?)
+            while (pending.isNotEmpty()) {
+                val id = pending.removeLast()
+                if (id in seen || !reader.has(id, org.eclipse.jgit.lib.Constants.OBJ_COMMIT)) continue
+                seen += id
+                val raw = reader.open(id, org.eclipse.jgit.lib.Constants.OBJ_COMMIT).cachedBytes
+                for (parent in org.eclipse.jgit.revwalk.RevCommit.parse(parser, raw).parents) {
+                    if (reader.has(parent, org.eclipse.jgit.lib.Constants.OBJ_COMMIT)) pending += parent.copy() else edge += id
+                }
+            }
+        }
+        return LocalHistory(seen.size, edge)
+    }
+
+    /**
+     * Makes `.git/shallow` list exactly the commits here whose parents aren't. JGit 6.8 writes the
+     * boundary the server announces as soon as it reads it, BEFORE the pack arrives: a history step
+     * whose transfer dropped (2026-11-11, on a slow emulator) left a boundary for commits that never
+     * came, and every walk then failed on a missing parent ("Walk failure"), the pulls included.
+     * Call under [gitMutex]; only worth it on a shallow clone.
+     */
+    private fun repairShallowBoundary(repo: org.eclipse.jgit.lib.Repository): LocalHistory {
+        val history = localHistory(repo)
+        val listed = repo.objectDatabase.shallowCommits
+        if (listed != history.edge) {
+            Log.w("JGitProvider", "Shallow boundary repaired: ${listed.size} listed, ${history.edge.size} actually at the edge")
+            repo.objectDatabase.setShallowCommits(history.edge)
+        }
+        return history
+    }
+
+    /** Before a pull: a shallow clone left inconsistent by a dropped history step is repaired first. */
+    private fun repairShallowBoundaryIfShallow() {
+        try {
+            Git.open(rootDir).use { git ->
+                if (git.repository.objectDatabase.shallowCommits.isNotEmpty()) repairShallowBoundary(git.repository)
+            }
+        } catch (e: java.io.IOException) {
+            Log.w("JGitProvider", "Shallow boundary check skipped: ${e.message}")
+        }
+    }
+
+    /** The commits a shallow history stops at (their parents aren't here): empty once complete. */
+    private fun shallowBoundary(repo: org.eclipse.jgit.lib.Repository): Set<org.eclipse.jgit.lib.ObjectId> =
+        runCatching { repo.objectDatabase.shallowCommits }.getOrDefault(emptySet())
 
     // Keep initRepository for backward compatibility/local-init fallback
     suspend fun initRepository(): Result<Unit> = setupRepository(null)
@@ -428,6 +559,7 @@ class JGitProvider @Inject constructor(
 
             val provider = getCredentialsProvider() ?: return@withContext SyncResult.Error(Exception("No API Token found"))
 
+            repairShallowBoundaryIfShallow()
             Git.open(rootDir).use { git ->
                 recoverRepositoryStateIfNeeded(git)
                 val pullResult = git.pull()
@@ -553,6 +685,7 @@ class JGitProvider @Inject constructor(
         cleanStaleLocksIfNeeded()
         try {
             val provider = getCredentialsProvider() ?: return@withLock SyncResult.Error(Exception("No API Token found"))
+            repairShallowBoundaryIfShallow()
             Git.open(rootDir).use { git ->
                 val result = git.pull()
                     .setRemote(remoteName)
@@ -836,6 +969,7 @@ class JGitProvider @Inject constructor(
                 Git.open(rootDir).use { git ->
                     val repo = git.repository
                     val head = repo.resolve("HEAD") ?: return@use emptyList()
+                    val boundary = shallowBoundary(repo)
                     org.eclipse.jgit.revwalk.RevWalk(repo).use { walk ->
                         walk.sort(org.eclipse.jgit.revwalk.RevSort.COMMIT_TIME_DESC)
                         walk.markStart(walk.parseCommit(head))
@@ -843,6 +977,9 @@ class JGitProvider @Inject constructor(
                             diff.setRepository(repo)
                             val result = mutableListOf<CommitSummary>()
                             for (commit in walk) {
+                                // A shallow clone's oldest commit has no parent here: diffed against
+                                // nothing, it would show every file as changed by it.
+                                if (commit in boundary) continue
                                 val time = commit.authorIdent.whenAsInstant.toEpochMilli()
                                 // Commit-time order: once both clocks are past the window, nothing older follows.
                                 if (time < sinceMillis && commit.commitTime * 1000L < sinceMillis) break
@@ -875,7 +1012,9 @@ class JGitProvider @Inject constructor(
             if (!gitDir.isDirectory) return@withContext emptyList()
             try {
                 Git.open(rootDir).use { git ->
-                    val logs = git.log().addPath(relativePath).setMaxCount(limit).call()
+                    // A shallow clone's oldest commit holds every file without having changed it.
+                    val boundary = shallowBoundary(git.repository)
+                    val logs = git.log().addPath(relativePath).setMaxCount(limit).call().filterNot { it in boundary }
                     logs.map { commit ->
                         GitCommitDto(
                             commitId = commit.id.name,
@@ -1016,6 +1155,14 @@ class JGitProvider @Inject constructor(
          * blocking every later save and leaving the sync indicator spinning.
          */
         const val NETWORK_TIMEOUT_SECONDS = 30
+
+        /** First-clone attempts on a dropped connection, [RETRY_BACKOFF_MS] × attempt² apart (5 s, then 20 s). */
+        const val CLONE_ATTEMPTS = 3
+        const val RETRY_BACKOFF_MS = 5_000L
+
+        /** Commits per history step after a shallow clone: one short transfer each. */
+        const val HISTORY_STEP = 1_000
+
     }
 }
 

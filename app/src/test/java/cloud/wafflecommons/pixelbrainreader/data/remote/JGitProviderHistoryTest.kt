@@ -58,7 +58,7 @@ class JGitProviderHistoryTest {
     @Test
     fun `history lists every commit touching the note, newest first, including its deletion`() = runBlocking {
         seedRemote(NOTE, "v1\n")
-        assertTrue(provider.setupRepository(remoteUri, "main").isSuccess)
+        cloneWithHistory()
 
         note().writeText("v2\n")
         assertTrue(provider.commit("edit note").isSuccess)
@@ -81,7 +81,7 @@ class JGitProviderHistoryTest {
     @Test
     fun `a generic auto-save message is replaced by one naming the staged change`() = runBlocking {
         seedRemote(NOTE, "v1\n")
-        assertTrue(provider.setupRepository(remoteUri, "main").isSuccess)
+        cloneWithHistory()
 
         note().writeText("v2\n")
         assertTrue(provider.commit("Auto-save: local changes").isSuccess)
@@ -95,7 +95,7 @@ class JGitProviderHistoryTest {
     @Test
     fun `an unknown commit id reads as null instead of throwing`() = runBlocking {
         seedRemote(NOTE, "v1\n")
-        assertTrue(provider.setupRepository(remoteUri, "main").isSuccess)
+        cloneWithHistory()
 
         assertNull(provider.getFileContentAtCommit(NOTE, "0123456789abcdef0123456789abcdef01234567"))
     }
@@ -116,5 +116,11 @@ class JGitProviderHistoryTest {
 
     private companion object {
         const val NOTE = "20_Projects/plan.md"
+    }
+
+    /** The login's shallow clone, then its history, as the app fetches it right after (VaultHistoryFetcher). */
+    private suspend fun cloneWithHistory() {
+        assertTrue(provider.setupRepository(remoteUri, "main").isSuccess)
+        while (!provider.deepenHistory().getOrThrow().complete) Unit
     }
 }
