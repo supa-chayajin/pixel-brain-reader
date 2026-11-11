@@ -194,16 +194,18 @@ minutes through WorkManager, XP for every finished session and the log on a tap)
 
 ### 12.15.0 — Sync safety
 
-The design, reviewed by the owner in an interview on 2026-11-11: `2026-11-11-12.15-sync-safety.md`
-(six decisions; it supersedes the details below where they differ).
+Built in 12.15.0 (2026-11-11). The design, reviewed by the owner in an interview on 2026-11-11:
+`2026-11-11-12.15-sync-safety.md` (six decisions and the as-built notes; it supersedes the details
+below where they differ: the conflict is remembered and the pulls pause, the resolution deletes the
+backups, the diff is side by side from 600 dp).
 
-- [ ] **S1 Conflict screen.** It lists the `*_sync_conflict_*` backups that `ConflictResolver`
+- [x] **S1 Conflict screen.** It lists the `*_sync_conflict_*` backups that `ConflictResolver`
       leaves in the vault, with a side-by-side diff (the Time Machine HISTOGRAM engine) and keep
       mine / keep theirs / edit; resolving removes the backup. The new risk is the phone's TODO
       answers and hand-offs colliding with the desktop sessions' edits of the same files. **S1
       jumps the queue the first time a sync stops on a conflict.** *(V12 11.2-E; Oct 17 3.4; the
       ideas list's "modified files" view.)*
-- [ ] **S2 Read-only polish.** On a read-only device, the Settings pages and tools that edit vault
+- [x] **S2 Read-only polish.** On a read-only device, the Settings pages and tools that edit vault
       files say "Change this on your phone" instead of saving into a refusal. *(The read-only plan,
       "Not done in 12.6.0".)*
 

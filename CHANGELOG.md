@@ -7,9 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Planned: `documentation/plans/2026-11-10-dream-app-roadmap.md`. Next, 12.15.0: sync safety (a
-conflict screen, read-only polish for the tablet). Hybrid search waits for the golden set's
-numbers, measured on the phone.
+Planned: `documentation/plans/2026-11-10-dream-app-roadmap.md`. Next, 12.16.0: private vault
+hardening (changing its password safely). Hybrid search waits for the golden set's numbers,
+measured on the phone.
+
+## [12.15.0] — 2026-11-11
+
+Sync safety.
+
+### Added
+
+- **A sync conflict screen.** When a sync stops because the same file changed on this phone and
+  on GitHub, the screen opens on its own. Each file shows GitHub's version beside the phone's (side
+  by side on an unfolded Fold or a tablet, − and + lines on a phone width). A note can keep yours,
+  keep GitHub's, be edited from git's merge with both sides marked, or keep both: GitHub's stays in
+  place and yours is saved beside it as `<name> (téléphone).md`. A data file (JSON) keeps one side,
+  with a line saying what differs. **Resolve and push** lands one commit on top of GitHub's (never a
+  merge commit), deletes the backups the stop made, pushes, then runs a sync. If GitHub changed
+  again meanwhile, the screen shows what is new to choose.
+- **Until it's resolved, syncing waits.** Before, every later sync wrote another backup and stopped
+  again. Now the pulls pause, a pull to refresh opens the screen, and local saves keep committing on
+  the phone and go up with the resolution. Daily shows "Sync stopped: N files changed on both
+  sides", and Settings › About lists it while it waits.
+
+### Changed
+
+- **A read-only device offers no write.** On the tablet, the pages that change the vault stay
+  readable with their controls off and one line: "Read-only device: change this on your phone."
+  That covers Habits & Automations, House & Chores, Modes (screen-share safe stays a setting of the
+  device), Export All, the mission log, boards, hand-offs, inbox filing, leave & handover, meetings
+  and next actions, a runbook's incident log, objectives, the evidence report, a project's
+  hand-offs and answers, the Habits and Chores tabs, and the Time Machine's Restore. On Daily, the
+  gratitude input, task ticks and edits, local timeline edits, the Second Brain fields and the
+  scraps' buttons are off too.
 
 ## [12.14.0] — 2026-11-11
 

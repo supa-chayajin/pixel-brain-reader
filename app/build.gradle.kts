@@ -37,8 +37,8 @@ android {
         // versionCode = major×10000 + minor×100 + patch since 12.10.0 (owner, 2026-11-10): the
         // old major×100 + minor×10 + patch would have given 13.0.0 a LOWER code than 12.10+, and
         // Android refuses a lower code (an uninstall). 12.10.0 = 121000, 13.0.0 = 130000.
-        versionCode = 121400
-        versionName = "12.14.0"
+        versionCode = 121500
+        versionName = "12.15.0"
 
         // GitHub OAuth "Device Flow" client id (public — no secret needed for device flow).
         // Register an OAuth App at github.com/settings/developers, enable Device Flow, and
