@@ -136,6 +136,21 @@ class MissionLogRepository @Inject constructor(
     private suspend fun exists(path: String): Boolean =
         if (path.endsWith(".enc")) File(vaultDir, path).exists() else fileRepository.fileExists(path)
 
+    /**
+     * The monthly work report of an encrypted log (D7), written encrypted beside it in `Rapports/`
+     * so its entries never land in plain text. [render] gets the note's path. Null when the report
+     * is already there: the monthly job writes it once.
+     */
+    suspend fun writeEncryptedReport(name: String, render: (String) -> String): String? = withContext(Dispatchers.IO) {
+        val settings = currentSettings()
+        check(settings.encrypted) { "Only an encrypted log keeps its reports beside it." }
+        val path = "${MissionLogSettings.ENCRYPTED_FOLDER}/$REPORTS_FOLDER/$name.md.enc"
+        if (exists(path)) return@withContext null
+        writeMutex.withLock { write(path, render(path), encrypted = true) }
+        pushScheduler.requestPush()
+        path
+    }
+
     suspend fun delete(entry: LogEntry) = mutate(YearMonth.from(entry.at)) { content ->
         MissionLogFormat.replace(content, entry, null) ?: throw IllegalStateException("The entry changed on disk; reload the log.")
     }
@@ -208,5 +223,7 @@ class MissionLogRepository @Inject constructor(
 
     companion object {
         const val SETTINGS_PATH = "10_Journal/system/mission_log.json"
+        /** Where an encrypted log keeps its monthly reports (D7). */
+        const val REPORTS_FOLDER = "Rapports"
     }
 }

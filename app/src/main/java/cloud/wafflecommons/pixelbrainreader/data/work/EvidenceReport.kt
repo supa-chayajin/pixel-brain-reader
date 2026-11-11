@@ -119,10 +119,17 @@ object EvidenceReport {
 
     private fun name(scope: EvidenceScope) = if (scope == EvidenceScope.PERSONAL) "Rapport d'activité personnel" else "Rapport d'activité"
 
-    fun render(period: ReportPeriod, figures: EvidenceFigures, generated: LocalDate, summary: String? = null): String = buildString {
+    /** The report as a note; [at] is where it will live (the inbox unless the monthly job places it). */
+    fun render(
+        period: ReportPeriod,
+        figures: EvidenceFigures,
+        generated: LocalDate,
+        summary: String? = null,
+        at: String = path(period, figures.scope)
+    ): String = buildString {
         val work = figures.scope == EvidenceScope.WORK
         val title = "${name(figures.scope)} — ${period.frenchLabel}"
-        append(VaultSchema.frontmatter(title = title, path = path(period, figures.scope), date = generated, tags = listOf("rapport-activite")))
+        append(VaultSchema.frontmatter(title = title, path = at, date = generated, tags = listOf("rapport-activite")))
         append("# ").append(title).append("\n\n")
         append("> Brouillon généré le ").append(generated)
         if (work) {

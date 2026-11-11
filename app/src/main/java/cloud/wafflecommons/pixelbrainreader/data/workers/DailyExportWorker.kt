@@ -10,6 +10,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import cloud.wafflecommons.pixelbrainreader.data.repository.DailyDashboardRepository
+import cloud.wafflecommons.pixelbrainreader.data.review.MonthlyReportsRepository
 import cloud.wafflecommons.pixelbrainreader.data.review.WeeklyReviewRepository
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
@@ -22,7 +23,8 @@ class DailyExportWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted workerParams: WorkerParameters,
     private val dashboardRepository: DailyDashboardRepository,
-    private val weeklyReviewRepository: WeeklyReviewRepository
+    private val weeklyReviewRepository: WeeklyReviewRepository,
+    private val monthlyReportsRepository: MonthlyReportsRepository
 ) : CoroutineWorker(appContext, workerParams) {
 
     override suspend fun doWork(): Result {
@@ -52,8 +54,8 @@ class DailyExportWorker @AssistedInject constructor(
     }
 
     /**
-     * The weekly review (D6) once the week's last board is burned. Never fails the burn: a review
-     * that can't be written is logged and tried again the next night.
+     * The weekly review (D6) and the monthly reports (D7) once the period's last board is burned.
+     * Never fails the burn: what can't be written is logged and tried again the next night.
      */
     private suspend fun writeReviews() {
         try {
@@ -62,6 +64,13 @@ class DailyExportWorker @AssistedInject constructor(
             throw e
         } catch (e: Exception) {
             Log.w("DailyExportWorker", "Weekly review not written (non-fatal)", e)
+        }
+        try {
+            monthlyReportsRepository.writeDue()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w("DailyExportWorker", "Monthly reports not written (non-fatal)", e)
         }
     }
 

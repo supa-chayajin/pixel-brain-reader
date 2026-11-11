@@ -200,6 +200,15 @@ class UserPreferencesRepository @Inject constructor(
         context.dataStore.edit { preferences -> preferences[KEY_WEEKLY_REVIEW_WRITTEN] = weekKey }
     }
 
+    // --- Monthly reports (12.13, D7): the last month written ("2026-10") ---
+    private val KEY_MONTHLY_REPORTS_WRITTEN = stringPreferencesKey("monthly_reports_written")
+
+    val monthlyReportsWritten: Flow<String?> = setting { it[KEY_MONTHLY_REPORTS_WRITTEN] }
+
+    suspend fun setMonthlyReportsWritten(month: String) {
+        context.dataStore.edit { preferences -> preferences[KEY_MONTHLY_REPORTS_WRITTEN] = month }
+    }
+
     // --- Reminders (Phase 3) ---
     private val KEY_VAULT_REMINDER_ENABLED = booleanPreferencesKey("vault_reminder_enabled")
     private val KEY_VAULT_REMINDER_TIME = stringPreferencesKey("vault_reminder_time")
