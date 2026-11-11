@@ -36,8 +36,7 @@ import org.junit.Before
 import org.junit.Test
 import java.time.LocalDate
 
-import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.cancel
+import cloud.wafflecommons.pixelbrainreader.ui.cancelAndAwait
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
@@ -105,7 +104,8 @@ class MainViewModelTest {
 
     @After
     fun tearDown() {
-        viewModel.viewModelScope.cancel()
+        // flowOn(Dispatchers.Default) and withContext(Dispatchers.IO) inside: wait for them before Main goes away.
+        viewModel.cancelAndAwait()
         Dispatchers.resetMain()
     }
 
@@ -117,11 +117,12 @@ class MainViewModelTest {
         coEvery { fileRepository.syncRepository(owner, repo) } returns Result.success(Unit)
 
         viewModel.refreshCurrentFolder()
-        advanceUntilIdle()
 
-        coVerify { fileRepository.syncRepository(owner, repo) }
-        coVerify { syncOrchestrator.reconcileVaultIntoRoom() }
-        coVerify { widgetSnapshotManager.updateSnapshot() }
+        // The refresh reads the repository info on Dispatchers.IO, a real thread advanceUntilIdle()
+        // doesn't wait for: each verification waits for its call instead.
+        coVerify(timeout = 5_000) { fileRepository.syncRepository(owner, repo) }
+        coVerify(timeout = 5_000) { syncOrchestrator.reconcileVaultIntoRoom() }
+        coVerify(timeout = 5_000) { widgetSnapshotManager.updateSnapshot() }
     }
 
     @Test
@@ -132,8 +133,12 @@ class MainViewModelTest {
         coEvery { fileRepository.syncRepository(owner, repo) } returns Result.failure(Exception("Network error"))
 
         viewModel.refreshCurrentFolder()
-        advanceUntilIdle()
 
+        // Past the Dispatchers.IO hop, the failure is recorded before anything could reconcile.
+        val state = withContext(Dispatchers.Default) {
+            withTimeout(5_000) { viewModel.uiState.first { it.error != null } }
+        }
+        assertEquals("Sync Failed: Network error", state.error)
         coVerify { fileRepository.syncRepository(owner, repo) }
         coVerify(exactly = 0) { syncOrchestrator.reconcileVaultIntoRoom() }
     }

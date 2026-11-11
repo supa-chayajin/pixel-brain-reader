@@ -19,7 +19,6 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
-import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -30,8 +29,7 @@ import org.junit.Before
 import org.junit.Test
 import java.time.LocalDate
 
-import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.cancel
+import cloud.wafflecommons.pixelbrainreader.ui.cancelAndAwait
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
@@ -62,7 +60,8 @@ class LifeOSViewModelTest {
 
     @After
     fun tearDown() {
-        activeViewModel?.viewModelScope?.cancel()
+        // Its uiState runs flowOn(Dispatchers.Default): wait for it before Main goes away.
+        activeViewModel?.cancelAndAwait()
         activeViewModel = null
         Dispatchers.resetMain()
     }
@@ -95,8 +94,6 @@ class LifeOSViewModelTest {
         assertTrue(scheduledIds.contains("1"))
         assertTrue(scheduledIds.contains("3"))
         assertTrue(!scheduledIds.contains("2"))
-        viewModel.viewModelScope.cancel()
-        advanceUntilIdle()
     }
 
     @Test
@@ -127,7 +124,5 @@ class LifeOSViewModelTest {
         assertTrue(groups.containsKey("VIG Training"))
         assertTrue(groups.containsKey("MND Training"))
         assertTrue(groups.containsKey("General"))
-        viewModel.viewModelScope.cancel()
-        advanceUntilIdle()
     }
 }

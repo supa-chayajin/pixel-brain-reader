@@ -1,7 +1,7 @@
 package cloud.wafflecommons.pixelbrainreader.ui.settings
 
 import android.content.Context
-import androidx.lifecycle.viewModelScope
+import cloud.wafflecommons.pixelbrainreader.ui.cancelAndAwait
 import androidx.work.WorkManager
 import cloud.wafflecommons.pixelbrainreader.data.ai.LocalAiManager
 import cloud.wafflecommons.pixelbrainreader.data.ai.NanoState
@@ -22,7 +22,6 @@ import io.mockk.mockkStatic
 import io.mockk.unmockkStatic
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -74,7 +73,7 @@ class SettingsViewModelTest {
 
     @After
     fun tearDown() {
-        viewModel?.viewModelScope?.cancel()
+        viewModel?.cancelAndAwait(testDispatcher.scheduler)
         viewModel = null
         unmockkStatic(WorkManager::class)
         Dispatchers.resetMain()
