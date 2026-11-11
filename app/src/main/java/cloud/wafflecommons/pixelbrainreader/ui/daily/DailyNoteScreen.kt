@@ -88,6 +88,7 @@ fun DailyNoteScreen(
     onOpenProject: (String) -> Unit = {},
     onOpenChores: () -> Unit = {},
     onOpenReader: () -> Unit = {},
+    onOpenMeetingPrep: (String) -> Unit = {},
     viewModel: DailyNoteViewModel = hiltViewModel(),
     modesViewModel: cloud.wafflecommons.pixelbrainreader.ui.modes.ModesViewModel = hiltViewModel(),
     guardStatus: cloud.wafflecommons.pixelbrainreader.ui.guard.GuardStatusViewModel = hiltViewModel(),
@@ -494,7 +495,7 @@ fun DailyNoteScreen(
                                         Spacer(Modifier.height(8.dp))
                                         TimelineList(
                                             events = state.timelineEvents,
-                                            onEdit = { editTimelineEntry = it }
+                                            onEdit = { entry -> if (entry.googleEventId != null) onOpenMeetingPrep(entry.id) else editTimelineEntry = entry }
                                         )
                                     }
                                 }
@@ -601,7 +602,7 @@ fun DailyNoteScreen(
                                             Column(modifier = Modifier.weight(0.4f)) {
                                                 TimelineHeader()
                                                 Spacer(Modifier.height(8.dp))
-                                                TimelineList(events = state.timelineEvents, onEdit = { editTimelineEntry = it })
+                                                TimelineList(events = state.timelineEvents, onEdit = { entry -> if (entry.googleEventId != null) onOpenMeetingPrep(entry.id) else editTimelineEntry = entry })
                                             }
                                             Column(modifier = Modifier.weight(0.6f)) {
                                                 JournalHeader()

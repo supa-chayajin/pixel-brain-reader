@@ -64,6 +64,11 @@ object V11Routes {
         "handoff?root=" + android.net.Uri.encode(root.orEmpty()) + "&text=" + android.net.Uri.encode(text)
 
     fun missionLog(add: Boolean = false) = "mission_log?add=$add"
+
+    /** A calendar entry's prep (12.12, D4). */
+    const val MEETING_PREP = "meeting_prep?entry={entry}"
+
+    fun meetingPrep(entryId: String) = "meeting_prep?entry=" + android.net.Uri.encode(entryId)
 }
 
 /**
@@ -150,6 +155,9 @@ fun NavGraphBuilder.v11Destinations(navController: NavHostController, openNote: 
             onOpenNote = openNote,
             onOpenRunbooks = { navController.navigate(V11Routes.RUNBOOKS) }
         )
+    }
+    composable(V11Routes.MEETING_PREP, arguments = listOf(navArgument("entry") { type = NavType.StringType; defaultValue = "" })) {
+        cloud.wafflecommons.pixelbrainreader.ui.meetings.MeetingPrepScreen(onBack = { navController.popBackStack() }, onOpenNote = openNote)
     }
     composable(V11Routes.EXPLAIN_ERROR) {
         cloud.wafflecommons.pixelbrainreader.ui.work.ExplainErrorScreen(onBack = { navController.popBackStack() }, onOpenNote = openNote)

@@ -1443,7 +1443,8 @@ fun MainScreen(
                     onOpenActivity = { navController.navigate(V11Routes.ACTIVITY) },
                     onOpenProject = { root -> navController.navigate(V11Routes.project(root)) },
                     onOpenChores = { navigateToTab(Screen.HomeOS) },
-                    onOpenReader = { navController.navigate(Screen.Import) }
+                    onOpenReader = { navController.navigate(Screen.Import) },
+                    onOpenMeetingPrep = { id -> navController.navigate(V11Routes.meetingPrep(id)) }
                 )
             }
             

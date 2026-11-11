@@ -50,6 +50,10 @@ interface DailyDashboardDao {
     @Query("SELECT * FROM timeline_entries WHERE date = :date ORDER BY time ASC")
     suspend fun getTimelineSnapshot(date: LocalDate): List<TimelineEntryEntity>
 
+    /** One timeline entry: a meeting's prep opens on it (12.12). */
+    @Query("SELECT * FROM timeline_entries WHERE id = :id")
+    suspend fun getTimelineEntry(id: String): TimelineEntryEntity?
+
     @Query("DELETE FROM timeline_entries WHERE date = :date")
     suspend fun clearTimeline(date: LocalDate)
 
