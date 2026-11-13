@@ -103,6 +103,12 @@ class ModesRepository @Inject constructor(
         readFromDisk()?.let { _config.value = it }
     }
 
+    /**
+     * For workers and widgets: the configuration on disk. A process a worker or widget started
+     * still holds the defaults in [config] (settled decision 8).
+     */
+    suspend fun currentConfig(): ModesConfig = withContext(Dispatchers.IO) { readFromDisk() ?: _config.value }
+
     /** For workers and widgets: the policy right now, without waiting for the flows. */
     suspend fun currentVisibility(): Visibility = withContext(Dispatchers.IO) {
         val cfg = readFromDisk() ?: _config.value
@@ -155,7 +161,12 @@ class ModesRepository @Inject constructor(
 
     private fun compute(cfg: ModesConfig, ov: ModeOverride?, safe: Boolean): Visibility {
         val resolved = ModeResolver.resolve(cfg, ov, LocalDateTime.now(), ZoneId.systemDefault())
-        return Visibility(resolved.mode, resolved.source, safe, cfg.workFolders, resolved.leave, cfg.appearance())
+        return Visibility(
+            resolved.mode, resolved.source, safe, cfg.workFolders, resolved.leave, cfg.appearance(),
+            withChild = resolved.withChild,
+            childLabel = cfg.custody.label,
+            personalProjects = cfg.personalProjects
+        )
     }
 
     private fun overrideOf(prefs: Preferences): ModeOverride? {

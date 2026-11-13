@@ -5,6 +5,7 @@ import cloud.wafflecommons.pixelbrainreader.data.local.dao.DailyDashboardDao
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.FileContentDao
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyTaskEntity
 import cloud.wafflecommons.pixelbrainreader.data.modes.ContextMode
+import cloud.wafflecommons.pixelbrainreader.data.modes.ModeResolver
 import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.DailyDashboardRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.FileRepository
@@ -112,7 +113,9 @@ class ShutdownRepository @Inject constructor(
         if (VaultWriteGate.refuses()) return null
         dashboardRepository.burnToDisk(today)
         preferences.setShutdownClosedDay(today)
-        val evening = modesRepository.config.value.outsideHoursMode
+        // The evening's own mode: with the custody calendar on, Off when the child is home tonight.
+        val config = modesRepository.config.value
+        val evening = ModeResolver.outsideHoursModeAt(config, today.atTime(config.endTime()))
         return evening.takeIf { modesRepository.currentVisibility().mode != it }
     }
 

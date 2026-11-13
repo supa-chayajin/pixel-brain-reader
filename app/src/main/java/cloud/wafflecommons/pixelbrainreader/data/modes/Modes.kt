@@ -76,7 +76,13 @@ data class ModesConfig(
     /** The user's names and icons for the modes. */
     val modeStyles: Map<ContextMode, ModeStyle> = emptyMap(),
     /** The name of the tools hub (the Daily screen chip); blank = "Toolkit". */
-    val toolkitName: String = ""
+    val toolkitName: String = "",
+    /** Shared custody: who is home outside work hours, and which days habits can follow. */
+    val custody: CustodySchedule = CustodySchedule(),
+    /** Outside work hours with the child home (custody on); [outsideHoursMode] is the mode without. */
+    val withChildMode: ContextMode = ContextMode.OFF,
+    /** The personal projects Perso shows (project roots); empty = every one of them. */
+    val personalProjects: List<String> = emptyList()
 ) {
     fun appearance(): ModeAppearance = ModeAppearance(modeStyles, toolkitName)
 
@@ -93,7 +99,8 @@ data class ModeOverride(val mode: ContextMode, val untilMillis: Long)
 /** Why the mode is what it is (shown under the mode chip). */
 enum class ModeSource { MANUAL, LEAVE, SCHEDULE, DEFAULT }
 
-data class ResolvedMode(val mode: ContextMode, val source: ModeSource, val leave: LeavePeriod? = null)
+/** [withChild]: whether the child is home (the custody calendar), null when it is off. */
+data class ResolvedMode(val mode: ContextMode, val source: ModeSource, val leave: LeavePeriod? = null, val withChild: Boolean? = null)
 
 /**
  * What each surface may show. One policy for the file list, search, AI search, resurfaced notes,
@@ -105,7 +112,13 @@ data class Visibility(
     val screenShareSafe: Boolean = false,
     val workFolders: List<String> = emptyList(),
     val leave: LeavePeriod? = null,
-    val appearance: ModeAppearance = ModeAppearance()
+    val appearance: ModeAppearance = ModeAppearance(),
+    /** The child is home (custody calendar), or null when it is off. */
+    val withChild: Boolean? = null,
+    /** How the screens call the child ("With <label>"). */
+    val childLabel: String = CustodySchedule.DEFAULT_NAME,
+    /** The project roots Perso shows; empty = every personal project. */
+    val personalProjects: List<String> = emptyList()
 ) {
     fun label(mode: ContextMode = this.mode): String = appearance.label(mode)
     /** The user's name for Work mode, for "hidden outside … mode" hints. */
@@ -122,6 +135,16 @@ data class Visibility(
 
     fun isWorkPath(path: String): Boolean = workFolders.any { folder -> path == folder || path.startsWith("$folder/") }
 
+    /**
+     * The project screens (the Projects tab, Daily's block, the widget, Due today): Work shows every
+     * project, Perso the ones ticked in Modes settings (all when none is), Off none.
+     */
+    fun showsProject(root: String): Boolean = isVisible(root) && when (mode) {
+        ContextMode.WORK -> true
+        ContextMode.PERSONAL -> personalProjects.isEmpty() || root in personalProjects
+        ContextMode.OFF -> false
+    }
+
     fun isVisible(path: String): Boolean {
         if (hidePrivate && (path == PRIVATE_FOLDER || path.startsWith("$PRIVATE_FOLDER/"))) return false
         if (hideWork && isWorkPath(path)) return false
@@ -134,20 +157,39 @@ data class Visibility(
     }
 }
 
-/** The mode rules: a manual choice beats a leave, which beats the schedule. */
+/**
+ * The mode rules: a manual choice beats a leave, which beats the schedule. With the custody calendar
+ * on, outside work hours (and on leave) the mode follows who is home: [ModesConfig.withChildMode]
+ * with the child, [ModesConfig.outsideHoursMode] without.
+ */
 object ModeResolver {
 
     fun resolve(config: ModesConfig, override: ModeOverride?, now: LocalDateTime, zone: ZoneId): ResolvedMode {
         val leave = activeLeave(config, now.toLocalDate())
+        val withChild = childHome(config, now)
         val nowMillis = now.atZone(zone).toInstant().toEpochMilli()
         if (override != null && override.untilMillis > nowMillis) {
-            return ResolvedMode(override.mode, ModeSource.MANUAL, leave)
+            return ResolvedMode(override.mode, ModeSource.MANUAL, leave, withChild)
         }
-        if (leave != null) return ResolvedMode(ContextMode.OFF, ModeSource.LEAVE, leave)
-        if (!config.scheduleEnabled) return ResolvedMode(ContextMode.WORK, ModeSource.DEFAULT)
-        val mode = if (inWorkHours(config, now)) ContextMode.WORK else config.outsideHoursMode
-        return ResolvedMode(mode, ModeSource.SCHEDULE)
+        // A leave only takes Work away; without the custody calendar it is Off, as before.
+        if (leave != null) {
+            return ResolvedMode(withChild?.let { offHoursMode(config, it) } ?: ContextMode.OFF, ModeSource.LEAVE, leave, withChild)
+        }
+        if (!config.scheduleEnabled) return ResolvedMode(ContextMode.WORK, ModeSource.DEFAULT, withChild = withChild)
+        val mode = if (inWorkHours(config, now)) ContextMode.WORK else outsideHoursModeAt(config, now)
+        return ResolvedMode(mode, ModeSource.SCHEDULE, withChild = withChild)
     }
+
+    /** Whether the child is home at [moment], or null when the calendar is off. The handover happens at the workday's end. */
+    fun childHome(config: ModesConfig, moment: LocalDateTime): Boolean? =
+        config.custody.takeIf { it.isActive }?.withChildAt(moment, config.endTime())
+
+    /** The mode outside work hours at [moment]: the evening the shutdown offers, the schedule's off hours. */
+    fun outsideHoursModeAt(config: ModesConfig, moment: LocalDateTime): ContextMode =
+        childHome(config, moment)?.let { offHoursMode(config, it) } ?: config.outsideHoursMode
+
+    private fun offHoursMode(config: ModesConfig, withChild: Boolean): ContextMode =
+        if (withChild) config.withChildMode else config.outsideHoursMode
 
     fun activeLeave(config: ModesConfig, date: LocalDate): LeavePeriod? = config.leavePeriods.firstOrNull { it.contains(date) }
 
@@ -157,15 +199,23 @@ object ModeResolver {
         return !time.isBefore(config.startTime()) && time.isBefore(config.endTime())
     }
 
-    /** The next moment the schedule changes the mode, or null without a schedule. */
+    /**
+     * The next moment the schedule changes the mode, or null without a schedule. A custody handover
+     * (the workday's end on its day) is one too, work day or not.
+     */
     fun nextBoundary(config: ModesConfig, now: LocalDateTime): LocalDateTime? {
-        if (!config.scheduleEnabled || config.workDays.isEmpty()) return null
+        if (!config.scheduleEnabled) return null
+        val handoverDay = config.custody.takeIf { it.isActive }?.handoverDayOfWeek
         for (offset in 0..7L) {
             val day = now.toLocalDate().plusDays(offset)
-            if (DayOfWeek.from(day).value !in config.workDays) continue
-            listOf(day.atTime(config.startTime()), day.atTime(config.endTime()))
-                .firstOrNull { it.isAfter(now) }
-                ?.let { return it }
+            val moments = buildList {
+                if (DayOfWeek.from(day).value in config.workDays) {
+                    add(day.atTime(config.startTime()))
+                    add(day.atTime(config.endTime()))
+                }
+                if (day.dayOfWeek == handoverDay) add(day.atTime(config.endTime()))
+            }
+            moments.filter { it.isAfter(now) }.minOrNull()?.let { return it }
         }
         return null
     }

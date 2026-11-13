@@ -48,14 +48,14 @@ class ProjectsWidget : GlanceAppWidget() {
     }
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val projects = WidgetLiveData.activeProjects(context, ProjectsWidgetLayout.MAX_ROWS)
+        val list = WidgetLiveData.activeProjects(context, ProjectsWidgetLayout.MAX_ROWS)
         provideContent {
-            GlanceTheme { Content(context, projects) }
+            GlanceTheme { Content(context, list.projects, list.emptyLine) }
         }
     }
 
     @Composable
-    private fun Content(context: Context, projects: List<WidgetLiveData.WidgetProject>) {
+    private fun Content(context: Context, projects: List<WidgetLiveData.WidgetProject>, emptyLine: String) {
         val layout = ProjectsWidgetLayout.forHeight(LocalSize.current.height.value)
         val open = actionStartActivity(WidgetNav.openIntent(context, WidgetNav.SCREEN_PROJECTS))
         // C13: hand off to a desktop session straight from the home screen.
@@ -72,7 +72,7 @@ class ProjectsWidget : GlanceAppWidget() {
                 )
                 Spacer(GlanceModifier.height(10.dp))
                 if (projects.isEmpty()) {
-                    WidgetEmpty("🗂️", "No project to show")
+                    WidgetEmpty("🗂️", emptyLine)
                 } else {
                     LazyColumn(modifier = GlanceModifier.fillMaxWidth().defaultWeight()) {
                         items(projects.take(layout.rows)) { p -> ProjectRow(p, layout.withNext, open) }

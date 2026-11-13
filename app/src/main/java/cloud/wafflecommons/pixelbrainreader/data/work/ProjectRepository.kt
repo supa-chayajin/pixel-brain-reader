@@ -3,6 +3,7 @@ package cloud.wafflecommons.pixelbrainreader.data.work
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.FileContentDao
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.LinkDao
 import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
+import cloud.wafflecommons.pixelbrainreader.data.modes.Visibility
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -34,6 +35,21 @@ class ProjectRepository @Inject constructor(
         val visibility = modesRepository.visibility.value
         all(today).filter { visibility.isVisible(it.root) }
     }
+
+    /**
+     * The projects the mode's project screens show (the Projects tab, Daily's block, the widget):
+     * Off none, Perso the ticked ones, Work every visible one ([Visibility.showsProject]). Workers and
+     * widgets pass the policy read from disk.
+     */
+    suspend fun shownProjects(
+        visibility: Visibility = modesRepository.visibility.value,
+        today: LocalDate = LocalDate.now()
+    ): List<ProjectSummary> = withContext(Dispatchers.IO) {
+        all(today).filter { visibility.showsProject(it.root) }
+    }
+
+    /** Every project, whatever the mode (Modes settings' Perso checklist). */
+    suspend fun everyProject(today: LocalDate = LocalDate.now()): List<ProjectSummary> = withContext(Dispatchers.IO) { all(today) }
 
     /** What each visible project did between [start] and [end], most commits first (the evidence report). */
     suspend fun periodActivity(start: LocalDate, end: LocalDate): List<ProjectPeriodActivity> = withContext(Dispatchers.IO) {

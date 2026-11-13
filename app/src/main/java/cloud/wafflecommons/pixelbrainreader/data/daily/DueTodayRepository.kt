@@ -2,6 +2,7 @@ package cloud.wafflecommons.pixelbrainreader.data.daily
 
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.FileContentDao
 import cloud.wafflecommons.pixelbrainreader.data.modes.Visibility
+import cloud.wafflecommons.pixelbrainreader.data.work.ProjectFormat
 import cloud.wafflecommons.pixelbrainreader.data.repository.ChoreRepository
 import cloud.wafflecommons.pixelbrainreader.data.work.WorkNote
 import kotlinx.coroutines.Dispatchers
@@ -22,8 +23,13 @@ class DueTodayRepository @Inject constructor(
     private val choreRepository: ChoreRepository
 ) {
     suspend fun due(today: LocalDate, visibility: Visibility): List<DueItem> = withContext(Dispatchers.IO) {
-        val notes = fileContentDao.contentsUnder("")
-            .filter { it.path.endsWith(".md") && visibility.isVisible(it.path) }
+        val visible = fileContentDao.contentsUnder("").filter { it.path.endsWith(".md") && visibility.isVisible(it.path) }
+        // A project the mode doesn't show (Off: none, Perso: the unticked ones) keeps its actions out too.
+        val roots = ProjectFormat.group(
+            visible.filter { it.path.startsWith("${ProjectFormat.PROJECTS_FOLDER}/") }.map { it.path to it.content }
+        ).keys
+        val notes = visible
+            .filter { note -> ProjectFormat.projectFor(roots, note.path)?.let(visibility::showsProject) ?: true }
             .map { WorkNote.from(it.path, it.content) }
         val rooms = choreRepository.getAllRoomsStream().first().associate { it.id to it.name }
         val chores = choreRepository.getAllChoresStream().first()

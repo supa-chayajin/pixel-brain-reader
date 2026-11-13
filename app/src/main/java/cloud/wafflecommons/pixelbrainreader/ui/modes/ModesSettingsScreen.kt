@@ -14,9 +14,12 @@ import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.BeachAccess
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Event
+import androidx.compose.material.icons.rounded.FamilyRestroom
 import androidx.compose.material.icons.rounded.FolderShared
+import androidx.compose.material.icons.rounded.RocketLaunch
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.VisibilityOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
@@ -24,6 +27,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -44,6 +48,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.modes.ContextMode
+import cloud.wafflecommons.pixelbrainreader.data.modes.CustodyException
 import cloud.wafflecommons.pixelbrainreader.data.modes.KeyDate
 import cloud.wafflecommons.pixelbrainreader.data.modes.LeavePeriod
 import cloud.wafflecommons.pixelbrainreader.data.modes.ModeAppearance
@@ -67,7 +72,11 @@ fun ModesSettingsScreen(onBack: () -> Unit, viewModel: ModesViewModel = hiltView
     val config by viewModel.config.collectAsStateWithLifecycle()
     val visibility by viewModel.visibility.collectAsStateWithLifecycle()
     val folders by viewModel.folders.collectAsStateWithLifecycle()
-    LaunchedEffect(Unit) { viewModel.loadFolders() }
+    val projects by viewModel.projects.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) {
+        viewModel.loadFolders()
+        viewModel.loadProjects()
+    }
 
     var timePicker by remember { mutableStateOf<Pair<String, (String) -> Unit>?>(null) }
     var pickLeave by remember { mutableStateOf(false) }
@@ -77,6 +86,9 @@ fun ModesSettingsScreen(onBack: () -> Unit, viewModel: ModesViewModel = hiltView
     var pendingKeyDateWork by remember { mutableStateOf(true) }
     var editMode by remember { mutableStateOf<ContextMode?>(null) }
     var editToolkit by remember { mutableStateOf(false) }
+    var editChildName by remember { mutableStateOf(false) }
+    var pickException by remember { mutableStateOf(false) }
+    var pendingException by remember { mutableStateOf<Pair<LocalDate, LocalDate>?>(null) }
     val appearance = config.appearance()
     val workLabel = appearance.label(ContextMode.WORK)
     // The modes live in the vault: a read-only device shows them and changes only screen-share safe,
@@ -120,6 +132,27 @@ fun ModesSettingsScreen(onBack: () -> Unit, viewModel: ModesViewModel = hiltView
             }
         }
 
+        val personalLabel = appearance.label(ContextMode.PERSONAL)
+        SectionCard(
+            title = "$personalLabel projects",
+            icon = Icons.Rounded.RocketLaunch,
+            subtitle = "What $personalLabel mode shows on the Projects tab, Daily, the widget and Due today; nothing ticked shows every personal project. " +
+                "${appearance.label(ContextMode.OFF)} mode shows none."
+        ) {
+            val personal = projects.filterNot { p -> config.workFolders.any { p.root == it || p.root.startsWith("$it/") } }
+            if (personal.isEmpty()) EmptyHint("No personal project yet — sync the vault first.")
+            personal.forEach { project ->
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Checkbox(
+                        checked = project.root in config.personalProjects,
+                        onCheckedChange = { viewModel.togglePersonalProject(project.root) },
+                        enabled = editable
+                    )
+                    Text(project.name, style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+        }
+
         SectionCard(
             title = "Schedule",
             icon = Icons.Rounded.Schedule,
@@ -145,17 +178,76 @@ fun ModesSettingsScreen(onBack: () -> Unit, viewModel: ModesViewModel = hiltView
                         Text("to ${config.workEnd}")
                     }
                 }
-                Text("Outside work hours", style = MaterialTheme.typography.labelLarge)
-                val choices = listOf(ContextMode.PERSONAL, ContextMode.OFF)
-                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                    choices.forEachIndexed { index, mode ->
-                        SegmentedButton(
-                            selected = config.outsideHoursMode == mode,
-                            onClick = { viewModel.setOutsideHoursMode(mode) },
+                // With the custody calendar on, the hours off follow who is home.
+                if (config.custody.isActive) {
+                    OutsideHoursChoice("With ${config.custody.label}", config.withChildMode, appearance, editable, viewModel::setWithChildMode)
+                    OutsideHoursChoice("Without ${config.custody.label}", config.outsideHoursMode, appearance, editable, viewModel::setOutsideHoursMode)
+                } else {
+                    OutsideHoursChoice("Outside work hours", config.outsideHoursMode, appearance, editable, viewModel::setOutsideHoursMode)
+                }
+            }
+        }
+
+        val custody = config.custody
+        SectionCard(
+            title = "Shared custody",
+            icon = Icons.Rounded.FamilyRestroom,
+            subtitle = "Every other week, from one handover to the next. Outside work hours and on leave the mode follows who is home, and habits can follow it too.",
+            trailing = { Switch(checked = custody.enabled, onCheckedChange = viewModel::setCustodyEnabled, enabled = editable) }
+        ) {
+            if (custody.enabled) {
+                ListItem(
+                    supportingContent = { Text("Shown as \"With ${custody.label}\"") },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    modifier = Modifier.clickable(enabled = editable) { editChildName = true }
+                ) { Text(custody.name.ifBlank { "Name" }) }
+                Text("Handover day", style = MaterialTheme.typography.labelLarge)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    DayOfWeek.entries.forEach { day ->
+                        FilterChip(
+                            selected = day == custody.handoverDayOfWeek,
+                            onClick = { viewModel.setHandoverDay(day) },
                             enabled = editable,
-                            shape = SegmentedButtonDefaults.itemShape(index, choices.size)
-                        ) { Text(appearance.label(mode)) }
+                            label = { Text(day.getDisplayName(TextStyle.SHORT, Locale.ENGLISH)) }
+                        )
                     }
+                }
+                val dayName = custody.handoverDayOfWeek.getDisplayName(TextStyle.FULL, Locale.ENGLISH)
+                val arrives = custody.arrivesInWeekOf(LocalDate.now())
+                Text("This week, ${custody.label}…", style = MaterialTheme.typography.labelLarge)
+                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                    SegmentedButton(
+                        selected = arrives == true,
+                        onClick = { viewModel.setCustodyThisWeek(arrives = true) },
+                        enabled = editable,
+                        shape = SegmentedButtonDefaults.itemShape(0, 2)
+                    ) { Text("arrives on $dayName") }
+                    SegmentedButton(
+                        selected = arrives == false,
+                        onClick = { viewModel.setCustodyThisWeek(arrives = false) },
+                        enabled = editable,
+                        shape = SegmentedButtonDefaults.itemShape(1, 2)
+                    ) { Text("leaves on $dayName") }
+                }
+                if (arrives == null) EmptyHint("Say how this week goes to start the rhythm.")
+                Text("Exceptions", style = MaterialTheme.typography.labelLarge)
+                if (custody.exceptions.isEmpty()) EmptyHint("School holidays or a swapped weekend: add them here.")
+                custody.exceptions.forEach { exception ->
+                    val who = (if (exception.withChild) "With " else "Without ") + custody.label
+                    RemovableRow(
+                        title = exception.label.ifBlank { who },
+                        subtitle = "${exception.start} → ${exception.end}" + if (exception.label.isNotBlank()) " · $who" else "",
+                        onRemove = if (editable) {
+                            { viewModel.removeCustodyException(exception) }
+                        } else {
+                            null
+                        }
+                    )
+                }
+                if (editable) FilledTonalButton(onClick = { pickException = true }) {
+                    Icon(Icons.Default.Add, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Add exception")
                 }
             }
         }
@@ -163,7 +255,12 @@ fun ModesSettingsScreen(onBack: () -> Unit, viewModel: ModesViewModel = hiltView
         SectionCard(
             title = "Leave",
             icon = Icons.Rounded.BeachAccess,
-            subtitle = "Off for the whole period; a summary of what happened waits for you on the first day back."
+            subtitle = if (config.custody.isActive) {
+                "No $workLabel for the whole period (${appearance.label(config.withChildMode)} with ${config.custody.label}, " +
+                    "${appearance.label(config.outsideHoursMode)} without); a summary of what happened waits for you on the first day back."
+            } else {
+                "Off for the whole period; a summary of what happened waits for you on the first day back."
+            }
         ) {
             if (config.leavePeriods.isEmpty()) EmptyHint("No leave planned.")
             config.leavePeriods.forEach { leave ->
@@ -259,6 +356,31 @@ fun ModesSettingsScreen(onBack: () -> Unit, viewModel: ModesViewModel = hiltView
             onDismiss = { pendingLeave = null }
         )
     }
+    if (editChildName) {
+        TextPromptDialog(
+            title = "Your child's name",
+            label = "Name",
+            initial = config.custody.name,
+            onConfirm = { name -> viewModel.setChildName(name); editChildName = false },
+            onDismiss = { editChildName = false }
+        )
+    }
+    if (pickException) {
+        PickDateRangeDialog(
+            onConfirm = { start, end -> pendingException = start to end; pickException = false },
+            onDismiss = { pickException = false }
+        )
+    }
+    pendingException?.let { (start, end) ->
+        CustodyExceptionDialog(
+            childLabel = config.custody.label,
+            onConfirm = { withChild, label ->
+                viewModel.addCustodyException(CustodyException(start.toString(), end.toString(), withChild, label.trim()))
+                pendingException = null
+            },
+            onDismiss = { pendingException = null }
+        )
+    }
     if (pickKeyDate) {
         PickDateDialog(
             initial = LocalDate.now(),
@@ -279,3 +401,50 @@ fun ModesSettingsScreen(onBack: () -> Unit, viewModel: ModesViewModel = hiltView
     }
 }
 
+/** The mode for some hours off: Perso or Off. */
+@Composable
+private fun OutsideHoursChoice(
+    title: String,
+    selected: ContextMode,
+    appearance: ModeAppearance,
+    editable: Boolean,
+    onSelect: (ContextMode) -> Unit
+) {
+    Text(title, style = MaterialTheme.typography.labelLarge)
+    val choices = listOf(ContextMode.PERSONAL, ContextMode.OFF)
+    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+        choices.forEachIndexed { index, mode ->
+            SegmentedButton(
+                selected = selected == mode,
+                onClick = { onSelect(mode) },
+                enabled = editable,
+                shape = SegmentedButtonDefaults.itemShape(index, choices.size)
+            ) { Text(appearance.label(mode)) }
+        }
+    }
+}
+
+/** An exception's side (with or without the child) and an optional label. */
+@Composable
+private fun CustodyExceptionDialog(childLabel: String, onConfirm: (Boolean, String) -> Unit, onDismiss: () -> Unit) {
+    var label by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Who is home those days?") },
+        text = {
+            OutlinedTextField(
+                value = label,
+                onValueChange = { label = it.take(ModeAppearance.MAX_LABEL * 2) },
+                label = { Text("Label (optional)") },
+                singleLine = true
+            )
+        },
+        confirmButton = {
+            Row {
+                TextButton(onClick = { onConfirm(false, label) }) { Text("Without $childLabel") }
+                TextButton(onClick = { onConfirm(true, label) }) { Text("With $childLabel") }
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}

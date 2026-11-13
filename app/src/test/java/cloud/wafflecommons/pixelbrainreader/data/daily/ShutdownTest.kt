@@ -1,5 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.data.daily
 
+import cloud.wafflecommons.pixelbrainreader.data.modes.CustodySchedule
 import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.DailyDashboardDao
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.FileContentDao
@@ -182,6 +183,15 @@ class ShutdownTest {
 
         coEvery { modesRepository.currentVisibility() } returns Visibility(mode = ContextMode.PERSONAL)
         assertNull(repository.closeDay(wednesday))
+    }
+
+    @Test
+    fun `with the custody calendar on, the evening offered is Off when the child is home tonight`() = runTest {
+        // The child arrives on Friday 2026-11-06 and leaves on Friday 2026-11-13: Wednesday the 11th is with them.
+        val custody = CustodySchedule(enabled = true, name = "Kid", arrival = "2026-11-06")
+        every { modesRepository.config } returns MutableStateFlow(config.copy(custody = custody))
+        assertEquals(ContextMode.OFF, repository.closeDay(wednesday))
+        assertEquals(ContextMode.PERSONAL, repository.closeDay(wednesday.plusDays(7)))
     }
 
     @Test

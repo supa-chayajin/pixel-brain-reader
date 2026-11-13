@@ -3,6 +3,7 @@ package cloud.wafflecommons.pixelbrainreader.ui.modes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cloud.wafflecommons.pixelbrainreader.data.modes.ContextMode
+import cloud.wafflecommons.pixelbrainreader.data.modes.CustodyException
 import cloud.wafflecommons.pixelbrainreader.data.modes.KeyDate
 import cloud.wafflecommons.pixelbrainreader.data.modes.LeavePeriod
 import cloud.wafflecommons.pixelbrainreader.data.modes.ModeAppearance
@@ -13,6 +14,8 @@ import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
 import cloud.wafflecommons.pixelbrainreader.data.modes.Visibility
 import cloud.wafflecommons.pixelbrainreader.data.repository.VaultDiscoveryRepository
 import cloud.wafflecommons.pixelbrainreader.data.system.AppClock
+import cloud.wafflecommons.pixelbrainreader.data.work.ProjectRepository
+import cloud.wafflecommons.pixelbrainreader.data.work.projectDisplayName
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -20,16 +23,23 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import java.time.DayOfWeek
+import java.time.LocalDate
 import javax.inject.Inject
 
 /** A key date with the number of days left (0 = today). */
 data class KeyDateCountdown(val keyDate: KeyDate, val daysLeft: Long)
 
+/** A project the Perso checklist offers: its root and the name the Projects tab shows. */
+data class ProjectChoice(val root: String, val name: String)
+
 @HiltViewModel
 class ModesViewModel @Inject constructor(
     private val modesRepository: ModesRepository,
     private val vaultDiscoveryRepository: VaultDiscoveryRepository,
+    private val projectRepository: ProjectRepository,
     appClock: AppClock
 ) : ViewModel() {
 
@@ -50,6 +60,22 @@ class ModesViewModel @Inject constructor(
             _folders.value = vaultDiscoveryRepository.getAllFolderPaths()
                 .filter { path -> path.count { it == '/' } <= 1 && !path.startsWith(".") }
                 .sorted()
+        }
+    }
+
+    private val _projects = MutableStateFlow<List<ProjectChoice>>(emptyList())
+    /** Every project, whatever the mode; the screen leaves out the ones in work folders. */
+    val projects: StateFlow<List<ProjectChoice>> = _projects.asStateFlow()
+
+    fun loadProjects() {
+        viewModelScope.launch {
+            _projects.value = try {
+                projectRepository.everyProject().map { ProjectChoice(it.root, projectDisplayName(it.title)) }.sortedBy { it.name.lowercase() }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                emptyList()
+            }
         }
     }
 
@@ -80,6 +106,30 @@ class ModesViewModel @Inject constructor(
     fun setWorkHours(start: String, end: String) = update { it.copy(workStart = start, workEnd = end) }
 
     fun setOutsideHoursMode(mode: ContextMode) = update { it.copy(outsideHoursMode = mode) }
+
+    fun setWithChildMode(mode: ContextMode) = update { it.copy(withChildMode = mode) }
+
+    fun setCustodyEnabled(enabled: Boolean) = update { it.copy(custody = it.custody.copy(enabled = enabled)) }
+
+    fun setChildName(name: String) = update { it.copy(custody = it.custody.copy(name = name.trim().take(ModeAppearance.MAX_LABEL))) }
+
+    /** This week the child [arrives] on the handover day, or leaves on it: sets the rhythm. */
+    fun setCustodyThisWeek(arrives: Boolean) = update { it.copy(custody = it.custody.withThisWeek(LocalDate.now(), arrives)) }
+
+    fun setHandoverDay(day: DayOfWeek) = update { it.copy(custody = it.custody.withHandoverDay(day)) }
+
+    fun addCustodyException(exception: CustodyException) = update { cfg ->
+        cfg.copy(custody = cfg.custody.copy(exceptions = (cfg.custody.exceptions + exception).sortedBy { it.start }))
+    }
+
+    fun removeCustodyException(exception: CustodyException) = update { cfg ->
+        cfg.copy(custody = cfg.custody.copy(exceptions = cfg.custody.exceptions - exception))
+    }
+
+    fun togglePersonalProject(root: String) = update { cfg ->
+        val roots = if (root in cfg.personalProjects) cfg.personalProjects - root else cfg.personalProjects + root
+        cfg.copy(personalProjects = roots.sorted())
+    }
 
     /** A blank [ModeStyle] puts the default name and icon back. */
     fun setModeStyle(mode: ContextMode, style: ModeStyle) = update { cfg ->

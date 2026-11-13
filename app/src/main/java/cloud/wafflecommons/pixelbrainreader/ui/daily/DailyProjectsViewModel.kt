@@ -40,7 +40,8 @@ class DailyProjectsViewModel @Inject constructor(
 
     init {
         modesRepository.visibility
-            .map { it.hideWork }
+            // The mode decides which projects show (Off none, Perso the ticked ones), not only work folders.
+            .map { listOf(it.mode, it.hideWork, it.personalProjects) }
             .distinctUntilChanged()
             .onEach { reload() }
             .launchIn(viewModelScope)
@@ -49,7 +50,7 @@ class DailyProjectsViewModel @Inject constructor(
     fun reload() {
         viewModelScope.launch {
             try {
-                val arranged = arrangementRepository.read().arrange(projectRepository.projects())
+                val arranged = arrangementRepository.read().arrange(projectRepository.shownProjects())
                 _isPinned.value = arranged.pinned.isNotEmpty()
                 _projects.value = DailyProjects.pick(arranged)
             } catch (e: CancellationException) {

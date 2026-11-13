@@ -70,6 +70,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
+import cloud.wafflecommons.pixelbrainreader.data.modes.ContextMode
 import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
 import cloud.wafflecommons.pixelbrainreader.data.modes.Visibility
 import cloud.wafflecommons.pixelbrainreader.data.work.ArrangedProjects
@@ -209,7 +210,7 @@ class ProjectsViewModel @Inject constructor(
                 ProjectArrangement()
             }
             _projects.value = try {
-                repository.projects()
+                repository.shownProjects()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -284,8 +285,13 @@ fun ProjectsScreen(
         when {
             list == null || arranged == null -> Text("Loading…", color = MaterialTheme.colorScheme.onSurfaceVariant)
             list.isEmpty() -> Text(
-                "No project folder found under 20_Projects/." +
-                    if (visibility.hideWork) " Work projects are hidden outside ${visibility.workLabel} mode." else "",
+                when {
+                    visibility.mode == ContextMode.OFF -> "No projects in ${visibility.label()}."
+                    visibility.mode == ContextMode.PERSONAL && visibility.personalProjects.isNotEmpty() ->
+                        "None of the projects picked for ${visibility.label()} is here. Pick them in Modes settings."
+                    else -> "No project folder found under 20_Projects/." +
+                        if (visibility.hideWork) " Work projects are hidden outside ${visibility.workLabel} mode." else ""
+                },
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             else -> {

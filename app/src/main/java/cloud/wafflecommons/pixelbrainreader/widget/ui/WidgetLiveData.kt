@@ -1,5 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.widget.ui
 
+import cloud.wafflecommons.pixelbrainreader.data.modes.ContextMode
 import android.content.Context
 import cloud.wafflecommons.pixelbrainreader.data.model.HabitStatus
 import cloud.wafflecommons.pixelbrainreader.data.mood.MoodEmojiSets
@@ -72,21 +73,28 @@ object WidgetLiveData {
 
     data class WidgetProject(val title: String, val line: String, val next: String?)
 
+    /** The widget's rows, and its line when there are none (Off shows no project). */
+    data class WidgetProjectList(val projects: List<WidgetProject>, val emptyLine: String)
+
     /**
      * The Projects widget's list (C11): the Projects page's — the pinned first, then the most
      * recently active, hidden ones left out — under the page's names, at most [limit]. The widget
      * shows as many as its height allows (`ProjectsWidgetLayout`).
      */
-    suspend fun activeProjects(context: Context, limit: Int): List<WidgetProject> = try {
+    suspend fun activeProjects(context: Context, limit: Int): WidgetProjectList = try {
         val ep = entryPoint(context)
-        ep.projectArrangementRepository().read().arrange(ep.projectRepository().projects()).shown.take(limit).map { p ->
+        // The mode from disk: a process the widget started still holds the default (every project).
+        val visibility = ep.modesRepository().currentVisibility()
+        val projects = ep.projectArrangementRepository().read().arrange(ep.projectRepository().shownProjects(visibility)).shown.take(limit).map { p ->
             val activity = buildList {
                 if (p.commits > 0) add("${p.commits} commit${if (p.commits == 1) "" else "s"}")
                 if (p.sessions > 0) add("${p.sessions} AI")
             }.joinToString(" · ").ifEmpty { "quiet" } + " · 14 d"
             WidgetProject(cloud.wafflecommons.pixelbrainreader.data.work.projectDisplayName(p.title), activity, p.nextAction?.text)
         }
-    } catch (e: CancellationException) { throw e } catch (e: Exception) { emptyList() }
+        val empty = if (visibility.mode == ContextMode.OFF) "No projects in ${visibility.label()}" else "No project to show"
+        WidgetProjectList(projects, empty)
+    } catch (e: CancellationException) { throw e } catch (e: Exception) { WidgetProjectList(emptyList(), "No project to show") }
 
     /** Chores that are due today (lastDone + frequency ≤ today), non-archived, by sortOrder. */
     suspend fun choresDue(context: Context): List<WidgetChore> {

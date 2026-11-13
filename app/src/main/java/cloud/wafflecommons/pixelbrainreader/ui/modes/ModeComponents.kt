@@ -57,16 +57,20 @@ import java.util.Locale
 
 private fun ContextMode.description(): String = when (this) {
     ContextMode.WORK -> "Everything visible; work notifications on."
-    ContextMode.PERSONAL -> "Work folders hidden from lists, search, AI, widgets and notifications."
-    ContextMode.OFF -> "Work fully muted — evenings, weekends and leave."
+    ContextMode.PERSONAL -> "Work hidden; your personal projects (pick them in Modes settings)."
+    ContextMode.OFF -> "Work and projects hidden."
 }
 
-/** Why the mode is what it is, in one line. */
+/** Why the mode is what it is, in one line, and whether the child is home (custody calendar). */
 fun Visibility.sourceLine(): String = when (source) {
     ModeSource.MANUAL -> "Chosen manually until the next schedule change"
     ModeSource.LEAVE -> "On leave" + (leave?.let { " until ${shortDate(it.end)}" } ?: "")
     ModeSource.SCHEDULE -> "Set by your schedule"
     ModeSource.DEFAULT -> "No schedule set"
+} + when (withChild) {
+    true -> " · with $childLabel"
+    false -> " · without $childLabel"
+    null -> ""
 }
 
 private fun shortDate(iso: String): String = runCatching {
