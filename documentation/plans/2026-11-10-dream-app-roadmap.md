@@ -209,7 +209,16 @@ backups, the diff is side by side from 600 dp).
       files say "Change this on your phone" instead of saving into a refusal. *(The read-only plan,
       "Not done in 12.6.0".)*
 
-### 12.16.0 — Private vault hardening
+### 12.16.0 — Owner feedback: custody weeks and the modes (2026-11-13)
+
+Not a roadmap item: the owner's feedback, planned and reviewed in an interview the same day
+(`2026-11-13-custody-weeks-and-modes.md`). The releases below keep their order, one number later.
+
+- [x] Shared custody in Modes: Off with the child, Perso without, exceptions, a leave only removes Work.
+- [x] Habits keep to the days with or without the child.
+- [x] Perso shows the ticked projects, Off none.
+
+### 12.17.0 — Private vault hardening
 
 - [ ] **V1 Change password.** Re-encrypts every `.md.enc` with a new salt: the journal, the
       encrypted mission log and ADRs, People. It must be crash-safe:
@@ -223,7 +232,7 @@ backups, the diff is side by side from 600 dp).
       the stored password, so it can sit behind a Keystore key that requires user authentication.
       *(RFC-008 §2.1.)*
 
-### 12.17.0 — People & 1:1s (C10)
+### 12.18.0 — People & 1:1s (C10)
 
 - [ ] **P1 People & 1:1s.** Encrypted notes in `99_Private/People/` (role, context, last 1:1, open
       points, agreed actions), never embedded (already excluded). Names live only there; the
@@ -231,7 +240,7 @@ backups, the diff is side by side from 600 dp).
       `muteWorkNotifications`). The open points show once the vault is unlocked, and they join
       D4's meeting prep. *(v11 C10; V12 11.3.)*
 
-### 12.18.0 and after — The second brain (each gated on R1)
+### 12.19.0 and after — The second brain (each gated on R1)
 
 - [ ] **K1 Smaller embedder.** int8 MiniLM (`scripts/convert_minilm.py`): the ~448 MB asset
       drops to ~120 MB and the APK from ~600 MB to ~170 MB, and indexing gets faster. Bump

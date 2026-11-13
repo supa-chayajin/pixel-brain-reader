@@ -7,9 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Planned: `documentation/plans/2026-11-10-dream-app-roadmap.md`. Next, 12.16.0: private vault
+Planned: `documentation/plans/2026-11-10-dream-app-roadmap.md`. Next, 12.17.0: private vault
 hardening (changing its password safely). Hybrid search waits for the golden set's numbers,
 measured on the phone.
+
+## [12.16.0] — 2026-11-13
+
+Shared custody, and what Perso and Off show. From the owner's feedback, planned in
+`documentation/plans/2026-11-13-custody-weeks-and-modes.md`.
+
+### Added
+
+- **Shared custody in Modes.** Settings › Modes has a Shared custody card with three settings:
+  - the child's name;
+  - the handover day (Friday by default);
+  - how this week goes: "arrives on Friday" or "leaves on Friday".
+
+  From there the app counts every other week whatever the week numbers say, so a 53-week year
+  doesn't break the rhythm. School holidays and swapped weekends go in as exceptions: whole days
+  marked with or without the child.
+- **Outside work hours, the mode follows who is home:** Off with the child, Perso without (both
+  editable). On a handover day the evening already follows the new week. The mode sheet says "with
+  …" or "without …", and the shutdown offers the evening's real mode.
+- **Habits can keep to those days.** The habit editor has a Days choice on top of the schedule
+  (weekly, every 2 weeks or an interval): Any day, With …, Without …. Exceptions count too. The
+  Habits tab, Daily, stats and streaks, the widgets, reminders, the health automations and the
+  weekly review all follow it. The 2-week grid now marks the current week.
+- **Perso projects.** Modes settings has a checklist of your personal projects, and Perso shows
+  only the ones you tick. With none ticked it shows all of them, as before.
+
+### Changed
+
+- **Off shows no project.** Perso and Off used to differ only by name. In Off now:
+  - the Projects tab shows one line, "No projects in Off";
+  - Daily's Projects block takes no room;
+  - the Projects widget shows the same line;
+  - project actions leave Due today.
+
+  Notes stay in the file list, search and AI answers. Work is unchanged.
+- **A leave only removes Work** while the custody calendar is on: Off with the child, Perso
+  without. Without the calendar a leave is still Off all day.
+- **This update keeps the chat history and the note vectors.** The database moves to version 32
+  in place, instead of being rebuilt, so nothing is re-indexed.
+
+### Fixed
+
+- **The Projects widget reads the mode from disk,** so a widget started in the background no
+  longer shows every project whatever the mode.
 
 ## [12.15.0] — 2026-11-11
 

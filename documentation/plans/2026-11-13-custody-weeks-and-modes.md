@@ -1,8 +1,7 @@
 # Custody weeks, and what Perso and Off show
 
-**Status:** planned 2026-11-13 from the owner's feedback (not a roadmap item), reviewed in an
-interview the same day. The seven decisions are recorded at the end. It ships with the day's other
-feedback fixes as one release; the version is set when that batch closes.
+**Status:** built in 12.16.0 (2026-11-13), from the owner's feedback (not a roadmap item) and an
+interview the same day. The seven decisions and the as-built notes are recorded at the end.
 
 The owner shares custody of a child, every other week from Friday to Friday. This repository is
 public: the child's name is typed in Modes settings and kept in the vault, never here. Below,
@@ -128,6 +127,37 @@ public: the child's name is typed in Modes settings and kept in the vault, never
 - The handover day is editable; the default is Friday.
 - With the calendar off, nothing changes: the habit condition is ignored and a leave is Off.
 - The Room column goes through a migration, not the destructive fallback (see Habits).
+
+## As built (12.16.0)
+
+Where the build differs from the text above, or settles what it left open:
+
+- **Setting the rhythm:** "This week, `<name>` arrives on Friday / leaves on Friday" stores the
+  arrival date. The handover-day chips move it within the same weeks. Until one of the two is
+  chosen the calendar changes nothing.
+- **An exception** is added like a leave: a date range, then "Who is home those days?" with an
+  optional label and two buttons, With and Without.
+- **The mode sheet** ends its line with "· with `<name>`" or "· without `<name>`". Perso reads "Work
+  hidden; your personal projects (pick them in Modes settings)", Off reads "Work and projects
+  hidden".
+- **The Perso card** takes the mode's own name ("Perso projects"). It lists every project outside
+  the work folders, sub-projects included. A ticked root that later moves into a work folder stays
+  in the file but no longer shows.
+- **`HabitScheduler.isScheduledOn` takes the calendar as a required parameter,** so no caller can
+  forget it. The habit card reads, for example, "SAT, SUN · without `<name>`".
+- **Room:** `MIGRATION_31_32` adds the column in place (`ALTER TABLE … DEFAULT ''`, with
+  `@ColumnInfo(defaultValue = "")` so Room's schema check matches). It is registered before the
+  destructive fallback.
+- **Checked on the tablet** (read-only, the real vault, 2026-11-13):
+  - Installed over 12.15.0, the database went to v32. A marker message planted in the chat table
+    was still there (removed afterwards); a rebuild would have dropped it.
+  - Modes settings shows the two new cards, locked.
+  - Off showed "No projects in Off." and Daily without its Projects block. Perso showed the
+    personal projects only.
+  - The tablet went back to its schedule afterwards.
+
+  The calendar's effect on modes and habits can't be shown there: the tablet is read-only, and the
+  vault's Modes have no calendar yet. The unit tests cover it, then the owner checks on the phone.
 
 ## Not in this batch
 
