@@ -1,5 +1,7 @@
 package cloud.wafflecommons.pixelbrainreader.ui.lifeos
 
+import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
+import cloud.wafflecommons.pixelbrainreader.data.modes.ModesConfig
 import cloud.wafflecommons.pixelbrainreader.data.gamification.GamificationRepository
 import cloud.wafflecommons.pixelbrainreader.data.gamification.GamificationState
 import cloud.wafflecommons.pixelbrainreader.data.model.HabitConfig
@@ -44,6 +46,7 @@ class LifeOSViewModelTest {
     private val syncOrchestrator: SyncOrchestrator = mockk(relaxed = true)
     private val soundEffectManager: SoundEffectManager = mockk(relaxed = true)
     private val appClock: AppClock = mockk(relaxed = true)
+    private val modesRepository: ModesRepository = mockk(relaxed = true)
     private val testDispatcher = UnconfinedTestDispatcher()
     private val testDate = LocalDate.of(2023, 10, 23) // Monday
     private var activeViewModel: LifeOSViewModel? = null
@@ -52,6 +55,7 @@ class LifeOSViewModelTest {
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
         every { appClock.today } returns MutableStateFlow(testDate)
+        every { modesRepository.config } returns MutableStateFlow(ModesConfig())
         every { gamificationRepository.gamificationState } returns MutableStateFlow(GamificationState())
         every { syncOrchestrator.syncState } returns MutableStateFlow(SyncState.Idle)
         every { taskRepository.getTasksFlow(any()) } returns flowOf(emptyList())
@@ -81,6 +85,7 @@ class LifeOSViewModelTest {
             grantXpUseCase = grantXpUseCase,
             syncOrchestrator = syncOrchestrator,
             soundEffectManager = soundEffectManager,
+            modesRepository = modesRepository,
             appClock = appClock
         ).also { activeViewModel = it }
 
@@ -111,6 +116,7 @@ class LifeOSViewModelTest {
             grantXpUseCase = grantXpUseCase,
             syncOrchestrator = syncOrchestrator,
             soundEffectManager = soundEffectManager,
+            modesRepository = modesRepository,
             appClock = appClock
         ).also { activeViewModel = it }
 

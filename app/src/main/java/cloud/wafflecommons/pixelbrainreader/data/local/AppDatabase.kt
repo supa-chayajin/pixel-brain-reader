@@ -1,5 +1,7 @@
 package cloud.wafflecommons.pixelbrainreader.data.local
 
+import androidx.sqlite.db.SupportSQLiteDatabase
+import androidx.room.migration.Migration
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.FileDao
@@ -39,7 +41,7 @@ import cloud.wafflecommons.pixelbrainreader.data.local.entity.ChoreEntity
         ChoreEntity::class, // V4.6 Home OS
         cloud.wafflecommons.pixelbrainreader.data.local.entity.ChatMessageEntity::class // Nano chat memory (RAG + CREATIVE)
     ],
-    version = 31, // links (backlinks / dead links)
+    version = 32, // a habit's custody "Days" choice (MIGRATION_31_32)
     exportSchema = false
 )
 @androidx.room.TypeConverters(RoomTypeConverters::class)
@@ -61,4 +63,16 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun choreDao(): ChoreDao
     abstract fun homeRoomDao(): cloud.wafflecommons.pixelbrainreader.data.local.dao.HomeRoomDao
     abstract fun chatDao(): cloud.wafflecommons.pixelbrainreader.data.local.dao.ChatDao
+
+    companion object {
+        /**
+         * 31 → 32: the habit's custody "Days" column, added in place. The destructive fallback would
+         * also drop the chat history (Room-only) and every vector (a full re-index on the phone).
+         */
+        val MIGRATION_31_32 = object : Migration(31, 32) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE habit_configs ADD COLUMN custody TEXT NOT NULL DEFAULT ''")
+            }
+        }
+    }
 }

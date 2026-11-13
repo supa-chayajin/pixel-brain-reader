@@ -1,5 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.data.workers
 
+import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
 import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import android.content.Context
 import android.util.Log
@@ -33,7 +34,8 @@ class ChoresHabitsReminderWorker @AssistedInject constructor(
     private val calculateChoreEntropy: CalculateChoreEntropyUseCase,
     private val habitDao: HabitDao,
     private val userPrefs: UserPreferencesRepository,
-    private val reminderScheduler: ReminderScheduler
+    private val reminderScheduler: ReminderScheduler,
+    private val modesRepository: ModesRepository
 ) : CoroutineWorker(appContext, workerParams) {
 
     override suspend fun doWork(): Result {
@@ -76,11 +78,15 @@ class ChoresHabitsReminderWorker @AssistedInject constructor(
             .filter { it.status == HabitStatus.COMPLETED }
             .groupBy { it.habitId }
             .mapValues { (_, logs) -> logs.maxOf { it.date } }
+        // A worker's process holds the default configuration: the custody calendar comes from disk.
+        val custody = modesRepository.currentConfig().custody
         val activeToday = habitDao.getAllConfigs().filter { cfg ->
             !cfg.archived && HabitScheduler.isScheduledOn(
                 cfg.scheduleMode, cfg.frequency, cfg.intervalCount, cfg.intervalUnit,
                 today,
-                lastCompletedByHabit[cfg.id]?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+                lastCompletedByHabit[cfg.id]?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
+                cfg.custody,
+                custody
             )
         }
         val completedIds = recentLogs

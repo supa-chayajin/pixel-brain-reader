@@ -1,6 +1,7 @@
 package cloud.wafflecommons.pixelbrainreader.domain.lifeos
 
 import cloud.wafflecommons.pixelbrainreader.data.model.HabitConfig
+import cloud.wafflecommons.pixelbrainreader.data.modes.CustodySchedule
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
@@ -15,6 +16,10 @@ import java.time.temporal.ChronoUnit
  *  - BIWEEKLY: [HabitConfig.frequency] = 2-week slots, e.g. "W1-MON", "W2-FRI". Empty = every day.
  *  - INTERVAL: due once [HabitConfig.intervalCount] [HabitConfig.intervalUnit]s have elapsed
  *              since the last completion (like chores), regardless of weekday.
+ *
+ * On top of any mode, [HabitConfig.custody] keeps a habit to the days the child wakes up at home
+ * ([WITH_CHILD]) or not ([WITHOUT_CHILD]), from the Modes custody calendar. With the calendar off
+ * the choice is ignored, so a habit never vanishes because of it.
  */
 object HabitScheduler {
 
@@ -22,6 +27,9 @@ object HabitScheduler {
     private val EPOCH_MONDAY: LocalDate = LocalDate.of(2024, 1, 1)
 
     val WEEK_DAYS = listOf("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN")
+
+    const val WITH_CHILD = "WITH"
+    const val WITHOUT_CHILD = "WITHOUT"
 
     fun dayKey(dow: DayOfWeek): String = WEEK_DAYS[dow.value - 1]
 
@@ -36,11 +44,34 @@ object HabitScheduler {
      * @param lastCompleted the most recent date this habit was completed (COMPLETED status),
      *   or null if never — only consulted for INTERVAL mode.
      */
-    fun isScheduledOn(habit: HabitConfig, date: LocalDate, lastCompleted: LocalDate?): Boolean =
-        isScheduledOn(habit.scheduleMode, habit.frequency, habit.intervalCount, habit.intervalUnit, date, lastCompleted)
+    fun isScheduledOn(habit: HabitConfig, date: LocalDate, lastCompleted: LocalDate?, custody: CustodySchedule?): Boolean =
+        isScheduledOn(habit.scheduleMode, habit.frequency, habit.intervalCount, habit.intervalUnit, date, lastCompleted, habit.custody, custody)
 
     /** Primitive overload so raw entities (reminder worker) and domain models share one impl. */
     fun isScheduledOn(
+        scheduleMode: String,
+        frequency: List<String>,
+        intervalCount: Int,
+        intervalUnit: String,
+        date: LocalDate,
+        lastCompleted: LocalDate?,
+        custodyChoice: String,
+        custody: CustodySchedule?
+    ): Boolean =
+        onSchedule(scheduleMode, frequency, intervalCount, intervalUnit, date, lastCompleted) &&
+            matchesCustody(custodyChoice, custody, date)
+
+    /** The habit's custody "Days" choice on [date]; any day passes while the calendar is off. */
+    fun matchesCustody(choice: String, custody: CustodySchedule?, date: LocalDate): Boolean {
+        if (custody == null || !custody.isActive) return true
+        return when (choice.trim().uppercase()) {
+            WITH_CHILD -> custody.withChildOn(date)
+            WITHOUT_CHILD -> !custody.withChildOn(date)
+            else -> true
+        }
+    }
+
+    private fun onSchedule(
         scheduleMode: String,
         frequency: List<String>,
         intervalCount: Int,
@@ -71,8 +102,14 @@ object HabitScheduler {
         }
     }
 
-    /** Human-readable (French) summary of a habit's schedule, for cards/editor previews. */
-    fun describe(habit: HabitConfig): String = when (habit.scheduleMode.uppercase()) {
+    /** Human-readable summary of a habit's schedule, for cards/editor previews; [childLabel] names the custody days. */
+    fun describe(habit: HabitConfig, childLabel: String? = null): String = describeSchedule(habit) + when (habit.custody.trim().uppercase()) {
+        WITH_CHILD -> childLabel?.let { " · with $it" }.orEmpty()
+        WITHOUT_CHILD -> childLabel?.let { " · without $it" }.orEmpty()
+        else -> ""
+    }
+
+    private fun describeSchedule(habit: HabitConfig): String = when (habit.scheduleMode.uppercase()) {
         "INTERVAL" -> {
             val unit = when (habit.intervalUnit.uppercase()) {
                 "WEEK" -> if (habit.intervalCount > 1) "weeks" else "week"

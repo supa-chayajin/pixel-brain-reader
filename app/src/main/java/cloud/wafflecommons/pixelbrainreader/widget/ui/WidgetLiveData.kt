@@ -47,13 +47,15 @@ object WidgetLiveData {
             // so a habit completed on Dec 31 isn't wrongly shown as "due" on Jan 2 (matches the app).
             val prevYearLogs = repo.getLogsForYear(today.year - 1)
             val todayIso = today.toString()
+            // The custody calendar from disk: a process the widget started still holds the default.
+            val custody = ep.modesRepository().currentConfig().custody
             configs.mapNotNull { c ->
                 val logs = logsByHabit[c.id].orEmpty()
                 val lastCompleted = (logs + prevYearLogs[c.id].orEmpty()).asSequence()
                     .filter { it.status == HabitStatus.COMPLETED }
                     .mapNotNull { runCatching { LocalDate.parse(it.date) }.getOrNull() }
                     .maxOrNull()
-                if (!HabitScheduler.isScheduledOn(c, today, lastCompleted)) return@mapNotNull null
+                if (!HabitScheduler.isScheduledOn(c, today, lastCompleted, custody)) return@mapNotNull null
                 val todayLog = logs.find { it.date == todayIso }
                 val done = todayLog != null && repo.calculateCompletion(todayLog.value, c.targetValue, c.type)
                 // Automatic (Health-Connect) habits are read-only in the widget too.

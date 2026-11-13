@@ -1,5 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.domain.gamification
 
+import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
 import android.util.Log
 import cloud.wafflecommons.pixelbrainreader.data.health.DailyHealthMetrics
 import cloud.wafflecommons.pixelbrainreader.data.model.HabitConfig
@@ -24,7 +25,8 @@ import javax.inject.Inject
 class AutomateHabitsUseCase @Inject constructor(
     private val habitRepository: HabitRepository,
     private val healthMetricsRepository: HealthMetricsRepository,
-    private val applyHealthSynergyUseCase: ApplyHealthSynergyUseCase
+    private val applyHealthSynergyUseCase: ApplyHealthSynergyUseCase,
+    private val modesRepository: ModesRepository
 ) {
     suspend operator fun invoke(date: LocalDate) = withContext(Dispatchers.IO) {
         val metrics = healthMetricsRepository.getMetrics(date)
@@ -42,6 +44,8 @@ class AutomateHabitsUseCase @Inject constructor(
 
         val dateKey = date.toString()
         val currentLogs = habitRepository.getLogsForYear(date.year)
+        // The custody calendar from disk (a sync may run in a process that hasn't read it yet).
+        val custody = modesRepository.currentConfig().custody
         val updates = automatic.mapNotNull { habit ->
             // Only habits actually scheduled for `date` (weekly / bi-weekly / interval), via the
             // shared HabitScheduler. Last-completed is only needed for INTERVAL mode.
@@ -50,7 +54,7 @@ class AutomateHabitsUseCase @Inject constructor(
             } else {
                 null
             }
-            if (!HabitScheduler.isScheduledOn(habit, date, lastCompleted)) return@mapNotNull null
+            if (!HabitScheduler.isScheduledOn(habit, date, lastCompleted, custody)) return@mapNotNull null
 
             val value = valueFor(habit, metrics)
             if (value <= 0.0) return@mapNotNull null

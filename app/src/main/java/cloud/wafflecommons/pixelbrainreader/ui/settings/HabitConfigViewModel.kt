@@ -1,5 +1,10 @@
 package cloud.wafflecommons.pixelbrainreader.ui.settings
 
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.SharingStarted
+import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
+import cloud.wafflecommons.pixelbrainreader.data.modes.CustodySchedule
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cloud.wafflecommons.pixelbrainreader.data.model.HabitConfig
@@ -14,11 +19,17 @@ import javax.inject.Inject
 
 @HiltViewModel
 class HabitConfigViewModel @Inject constructor(
-    private val habitRepository: HabitRepository
+    private val habitRepository: HabitRepository,
+    modesRepository: ModesRepository
 ) : ViewModel() {
 
     private val _habits = MutableStateFlow<List<HabitConfig>>(emptyList())
     val habits: StateFlow<List<HabitConfig>> = _habits.asStateFlow()
+
+    /** The Modes custody calendar: the editor offers the "Days" choice only while it is on. */
+    val custody: StateFlow<CustodySchedule> = modesRepository.config
+        .map { it.custody }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), modesRepository.config.value.custody)
 
     init {
         loadHabits()

@@ -104,7 +104,7 @@ class WeeklyReviewRepository @Inject constructor(
             WeeklyFacts(
                 habits = optional(emptyList()) {
                     val logs = habitRepository.getLogsBetweenFlow(week.monday, week.sunday).first().values.flatten()
-                    WeeklyActivity.habits(habitRepository.getHabitConfigs(), logs, week)
+                    WeeklyActivity.habits(habitRepository.getHabitConfigs(), logs, week, modesRepository.config.value.custody)
                 },
                 mood = optional(null) {
                     val before = week.previous()

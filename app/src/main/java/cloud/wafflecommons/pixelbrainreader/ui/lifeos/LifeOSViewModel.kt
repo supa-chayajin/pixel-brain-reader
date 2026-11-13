@@ -1,5 +1,8 @@
 package cloud.wafflecommons.pixelbrainreader.ui.lifeos
 
+import kotlinx.coroutines.flow.distinctUntilChanged
+import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
+import cloud.wafflecommons.pixelbrainreader.data.modes.CustodySchedule
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
@@ -62,6 +65,7 @@ class LifeOSViewModel @Inject constructor(
     private val grantXpUseCase: GrantXpUseCase,
     private val syncOrchestrator: SyncOrchestrator,
     private val soundEffectManager: SoundEffectManager,
+    modesRepository: ModesRepository,
     appClock: AppClock
 ) : ViewModel() {
 
@@ -77,9 +81,11 @@ class LifeOSViewModel @Inject constructor(
                 // Two years of logs, so streaks and interval scheduling see across January 1st.
                 habitRepository.getLogsBetweenFlow(LocalDate.of(date.year - 1, 1, 1), LocalDate.of(date.year, 12, 31)),
                 gamificationRepository.gamificationState,
-                taskRepository.getTasksFlow(date)
-            ) { configs, logsByHabit, gamificationState, scopedTasks ->
-                buildState(date, configs, logsByHabit, gamificationState, scopedTasks)
+                taskRepository.getTasksFlow(date),
+                // Habits kept to the days with or without the child follow the custody calendar.
+                modesRepository.config.map { it.custody }.distinctUntilChanged()
+            ) { configs, logsByHabit, gamificationState, scopedTasks, custody ->
+                buildState(date, configs, logsByHabit, gamificationState, scopedTasks, custody)
             }
         }
         .flowOn(Dispatchers.Default)
@@ -218,10 +224,11 @@ class LifeOSViewModel @Inject constructor(
         configs: List<HabitConfig>,
         logsByHabit: Map<String, List<HabitLogEntry>>,
         gamificationState: GamificationState,
-        scopedTasks: List<DailyTaskEntity>
+        scopedTasks: List<DailyTaskEntity>,
+        custody: CustodySchedule
     ): LifeOSUiState {
         val habitsWithStats = configs.map { habit ->
-            val stats = HabitStatsCalculator.compute(habit, logsByHabit[habit.id].orEmpty(), date)
+            val stats = HabitStatsCalculator.compute(habit, logsByHabit[habit.id].orEmpty(), date, custody)
             HabitWithStats(
                 config = habit,
                 isCompletedToday = stats.isCompletedToday,

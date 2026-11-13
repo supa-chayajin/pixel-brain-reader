@@ -99,7 +99,9 @@ class HabitRepository @Inject constructor(
         // them as null. Coalesced to defaults at the entity boundary below.
         val scheduleMode: String? = null,
         val intervalCount: Int = 0,
-        val intervalUnit: String? = null
+        val intervalUnit: String? = null,
+        // The custody "Days" choice; absent (null) = any day, so older files and versions agree.
+        val custody: String? = null
     )
 
     @Serializable
@@ -206,7 +208,8 @@ class HabitRepository @Inject constructor(
                         sortOrder = entity.sortOrder,
                         scheduleMode = entity.scheduleMode,
                         intervalCount = entity.intervalCount,
-                        intervalUnit = entity.intervalUnit
+                        intervalUnit = entity.intervalUnit,
+                        custody = entity.custody.ifEmpty { null }
                     )
                 }
 
@@ -358,7 +361,8 @@ class HabitRepository @Inject constructor(
         sortOrder = sortOrder,
         scheduleMode = scheduleMode ?: "WEEKLY",
         intervalCount = intervalCount,
-        intervalUnit = intervalUnit ?: "DAY"
+        intervalUnit = intervalUnit ?: "DAY",
+        custody = custody.orEmpty()
     )
 
     private fun mapConfigToEntity(domain: HabitConfig): HabitConfigEntity {
@@ -378,7 +382,8 @@ class HabitRepository @Inject constructor(
             sortOrder = domain.sortOrder,
             scheduleMode = domain.scheduleMode,
             intervalCount = domain.intervalCount,
-            intervalUnit = domain.intervalUnit
+            intervalUnit = domain.intervalUnit,
+            custody = domain.custody
         )
     }
 
@@ -399,7 +404,8 @@ class HabitRepository @Inject constructor(
             sortOrder = entity.sortOrder,
             scheduleMode = entity.scheduleMode,
             intervalCount = entity.intervalCount,
-            intervalUnit = entity.intervalUnit
+            intervalUnit = entity.intervalUnit,
+            custody = entity.custody
         )
     }
 

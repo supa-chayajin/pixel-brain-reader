@@ -1,5 +1,7 @@
 package cloud.wafflecommons.pixelbrainreader.ui.settings
 
+import cloud.wafflecommons.pixelbrainreader.domain.lifeos.HabitScheduler
+import cloud.wafflecommons.pixelbrainreader.data.modes.CustodySchedule
 import cloud.wafflecommons.pixelbrainreader.ui.utils.centeredMaxWidth
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.*
@@ -42,6 +44,7 @@ fun HabitConfigScreen(
     viewModel: HabitConfigViewModel = hiltViewModel()
 ) {
     val habits by viewModel.habits.collectAsStateWithLifecycle()
+    val custody by viewModel.custody.collectAsStateWithLifecycle()
     val activeHabits = habits.filter { !it.archived }.sortedBy { it.sortOrder }
     val haptic = LocalHapticFeedback.current
     // A read-only device lists the habits and edits none (12.15, S2).
@@ -121,7 +124,10 @@ fun HabitConfigScreen(
                             onClick = { },
                             label = {
                                 Text(
-                                    cloud.wafflecommons.pixelbrainreader.domain.lifeos.HabitScheduler.describe(habit),
+                                    cloud.wafflecommons.pixelbrainreader.domain.lifeos.HabitScheduler.describe(
+                                        habit,
+                                        custody.label.takeIf { custody.isActive }
+                                    ),
                                     style = MaterialTheme.typography.labelSmall
                                 )
                             }
@@ -139,6 +145,7 @@ fun HabitConfigScreen(
         ) {
             HabitEditorForm(
                 initialHabit = editingHabit!!,
+                custody = custody,
                 onSave = { updated ->
                     viewModel.saveHabit(updated)
                     coroutineScope.launch { sheetState.hide(); isSheetOpen = false }
@@ -159,6 +166,7 @@ fun HabitConfigScreen(
 @Composable
 fun HabitEditorForm(
     initialHabit: HabitConfig,
+    custody: CustodySchedule,
     onSave: (HabitConfig) -> Unit,
     onDelete: () -> Unit,
     onCancel: () -> Unit
@@ -174,6 +182,8 @@ fun HabitEditorForm(
     var scheduleMode by remember { mutableStateOf(initialHabit.scheduleMode.uppercase().ifBlank { "WEEKLY" }) }
     var intervalCount by remember { mutableStateOf(if (initialHabit.intervalCount > 0) initialHabit.intervalCount.toString() else "2") }
     var intervalUnit by remember { mutableStateOf(initialHabit.intervalUnit.uppercase().ifBlank { "DAY" }) }
+    // "" any day, or HabitScheduler.WITH_CHILD / WITHOUT_CHILD (the Modes custody calendar).
+    var custodyChoice by remember { mutableStateOf(initialHabit.custody.trim().uppercase()) }
     var autoSource by remember { mutableStateOf(initialHabit.autoSource ?: "None (Manual)") }
     val haptic = LocalHapticFeedback.current
 
@@ -306,8 +316,9 @@ fun HabitEditorForm(
                 }
             }
             "BIWEEKLY" -> {
+                val thisWeek = HabitScheduler.biweeklyWeekOf(LocalDate.now())
                 listOf(1, 2).forEach { week ->
-                    Text("Week $week", style = MaterialTheme.typography.bodyMedium)
+                    Text(if (week == thisWeek) "Week $week · this week" else "Week $week", style = MaterialTheme.typography.bodyMedium)
                     FlowRow(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -341,6 +352,30 @@ fun HabitEditorForm(
                             label = { Text(day) }
                         )
                     }
+                }
+            }
+        }
+
+        // The custody calendar's days, on top of the schedule (only while the calendar is on).
+        if (custody.isActive) {
+            Text("Days", style = MaterialTheme.typography.titleMedium)
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                listOf(
+                    "" to "Any day",
+                    HabitScheduler.WITH_CHILD to "With ${custody.label}",
+                    HabitScheduler.WITHOUT_CHILD to "Without ${custody.label}"
+                ).forEach { (choice, lbl) ->
+                    FilterChip(
+                        selected = custodyChoice == choice,
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            custodyChoice = choice
+                        },
+                        label = { Text(lbl) }
+                    )
                 }
             }
         }
@@ -413,7 +448,8 @@ fun HabitEditorForm(
                         scheduleMode = scheduleMode,
                         intervalCount = intervalCount.toIntOrNull()?.coerceAtLeast(1) ?: 1,
                         intervalUnit = intervalUnit,
-                        autoSource = finalSource
+                        autoSource = finalSource,
+                        custody = custodyChoice
                     )
                     onSave(updated)
                 }) {

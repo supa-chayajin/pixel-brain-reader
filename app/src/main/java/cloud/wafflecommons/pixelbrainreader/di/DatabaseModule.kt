@@ -24,6 +24,7 @@ object DatabaseModule {
             "pixel_brain_db"
         )
         // .openHelperFactory(...) // Logic for SQLCipher Phase A
+        .addMigrations(AppDatabase.MIGRATION_31_32) // keeps the chat history and the vectors
         .fallbackToDestructiveMigration(dropAllTables = true) // Default for development, Refined for Prod
         .build()
     }

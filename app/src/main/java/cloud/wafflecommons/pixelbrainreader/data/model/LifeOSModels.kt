@@ -24,7 +24,9 @@ data class HabitConfig(
     // See HabitConfigEntity for the scheduling model.
     val scheduleMode: String = "WEEKLY",   // WEEKLY | BIWEEKLY | INTERVAL
     val intervalCount: Int = 0,            // INTERVAL: N
-    val intervalUnit: String = "DAY"       // INTERVAL: DAY | WEEK | MONTH
+    val intervalUnit: String = "DAY",      // INTERVAL: DAY | WEEK | MONTH
+    // The custody "Days" choice, on top of the schedule: "" any day, WITH or WITHOUT the child home.
+    val custody: String = ""
 )
 
 @Immutable

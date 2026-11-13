@@ -1,5 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.data.review
 
+import cloud.wafflecommons.pixelbrainreader.data.modes.CustodySchedule
 import cloud.wafflecommons.pixelbrainreader.data.gamification.XpCalculator
 import cloud.wafflecommons.pixelbrainreader.data.gamification.XpGainEntry
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.ChoreEntity
@@ -122,7 +123,8 @@ object WeeklyActivity {
     private const val ADR_LINK = "[[ADR "
     private val EXCLUDED_PREFIXES = listOf("10_Journal/data/", "10_Journal/system/", "99_System/", "99_Private/")
 
-    fun habits(configs: List<HabitConfig>, logs: List<HabitLogEntry>, week: ReviewWeek): List<HabitWeek> {
+    /** [custody]: the Modes custody calendar, so a habit kept to the days with or without the child counts only those. */
+    fun habits(configs: List<HabitConfig>, logs: List<HabitLogEntry>, week: ReviewWeek, custody: CustodySchedule? = null): List<HabitWeek> {
         val inWeek = week.days.map { it.toString() }.toSet()
         val doneDays = logs.filter { it.status == HabitStatus.COMPLETED && it.date in inWeek }
             .groupBy { it.habitId }
@@ -135,7 +137,7 @@ object WeeklyActivity {
             }
             val days = week.days.filter { created == null || !it.isBefore(created) }
             val planned = if (habit.scheduleMode.equals("INTERVAL", ignoreCase = true)) null
-            else days.count { HabitScheduler.isScheduledOn(habit, it, null) }
+            else days.count { HabitScheduler.isScheduledOn(habit, it, null, custody) }
             val done = doneDays[habit.id] ?: 0
             if (done == 0 && (planned == null || planned == 0)) null else HabitWeek(habit.title, done, planned)
         }

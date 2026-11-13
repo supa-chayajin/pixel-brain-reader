@@ -1,5 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.domain.lifeos
 
+import cloud.wafflecommons.pixelbrainreader.data.modes.CustodySchedule
 import cloud.wafflecommons.pixelbrainreader.data.model.HabitConfig
 import cloud.wafflecommons.pixelbrainreader.data.model.HabitLogEntry
 import cloud.wafflecommons.pixelbrainreader.data.model.HabitStatus
@@ -36,7 +37,8 @@ object HabitStatsCalculator {
         }
     }
 
-    fun compute(habit: HabitConfig, logs: List<HabitLogEntry>, date: LocalDate): HabitDayStats {
+    /** [custody]: the Modes custody calendar, for habits kept to the days with or without the child. */
+    fun compute(habit: HabitConfig, logs: List<HabitLogEntry>, date: LocalDate, custody: CustodySchedule? = null): HabitDayStats {
         // First log per date wins (matches the former `find`, which returned the first match).
         val byDate = HashMap<String, HabitLogEntry>(logs.size * 2)
         logs.forEach { byDate.putIfAbsent(it.date, it) }
@@ -57,9 +59,9 @@ object HabitStatsCalculator {
         return HabitDayStats(
             isCompletedToday = completedToday,
             currentValue = todayLog?.value ?: 0.0,
-            currentStreak = currentStreak(habit, logs, byDate, date, completedToday),
+            currentStreak = currentStreak(habit, logs, byDate, date, completedToday, custody),
             history = history,
-            isScheduledToday = HabitScheduler.isScheduledOn(habit, date, lastCompleted)
+            isScheduledToday = HabitScheduler.isScheduledOn(habit, date, lastCompleted, custody)
         )
     }
 
@@ -73,7 +75,8 @@ object HabitStatsCalculator {
         logs: List<HabitLogEntry>,
         byDate: Map<String, HabitLogEntry>,
         date: LocalDate,
-        completedToday: Boolean
+        completedToday: Boolean,
+        custody: CustodySchedule?
     ): Int {
         if (habit.scheduleMode.equals("INTERVAL", ignoreCase = true)) {
             val yearPrefix = "${date.year}-"
@@ -87,7 +90,7 @@ object HabitStatsCalculator {
                     streak++
                     checkDate = checkDate.minusDays(1)
                 }
-                !HabitScheduler.isScheduledOn(habit, checkDate, null) -> checkDate = checkDate.minusDays(1)
+                !HabitScheduler.isScheduledOn(habit, checkDate, null, custody) -> checkDate = checkDate.minusDays(1)
                 else -> return streak
             }
         }

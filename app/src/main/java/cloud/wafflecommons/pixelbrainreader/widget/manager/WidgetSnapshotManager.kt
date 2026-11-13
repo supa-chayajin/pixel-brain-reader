@@ -222,6 +222,8 @@ class WidgetSnapshotManager @Inject constructor(
             // Include last year so an INTERVAL habit last completed in December isn't wrongly "due".
             val prevYearLogs = habitRepository.getLogsForYear(today.year - 1)
             val todayIso = today.toString()
+            // Habits kept to the days with or without the child: the custody calendar, from disk.
+            val custody = modesRepository.get().currentConfig().custody
             var done = 0
             var total = 0
             for (c in configs) {
@@ -230,7 +232,7 @@ class WidgetSnapshotManager @Inject constructor(
                     .filter { it.status == HabitStatus.COMPLETED }
                     .mapNotNull { runCatching { LocalDate.parse(it.date) }.getOrNull() }
                     .maxOrNull()
-                if (!HabitScheduler.isScheduledOn(c, today, lastCompleted)) continue
+                if (!HabitScheduler.isScheduledOn(c, today, lastCompleted, custody)) continue
                 total++
                 val todayLog = logs.find { it.date == todayIso }
                 if (todayLog != null && habitRepository.calculateCompletion(todayLog.value, c.targetValue, c.type)) done++

@@ -126,7 +126,7 @@ class HabitStatsCalculatorTest {
             .filter { isHabitComplete(it) }
             .maxByOrNull { it.date }
             ?.date?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
-        val isScheduledToday = HabitScheduler.isScheduledOn(habit, date, lastCompletedDate)
+        val isScheduledToday = HabitScheduler.isScheduledOn(habit, date, lastCompletedDate, null)
         val history = (0..6).map { i ->
             val checkDate = date.minusDays(i.toLong()).toString()
             isHabitComplete(habitLogs.find { it.date == checkDate })
@@ -137,7 +137,7 @@ class HabitStatsCalculatorTest {
             var s = 0
             var checkDate = if (isCompletedToday) date else date.minusDays(1)
             for (i in 0..365) {
-                val scheduled = HabitScheduler.isScheduledOn(habit, checkDate, null)
+                val scheduled = HabitScheduler.isScheduledOn(habit, checkDate, null, null)
                 val log = habitLogs.find { it.date == checkDate.toString() }
                 if (isHabitComplete(log)) {
                     s++

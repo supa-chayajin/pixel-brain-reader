@@ -1,5 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.data.local.entity
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import androidx.room.Index
@@ -32,7 +33,9 @@ data class HabitConfigEntity(
     // [intervalCount] [intervalUnit] since last completion, regardless of weekday.
     val scheduleMode: String = "WEEKLY",   // WEEKLY | BIWEEKLY | INTERVAL
     val intervalCount: Int = 0,            // INTERVAL: N (e.g. every 2 …)
-    val intervalUnit: String = "DAY"       // INTERVAL: DAY | WEEK | MONTH
+    val intervalUnit: String = "DAY",      // INTERVAL: DAY | WEEK | MONTH
+    // Custody "Days" (v32): "" any day, WITH / WITHOUT the child home. Added by MIGRATION_31_32.
+    @ColumnInfo(defaultValue = "") val custody: String = ""
 )
 
 @Immutable

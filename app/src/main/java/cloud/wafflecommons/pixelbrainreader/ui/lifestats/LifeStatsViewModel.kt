@@ -1,5 +1,8 @@
 package cloud.wafflecommons.pixelbrainreader.ui.lifestats
 
+import kotlinx.coroutines.flow.distinctUntilChanged
+import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
+import cloud.wafflecommons.pixelbrainreader.data.modes.CustodySchedule
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -97,6 +100,7 @@ class LifeStatsViewModel @Inject constructor(
     gamificationPreferences: GamificationPreferences,
     private val syncOrchestrator: SyncOrchestrator,
     healthMetricsRepository: HealthMetricsRepository,
+    modesRepository: ModesRepository,
     appClock: AppClock
 ) : ViewModel() {
 
@@ -106,7 +110,8 @@ class LifeStatsViewModel @Inject constructor(
         val logsByHabit: Map<String, List<HabitLogEntry>>,
         val configs: List<HabitConfig>,
         val chores: List<ChoreEntity>,
-        val health: List<DailyHealthMetrics>
+        val health: List<DailyHealthMetrics>,
+        val custody: CustodySchedule = CustodySchedule()
     )
 
     /**
@@ -129,8 +134,8 @@ class LifeStatsViewModel @Inject constructor(
                     Inputs(today, moods, logsByHabit, configs, chores, health)
                 },
                 gamificationPreferences.moodEmojiSetFlow,
-                ::Pair
-            )
+                modesRepository.config.map { it.custody }.distinctUntilChanged()
+            ) { inputs, emojiSet, custody -> Inputs(inputs.today, inputs.moods, inputs.logsByHabit, inputs.configs, inputs.chores, inputs.health, custody) to emojiSet }
         }
         .map { (inputs, emojiSet) -> buildState(inputs, emojiSet) }
         .flowOn(Dispatchers.Default)
@@ -220,7 +225,7 @@ class LifeStatsViewModel @Inject constructor(
         var completedToday = 0
         var bestHabitStreak = 0
         activeConfigs.forEach { habit ->
-            val stats = HabitStatsCalculator.compute(habit, inputs.logsByHabit[habit.id].orEmpty(), today)
+            val stats = HabitStatsCalculator.compute(habit, inputs.logsByHabit[habit.id].orEmpty(), today, inputs.custody)
             if (stats.isScheduledToday) {
                 scheduledToday++
                 if (stats.isCompletedToday) completedToday++
