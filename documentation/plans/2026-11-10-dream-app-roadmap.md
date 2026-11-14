@@ -218,7 +218,29 @@ Not a roadmap item: the owner's feedback, planned and reviewed in an interview t
 - [x] Habits keep to the days with or without the child.
 - [x] Perso shows the ticked projects, Off none.
 
-### 12.17.0 — Private vault hardening
+### 12.17.0 — Games (RFC-009)
+
+Not in the 2026-11-10 triage: RFC-009 (in the vault) came from the owner's home-session interview
+on 2026-11-14, and its D8 puts it before the private vault, so the releases below move one more
+number. The design, with the code check, the PSN spike and a second interview the same day:
+`2026-11-14-12.17-games.md`.
+
+- [ ] **G1 Library and pages.** Game pages found by their `game_template` key, the Games tab
+      (8th; the folded bar shows four tabs), a page per game with its state, trophies and sessions.
+- [ ] **G2 PlayStation Network.** The NPSSO pasted once, the tokens in encrypted storage, Sony's
+      app credentials from `local.properties`; a read-only sync at 23:40 and 06:00 and on demand;
+      "PSN paused" on failure, never a blocked vault sync.
+- [ ] **G3 What a sync writes.** `10_Journal/data/games/` (snapshot, links, sessions, trophy
+      sets), each page's 🏆 section (earned trophies only) and its trophy markers ticked.
+- [ ] **G4 Sessions in the Timeline.** One line per game and day, derived at the burn and skipped
+      by the parser (no Room change); a past day's line edited in, never re-burned; older lines
+      read as history.
+- [ ] **G6 Manual sessions.** A Quick Settings tile and a Live Update counting up.
+- [ ] **G7 Game nights.** The app's own Do Not Disturb mode while a session runs in Perso outside
+      work hours; the shutdown banner hidden until morning. One new permission (D7).
+- [ ] **G8 Ask Claude** about a game, through the hand-off composer.
+
+### 12.18.0 — Private vault hardening
 
 - [ ] **V1 Change password.** Re-encrypts every `.md.enc` with a new salt: the journal, the
       encrypted mission log and ADRs, People. It must be crash-safe:
@@ -232,7 +254,7 @@ Not a roadmap item: the owner's feedback, planned and reviewed in an interview t
       the stored password, so it can sit behind a Keystore key that requires user authentication.
       *(RFC-008 §2.1.)*
 
-### 12.18.0 — People & 1:1s (C10)
+### 12.19.0 — People & 1:1s (C10)
 
 - [ ] **P1 People & 1:1s.** Encrypted notes in `99_Private/People/` (role, context, last 1:1, open
       points, agreed actions), never embedded (already excluded). Names live only there; the
@@ -240,7 +262,7 @@ Not a roadmap item: the owner's feedback, planned and reviewed in an interview t
       `muteWorkNotifications`). The open points show once the vault is unlocked, and they join
       D4's meeting prep. *(v11 C10; V12 11.3.)*
 
-### 12.19.0 and after — The second brain (each gated on R1)
+### 12.20.0 and after — The second brain (each gated on R1)
 
 - [ ] **K1 Smaller embedder.** int8 MiniLM (`scripts/convert_minilm.py`): the ~448 MB asset
       drops to ~120 MB and the APK from ~600 MB to ~170 MB, and indexing gets faster. Bump
@@ -306,7 +328,7 @@ Not a roadmap item: the owner's feedback, planned and reviewed in an interview t
 ## 4. Gates (every release)
 
 1. **Plan before code** for anything that touches sync, the burn, crypto or retrieval (W1, R2,
-   D1, D3, D6, S1, V1): a short plan the owner reviews.
+   D1, D3, D6, S1, G4, V1): a short plan the owner reviews.
 2. **A failing test first.**
    - Burn↔parse round trips for D1, D3 and D6.
    - Real JGit temp repos for S1, K3 and K4.
@@ -404,6 +426,7 @@ Defaults the owner can change:
 | RFC-006a Bio-Link | Shipped | — |
 | RFC-007 Wear OS | Deferred (owner, 2026-11-04) | X1 |
 | RFC-008 Private Vault | Shipped | T3, V1, V2, V3 |
+| RFC-009 Games (2026-11-14, after this triage) | Planned for 12.17 | G1–G8 |
 | ROADMAP V4.5, V5, V6 | Done or superseded | §6 |
 | ROADMAP V12 | C7, C9, C11 and C13 shipped; the rest is this plan | §3 |
 | The Oct 17 plan, phases 2–6 | 2.1, 2.3, 2.6 and 2.7 shipped in 11.0.0 | R1, R2, K1–K6, D6, L1–L3, S1, T2, V1, V2, X1–X5 |
