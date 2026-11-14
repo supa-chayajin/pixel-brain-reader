@@ -56,6 +56,10 @@ in `documentation/plans/2026-11-14-12.17-games.md`.
 
 ### Notes
 
+- **PSN is blocked by Sony for now.** Since late September 2026 Sony's token step refuses the
+  PlayStation App's public client that every PSN library uses (`4102 Bad client credentials`),
+  checked on the Fold on 2026-11-15. The PlayStation page says so, nothing syncs, and Games works
+  by hand. A working client or flow found by the community comes in a 12.17.x.
 - One new permission, `ACCESS_NOTIFICATION_POLICY` (the owner's D7). No new dependency, and the
   database doesn't change.
 - Nothing of Games writes on a read-only device: no PSN, no session, no tile, no game night.
