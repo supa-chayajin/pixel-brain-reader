@@ -222,23 +222,23 @@ Not a roadmap item: the owner's feedback, planned and reviewed in an interview t
 
 Not in the 2026-11-10 triage: RFC-009 (in the vault) came from the owner's home-session interview
 on 2026-11-14, and its D8 puts it before the private vault, so the releases below move one more
-number. The design, with the code check, the PSN spike and a second interview the same day:
-`2026-11-14-12.17-games.md`.
+number. Built in 12.17.0 (2026-11-14). The design, with the code check, the PSN spike, a second
+interview the same day and the as-built notes: `2026-11-14-12.17-games.md`.
 
-- [ ] **G1 Library and pages.** Game pages found by their `game_template` key, the Games tab
+- [x] **G1 Library and pages.** *(12.17.0)* Game pages found by their `game_template` key, the Games tab
       (8th; the folded bar shows four tabs), a page per game with its state, trophies and sessions.
-- [ ] **G2 PlayStation Network.** The NPSSO pasted once, the tokens in encrypted storage, Sony's
+- [x] **G2 PlayStation Network.** *(12.17.0; the live sign-in on the owner's account still to check)* The NPSSO pasted once, the tokens in encrypted storage, Sony's
       app credentials from `local.properties`; a read-only sync at 23:40 and 06:00 and on demand;
       "PSN paused" on failure, never a blocked vault sync.
-- [ ] **G3 What a sync writes.** `10_Journal/data/games/` (snapshot, links, sessions, trophy
+- [x] **G3 What a sync writes.** *(12.17.0)* `10_Journal/data/games/` (snapshot, links, sessions, trophy
       sets), each page's 🏆 section (earned trophies only) and its trophy markers ticked.
-- [ ] **G4 Sessions in the Timeline.** One line per game and day, derived at the burn and skipped
+- [x] **G4 Sessions in the Timeline.** *(12.17.0)* One line per game and day, derived at the burn and skipped
       by the parser (no Room change); a past day's line edited in, never re-burned; older lines
       read as history.
-- [ ] **G6 Manual sessions.** A Quick Settings tile and a Live Update counting up.
-- [ ] **G7 Game nights.** The app's own Do Not Disturb mode while a session runs in Perso outside
+- [x] **G6 Manual sessions.** *(12.17.0)* A Quick Settings tile and a Live Update counting up.
+- [x] **G7 Game nights.** *(12.17.0)* The app's own Do Not Disturb mode while a session runs in Perso outside
       work hours; the shutdown banner hidden until morning. One new permission (D7).
-- [ ] **G8 Ask Claude** about a game, through the hand-off composer.
+- [x] **G8 Ask Claude** *(12.17.0)* about a game, through the hand-off composer.
 
 ### 12.18.0 — Private vault hardening
 

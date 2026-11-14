@@ -7,9 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Planned: `documentation/plans/2026-11-10-dream-app-roadmap.md`. Next, 12.17.0: private vault
+Planned: `documentation/plans/2026-11-10-dream-app-roadmap.md`. Next, 12.18.0: private vault
 hardening (changing its password safely). Hybrid search waits for the golden set's numbers,
 measured on the phone.
+
+## [12.17.0] — 2026-11-14
+
+Games: a space for the owner's PS5 games. From RFC-009 (in the vault) and two interviews, planned
+in `documentation/plans/2026-11-14-12.17-games.md`.
+
+### Added
+
+- **A Games tab**, the eighth, at the end of the bar: the library in four groups (Playing, Next,
+  Backlog with paused games first, Done with a 100% mark), each game with its hours, trophy % and
+  last played day, the running session, and the PlayStation line ("PSN ✓ 06:00", or why it
+  paused). A game is any vault note whose frontmatter has `game_template`; its state is
+  `game_state`.
+- **A page per game:** its state in one tap (written to the note), hours, the trophy list (earned
+  ones dated, the others ??? until revealed), the note's checklists (tick them here; a line that
+  waits for a trophy stays ??? until reached), its sessions and the earlier Timeline lines that
+  named it, the notes of its folder, and Ask Claude, which opens the hand-off composer with a
+  question about the game.
+- **PlayStation Network**, read-only (Settings › Integrations): paste the NPSSO once (it is never
+  kept), then play time and trophies sync at 23:40 and 06:00, or on demand. The page shows when the
+  sign-in expires. A failure only pauses PSN: the vault sync never waits for it, and Games works by
+  hand. The app's client comes from `local.properties`; without it the row is hidden.
+- **Sessions in the day's Timeline:** one line per game and day, `- 21:05 🎮 <game> · 2 h 35`,
+  written by the burn from `10_Journal/data/games/sessions/` and left out of the board, so a cold
+  start can't duplicate it. A session found after its day was burned (past midnight) goes to the
+  day it started: that one line is edited into the note, which is never burned again.
+- **Trophies in the notes:** each linked page ends with a `🏆 Trophies` section listing the earned
+  trophies, dated, rewritten at each sync; no unearned name ever reaches the note. A checklist
+  line ending with a trophy marker ticks itself, dated, when that trophy is earned.
+- **A game session by hand:** from the tab, a game's page or the new Game tile (the game played
+  last); it shows as a Live Update counting up, with Stop.
+- **Game nights:** a session started in Perso, outside work hours, turns on the app's own "Game
+  night" mode (Settings › Modes, with your exceptions; your own Do Not Disturb is untouched), and
+  the end-of-workday banner stays hidden until the next day. Never in Off. It needs Do Not Disturb
+  access, asked the first time.
+
+### Changed
+
+- **Folded, the bar shows four tabs** instead of three, in your order.
+- **The hand-off composer reads a typed kind:** text handed to it as "question: …" selects
+  Question and keeps only the text, so the prefix is sent once.
+
+### Notes
+
+- One new permission, `ACCESS_NOTIFICATION_POLICY` (the owner's D7). No new dependency, and the
+  database doesn't change.
+- Nothing of Games writes on a read-only device: no PSN, no session, no tile, no game night.
 
 ## [12.16.0] — 2026-11-13
 
