@@ -122,4 +122,23 @@ class GameSessionControllerTest {
         assertNull(controller.current())
         verify(exactly = 0) { platform.postRunning(any(), any()) }
     }
+
+    @Test
+    fun `the game played last is the latest of the sessions and PSN's last-played times`() = runTest {
+        val other = GamePage("30_Areas/Games/Bricks/Bricks.md", "Brick Wars", emptyList(), GameTemplate.LEGO, GameState.BACKLOG, null, null)
+        coEvery { games.pages() } returns listOf(other, page)
+        coEvery { games.links() } returns GameLinks(links = mapOf("PPSA1" to other.path))
+        every { games.resolver(any(), any()) } returns { record: GameSessionRecord -> listOf(other, page).firstOrNull { it.path == record.page } }
+        val today = LocalDate.now(zone)
+        coEvery { games.sessionsBetween(any(), any()) } returns listOf(
+            GameSessionRecord("m1", today.minusDays(2).toString(), "21:00", 60, GameSessionRecord.SOURCE_MANUAL, page = page.path)
+        )
+        // PSN saw Brick Wars yesterday: later than the manual session two days ago.
+        val yesterday = today.minusDays(1).atTime(20, 0).atZone(zone).toInstant().toString()
+        coEvery { games.snapshot() } returns PsnSnapshot("x", listOf(PsnTitleState("PPSA1", "BRICK WARS", lastPlayed = yesterday)))
+        assertEquals(other, controller.defaultPage(zone))
+
+        coEvery { games.snapshot() } returns null
+        assertEquals(page, controller.defaultPage(zone))
+    }
 }

@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
@@ -32,6 +34,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -45,6 +49,7 @@ import cloud.wafflecommons.pixelbrainreader.ui.components.EmptyHint
 import cloud.wafflecommons.pixelbrainreader.ui.components.FormScaffold
 import cloud.wafflecommons.pixelbrainreader.ui.components.ReadOnlyNotice
 import cloud.wafflecommons.pixelbrainreader.ui.components.SectionCard
+import coil.compose.AsyncImage
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -110,6 +115,7 @@ fun GamesScreen(
     if (picking) {
         GamePickerDialog(
             pages = state.pages,
+            lastPlayed = state.lastPlayedPath,
             onPick = { page ->
                 picking = false
                 viewModel.start(page)
@@ -151,7 +157,19 @@ private fun GameCard(row: GameRow, onClick: () -> Unit) {
     ElevatedCard(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
         ListItem(
             supportingContent = { if (facts.isNotEmpty()) Text(facts.joinToString(" · ")) },
-            leadingContent = { Icon(Icons.Rounded.SportsEsports, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
+            leadingContent = {
+                // PSN's icon for the game when a linked title has one (RFC-009 §8), else the pad.
+                if (row.iconUrl != null) {
+                    AsyncImage(
+                        model = row.iconUrl,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.size(48.dp).clip(RoundedCornerShape(10.dp))
+                    )
+                } else {
+                    Icon(Icons.Rounded.SportsEsports, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                }
+            }
         ) {
             Text(
                 if (row.page.state == GameState.HUNDRED) "${row.page.title}  ·  100%" else row.page.title,
@@ -216,10 +234,18 @@ private fun UnlinkedFold(titles: List<UnlinkedTitle>, readOnly: Boolean, onLink:
     }
 }
 
-/** Picks a game page: the ones being played first. */
+/** Picks a game page: the one played last first (RFC-009 §4.3), then the ones being played. */
 @Composable
-fun GamePickerDialog(pages: List<GamePage>, onPick: (GamePage) -> Unit, onDismiss: () -> Unit, title: String = "Start a session") {
-    val ordered = pages.sortedWith(compareBy({ it.state != GameState.PLAYING }, { it.state != GameState.NEXT }, { it.title.lowercase() }))
+fun GamePickerDialog(
+    pages: List<GamePage>,
+    onPick: (GamePage) -> Unit,
+    onDismiss: () -> Unit,
+    title: String = "Start a session",
+    lastPlayed: String? = null
+) {
+    val ordered = pages.sortedWith(
+        compareBy({ it.path != lastPlayed }, { it.state != GameState.PLAYING }, { it.state != GameState.NEXT }, { it.title.lowercase() })
+    )
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
@@ -227,7 +253,7 @@ fun GamePickerDialog(pages: List<GamePage>, onPick: (GamePage) -> Unit, onDismis
             Column(modifier = Modifier.fillMaxWidth()) {
                 ordered.forEach { page ->
                     ListItem(
-                        supportingContent = { Text(page.state.label) },
+                        supportingContent = { Text(if (page.path == lastPlayed) "Played last · ${page.state.label}" else page.state.label) },
                         modifier = Modifier.clickable { onPick(page) }
                     ) {
                         Text(page.title)

@@ -101,6 +101,50 @@ object GamePages {
         return next
     }
 
+    /**
+     * The page's own text for the app's game page (RFC-009 §4.2): the note without its frontmatter,
+     * its title, its checklists (tickable cards there) and the derived 🏆 section (the trophy card).
+     * A heading left with nothing under it goes too. Blank when the page holds only checklists.
+     */
+    fun prose(content: String): String {
+        val kept = mutableListOf<String>()
+        var inTrophies = false
+        var titleDropped = false
+        bodyLines(content).forEach { raw ->
+            val line = raw.trimEnd('\r')
+            val trimmed = line.trim()
+            if (trimmed.startsWith("#")) inTrophies = trimmed == TrophySection.HEADING
+            if (inTrophies) return@forEach
+            if (!titleDropped && trimmed.startsWith("# ")) {
+                titleDropped = true
+                return@forEach
+            }
+            if (CHECK_ITEM.matches(line)) return@forEach
+            kept += line
+        }
+        val withoutEmptyHeadings = kept.filterIndexed { i, line ->
+            val level = headingLevel(line) ?: return@filterIndexed true
+            val section = kept.drop(i + 1).takeWhile { next -> headingLevel(next)?.let { it > level } ?: true }
+            section.any { it.isNotBlank() && headingLevel(it) == null }
+        }
+        return withoutEmptyHeadings.joinToString("\n").replace(Regex("\n{3,}"), "\n\n").trim()
+    }
+
+    private val CHECK_ITEM = Regex("^\\s*[-*+]\\s+\\[[ xX]\\]\\s+.*$")
+
+    private fun headingLevel(line: String): Int? {
+        val trimmed = line.trimStart()
+        val hashes = trimmed.takeWhile { it == '#' }.length
+        return hashes.takeIf { it in 1..6 && trimmed.length > hashes && trimmed[hashes] == ' ' }
+    }
+
+    private fun bodyLines(content: String): List<String> {
+        val lines = content.split("\n")
+        if (lines.firstOrNull()?.trimEnd('\r') != "---") return lines
+        val close = (1 until lines.size).firstOrNull { lines[it].trimEnd('\r') == "---" } ?: return lines
+        return lines.drop(close + 1)
+    }
+
     /** What "Ask Claude" types in the hand-off composer (D6): a question about the game, the owner finishes it. */
     fun askText(page: GamePage): String = DeskHandoffFormat.typed(QUESTION, "${page.title} —") + " "
 

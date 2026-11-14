@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Article
 import androidx.compose.material.icons.rounded.Checklist
@@ -34,6 +36,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -47,6 +51,8 @@ import cloud.wafflecommons.pixelbrainreader.ui.components.EmptyHint
 import cloud.wafflecommons.pixelbrainreader.ui.components.FormScaffold
 import cloud.wafflecommons.pixelbrainreader.ui.components.ReadOnlyNotice
 import cloud.wafflecommons.pixelbrainreader.ui.components.SectionCard
+import cloud.wafflecommons.pixelbrainreader.ui.main.MarkwonContent
+import coil.compose.AsyncImage
 
 /**
  * A game's page (RFC-009 §4.2): its state, hours and trophies, the checklists of its note (a trophy's
@@ -63,6 +69,12 @@ fun GamePageScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var reveal by rememberSaveable { mutableStateOf(false) }
+    // One hidden item revealed at a time (RFC-009 §4.2: "??? until reached or tapped"); Reveal shows them all.
+    var revealedKeys by rememberSaveable { mutableStateOf("") }
+    fun shown(key: String) = reveal || key in revealedKeys.split('\n')
+    fun show(key: String) {
+        revealedKeys = if (revealedKeys.isEmpty()) key else revealedKeys + "\n" + key
+    }
     val page = state.page
 
     FormScaffold(title = page?.title ?: "Game", onBack = onBack) {
@@ -82,6 +94,14 @@ fun GamePageScreen(
                 page.finished?.let { "finished ${day(it)}" }
             ).joinToString(" · ").ifEmpty { null }
         ) {
+            state.iconUrl?.let { url ->
+                AsyncImage(
+                    model = url,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.size(96.dp).clip(RoundedCornerShape(16.dp))
+                )
+            }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 GameState.entries.forEach { s ->
                     FilterChip(
@@ -114,6 +134,16 @@ fun GamePageScreen(
             }
         }
 
+        // The page itself, without what the cards below show (RFC-009 §4.2: the app renders it).
+        if (state.prose.isNotBlank()) {
+            SectionCard(title = "Page", icon = Icons.AutoMirrored.Rounded.Article) {
+                MarkwonContent(
+                    content = state.prose,
+                    onWikiLinkClick = { link -> onOpenNote("[[" + link.removePrefix("[[").removeSuffix("]]") + "]]") }
+                )
+            }
+        }
+
         if (state.trophies.isNotEmpty()) {
             SectionCard(
                 title = "Trophies",
@@ -123,11 +153,14 @@ fun GamePageScreen(
             ) {
                 state.trophies.forEach { line ->
                     val earned = line.earnedOn
-                    val name = if (earned != null || reveal) line.trophy.name.ifBlank { "Trophy ${line.trophy.id}" } else "???"
+                    val key = "t:${line.set}#${line.trophy.id}"
+                    val hidden = earned == null && !shown(key)
+                    val name = if (hidden) "???" else line.trophy.name.ifBlank { "Trophy ${line.trophy.id}" }
                     Text(
                         "${TrophySection.gradeIcon(line.trophy.grade)}  $name" + (earned?.let { "  ·  ${day(it)}" } ?: ""),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = if (earned != null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+                        color = if (earned != null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.fillMaxWidth().clickable(enabled = hidden) { show(key) }
                     )
                 }
             }
@@ -136,10 +169,11 @@ fun GamePageScreen(
         state.checklists.forEach { section ->
             SectionCard(title = section.heading.ifBlank { "Checklist" }, icon = Icons.Rounded.Checklist) {
                 section.items.forEach { item ->
-                    val hidden = item.waitsForTrophy && !item.done && !reveal
+                    val key = "c:${item.line}"
+                    val hidden = item.waitsForTrophy && !item.done && !shown(key)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth().clickable(enabled = hidden) { reveal = true }
+                        modifier = Modifier.fillMaxWidth().clickable(enabled = hidden) { show(key) }
                     ) {
                         Checkbox(checked = item.done, onCheckedChange = { viewModel.toggle(item.line) }, enabled = !state.readOnly)
                         Text(if (hidden) "???" else item.text, style = MaterialTheme.typography.bodyMedium)

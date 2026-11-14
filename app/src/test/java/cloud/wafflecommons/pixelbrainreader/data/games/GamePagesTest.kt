@@ -97,4 +97,37 @@ class GamePagesTest {
         assertEquals(listOf("Now"), groups.getValue(GameGroup.PLAYING).map { it.title })
         assertEquals(emptyList<GamePage>(), groups.getValue(GameGroup.NEXT))
     }
+
+    @Test
+    fun `the page's prose leaves out what the cards show`() {
+        val content = """
+            ---
+            game_template: souls-like
+            tags:
+              - [ ] not a checklist
+            ---
+            # Ring of Ash
+
+            My notes on this run: [[Build_Rakshasa]].
+
+            ## Bosses
+            - [ ] The first knight <!--trophy:NPWR00001_00#3-->
+            - [x] The gatekeeper
+
+            ## Builds
+            ### Bleed
+            Katana and frost.
+
+            ## 🏆 Trophies
+
+            *1 of 2 trophies · 50 %*
+
+            - 🥉 First Steps — 2026-11-02
+        """.trimIndent() + "\n"
+        assertEquals(
+            "My notes on this run: [[Build_Rakshasa]].\n\n## Builds\n### Bleed\nKatana and frost.",
+            GamePages.prose(content)
+        )
+        assertEquals("", GamePages.prose("---\ngame_template: lego\n---\n# Brick Wars\n\n## Episodes\n- [ ] Episode I\n"))
+    }
 }

@@ -23,11 +23,12 @@ in `documentation/plans/2026-11-14-12.17-games.md`.
   last played day, the running session, and the PlayStation line ("PSN ✓ 06:00", or why it
   paused). A game is any vault note whose frontmatter has `game_template`; its state is
   `game_state`.
-- **A page per game:** its state in one tap (written to the note), hours, the trophy list (earned
-  ones dated, the others ??? until revealed), the note's checklists (tick them here; a line that
-  waits for a trophy stays ??? until reached), its sessions and the earlier Timeline lines that
-  named it, the notes of its folder, and Ask Claude, which opens the hand-off composer with a
-  question about the game.
+- **A page per game:** PSN's icon for it, its state in one tap (written to the note), hours, the
+  note's own text, the trophy list (earned ones dated, the others ??? until reached or tapped, one
+  at a time), the note's checklists (tick them here; a line that waits for a trophy stays ??? the
+  same way), its sessions and the earlier Timeline lines that named it, the notes of its folder,
+  and Ask Claude, which opens the hand-off composer with a question about the game, on the
+  project your games config names.
 - **PlayStation Network**, read-only (Settings › Integrations): paste the NPSSO once (it is never
   kept), then play time and trophies sync at 23:40 and 06:00, or on demand. The page shows when the
   sign-in expires. A failure only pauses PSN: the vault sync never waits for it, and Games works by
@@ -39,8 +40,9 @@ in `documentation/plans/2026-11-14-12.17-games.md`.
 - **Trophies in the notes:** each linked page ends with a `🏆 Trophies` section listing the earned
   trophies, dated, rewritten at each sync; no unearned name ever reaches the note. A checklist
   line ending with a trophy marker ticks itself, dated, when that trophy is earned.
-- **A game session by hand:** from the tab, a game's page or the new Game tile (the game played
-  last); it shows as a Live Update counting up, with Stop.
+- **A game session by hand:** from the tab (its picker starts on the game played last, from
+  PSN or your own sessions), a game's page or the new Game tile (the game played last); it shows
+  as a Live Update counting up, with Stop.
 - **Game nights:** a session started in Perso, outside work hours, turns on the app's own "Game
   night" mode (Settings › Modes, with your exceptions; your own Do Not Disturb is untouched), and
   the end-of-workday banner stays hidden until the next day. Never in Off. It needs Do Not Disturb

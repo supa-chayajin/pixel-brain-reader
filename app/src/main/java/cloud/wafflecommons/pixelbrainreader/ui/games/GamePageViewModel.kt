@@ -40,6 +40,10 @@ data class GamePageUiState(
     val trophiesTotal: Int = 0,
     val trophies: List<TrophyLine> = emptyList(),
     val checklists: List<ChecklistSection> = emptyList(),
+    /** The page's own text, without its checklists and 🏆 section (shown as cards). */
+    val prose: String = "",
+    /** PSN's icon for the game, when a linked title has one. */
+    val iconUrl: String? = null,
     /** A line per day played, newest first. */
     val days: List<Pair<LocalDate, GameDayLine>> = emptyList(),
     val history: List<GameHistoryEntry> = emptyList(),
@@ -108,6 +112,8 @@ class GamePageViewModel @Inject constructor(
                     trophiesTotal = trophies.size,
                     trophies = trophies,
                     checklists = GameChecklists.sections(content),
+                    prose = cloud.wafflecommons.pixelbrainreader.data.games.GamePages.prose(content),
+                    iconUrl = titles.firstNotNullOfOrNull { t -> t.imageUrl },
                     days = days,
                     history = history ?: games.history(listOf(page)).also { history = it },
                     folderNotes = games.folderNotes(page),

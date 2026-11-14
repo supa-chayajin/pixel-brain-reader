@@ -51,6 +51,8 @@ data class GamesUiState(
     val unlinked: List<UnlinkedTitle> = emptyList(),
     val running: RunningGame? = null,
     val runningTitle: String? = null,
+    /** The game played last: the session picker's default (RFC-009 §4.3). */
+    val lastPlayedPath: String? = null,
     val psn: PsnLine = PsnLine(configured = false, connected = false, status = null, expiresInDays = null),
     val readOnly: Boolean = VaultWriteGate.readOnly,
     /** A game night would have started, but Do Not Disturb access isn't granted yet. */
@@ -121,6 +123,7 @@ class GamesViewModel @Inject constructor(
                     unlinked = unlinked(snapshot, links.links.keys, links.hidden.toSet(), zone),
                     running = running,
                     runningTitle = running?.let { r -> pages.firstOrNull { p -> p.path == r.page }?.title },
+                    lastPlayedPath = controller.defaultPage()?.path,
                     psn = PsnLine(
                         configured = account.configured,
                         connected = tokens != null,
