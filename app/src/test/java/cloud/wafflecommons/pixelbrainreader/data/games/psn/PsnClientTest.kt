@@ -39,11 +39,23 @@ class PsnClientTest {
     private fun client(vararg routes: Pair<String, (String) -> PsnHttpResponse>) = FakeTransport(routes.toList()).let { it to PsnClient(it, "client-id", "client-secret") }
 
     @Test
-    fun `the NPSSO is taken alone or out of the page's answer`() {
+    fun `the NPSSO is taken alone or out of the page's answer, in a token-safe format`() {
         assertEquals(npsso, PsnClient.cleanNpsso("  $npsso \n"))
         assertEquals(npsso, PsnClient.cleanNpsso("""{ "npsso": "$npsso" }"""))
+        // A format change at Sony (longer, base64url) still goes through: Sony is the judge.
+        val longer = "Ab-_9".repeat(20)
+        assertEquals(longer, PsnClient.cleanNpsso("""{"npsso":"$longer"}"""))
         assertNull(PsnClient.cleanNpsso("too-short"))
-        assertNull(PsnClient.cleanNpsso("b".repeat(65)))
+        assertNull(PsnClient.cleanNpsso("https://ca.account.sony.com/api/v1/ssocookie"))
+        assertNull(PsnClient.cleanNpsso("""{"error":"invalid_grant","error_description":"not signed in"}"""))
+        assertNull(PsnClient.cleanNpsso("two words " + npsso))
+    }
+
+    @Test
+    fun `a refused paste is described, never echoed`() {
+        val described = PsnClient.describeRefused("""{"error":"invalid_grant"}""")
+        assertEquals("25 characters, JSON without an npsso field, with \" : _ { }", described)
+        assertFalse(described.contains("invalid"))
     }
 
     @Test

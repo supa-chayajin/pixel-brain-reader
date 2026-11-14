@@ -1,5 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.data.games.psn
 
+import android.util.Log
 import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
 import cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
@@ -69,13 +70,24 @@ class PsnAccount @Inject constructor(
             return Result.failure(PsnException(PsnException.Kind.NOT_CONFIGURED, "Read-only device: connect PlayStation on your phone."))
         }
         val npsso = PsnClient.cleanNpsso(pasted)
-            ?: return Result.failure(PsnException(PsnException.Kind.NPSSO_REJECTED, "That isn't an NPSSO: it is 64 letters and digits."))
+        if (npsso == null) {
+            // What was pasted is described, never logged nor shown.
+            Log.i(TAG, "PSN connect: the paste isn't an NPSSO")
+            return Result.failure(
+                PsnException(
+                    PsnException.Kind.NPSSO_REJECTED,
+                    "That doesn't look like an NPSSO (${PsnClient.describeRefused(pasted)}). Copy the value after \"npsso\" on the NPSSO page."
+                )
+            )
+        }
         return try {
             val tokens = client.signIn(npsso, now)
             withContext(Dispatchers.IO) { secrets.savePsnTokens(tokens) }
             preferences.setPsnStatus(PsnStatus(true, now).encode())
+            Log.i(TAG, "PSN connect: signed in")
             Result.success(Unit)
         } catch (e: PsnException) {
+            Log.i(TAG, "PSN connect refused: ${e.kind}")
             Result.failure(e)
         }
     }
@@ -95,4 +107,8 @@ class PsnAccount @Inject constructor(
     }
 
     suspend fun setStatus(status: PsnStatus) = preferences.setPsnStatus(status.encode())
+
+    private companion object {
+        const val TAG = "PsnAccount"
+    }
 }

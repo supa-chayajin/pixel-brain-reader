@@ -234,14 +234,33 @@ class PsnClient(
         private const val PAGE = 200
         private const val MAX_PAGES = 10
 
-        private val NPSSO = Regex("^[A-Za-z0-9]{64}$")
-        private val NPSSO_IN_JSON = Regex("\"npsso\"\\s*:\\s*\"([A-Za-z0-9]{64})\"")
+        /**
+         * The libraries describe 64 letters and digits; a token-safe set of 32 to 512 characters is
+         * accepted, so a format change at Sony doesn't lock the owner out (Sony refuses a wrong one
+         * anyway, 4165). A URL, an error page or a sentence still fails here.
+         */
+        private val NPSSO = Regex("^[A-Za-z0-9._~+/=-]{32,512}$")
+        private val NPSSO_IN_JSON = Regex("\"npsso\"\\s*:\\s*\"([^\"]+)\"")
 
-        /** The 64-character NPSSO from what the owner pasted: the value alone, or the page's whole answer. */
+        /** The NPSSO from what the owner pasted: the value alone, or the page's whole answer. */
         fun cleanNpsso(input: String): String? {
             val trimmed = input.trim()
-            if (NPSSO.matches(trimmed)) return trimmed
-            return NPSSO_IN_JSON.find(trimmed)?.groupValues?.get(1)
+            val candidate = NPSSO_IN_JSON.find(trimmed)?.groupValues?.get(1)?.trim() ?: trimmed
+            return candidate.takeIf { NPSSO.matches(it) }
+        }
+
+        /** What a refused paste looked like, never its content: its length, JSON or not, which characters. */
+        fun describeRefused(input: String): String {
+            val trimmed = input.trim()
+            val json = trimmed.startsWith("{")
+            val field = NPSSO_IN_JSON.containsMatchIn(trimmed)
+            val odd = trimmed.filterNot { it.isLetterOrDigit() }.toSet().sorted()
+                .joinToString(" ") { if (it == ' ') "space" else if (it == '\n') "a line break" else it.toString() }
+            return buildString {
+                append(trimmed.length).append(" characters")
+                if (json) append(if (field) ", JSON with an npsso field" else ", JSON without an npsso field")
+                if (odd.isNotEmpty()) append(", with ").append(odd)
+            }
         }
 
         /** The query of a redirect target (`com.scee…://redirect/?code=v3…`), decoded. */
