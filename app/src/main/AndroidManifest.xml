@@ -8,6 +8,9 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- A focus session shows as a Live Update (12.14, D9; owner 2026-11-11): a normal permission, no prompt. -->
     <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
+    <!-- 12.17 (RFC-009, the owner's D7): the "Game night" mode while a game session runs; the owner
+         grants Do Not Disturb access once, in the system's settings. -->
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
     <uses-permission android:name="android.permission.health.READ_STEPS" />
     <uses-permission android:name="android.permission.health.READ_SLEEP" />
     <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
@@ -264,6 +267,23 @@
             android:exported="true"
             android:icon="@drawable/ic_tile_focus"
             android:label="@string/tile_focus_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
+        <!-- 12.17: the game session notification's Stop. -->
+        <receiver
+            android:name=".data.games.GameReceiver"
+            android:exported="false" />
+
+        <!-- Quick Settings: start or stop a game session (12.17). -->
+        <service
+            android:name=".ui.games.GameTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_tile_game"
+            android:label="@string/tile_game_label"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
             <intent-filter>
                 <action android:name="android.service.quicksettings.action.QS_TILE" />

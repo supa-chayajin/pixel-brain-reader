@@ -37,14 +37,23 @@ class NavOrderTest {
     }
 
     @Test
-    fun `projects is a tab, and joins an order saved before it as the last one`() {
+    fun `projects is a tab, and joins an order saved before it among the last ones`() {
         val defaults = UserPreferencesRepository.DEFAULT_NAVBAR_ORDER
-        assertEquals("projects", defaults.last())
-        assertEquals(V11Routes.PROJECTS, defaults.last())
+        assertEquals(V11Routes.PROJECTS, defaults[defaults.size - 2])
         // A phone's order from 12.6.0, tabs rearranged: everything stays where it was.
         assertEquals(
-            listOf("stats", "home", "chat", "habits", "home_os", "mood", "projects"),
+            listOf("stats", "home", "chat", "habits", "home_os", "mood", "projects", "games"),
             inNavOrder(listOf("stats", "home", "chat", "habits", "home_os", "mood"), defaults) { it }
         )
+    }
+
+    @Test
+    fun `games is the 8th tab and joins an order saved before it at its end`() {
+        val defaults = UserPreferencesRepository.DEFAULT_NAVBAR_ORDER
+        assertEquals(cloud.wafflecommons.pixelbrainreader.ui.games.GamesRoutes.GAMES, defaults.last())
+        assertEquals(8, defaults.size)
+        // The owner's 12.16 order, rearranged: nothing existing moves, Games comes last.
+        val saved = listOf("home", "habits", "home_os", "projects", "chat", "mood", "stats")
+        assertEquals(saved + "games", inNavOrder(saved, defaults) { it })
     }
 }

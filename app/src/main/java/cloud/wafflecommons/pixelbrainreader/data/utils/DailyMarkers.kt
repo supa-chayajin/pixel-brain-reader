@@ -21,6 +21,14 @@ object DailyMarkers {
 
     private val CALENDAR = Regex("<!--\\s*gcal:(.+?)\\s*-->")
     private val TASK = Regex("<!--\\s*gtask:(.+?)\\s*-->")
+    private val GAME = Regex("<!--\\s*game:(.+?)\\s*-->")
+
+    /**
+     * A Timeline line derived from the games data (RFC-009, 12.17): the burn writes it from the
+     * sessions files, so the parser leaves it out of the board and a cold-start rehydrate can't
+     * stack copies of it.
+     */
+    fun isGameLine(text: String): Boolean = GAME.containsMatchIn(text)
 
     /** Appends a `<!--gcal:ID-->` marker to [content] when the entry is Calendar-sourced. */
     fun appendCalendarMarker(content: String, googleEventId: String?): String =

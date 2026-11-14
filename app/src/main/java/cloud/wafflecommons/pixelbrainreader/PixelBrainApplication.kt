@@ -46,6 +46,7 @@ class PixelBrainApplication : Application(), Configuration.Provider {
     @Inject lateinit var widgetUpdateManager: dagger.Lazy<WidgetUpdateManager>
     @Inject lateinit var foregroundRefresher: dagger.Lazy<ForegroundRefresher>
     @Inject lateinit var objectiveRepository: dagger.Lazy<cloud.wafflecommons.pixelbrainreader.data.work.ObjectiveRepository>
+    @Inject lateinit var psnAccount: dagger.Lazy<cloud.wafflecommons.pixelbrainreader.data.games.psn.PsnAccount>
 
     /** Application-scoped coroutine scope — survives Activity recreation. */
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -75,6 +76,7 @@ class PixelBrainApplication : Application(), Configuration.Provider {
         // Today's health numbers + health-driven habits, refreshed each time the app is opened.
         appScope.launch { safely("Foreground refresher") { foregroundRefresher.get().start() } }
         if (!VaultWriteGate.readOnly) scheduleDailyBurnWork()
+        if (!VaultWriteGate.readOnly) schedulePsnSync()
         cancelLegacyGoogleOutboxWorkers()
         // Hydrate the gamification profile from disk first thing so the level/XP shown across the
         // app (and the mutation baseline) is the real saved state from the first frame.
@@ -178,6 +180,20 @@ class PixelBrainApplication : Application(), Configuration.Provider {
      * Pins the nightly 23:50 burn. KEEP-based at startup (never replaces a run that may be due
      * right now); the worker re-pins itself after each run so the schedule never drifts.
      */
+    /** The PSN sync's two daily slots (12.17), kept only while PlayStation is connected. */
+    private fun schedulePsnSync() {
+        appScope.launch {
+            safely("PSN sync scheduling") {
+                val account = psnAccount.get()
+                if (account.configured && account.isConnected()) {
+                    cloud.wafflecommons.pixelbrainreader.data.workers.GamesSyncWorker.ensureScheduled(
+                        WorkManager.getInstance(this@PixelBrainApplication)
+                    )
+                }
+            }
+        }
+    }
+
     private fun scheduleDailyBurnWork() {
         appScope.launch {
             safely("Daily burn scheduling") {

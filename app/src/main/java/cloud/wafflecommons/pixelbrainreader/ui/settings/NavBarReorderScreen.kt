@@ -24,6 +24,7 @@ import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.Psychology
 import androidx.compose.material.icons.rounded.RocketLaunch
+import androidx.compose.material.icons.rounded.SportsEsports
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -49,7 +50,8 @@ private val NAV_ITEM_META: Map<String, Pair<ImageVector, String>> = mapOf(
     "chat" to (Icons.Rounded.Psychology to "Chat"),
     "mood" to (Icons.Default.Mood to "Mood"),
     "stats" to (Icons.Default.Star to "Stats"),
-    "projects" to (Icons.Rounded.RocketLaunch to "Projects")
+    "projects" to (Icons.Rounded.RocketLaunch to "Projects"),
+    "games" to (Icons.Rounded.SportsEsports to "Games")
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -81,7 +83,7 @@ fun NavBarReorderScreen(
             item {
                 Text(
                     text = "Reorder the tabs. The \"Daily\" button stays fixed. " +
-                        "On compact screens, the first three are shown.",
+                        "On compact screens, the first four are shown.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(vertical = 8.dp)

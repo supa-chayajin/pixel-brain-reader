@@ -19,6 +19,10 @@ interface FileContentDao {
     @Query("SELECT path FROM file_contents WHERE substr(path, 1, length(:prefix)) = :prefix")
     suspend fun pathsUnder(prefix: String): List<String>
 
+    /** The notes whose text holds [needle] (a frontmatter key, for example); a plain LIKE, no index. */
+    @Query("SELECT path FROM file_contents WHERE instr(content, :needle) > 0")
+    suspend fun pathsContaining(needle: String): List<String>
+
     /** Changes whenever a row under [prefix] is added, removed or rewritten: a cheap cache key. */
     @Query(
         "SELECT COUNT(*) || ':' || COALESCE(MAX(lastSyncedAt), 0) || ':' || COALESCE(SUM(LENGTH(content)), 0) " +

@@ -3,7 +3,14 @@ package cloud.wafflecommons.pixelbrainreader.data.utils
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyDashboardEntity
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyTaskEntity
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.TimelineEntryEntity
+import java.time.LocalTime
 import java.time.format.DateTimeFormatter
+
+/**
+ * A Timeline line the burn derives from data outside the board (12.17: a game's play of the day).
+ * [text] is what follows the time, its invisible marker included; the parser leaves such lines out.
+ */
+data class TimelineLine(val time: LocalTime, val text: String)
 
 /**
  * Masterclass Utility to translate the DailyBuffer (Room) into a perfect Obsidian Markdown String.
@@ -31,7 +38,8 @@ object MarkdownBurner {
         scratchNotes: List<cloud.wafflecommons.pixelbrainreader.data.local.entity.ScratchNoteEntity> = emptyList(),
         gratitudes: List<cloud.wafflecommons.pixelbrainreader.data.local.entity.GratitudeEntity> = emptyList(),
         existingFrontmatter: String = "",
-        health: List<String> = emptyList()
+        health: List<String> = emptyList(),
+        derivedTimeline: List<TimelineLine> = emptyList()
     ): String {
         val sb = StringBuilder()
 
@@ -65,15 +73,17 @@ object MarkdownBurner {
 
         // 4. Timeline Section
         sb.append("## 🗓️ Timeline\n\n")
-        if (timeline.isEmpty()) {
+        if (timeline.isEmpty() && derivedTimeline.isEmpty()) {
             sb.append("*No events*\n")
         } else {
-            timeline.sortedBy { it.time }.forEach { entry ->
-                val timeStr = entry.time.format(DateTimeFormatter.ofPattern("HH:mm"))
-                // Preserve googleEventId across the round-trip so re-parsed Calendar rows
-                // stay reclaimable by purgeGoogleTimelineForDate (fixes the triple-dup bug).
-                val content = DailyMarkers.appendCalendarMarker(singleLine(entry.content), entry.googleEventId)
-                sb.append("- $timeStr $content\n")
+            // Preserve googleEventId across the round-trip so re-parsed Calendar rows
+            // stay reclaimable by purgeGoogleTimelineForDate (fixes the triple-dup bug).
+            val board = timeline.map { entry ->
+                TimelineLine(entry.time, DailyMarkers.appendCalendarMarker(singleLine(entry.content), entry.googleEventId))
+            }
+            // A stable sort: at the same minute the board's entries come before the derived lines.
+            (board + derivedTimeline).sortedBy { it.time }.forEach { line ->
+                sb.append("- ${line.time.format(DateTimeFormatter.ofPattern("HH:mm"))} ${line.text}\n")
             }
         }
         sb.append("\n")

@@ -111,6 +111,7 @@ class ShutdownTest {
         coEvery { modesRepository.currentVisibility() } returns Visibility(mode = ContextMode.WORK)
         every { preferences.shutdownClosedDay } returns flowOf(null)
         every { preferences.rolloverHandled } returns flowOf(emptySet())
+        every { preferences.gameNightDay } returns flowOf(null)
         coEvery { dashboardDao.getTasksSnapshot(any()) } returns listOf(task("Call the bank"), task("Buy milk", done = true))
         coEvery { fileContentDao.pathsUnder(any()) } returns listOf("00_Inbox/Voice note.md")
     }
@@ -118,6 +119,14 @@ class ShutdownTest {
     @After
     fun tearDown() {
         VaultWriteGate.readOnly = false
+    }
+
+    @Test
+    fun `a game night keeps the banner away for the rest of its day`() = runTest {
+        every { preferences.gameNightDay } returns flowOf(wednesday.toString())
+        assertNull(repository.state(wednesday.atTime(18, 30)))
+        every { preferences.gameNightDay } returns flowOf(wednesday.minusDays(1).toString())
+        assertTrue(repository.state(wednesday.atTime(18, 30)) != null)
     }
 
     @Test

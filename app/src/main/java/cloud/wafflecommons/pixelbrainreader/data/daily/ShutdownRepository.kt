@@ -18,6 +18,7 @@ import cloud.wafflecommons.pixelbrainreader.data.work.LogKind
 import cloud.wafflecommons.pixelbrainreader.data.work.MissionLogRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -53,6 +54,8 @@ class ShutdownRepository @Inject constructor(
         val today = now.toLocalDate()
         val closed = preferences.shutdownClosedDay.first()?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
         if (!Shutdown.isDue(modesRepository.config.value, now, closed)) return@withContext null
+        // A game night (12.17, D13) keeps the banner away for the rest of its day.
+        if (cloud.wafflecommons.pixelbrainreader.data.games.GameNight.hidesShutdown(preferences.gameNightDay.firstOrNull(), today)) return@withContext null
         val handled = preferences.rolloverHandled.first()
         ShutdownState(
             day = today,

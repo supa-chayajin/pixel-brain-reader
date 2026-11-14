@@ -24,7 +24,8 @@ class DailyDashboardRepositoryTimelineTest {
         widgetUpdateManager = mockk(relaxed = true),
         pushScheduler = mockk(relaxed = true),
         healthMetricsRepository = mockk(relaxed = true),
-        recoveryRepository = mockk(relaxed = true)
+        recoveryRepository = mockk(relaxed = true),
+        gameTimeline = dagger.Lazy { cloud.wafflecommons.pixelbrainreader.data.games.GameTimelineSource { emptyList() } }
     )
     private val date = LocalDate.of(2026, 10, 17)
 

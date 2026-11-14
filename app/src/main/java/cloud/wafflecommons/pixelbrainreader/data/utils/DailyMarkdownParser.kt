@@ -83,6 +83,8 @@ object DailyMarkdownParser {
                     val match = timelineRegex.find(line)
                     if (match != null) {
                         val (timeStr, text) = match.destructured
+                        // A game line is derived from the games data at each burn: never board content.
+                        if (DailyMarkers.isGameLine(text)) return@forEach
                         // Pull the googleEventId back out of its invisible marker (and strip
                         // it from the visible content) so the row stays Calendar-reclaimable.
                         val (cleanContent, googleEventId) = DailyMarkers.stripCalendarMarker(text)

@@ -63,6 +63,8 @@ import androidx.compose.material.icons.rounded.Visibility
 
 import androidx.compose.material.icons.rounded.Psychology
 import androidx.compose.material.icons.rounded.RocketLaunch
+import androidx.compose.material.icons.rounded.SportsEsports
+import cloud.wafflecommons.pixelbrainreader.ui.games.gamesDestinations
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.DateRange
 import androidx.compose.material.icons.rounded.Search
@@ -150,8 +152,8 @@ internal val ExpressiveNavBarClearance: Dp
 /**
  * Material 3 Expressive floating navigation bar modeled on the new Google Finance
  * app: a rounded floating group of regular tabs + a separate, emphasized "Daily"
- * button (Finance's "Ask" equivalent). Folded shows Repo/Habits/Chores; unfolded
- * reveals all. The active tab shows a spring-animated pill behind its icon.
+ * button (Finance's "Ask" equivalent). Folded shows the first four tabs of the user's order;
+ * unfolded reveals all. The active tab shows a spring-animated pill behind its icon.
  */
 @Composable
 private fun ExpressiveNavBar(
@@ -164,9 +166,10 @@ private fun ExpressiveNavBar(
 ) {
     val navShadowColor = navShadowColor()
 
-    // First three = the folded set (Repo, Habits, Chores). Unfolded reveals the rest.
+    // The first four of the user's order = the folded set (four since 12.17, owner's D9: Games made
+    // eight tabs, and three left too many out of reach). Unfolded reveals the rest.
     val ordered = navDestinations(currentRoute, isViewingDailyNote, order)
-    val regular = if (isLargeScreen) ordered else ordered.take(3)
+    val regular = if (isLargeScreen) ordered else ordered.take(FOLDED_TABS)
     val dailySelected = currentRoute == Screen.DailyNote
 
     Row(
@@ -394,9 +397,20 @@ private fun navDestinations(currentRoute: String?, isViewingDailyNote: Boolean, 
                 Icons.Rounded.RocketLaunch,
                 "Projects",
                 currentRoute == V11Routes.PROJECTS || currentRoute == V11Routes.PROJECT
+            ),
+            // 12.17 (RFC-009): lit on a game's page too.
+            NavDest(
+                cloud.wafflecommons.pixelbrainreader.ui.games.GamesRoutes.GAMES,
+                Icons.Rounded.SportsEsports,
+                "Games",
+                currentRoute == cloud.wafflecommons.pixelbrainreader.ui.games.GamesRoutes.GAMES ||
+                    currentRoute == cloud.wafflecommons.pixelbrainreader.ui.games.GamesRoutes.GAME
             )
         )
     ) { it.route }
+
+/** How many tabs the floating bar shows below 600 dp (the folded phone). */
+private const val FOLDED_TABS = 4
 
 /** Corner radius of the nav surfaces; the selection pill sits [NavInnerPad] inside it. */
 private val NavBarRadius = 28.dp
@@ -1353,6 +1367,7 @@ fun MainScreen(
                     onBack = { navController.popBackStack() },
                     onNavigateToDailyLayout = { navController.navigate("daily_layout") },
                     onNavigateToFeeds = { navController.navigate("watch_feeds") },
+                    onNavigateToPsn = { navController.navigate(cloud.wafflecommons.pixelbrainreader.ui.games.GamesRoutes.PSN) },
                     onNavigateToHabitConfig = { navController.navigate("habit_config") },
                     onNavigateToHomeConfig = { navController.navigate(Screen.ROUTE_HOME_CONFIG) },
                     onNavigateToReminders = { navController.navigate("reminders") },
@@ -1460,6 +1475,7 @@ fun MainScreen(
                     onOpenChores = { navigateToTab(Screen.HomeOS) },
                     onOpenReader = { navController.navigate(Screen.Import) },
                     onOpenMeetingPrep = { id -> navController.navigate(V11Routes.meetingPrep(id)) },
+                    onOpenGame = { path -> navController.navigate(cloud.wafflecommons.pixelbrainreader.ui.games.GamesRoutes.game(path)) },
                     onOpenSyncConflicts = { navController.navigate(V11Routes.SYNC_CONFLICTS) },
                     onOpenInbox = { navController.navigate(V11Routes.INBOX) }
                 )
@@ -1499,6 +1515,9 @@ fun MainScreen(
                     onNavigateBack = { navController.popBackStack() }
                 )
             }
+
+            // Games (12.17, RFC-009): the tab, a game's page, the PlayStation settings.
+            gamesDestinations(navController, openNote = { path -> viewModel.openVaultFile(path) })
 
             v11Destinations(
                 navController,

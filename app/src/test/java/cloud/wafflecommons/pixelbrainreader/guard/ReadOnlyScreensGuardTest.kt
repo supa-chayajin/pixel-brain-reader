@@ -37,7 +37,11 @@ class ReadOnlyScreensGuardTest {
         "ui/work/ProjectsScreen.kt",
         // The tabs
         "ui/lifeos/HabitDashboardScreen.kt",
-        "ui/homeos/ChoreDashboardScreen.kt"
+        "ui/homeos/ChoreDashboardScreen.kt",
+        // Games (12.17, RFC-009)
+        "ui/games/GamesScreen.kt",
+        "ui/games/GamePageScreen.kt",
+        "ui/games/PsnSettingsScreen.kt"
     )
 
     /** Pages that handled it before 12.15 in their own words, and controls that only hide. */

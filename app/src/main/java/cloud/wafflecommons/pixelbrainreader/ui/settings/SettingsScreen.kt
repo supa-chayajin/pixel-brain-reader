@@ -60,6 +60,7 @@ import androidx.compose.material.icons.rounded.Work
 import androidx.compose.material.icons.rounded.DateRange
 import androidx.compose.material.icons.rounded.Mood
 import androidx.compose.material.icons.rounded.RssFeed
+import androidx.compose.material.icons.rounded.SportsEsports
 import androidx.compose.material.icons.rounded.SyncProblem
 import androidx.compose.material.icons.rounded.ViewAgenda
 import androidx.health.connect.client.records.StepsRecord
@@ -85,6 +86,7 @@ fun SettingsScreen(
     onBack: () -> Unit,
     onNavigateToDailyLayout: () -> Unit = {},
     onNavigateToFeeds: () -> Unit = {},
+    onNavigateToPsn: () -> Unit = {},
     onNavigateToHabitConfig: () -> Unit = {},
     onNavigateToHomeConfig: () -> Unit = {},
     onNavigateToReminders: () -> Unit = {},
@@ -307,6 +309,20 @@ fun SettingsScreen(
                     supportingContent = { Text("The feeds behind the Daily screen's Tech watch, kept in your vault") }
                 ) {
                     Text("Tech watch feeds")
+                }
+
+                // 12.17 (RFC-009): only in a build that carries the PlayStation client (D10).
+                if (cloud.wafflecommons.pixelbrainreader.BuildConfig.PSN_CLIENT_ID.isNotBlank()) {
+                    ListItem(
+                        modifier = Modifier.clickable {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onNavigateToPsn()
+                        },
+                        leadingContent = { Icon(Icons.Rounded.SportsEsports, contentDescription = null) },
+                        supportingContent = { Text("Play time and trophies for Games, synced each night; game nights") }
+                    ) {
+                        Text("PlayStation Network")
+                    }
                 }
             }
             }

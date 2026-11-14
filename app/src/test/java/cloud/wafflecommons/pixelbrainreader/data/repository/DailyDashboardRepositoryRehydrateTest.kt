@@ -97,6 +97,8 @@ class DailyDashboardRepositoryRehydrateTest {
         val recoveryRepository: RecoveryRepository = mockk {
             coEvery { history(any(), any()) } returns RecoveryHistory(emptyList(), needsPermission = false)
         }
+        /** The day's game lines the burn derives (12.17). */
+        var gameLines: List<cloud.wafflecommons.pixelbrainreader.data.utils.TimelineLine> = emptyList()
         val repository = DailyDashboardRepository(
             dashboardDao = dashboardDao,
             scratchDao = scratchDao,
@@ -107,7 +109,8 @@ class DailyDashboardRepositoryRehydrateTest {
             widgetUpdateManager = mockk(relaxed = true),
             pushScheduler = pushScheduler,
             healthMetricsRepository = healthMetricsRepository,
-            recoveryRepository = recoveryRepository
+            recoveryRepository = recoveryRepository,
+            gameTimeline = dagger.Lazy { cloud.wafflecommons.pixelbrainreader.data.games.GameTimelineSource { gameLines } }
         )
     }
 
@@ -451,5 +454,38 @@ class DailyDashboardRepositoryRehydrateTest {
         h.repository.burnToDisk(today)
 
         coVerify(exactly = 1) { h.pushScheduler.requestPush() }
+    }
+
+    @Test
+    fun `burnToDisk writes the day's game lines among the timeline and rehydrate keeps them out of Room`() = runTest {
+        val game = cloud.wafflecommons.pixelbrainreader.data.utils.TimelineLine(
+            LocalTime.of(10, 0), "🎮 A souls-like · 2 h 35 <!--game:A_Souls_Like-->"
+        )
+        val h = Harness()
+        h.gameLines = listOf(game)
+        val written = stubPopulatedBurn(h)
+
+        h.repository.burnToDisk(today)
+
+        val md = written.captured
+        // In time order, between the board's 09:00 and 11:30 entries.
+        assertTrue(md.contains(
+            "- 09:00 [Work] Standup <!--gcal:evt_google_1-->\n" +
+                "- 10:00 🎮 A souls-like · 2 h 35 <!--game:A_Souls_Like-->\n" +
+                "- 11:30 Local errand\n"
+        ))
+
+        val h2 = Harness()
+        coEvery { h2.dashboardDao.getDashboard(today) } returns null
+        coEvery { h2.fileRepository.readFile(journalPath) } returns md
+        val timelineSlot = slot<List<TimelineEntryEntity>>()
+        coEvery { h2.dashboardDao.ingestDailyData(any(), capture(timelineSlot), any()) } returns Unit
+        coEvery { h2.scratchDao.insertScrap(any()) } returns Unit
+        coEvery { h2.gratitudeDao.insertGratitude(any()) } returns Unit
+
+        h2.repository.rehydrateTodayFromDiskIfEmpty()
+
+        // The derived line never becomes a board entry: the next burn writes it from the games data again.
+        assertEquals(listOf("[Work] Standup", "Local errand"), timelineSlot.captured.sortedBy { it.time }.map { it.content })
     }
 }

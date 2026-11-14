@@ -243,8 +243,17 @@ class MainActivity : FragmentActivity() {
         // Long-press on one of our Quick Settings tiles: open that tile's screen.
         if (intent.action == android.service.quicksettings.TileService.ACTION_QS_TILE_PREFERENCES) {
             val tile = intent.getParcelableExtra(Intent.EXTRA_COMPONENT_NAME, android.content.ComponentName::class.java)
-            val screen = if (tile?.className?.endsWith(".MissionLogTileService") == true) WidgetNav.SCREEN_WORK else WidgetNav.SCREEN_MODES
+            val screen = when {
+                tile?.className?.endsWith(".MissionLogTileService") == true -> WidgetNav.SCREEN_WORK
+                tile?.className?.endsWith(".GameTileService") == true -> WidgetNav.SCREEN_GAMES
+                else -> WidgetNav.SCREEN_MODES
+            }
             pendingDestination = WidgetNav.screenToRoute(screen)
+        }
+
+        // Settings › Modes › Game night opens the app: it is that mode's configuration activity (12.17).
+        if (intent.action == android.app.NotificationManager.ACTION_AUTOMATIC_ZEN_RULE) {
+            pendingDestination = WidgetNav.screenToRoute(WidgetNav.SCREEN_GAMES)
         }
 
         // pixelbrain:// deep links. `import` is a PUBLIC, BROWSABLE entry point (any web page can

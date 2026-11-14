@@ -11,7 +11,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Inventory2
-import androidx.compose.material.icons.rounded.NextPlan
+import androidx.compose.material.icons.automirrored.rounded.NextPlan
 import androidx.compose.material.icons.rounded.WbTwilight
 import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
@@ -58,8 +58,8 @@ data class ModeOffer(val mode: ContextMode, val label: String)
 
 /**
  * The shutdown ritual's banner (D8, owner 2026-11-11): from 30 minutes before work ends on a work
- * day until the day is closed, re-read on a day change, a return to the app, a task handled and a
- * mode change, and woken at its start time. Nothing on a read-only device.
+ * day until the day is closed, re-read on a day change, a return to the app, a task handled, a
+ * mode change and a game night (12.17), and woken at its start time. Nothing on a read-only device.
  */
 @HiltViewModel
 class ShutdownViewModel @Inject constructor(
@@ -82,6 +82,7 @@ class ShutdownViewModel @Inject constructor(
         viewModelScope.launch { appClock.foregroundEvents.collect { reload() } }
         viewModelScope.launch { preferences.rolloverHandled.collect { reload() } }
         viewModelScope.launch { modesRepository.visibility.collect { reload() } }
+        viewModelScope.launch { preferences.gameNightDay.collect { reload() } }
     }
 
     fun reload() {
@@ -182,7 +183,7 @@ fun ShutdownBanner(
                         modifier = Modifier.weight(1f)
                     )
                     IconButton(onClick = { onTomorrow(task) }) {
-                        Icon(Icons.Rounded.NextPlan, contentDescription = "Tomorrow")
+                        Icon(Icons.AutoMirrored.Rounded.NextPlan, contentDescription = "Tomorrow")
                     }
                     IconButton(onClick = { onSomeday(task) }) {
                         Icon(Icons.Rounded.Inventory2, contentDescription = "Someday")

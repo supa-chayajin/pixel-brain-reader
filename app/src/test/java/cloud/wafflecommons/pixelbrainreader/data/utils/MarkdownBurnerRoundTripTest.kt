@@ -503,4 +503,60 @@ class MarkdownBurnerRoundTripTest {
         assertTrue(parsed.tasks.all { it.scheduledDate == dateStr })
         assertTrue(parsed.timeline.all { it.date == date })
     }
+
+    // ---------------------------------------------------------------------------------
+    // 12.17: game lines, derived from the games data at each burn (RFC-009)
+    // ---------------------------------------------------------------------------------
+
+    private val gameLines = listOf(
+        TimelineLine(LocalTime.of(10, 0), "🎮 A souls-like · 2 h 35 <!--game:A_Souls_Like-->"),
+        TimelineLine(LocalTime.of(21, 5), "🎮 An open world · 45 min <!--game:An_Open_World-->")
+    )
+
+    @Test
+    fun `game lines are burned in time order among the timeline and nothing of them enters the board`() {
+        val md = MarkdownBurner.burn(dashboard, timeline, tasks, scraps, gratitudes, "", emptyList(), gameLines)
+        val section = md.substringAfter("## 🗓️ Timeline\n\n").substringBefore("\n\n")
+        assertEquals(
+            listOf(
+                "- 09:00 [Work] Standup <!--gcal:evt_google_1-->",
+                "- 10:00 🎮 A souls-like · 2 h 35 <!--game:A_Souls_Like-->",
+                "- 11:15 Local errand",
+                "- 14:30 Réunion équipe (unicode) <!--gcal:evt_google_2-->",
+                "- 21:05 🎮 An open world · 45 min <!--game:An_Open_World-->"
+            ),
+            section.lines()
+        )
+        assertEquals(boardOf(DailyMarkdownParser.parse(date, burnMaximal())), boardOf(DailyMarkdownParser.parse(date, md)))
+    }
+
+    @Test
+    fun `burn parse burn with game lines is byte-identical`() {
+        val burn1 = MarkdownBurner.burn(dashboard, timeline, tasks, scraps, gratitudes, "", emptyList(), gameLines)
+        val parsed = DailyMarkdownParser.parse(date, burn1)
+        val dashboard2 = DailyDashboardEntity(date = date, ideasContent = parsed.ideas, notesContent = parsed.notes)
+        val burn2 = MarkdownBurner.burn(
+            dashboard2, parsed.timeline, parsed.tasks,
+            parsed.scraps.map { ScratchNoteEntity(content = it) },
+            parsed.gratitude.map { GratitudeEntity(date = dateStr, content = it) },
+            "", emptyList(), gameLines
+        )
+        assertEquals(burn1, burn2)
+    }
+
+    @Test
+    fun `a day with only game lines burns them instead of No events`() {
+        val empty = DailyDashboardEntity(date = date)
+        val md = MarkdownBurner.burn(empty, emptyList(), emptyList(), derivedTimeline = gameLines.take(1))
+        assertTrue(md.contains("## 🗓️ Timeline\n\n- 10:00 🎮 A souls-like · 2 h 35 <!--game:A_Souls_Like-->\n\n"))
+        assertFalse(md.contains("*No events*"))
+        assertTrue(DailyMarkdownParser.parse(date, md).timeline.isEmpty())
+    }
+
+    @Test
+    fun `a user's own line naming a game has no marker and stays on the board`() {
+        val mine = TimelineEntryEntity(date = date, time = LocalTime.of(20, 0), content = "🎮 Played with a friend")
+        val md = MarkdownBurner.burn(dashboard, listOf(mine), emptyList(), derivedTimeline = gameLines)
+        assertEquals(listOf("🎮 Played with a friend"), DailyMarkdownParser.parse(date, md).timeline.map { it.content })
+    }
 }

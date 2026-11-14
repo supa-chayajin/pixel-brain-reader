@@ -50,6 +50,13 @@ android {
             "\"${localProperties.getProperty("githubOauthClientId", "")}\""
         )
 
+        // PlayStation Network (12.17, RFC-009, owner's D10): the PlayStation App's public client id
+        // and secret, as the open-source PSN libraries publish them, kept in local.properties as
+        // `psnClientId=...` and `psnClientSecret=...` so this public repository doesn't carry Sony's
+        // app credentials. Empty by default → the PSN row is hidden and Games works by hand.
+        buildConfigField("String", "PSN_CLIENT_ID", "\"${localProperties.getProperty("psnClientId", "")}\"")
+        buildConfigField("String", "PSN_CLIENT_SECRET", "\"${localProperties.getProperty("psnClientSecret", "")}\"")
+
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary = true

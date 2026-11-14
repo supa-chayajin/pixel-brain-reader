@@ -91,6 +91,8 @@ fun DailyNoteScreen(
     onOpenChores: () -> Unit = {},
     onOpenReader: () -> Unit = {},
     onOpenMeetingPrep: (String) -> Unit = {},
+    /** A game line's page (12.17, RFC-009). */
+    onOpenGame: (String) -> Unit = {},
     onOpenSyncConflicts: () -> Unit = {},
     viewModel: DailyNoteViewModel = hiltViewModel(),
     modesViewModel: cloud.wafflecommons.pixelbrainreader.ui.modes.ModesViewModel = hiltViewModel(),
@@ -107,6 +109,7 @@ fun DailyNoteScreen(
     weeklyPlanViewModel: WeeklyPlanViewModel = hiltViewModel(),
     shutdownViewModel: ShutdownViewModel = hiltViewModel(),
     focusViewModel: FocusViewModel = hiltViewModel(),
+    gamesViewModel: DailyGamesViewModel = hiltViewModel(),
     syncConflictViewModel: cloud.wafflecommons.pixelbrainreader.ui.sync.PendingConflictViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -162,6 +165,18 @@ fun DailyNoteScreen(
 
     var showAddTimelineDialog by remember { mutableStateOf(false) }
     var editTimelineEntry by remember { mutableStateOf<TimelineEntryEntity?>(null) }
+    // The day's game lines (12.17): shown among the board's entries, never part of the board.
+    val gameRows by gamesViewModel.rows.collectAsStateWithLifecycle()
+    LaunchedEffect(state.date) { gamesViewModel.show(state.date) }
+    val timelineEvents = state.timelineEvents + gameRows
+    val onTimelineTap: (TimelineEntryEntity) -> Unit = { entry ->
+        when {
+            DailyGamesViewModel.isGameRow(entry) -> onOpenGame(DailyGamesViewModel.pageOf(entry))
+            entry.googleEventId != null -> onOpenMeetingPrep(entry.id)
+            // A read-only device edits no entry (12.15, S2).
+            !VaultWriteGate.readOnly -> editTimelineEntry = entry
+        }
+    }
     var showAddTaskDialog by remember { mutableStateOf(false) }
     var showFocusDialog by remember { mutableStateOf(false) }
     val focusSession by focusViewModel.session.collectAsStateWithLifecycle()
@@ -550,16 +565,7 @@ fun DailyNoteScreen(
                                     Column {
                                         TimelineHeader()
                                         Spacer(Modifier.height(8.dp))
-                                        TimelineList(
-                                            events = state.timelineEvents,
-                                            onEdit = { entry ->
-                                                when {
-                                                    entry.googleEventId != null -> onOpenMeetingPrep(entry.id)
-                                                    // A read-only device edits no entry (12.15, S2).
-                                                    !VaultWriteGate.readOnly -> editTimelineEntry = entry
-                                                }
-                                            }
-                                        )
+                                        TimelineList(events = timelineEvents, onEdit = onTimelineTap)
                                     }
                                 }
                             }
@@ -665,7 +671,7 @@ fun DailyNoteScreen(
                                             Column(modifier = Modifier.weight(0.4f)) {
                                                 TimelineHeader()
                                                 Spacer(Modifier.height(8.dp))
-                                                TimelineList(events = state.timelineEvents, onEdit = { entry -> if (entry.googleEventId != null) onOpenMeetingPrep(entry.id) else editTimelineEntry = entry })
+                                                TimelineList(events = timelineEvents, onEdit = onTimelineTap)
                                             }
                                             Column(modifier = Modifier.weight(0.6f)) {
                                                 JournalHeader()

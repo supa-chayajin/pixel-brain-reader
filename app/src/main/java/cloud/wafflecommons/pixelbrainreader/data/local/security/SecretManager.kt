@@ -38,6 +38,12 @@ class SecretManager @Inject constructor(
         private const val KEY_GOOGLE_EMAIL = "google_email"
         private const val KEY_GOOGLE_ACCESS_TOKEN = "google_access_token"
         private const val KEY_GOOGLE_TOKEN_EXPIRES_AT = "google_token_expires_at"
+
+        // 12.17: PlayStation Network tokens (RFC-009). The NPSSO itself is never stored.
+        private const val KEY_PSN_ACCESS = "psn_access_token"
+        private const val KEY_PSN_ACCESS_EXPIRES_AT = "psn_access_expires_at"
+        private const val KEY_PSN_REFRESH = "psn_refresh_token"
+        private const val KEY_PSN_REFRESH_EXPIRES_AT = "psn_refresh_expires_at"
     }
 
     // Everything Keystore-backed is created on FIRST USE, never at injection. SecretManager is
@@ -211,6 +217,37 @@ class SecretManager @Inject constructor(
         encryptedPrefs.edit {
             remove(KEY_GOOGLE_ACCESS_TOKEN)
             remove(KEY_GOOGLE_TOKEN_EXPIRES_AT)
+        }
+    }
+
+    // --- 12.17: PlayStation Network (RFC-009) ----------------------------------
+
+    fun savePsnTokens(tokens: cloud.wafflecommons.pixelbrainreader.data.games.psn.PsnTokens) {
+        encryptedPrefs.edit {
+            putString(KEY_PSN_ACCESS, tokens.access)
+            putLong(KEY_PSN_ACCESS_EXPIRES_AT, tokens.accessExpiresAt)
+            putString(KEY_PSN_REFRESH, tokens.refresh)
+            putLong(KEY_PSN_REFRESH_EXPIRES_AT, tokens.refreshExpiresAt)
+        }
+    }
+
+    fun getPsnTokens(): cloud.wafflecommons.pixelbrainreader.data.games.psn.PsnTokens? {
+        val access = encryptedPrefs.getString(KEY_PSN_ACCESS, null) ?: return null
+        val refresh = encryptedPrefs.getString(KEY_PSN_REFRESH, null) ?: return null
+        return cloud.wafflecommons.pixelbrainreader.data.games.psn.PsnTokens(
+            access = access,
+            accessExpiresAt = encryptedPrefs.getLong(KEY_PSN_ACCESS_EXPIRES_AT, 0L),
+            refresh = refresh,
+            refreshExpiresAt = encryptedPrefs.getLong(KEY_PSN_REFRESH_EXPIRES_AT, 0L)
+        )
+    }
+
+    fun clearPsnTokens() {
+        encryptedPrefs.edit {
+            remove(KEY_PSN_ACCESS)
+            remove(KEY_PSN_ACCESS_EXPIRES_AT)
+            remove(KEY_PSN_REFRESH)
+            remove(KEY_PSN_REFRESH_EXPIRES_AT)
         }
     }
 }

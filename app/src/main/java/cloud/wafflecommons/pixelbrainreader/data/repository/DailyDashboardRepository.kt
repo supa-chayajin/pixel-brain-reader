@@ -29,7 +29,9 @@ class DailyDashboardRepository @Inject constructor(
     private val widgetUpdateManager: cloud.wafflecommons.pixelbrainreader.widget.ui.WidgetUpdateManager,
     private val pushScheduler: cloud.wafflecommons.pixelbrainreader.data.sync.VaultPushScheduler,
     private val healthMetricsRepository: HealthMetricsRepository,
-    private val recoveryRepository: cloud.wafflecommons.pixelbrainreader.data.health.RecoveryRepository
+    private val recoveryRepository: cloud.wafflecommons.pixelbrainreader.data.health.RecoveryRepository,
+    /** The day's game lines (12.17, RFC-009): derived at each burn, never held by the board. */
+    private val gameTimeline: dagger.Lazy<cloud.wafflecommons.pixelbrainreader.data.games.GameTimelineSource>
 ) {
 
     // --- Live Data Access (Separated Sections) ---
@@ -151,6 +153,12 @@ class DailyDashboardRepository @Inject constructor(
         runCatching { widgetUpdateManager.scheduleSnapshotUpdate() }
     }
 
+    /**
+     * Makes sure [date] has a board, so its next burn writes the note even when nothing else was
+     * done that day (12.17: a day with only a game session still gets its Timeline line).
+     */
+    suspend fun ensureDay(date: LocalDate) = withContext(Dispatchers.IO) { ensureDashboard(date) }
+
     private suspend fun ensureDashboard(date: LocalDate) {
         if (dashboardDao.getDashboard(date) == null) {
             dashboardDao.insertDashboard(DailyDashboardEntity(date = date))
@@ -261,7 +269,8 @@ class DailyDashboardRepository @Inject constructor(
         // night's recovery verdict (Health Connect when it answers, else the vault's health files).
         val health = DailyHealthSection.lines(healthMetricsRepository.getMetrics(date), recoveryReadout(date))
 
-        val newContent = MarkdownBurner.burn(dashboard, timeline, tasks, activeScraps, gratitudes, frontmatter, health)
+        val games = gameLines(date)
+        val newContent = MarkdownBurner.burn(dashboard, timeline, tasks, activeScraps, gratitudes, frontmatter, health, games)
         fileRepository.saveFileLocally(path, newContent)
         // A change in the health lines alone requests no push (the health file never does): it goes
         // up with the next commit, so leaving the app after a step-count refresh adds no commit.
@@ -269,6 +278,16 @@ class DailyDashboardRepository @Inject constructor(
             pushScheduler.requestPush()
         }
     }
+
+    /** The day's game lines; none when the games data can't be read (the burn never fails for it). */
+    private suspend fun gameLines(date: LocalDate): List<cloud.wafflecommons.pixelbrainreader.data.utils.TimelineLine> =
+        try {
+            gameTimeline.get().linesFor(date)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            emptyList()
+        }
 
     private suspend fun recoveryReadout(date: LocalDate): cloud.wafflecommons.pixelbrainreader.data.health.RecoveryReadout? =
         try {

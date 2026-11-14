@@ -230,6 +230,44 @@ class UserPreferencesRepository @Inject constructor(
         context.dataStore.edit { preferences -> preferences[KEY_SHUTDOWN_CLOSED_DAY] = day.toString() }
     }
 
+    // --- Games (12.17, RFC-009): the running session ("startMillis|page"), the day a game night hid the
+    // shutdown banner, the "Game night" mode's rule id, and the last PSN sync's outcome. Device-only. ---
+    private val KEY_GAME_SESSION = stringPreferencesKey("game_session")
+    private val KEY_GAME_NIGHT_DAY = stringPreferencesKey("game_night_day")
+    private val KEY_GAME_NIGHT_RULE = stringPreferencesKey("game_night_rule")
+    private val KEY_PSN_STATUS = stringPreferencesKey("psn_status")
+
+    val gameSession: Flow<String?> = setting { it[KEY_GAME_SESSION] }
+
+    /** Keeps [encoded] as the running game session; null ends it. */
+    suspend fun setGameSession(encoded: String?) {
+        context.dataStore.edit { preferences ->
+            if (encoded == null) preferences.remove(KEY_GAME_SESSION) else preferences[KEY_GAME_SESSION] = encoded
+        }
+    }
+
+    val gameNightDay: Flow<String?> = setting { it[KEY_GAME_NIGHT_DAY] }
+
+    suspend fun setGameNightDay(day: java.time.LocalDate) {
+        context.dataStore.edit { preferences -> preferences[KEY_GAME_NIGHT_DAY] = day.toString() }
+    }
+
+    val gameNightRule: Flow<String?> = setting { it[KEY_GAME_NIGHT_RULE] }
+
+    suspend fun setGameNightRule(id: String?) {
+        context.dataStore.edit { preferences ->
+            if (id == null) preferences.remove(KEY_GAME_NIGHT_RULE) else preferences[KEY_GAME_NIGHT_RULE] = id
+        }
+    }
+
+    val psnStatus: Flow<String?> = setting { it[KEY_PSN_STATUS] }
+
+    suspend fun setPsnStatus(encoded: String?) {
+        context.dataStore.edit { preferences ->
+            if (encoded == null) preferences.remove(KEY_PSN_STATUS) else preferences[KEY_PSN_STATUS] = encoded
+        }
+    }
+
     // --- Review notifications (12.13): off by default, nothing notifies unless switched on ---
     private val KEY_REVIEW_NOTIFICATIONS = booleanPreferencesKey("review_notifications")
 
@@ -388,7 +426,8 @@ class UserPreferencesRepository @Inject constructor(
 
     companion object {
         /** Canonical order + membership of the reorderable regular nav destinations. */
-        // A tab added later joins the end of a saved order (see navBarOrder): "projects" came in 12.7.0.
-        val DEFAULT_NAVBAR_ORDER = listOf("home", "habits", "home_os", "chat", "mood", "stats", "projects")
+        // A tab added later joins the end of a saved order (see navBarOrder): "projects" came in 12.7.0,
+        // "games" in 12.17.0 (RFC-009, D4: the 8th, nothing existing moves).
+        val DEFAULT_NAVBAR_ORDER = listOf("home", "habits", "home_os", "chat", "mood", "stats", "projects", "games")
     }
 }
