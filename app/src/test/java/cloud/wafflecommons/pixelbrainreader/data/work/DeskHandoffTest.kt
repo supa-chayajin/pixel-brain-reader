@@ -66,4 +66,13 @@ class DeskHandoffTest {
         assertTrue(s.actions.isEmpty())
         assertTrue(s.recentNotes.none { DeskHandoffFormat.isHandoff(it.path) })
     }
+
+    @Test
+    fun `a text given with its kind is split, so sending types the prefix once`() {
+        assertEquals("question" to "Ring of Ash — ", DeskHandoffFormat.split("question: Ring of Ash — "))
+        assertEquals(null to "Look at this", DeskHandoffFormat.split("Look at this"))
+        assertEquals(null to "questions: plural", DeskHandoffFormat.split("questions: plural"))
+        val (kind, body) = DeskHandoffFormat.split("tâche: ship it")
+        assertEquals("tâche: ship it", DeskHandoffFormat.typed(kind, body))
+    }
 }

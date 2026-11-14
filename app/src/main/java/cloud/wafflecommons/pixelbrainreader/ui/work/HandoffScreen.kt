@@ -122,8 +122,9 @@ fun HandoffScreen(
     LaunchedEffect(Unit) { viewModel.messages.collect { snackbarHostState.showSnackbar(it) } }
 
     var root by rememberSaveable { mutableStateOf(initialRoot?.takeIf { it.isNotBlank() }) }
-    var kind by rememberSaveable { mutableStateOf<String?>(null) }
-    var text by rememberSaveable { mutableStateOf(initialText) }
+    // A text given with its kind ("question: …", from a game's Ask Claude) selects that chip.
+    var kind by rememberSaveable { mutableStateOf(DeskHandoffFormat.split(initialText).first) }
+    var text by rememberSaveable { mutableStateOf(DeskHandoffFormat.split(initialText).second) }
     val list = projects
     // The project holding what was given (a note's folder: its sub-project before its parent), else
     // the most recently active one.

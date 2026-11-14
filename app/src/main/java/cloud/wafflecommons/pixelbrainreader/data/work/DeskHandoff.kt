@@ -49,6 +49,16 @@ object DeskHandoffFormat {
     /** "question: Should we…" for a typed hand-off, the text alone otherwise. */
     fun typed(kind: String?, text: String): String = kind?.takeIf { it in KINDS }?.let { "$it: ${text.trim()}" } ?: text.trim()
 
+    /**
+     * The inverse of [typed] for a text handed to the composer (12.17: Ask Claude gives
+     * "question: <game> — "): its kind, and the text without the prefix, so the kind chip shows it and
+     * sending doesn't type it twice. A text without a known prefix has no kind.
+     */
+    fun split(text: String): Pair<String?, String> {
+        val kind = KINDS.firstOrNull { text.startsWith("$it: ") } ?: return null to text
+        return kind to text.removePrefix("$kind: ")
+    }
+
     /** One line, whatever was typed: line breaks would split the item. */
     fun line(at: LocalDateTime, text: String): String =
         "- [ ] ${at.format(stamp)} — ${text.replace(Regex("""\s*[\r\n]+\s*"""), " ").trim()}"
