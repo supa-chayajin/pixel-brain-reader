@@ -9,8 +9,11 @@ import cloud.wafflecommons.pixelbrainreader.data.local.entity.EmbeddingEntity
 /** Cheap fingerprint of the embeddings table: it changes whenever rows are added, replaced or removed. */
 data class EmbeddingTableSignature(val count: Int, val newest: Long?, val total: Long?)
 
-/** A stored chunk without its text, for similarity scoring. */
-data class EmbeddingVectorRow(val id: String, val fileId: String, val isPrivate: Boolean, val vector: List<Float>)
+/**
+ * A stored chunk's vector as the table keeps it (the floats joined by commas, `RoomTypeConverters`),
+ * without its text, and its row id: the search index reads the table a page at a time (12.19).
+ */
+data class EmbeddingVectorText(val rowId: Long, val id: String, val fileId: String, val isPrivate: Boolean, val vector: String?)
 
 /** A stored chunk's text. */
 data class EmbeddingContentRow(val id: String, val content: String)
@@ -55,8 +58,12 @@ interface EmbeddingDao {
     @Query("SELECT COUNT(*) AS count, MAX(lastUpdated) AS newest, SUM(lastUpdated) AS total FROM embeddings")
     suspend fun signature(): EmbeddingTableSignature
 
-    @Query("SELECT id, fileId, isPrivate, vector FROM embeddings")
-    suspend fun getAllVectors(): List<EmbeddingVectorRow>
+    /**
+     * The stored vectors after [afterRowId], in row order, [limit] at a time. Loading them all at once
+     * as `List<Float>`s ran the Fold out of memory during Measure retrieval (12.19).
+     */
+    @Query("SELECT rowid AS rowId, id, fileId, isPrivate, vector FROM embeddings WHERE rowid > :afterRowId ORDER BY rowid LIMIT :limit")
+    suspend fun vectorPage(afterRowId: Long, limit: Int): List<EmbeddingVectorText>
 
     @Query("SELECT id, content FROM embeddings WHERE id IN (:ids)")
     suspend fun getContents(ids: List<String>): List<EmbeddingContentRow>

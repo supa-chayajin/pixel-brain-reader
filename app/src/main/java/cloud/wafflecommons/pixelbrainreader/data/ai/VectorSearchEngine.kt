@@ -387,14 +387,36 @@ class VectorSearchEngine @Inject constructor(
         embedInternal(eng, text)
     }
 
-    /** The parsed vectors of every stored chunk, re-read only when the embeddings table changed. */
+    /**
+     * The parsed vectors of every stored chunk, re-read only when the embeddings table changed. Read
+     * [VECTOR_PAGE] rows at a time, each vector's text parsed straight into a FloatArray, the previous
+     * index dropped first, one path string per note. The whole table used to arrive at once as boxed
+     * `List<Float>`s (several KB a passage) next to the old index: Measure retrieval ran the Fold out
+     * of its 256 MB heap at the first question (12.19).
+     */
     private suspend fun loadChunkIndex(): List<IndexedChunk> = chunkIndexMutex.withLock {
         val signature = embeddingDao.signature()
         chunkIndex?.takeIf { it.signature == signature }?.let { return@withLock it.chunks }
 
-        val chunks = embeddingDao.getAllVectors().map { row ->
-            IndexedChunk(row.id, row.fileId, row.isPrivate, row.vector.toFloatArray())
+        chunkIndex = null
+        val chunks = ArrayList<IndexedChunk>(signature.count)
+        val paths = HashMap<String, String>()
+        var unreadable = 0
+        var after = 0L
+        while (true) {
+            val page = embeddingDao.vectorPage(after, VECTOR_PAGE)
+            for (row in page) {
+                val vector = VectorText.parse(row.vector)
+                if (vector == null) {
+                    unreadable++
+                    continue
+                }
+                chunks += IndexedChunk(row.id, paths.getOrPut(row.fileId) { row.fileId }, row.isPrivate, vector)
+            }
+            if (page.size < VECTOR_PAGE) break
+            after = page.last().rowId
         }
+        if (unreadable > 0) Log.w("RAG_DEBUG", "loadChunkIndex: $unreadable stored vector(s) unreadable, left out")
         chunkIndex = ChunkIndex(signature, chunks)
         chunks
     }
@@ -530,6 +552,9 @@ class VectorSearchEngine @Inject constructor(
 
         /** MiniLM-L12 hidden size; output of the L2-normalized mean-pool. */
         const val EMBED_DIM = 384
+
+        /** Stored vectors read per query when the index is (re)built. */
+        const val VECTOR_PAGE = 2_000
 
         /**
          * Measured with TFLite's benchmark_model on a Snapdragon 865 (4 big + 4 little cores, like
