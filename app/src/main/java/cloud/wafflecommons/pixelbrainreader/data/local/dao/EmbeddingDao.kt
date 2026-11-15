@@ -49,9 +49,6 @@ interface EmbeddingDao {
     @Query("UPDATE embeddings SET lastUpdated = :stamp WHERE fileId = :fileId AND lastUpdated < :stamp")
     suspend fun restamp(fileId: String, stamp: Long)
 
-    @Query("SELECT * FROM embeddings")
-    suspend fun getAllEmbeddings(): List<EmbeddingEntity>
-
     @Query("SELECT COUNT(*) FROM embeddings")
     suspend fun count(): Int
 
