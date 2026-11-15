@@ -94,6 +94,48 @@ object WidgetLiveData {
         ep.memoryEchoRepository().getEchoesForToday(forgottenLimit = 1, spacedLimit = 1).firstOrNull()
     } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
 
+    /**
+     * The Toolkit widget's day (E17). [shown] false outside Work mode (or while sharing the screen),
+     * when only [workLabel], the user's name for that mode, is shown.
+     */
+    data class ToolkitDay(
+        val workLabel: String,
+        val shown: Boolean,
+        val logToday: Int? = null,
+        val logLocked: Boolean = false,
+        val nextMeeting: String? = null,
+        val overload: String? = null
+    )
+
+    suspend fun toolkitDay(context: Context): ToolkitDay = try {
+        val ep = entryPoint(context)
+        // The mode from disk: a process the widget started still holds the default.
+        val visibility = ep.modesRepository().currentVisibility()
+        val workLabel = visibility.label(ContextMode.WORK)
+        if (visibility.workContextHidden) {
+            ToolkitDay(workLabel, shown = false)
+        } else {
+            val today = java.time.LocalDate.now()
+            var locked = false
+            val logToday = try {
+                ep.missionLogRepository().entriesBetween(today, today).size
+            } catch (e: cloud.wafflecommons.pixelbrainreader.data.privatevault.PrivateVaultLockedException) {
+                locked = true
+                null
+            }
+            val now = java.time.LocalTime.now()
+            val meeting = ep.dailyDashboardDao().getTimelineSnapshot(today)
+                .filter { it.googleEventId != null && it.time.isAfter(now) }
+                .minByOrNull { it.time }
+                ?.let { entry ->
+                    entry.time.format(java.time.format.DateTimeFormatter.ofPattern("HH:mm")) + " · " +
+                        cloud.wafflecommons.pixelbrainreader.data.meetings.MeetingPrep.topic(entry.content)
+                }
+            val overload = ep.loadRecoveryRepository().report().overload?.let { "+${it.loadIncreasePercent} % load this week" }
+            ToolkitDay(workLabel, shown = true, logToday = logToday, logLocked = locked, nextMeeting = meeting, overload = overload)
+        }
+    } catch (e: CancellationException) { throw e } catch (e: Exception) { ToolkitDay("Work", shown = false) }
+
     suspend fun activeProjects(context: Context, limit: Int): WidgetProjectList = try {
         val ep = entryPoint(context)
         // The mode from disk: a process the widget started still holds the default (every project).

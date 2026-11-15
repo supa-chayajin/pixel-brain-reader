@@ -208,6 +208,19 @@
                 android:resource="@xml/echo_widget_info" />
         </receiver>
 
+        <!-- Toolkit (E17, 12.20): today's log, the next meeting, the load signal; Work mode only -->
+        <receiver
+            android:name=".widget.ui.ToolkitWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_toolkit_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/toolkit_widget_info" />
+        </receiver>
+
         <!-- Projects: the most active projects and their next action -->
         <receiver
             android:name=".widget.ui.ProjectsWidgetReceiver"

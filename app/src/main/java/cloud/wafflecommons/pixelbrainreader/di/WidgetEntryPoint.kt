@@ -52,4 +52,9 @@ interface WidgetEntryPoint {
 
     /** Today's echo for the Echo widget (K6, 12.20). */
     fun memoryEchoRepository(): cloud.wafflecommons.pixelbrainreader.data.repository.MemoryEchoRepository
+
+    /** The Toolkit widget's day (E17, 12.20): the log, today's meetings, the load signal. */
+    fun missionLogRepository(): cloud.wafflecommons.pixelbrainreader.data.work.MissionLogRepository
+    fun dailyDashboardDao(): cloud.wafflecommons.pixelbrainreader.data.local.dao.DailyDashboardDao
+    fun loadRecoveryRepository(): cloud.wafflecommons.pixelbrainreader.data.work.LoadRecoveryRepository
 }
