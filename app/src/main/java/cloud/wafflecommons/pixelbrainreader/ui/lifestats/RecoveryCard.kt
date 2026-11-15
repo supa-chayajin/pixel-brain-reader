@@ -14,8 +14,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.MonitorHeart
+import androidx.compose.material3.Surface
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -96,66 +97,57 @@ fun RecoveryCard(viewModel: RecoveryViewModel = hiltViewModel()) {
         PermissionController.createRequestPermissionResultContract()
     ) { viewModel.refresh() }
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-    ) {
-        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Recovery", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                Text("last night", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            val readout = state.readout
-            if (state.loading || readout == null) {
-                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-            } else {
-                StatusLine(readout)
-                if (readout.status != RecoveryStatus.NO_DATA) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Metric(
-                            label = "Resting HR",
-                            value = readout.night?.restingHeartRate?.let { "$it bpm" },
-                            detail = readout.restingDelta?.let { delta ->
-                                "${signed(delta.roundToInt())} vs ${readout.restingBaseline!!.mean.roundToInt()}"
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
-                        Metric(
-                            label = "HRV",
-                            value = readout.night?.hrvMs?.let { "${it.roundToInt()} ms" },
-                            detail = readout.hrvDeltaPercent?.let { pct ->
-                                "${signed(pct.roundToInt())}% vs ${readout.hrvBaseline!!.mean.roundToInt()}"
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
-                        Metric(
-                            label = "Sleep",
-                            value = readout.night?.sleepMinutes?.let(::hoursMinutes),
-                            detail = readout.sleepBaseline?.let { "avg ${hoursMinutes(it.mean.roundToInt().toLong())}" },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-                readout.night?.stages?.let { StagesBar(it) }
-                val nights = maxOf(readout.restingBaseline?.nights ?: 0, readout.hrvBaseline?.nights ?: 0)
-                if (nights > 0) {
-                    Text(
-                        "Compared with your own last ${RecoveryMath.BASELINE_NIGHTS} nights ($nights measured). " +
-                            "More than one standard deviation from your norm counts as unusual.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+    StatsCard(title = "Recovery", icon = Icons.Rounded.MonitorHeart, accent = ChartPalette.HeartRate, trailing = "last night") {
+        val readout = state.readout
+        if (state.loading || readout == null) {
+            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        } else {
+            StatusLine(readout)
+            if (readout.status != RecoveryStatus.NO_DATA) {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Metric(
+                        label = "Resting HR",
+                        value = readout.night?.restingHeartRate?.let { "$it bpm" },
+                        detail = readout.restingDelta?.let { delta ->
+                            "${signed(delta.roundToInt())} vs ${readout.restingBaseline!!.mean.roundToInt()}"
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                    Metric(
+                        label = "HRV",
+                        value = readout.night?.hrvMs?.let { "${it.roundToInt()} ms" },
+                        detail = readout.hrvDeltaPercent?.let { pct ->
+                            "${signed(pct.roundToInt())}% vs ${readout.hrvBaseline!!.mean.roundToInt()}"
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                    Metric(
+                        label = "Sleep",
+                        value = readout.night?.sleepMinutes?.let(::hoursMinutes),
+                        detail = readout.sleepBaseline?.let { "avg ${hoursMinutes(it.mean.roundToInt().toLong())}" },
+                        modifier = Modifier.weight(1f)
                     )
                 }
             }
-            if (state.needsPermission) {
+            readout.night?.stages?.let { StagesBar(it) }
+            val nights = maxOf(readout.restingBaseline?.nights ?: 0, readout.hrvBaseline?.nights ?: 0)
+            if (nights > 0) {
                 Text(
-                    "Allow resting heart rate and heart rate variability in Health Connect to read your recovery.",
+                    "Compared with your own last ${RecoveryMath.BASELINE_NIGHTS} nights ($nights measured). " +
+                        "More than one standard deviation from your norm counts as unusual.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                FilledTonalButton(onClick = { permissionLauncher.launch(viewModel.permissions()) }) {
-                    Text("Allow in Health Connect")
-                }
+            }
+        }
+        if (state.needsPermission) {
+            Text(
+                "Allow resting heart rate and heart rate variability in Health Connect to read your recovery.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            FilledTonalButton(onClick = { permissionLauncher.launch(viewModel.permissions()) }) {
+                Text("Allow in Health Connect")
             }
         }
     }
@@ -179,13 +171,16 @@ private fun StatusLine(readout: RecoveryReadout) {
     }
 }
 
+/** One of last night's readings as a tile (12.21, D7). */
 @Composable
 private fun Metric(label: String, value: String?, detail: String?, modifier: Modifier = Modifier) {
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value ?: "not measured", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        if (detail != null) {
-            Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Surface(modifier = modifier, shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(value ?: "not measured", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            if (detail != null) {
+                Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
 }

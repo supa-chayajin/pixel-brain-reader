@@ -66,7 +66,7 @@ class HealthInsightsTest {
     @Test
     fun `rho reads in plain words`() {
         assertEquals("No clear link", HealthInsights.words(0.05))
-        assertEquals("Moderate: they rise together", HealthInsights.words(0.42))
-        assertEquals("Strong: one rises as the other falls", HealthInsights.words(-0.7))
+        assertEquals("Moderate · they rise together", HealthInsights.words(0.42))
+        assertEquals("Strong · they move opposite", HealthInsights.words(-0.7))
     }
 }

@@ -103,7 +103,7 @@ object HealthInsights {
         return cov / sqrt(varA * varB)
     }
 
-    /** ρ in plain words: how strongly, and which way. */
+    /** ρ in plain words, the strength bar's caption (12.21, D8): how strongly, and which way. */
     fun words(rho: Double): String {
         val size = abs(rho)
         val strength = when {
@@ -112,6 +112,6 @@ object HealthInsights {
             size < 0.5 -> "Moderate"
             else -> "Strong"
         }
-        return if (rho > 0) "$strength: they rise together" else "$strength: one rises as the other falls"
+        return "$strength · " + if (rho > 0) "they rise together" else "they move opposite"
     }
 }

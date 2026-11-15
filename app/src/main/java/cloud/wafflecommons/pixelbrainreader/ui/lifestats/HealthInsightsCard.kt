@@ -4,19 +4,24 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowForward
+import androidx.compose.material.icons.automirrored.rounded.DirectionsWalk
+import androidx.compose.material.icons.rounded.Bedtime
+import androidx.compose.material.icons.rounded.Insights
+import androidx.compose.material.icons.rounded.MonitorHeart
+import androidx.compose.material.icons.rounded.Mood
+import androidx.compose.material.icons.rounded.TaskAlt
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -60,52 +65,71 @@ class HealthInsightsViewModel @Inject constructor(
 }
 
 /**
- * How your measures move together over 90 days (L1, the owner's D10): each pair once it has 14
- * paired days, with N, in plain words, and the reminder that a correlation is not a cause.
+ * How your measures move together over 90 days (L1, the owner's D10), each pair as a strength bar
+ * (12.21, D8): its two icons, where ρ sits between −1 and +1, the words and N. Each pair shows
+ * from 14 paired days, and the card says a correlation is not a cause.
  */
 @Composable
 fun HealthInsightsCard(viewModel: HealthInsightsViewModel = hiltViewModel()) {
     val insights by viewModel.insights.collectAsStateWithLifecycle()
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+    StatsCard(
+        title = "Honest insights",
+        icon = Icons.Rounded.Insights,
+        accent = MaterialTheme.colorScheme.tertiary,
+        trailing = "${HealthInsights.WINDOW_DAYS} days"
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Honest insights", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                Text("${HealthInsights.WINDOW_DAYS} days", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        when (val list = insights) {
+            null -> Text("Reading your days…", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            else -> Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                list.forEach { InsightRow(it) }
             }
-            Spacer(Modifier.height(8.dp))
-            when (val list = insights) {
-                null -> Text("Reading your days…", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                else -> list.forEachIndexed { index, insight ->
-                    if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), modifier = Modifier.padding(vertical = 6.dp))
-                    InsightRow(insight)
-                }
-            }
-            Spacer(Modifier.height(10.dp))
-            Text(
-                "A correlation is not a cause: these say what moves together, never why.",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
         }
+        Text(
+            "A correlation is not a cause: these say what moves together, never why.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
 @Composable
 private fun InsightRow(insight: HealthInsights.Insight) {
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(insight.link.label, style = MaterialTheme.typography.bodyLarge)
-        val rho = insight.rho
+    val (from, to) = linkIcons(insight.link)
+    val rho = insight.rho?.takeIf { insight.enoughDays }
+    val positive = MaterialTheme.colorScheme.primary
+    val negative = MaterialTheme.colorScheme.tertiary
+    val caption = when {
+        !insight.enoughDays -> "Not enough days yet: ${insight.n} of ${HealthInsights.MIN_DAYS}"
+        rho == null -> "No variation to compare"
+        else -> HealthInsights.words(rho) + " · ρ " + String.format(Locale.ROOT, "%.2f", rho)
+    }
+    val iconTint = MaterialTheme.colorScheme.onSurfaceVariant
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(from, contentDescription = null, tint = iconTint, modifier = Modifier.size(18.dp))
+            Icon(Icons.AutoMirrored.Rounded.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(14.dp))
+            Icon(to, contentDescription = null, tint = iconTint, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(10.dp))
+            Text(insight.link.label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+            LabelChip("N ${insight.n}")
+        }
+        StrengthBar(rho = rho, positive = positive, negative = negative, description = "${insight.link.label}: $caption")
         Text(
-            text = when {
-                !insight.enoughDays -> "Not enough days yet: ${insight.n} of ${HealthInsights.MIN_DAYS}"
-                rho == null -> "No variation to compare · N = ${insight.n}"
-                else -> HealthInsights.words(rho) + " · ρ = " + String.format(Locale.ROOT, "%.2f", rho) + " · N = ${insight.n}"
-            },
+            caption,
             style = MaterialTheme.typography.bodySmall,
-            color = if (rho != null && insight.enoughDays) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+            color = when {
+                rho == null -> MaterialTheme.colorScheme.onSurfaceVariant
+                rho >= 0 -> readableOn(positive, MaterialTheme.colorScheme.surfaceContainer)
+                else -> readableOn(negative, MaterialTheme.colorScheme.surfaceContainer)
+            }
         )
     }
+}
+
+/** What comes first and what may follow, as icons. */
+private fun linkIcons(link: HealthInsights.Link): Pair<ImageVector, ImageVector> = when (link) {
+    HealthInsights.Link.SLEEP_MOOD -> Icons.Rounded.Bedtime to Icons.Rounded.Mood
+    HealthInsights.Link.STEPS_SLEEP -> Icons.AutoMirrored.Rounded.DirectionsWalk to Icons.Rounded.Bedtime
+    HealthInsights.Link.SLEEP_TASKS -> Icons.Rounded.Bedtime to Icons.Rounded.TaskAlt
+    HealthInsights.Link.MOOD_HRV -> Icons.Rounded.Mood to Icons.Rounded.MonitorHeart
 }

@@ -6,16 +6,23 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bedtime
-import androidx.compose.material.icons.filled.Checklist
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.LocalFireDepartment
-import androidx.compose.material.icons.filled.MilitaryTech
-import androidx.compose.material.icons.filled.Mood
-import androidx.compose.material.icons.filled.Speed
-import androidx.compose.material.icons.filled.Straighten
-import androidx.compose.material.icons.filled.Timer
-import androidx.compose.material.icons.filled.Whatshot
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.automirrored.rounded.ShowChart
+import androidx.compose.material.icons.rounded.Bedtime
+import androidx.compose.material.icons.rounded.Checklist
+import androidx.compose.material.icons.rounded.DonutLarge
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.LocalFireDepartment
+import androidx.compose.material.icons.rounded.MilitaryTech
+import androidx.compose.material.icons.rounded.Mood
+import androidx.compose.material.icons.rounded.Speed
+import androidx.compose.material.icons.rounded.Straighten
+import androidx.compose.material.icons.rounded.TaskAlt
+import androidx.compose.material.icons.rounded.Timer
+import androidx.compose.material.icons.rounded.Today
+import androidx.compose.material.icons.rounded.Visibility
+import androidx.compose.material.icons.rounded.Whatshot
 import androidx.compose.material.icons.rounded.CleaningServices
 import androidx.compose.material.icons.rounded.DateRange
 import androidx.compose.material3.*
@@ -23,6 +30,7 @@ import androidx.compose.material3.LoadingIndicator
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -51,7 +59,6 @@ fun LifeStatsScreen(
 ) {
     val uiState by viewModel.finalUiState.collectAsStateWithLifecycle()
     val visibility by modesViewModel.visibility.collectAsStateWithLifecycle()
-    val sleepDuration by viewModel.sleepDurationState.collectAsStateWithLifecycle()
     val globalCompletion by viewModel.globalCompletionState.collectAsStateWithLifecycle()
     val syncState by viewModel.isSyncing.collectAsStateWithLifecycle()
     val isRefreshing = syncState is SyncState.Syncing
@@ -114,38 +121,14 @@ fun LifeStatsScreen(
                     item { MoodVsHeartRateChartCard(uiState.moodHistory) }
                     item { MoodSummaryCard(uiState) }
                     item { CompletionRingsCard(uiState, globalCompletion) }
-                    item { HabitsSummaryCard(uiState, sleepDuration) }
+                    item { HabitsSummaryCard(uiState) }
                 }
             }
         }
     }
 }
 
-@Composable
-private fun DashboardCard(title: String, trailing: String? = null, content: @Composable ColumnScope.() -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-    ) {
-        Column(modifier = Modifier.padding(20.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f)
-                )
-                if (trailing != null) {
-                    Text(text = trailing, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-            content()
-        }
-    }
-}
-
-// --- 1. RPG Hero (level / class / XP) ---
+// --- 1. RPG Hero (level / class / XP): the page's lead, in the primary container ---
 @OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun RpgHeroCard(uiState: LifeStatsUiState) {
@@ -158,23 +141,24 @@ private fun RpgHeroCard(uiState: LifeStatsUiState) {
     )
     Card(
         modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.extraLarge,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Surface(
-                    shape = MaterialTheme.shapes.medium,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(56.dp)
+                Box(
+                    modifier = Modifier
+                        .size(60.dp)
+                        .clip(MaterialShapes.Cookie9Sided.toShape())
+                        .background(MaterialTheme.colorScheme.primary),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            Icons.Default.MilitaryTech,
-                            contentDescription = "Level",
-                            tint = MaterialTheme.colorScheme.onPrimary,
-                            modifier = Modifier.size(32.dp)
-                        )
-                    }
+                    Icon(
+                        Icons.Rounded.MilitaryTech,
+                        contentDescription = "Level",
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(32.dp)
+                    )
                 }
                 Spacer(Modifier.width(16.dp))
                 Column(modifier = Modifier.weight(1f)) {
@@ -191,7 +175,7 @@ private fun RpgHeroCard(uiState: LifeStatsUiState) {
                     )
                 }
             }
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(18.dp))
             LinearProgressIndicator(
                 progress = { animatedXp },
                 modifier = Modifier.fillMaxWidth().height(10.dp),
@@ -209,7 +193,7 @@ private fun RpgHeroCard(uiState: LifeStatsUiState) {
     }
 }
 
-// --- 2. Today's vitals (a 2-col tile grid) ---
+// --- 2. Today's vitals: big numbers in tiles, two to a row ---
 @Composable
 private fun TodayVitalsCard(uiState: LifeStatsUiState) {
     val stepPct = if (uiState.stepGoal > 0)
@@ -218,19 +202,21 @@ private fun TodayVitalsCard(uiState: LifeStatsUiState) {
     val sleepM = uiState.todaySleepMinutes % 60
     val distFormatted = String.format(java.util.Locale.US, "%.1f", uiState.todayDistanceKm)
 
-    DashboardCard(title = "Today") {
+    StatsCard(title = "Today", icon = Icons.Rounded.Today, accent = ChartPalette.Distance) {
         val tiles = listOf(
-            VitalTile("Steps", "${uiState.todaySteps}", "$stepPct% of goal", Icons.Default.Speed, SemanticPalette.Success),
-            VitalTile("Distance", "$distFormatted km", null, Icons.Default.Straighten, ChartPalette.Distance),
-            VitalTile("Active", "${uiState.todayActiveMinutes} min", null, Icons.Default.Timer, ChartPalette.ActiveMinutes),
-            VitalTile("Calories", "${uiState.caloriesBurned} kcal", "burned", Icons.Default.LocalFireDepartment, ChartPalette.Calories),
-            VitalTile("Heart rate", "${uiState.avgHeartRate} BPM", null, Icons.Default.Favorite, ChartPalette.HeartRate),
-            VitalTile("Sleep", "${sleepH}h ${sleepM}m", null, Icons.Default.Bedtime, ChartPalette.Sleep),
+            VitalTile("Steps", "${uiState.todaySteps}", "$stepPct% of goal", Icons.Rounded.Speed, SemanticPalette.Success),
+            VitalTile("Distance", "$distFormatted km", null, Icons.Rounded.Straighten, ChartPalette.Distance),
+            VitalTile("Active", "${uiState.todayActiveMinutes} min", null, Icons.Rounded.Timer, ChartPalette.ActiveMinutes),
+            VitalTile("Calories", "${uiState.caloriesBurned} kcal", "burned", Icons.Rounded.LocalFireDepartment, ChartPalette.Calories),
+            VitalTile("Heart rate", "${uiState.avgHeartRate} bpm", null, Icons.Rounded.Favorite, ChartPalette.HeartRate),
+            VitalTile("Sleep", "${sleepH}h ${sleepM}m", null, Icons.Rounded.Bedtime, ChartPalette.Sleep),
         )
-        tiles.chunked(2).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
-                row.forEach { StatTile(Modifier.weight(1f), it) }
-                if (row.size == 1) Spacer(Modifier.weight(1f))
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            tiles.chunked(2).forEach { row ->
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                    row.forEach { StatsTile(it.label, it.value, it.icon, it.tint, Modifier.weight(1f), note = it.subtitle) }
+                    if (row.size == 1) Spacer(Modifier.weight(1f))
+                }
             }
         }
     }
@@ -238,27 +224,10 @@ private fun TodayVitalsCard(uiState: LifeStatsUiState) {
 
 private data class VitalTile(val label: String, val value: String, val subtitle: String?, val icon: ImageVector, val tint: Color)
 
-@Composable
-private fun StatTile(modifier: Modifier, tile: VitalTile) {
-    Surface(modifier = modifier, shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surface) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(12.dp)) {
-            Icon(tile.icon, contentDescription = tile.label, tint = tile.tint, modifier = Modifier.size(28.dp))
-            Spacer(Modifier.width(10.dp))
-            Column {
-                Text(tile.label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(tile.value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                if (tile.subtitle != null) {
-                    Text(tile.subtitle, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-        }
-    }
-}
-
-// --- 3. Mood vs Heart Rate chart ---
+// --- 3. Mood and heart rate, side by side over the week ---
 @Composable
 private fun MoodVsHeartRateChartCard(moodHistory: List<LifeStatsMoodPoint>) {
-    DashboardCard(title = "Mood vs. Heart Rate (7d)") {
+    StatsCard(title = "Mood & heart rate", icon = Icons.AutoMirrored.Rounded.ShowChart, accent = ChartPalette.HeartRate, trailing = "7 days") {
         MoodTrendsCard(
             moodTrend = moodHistory.map {
                 DailyMoodPoint(date = it.date, score = it.score, emoji = it.emoji, avgBpm = it.avgBpm)
@@ -272,15 +241,15 @@ private fun MoodVsHeartRateChartCard(moodHistory: List<LifeStatsMoodPoint>) {
 private fun MoodSummaryCard(uiState: LifeStatsUiState) {
     val realDays = uiState.moodHistory.filter { it.score > 0f }
     val bestDay = realDays.maxByOrNull { it.score }
-    DashboardCard(title = "Mood") {
+    StatsCard(title = "Mood", icon = Icons.Rounded.Mood, accent = ChartPalette.Calories) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(uiState.avgMood7DaysEmoji, style = MaterialTheme.typography.displaySmall)
             Spacer(Modifier.width(20.dp))
             Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.weight(1f)) {
-                StatLine(Icons.Default.Mood, ChartPalette.Habits, "7-day average", String.format(java.util.Locale.US, "%.1f/5", uiState.avgMood7Days))
-                StatLine(Icons.Default.Mood, ChartPalette.Meditation, "30-day average", String.format(java.util.Locale.US, "%.1f/5", uiState.avgMood30Days))
+                StatLine(Icons.Rounded.Mood, ChartPalette.Habits, "7-day average", String.format(java.util.Locale.US, "%.1f/5", uiState.avgMood7Days))
+                StatLine(Icons.Rounded.Mood, ChartPalette.Meditation, "30-day average", String.format(java.util.Locale.US, "%.1f/5", uiState.avgMood30Days))
                 if (bestDay != null) {
-                    StatLine(Icons.Default.Whatshot, SemanticPalette.Success, "Best day", "${bestDay.emoji} ${String.format(java.util.Locale.US, "%.1f", bestDay.score)}")
+                    StatLine(Icons.Rounded.Whatshot, SemanticPalette.Success, "Best day", "${bestDay.emoji} ${String.format(java.util.Locale.US, "%.1f", bestDay.score)}")
                 }
             }
         }
@@ -290,7 +259,7 @@ private fun MoodSummaryCard(uiState: LifeStatsUiState) {
 @Composable
 private fun StatLine(icon: ImageVector, tint: Color, label: String, value: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
+        Icon(icon, contentDescription = null, tint = readableOn(tint, MaterialTheme.colorScheme.surfaceContainer), modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(10.dp))
         Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
         Text(value, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
@@ -302,7 +271,12 @@ private fun StatLine(icon: ImageVector, tint: Color, label: String, value: Strin
 private fun CompletionRingsCard(uiState: LifeStatsUiState, globalCompletion: Float) {
     val totalChores = uiState.criticalChoresCount + uiState.cleanChoresCount
     val choreRate = if (totalChores > 0) uiState.cleanChoresCount.toFloat() / totalChores.toFloat() else 0f
-    DashboardCard(title = "Productivity (7d)", trailing = "${(globalCompletion * 100).toInt()}% overall") {
+    StatsCard(
+        title = "Productivity",
+        icon = Icons.Rounded.DonutLarge,
+        accent = ChartPalette.Tasks,
+        trailing = "7 days · ${(globalCompletion * 100).toInt()}%"
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(contentAlignment = Alignment.Center, modifier = Modifier.size(150.dp)) {
                 ActivityRings(
@@ -324,24 +298,25 @@ private fun CompletionRingsCard(uiState: LifeStatsUiState, globalCompletion: Flo
 @Composable
 private fun LegendItem(label: String, color: Color, value: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Surface(color = color, shape = MaterialTheme.shapes.small, modifier = Modifier.size(12.dp)) {}
+        Surface(color = color, shape = CircleShape, modifier = Modifier.size(12.dp)) {}
         Spacer(Modifier.width(8.dp))
         Text(text = label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
         Text(text = value, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
     }
 }
 
-// --- 6. Habits summary (done today / best streak / active / chores breakdown) ---
+// --- 6. Habits and chores: today, streaks, what needs attention ---
 @Composable
-private fun HabitsSummaryCard(uiState: LifeStatsUiState, sleepDurationMinutes: Long) {
-    DashboardCard(title = "Habits & Chores") {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            StatLine(Icons.Default.Checklist, ChartPalette.Habits, "Done today", "${uiState.completedHabitsToday}/${uiState.scheduledHabitsToday}")
-            StatLine(Icons.Default.Whatshot, SemanticPalette.StreakAccent, "Best streak", "${uiState.bestHabitStreak} 🔥")
-            StatLine(Icons.Default.Checklist, MaterialTheme.colorScheme.primary, "Active habits", "${uiState.totalActiveHabits}")
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-            StatLine(Icons.Default.LocalFireDepartment, ChartPalette.HeartRate, "Critical chores", "${uiState.criticalChoresCount}")
-            StatLine(Icons.Default.LocalFireDepartment, SemanticPalette.Warning, "Chores to watch", "${uiState.warningChoresCount}")
+private fun HabitsSummaryCard(uiState: LifeStatsUiState) {
+    StatsCard(title = "Habits & chores", icon = Icons.Rounded.Checklist, accent = ChartPalette.Habits) {
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+            StatsTile("Done today", "${uiState.completedHabitsToday}/${uiState.scheduledHabitsToday}", Icons.Rounded.TaskAlt, ChartPalette.Habits, Modifier.weight(1f))
+            StatsTile("Best streak", "${uiState.bestHabitStreak}", Icons.Rounded.Whatshot, SemanticPalette.StreakAccent, Modifier.weight(1f))
+            StatsTile("Active", "${uiState.totalActiveHabits}", Icons.Rounded.Checklist, ChartPalette.Completion, Modifier.weight(1f))
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+            StatsTile("Critical chores", "${uiState.criticalChoresCount}", Icons.Rounded.LocalFireDepartment, ChartPalette.HeartRate, Modifier.weight(1f))
+            StatsTile("To watch", "${uiState.warningChoresCount}", Icons.Rounded.Visibility, SemanticPalette.Warning, Modifier.weight(1f))
         }
     }
 }
