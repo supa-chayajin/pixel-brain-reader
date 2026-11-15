@@ -299,7 +299,7 @@ owner asked for the same morning and the fixes of a full pre-release review.
 - [x] **K5 Related while writing.** *(12.20.0: chips on a phone, a side pane on a wide window, a tap links, a long-press opens)* The 3 notes closest to the current paragraph: a side pane when
       unfolded, chips when folded. Inference runs off the main thread, behind the inference lock.
       *(Oct 17 5.1.)*
-- [ ] **K6 Memory echoes v2.** An opt-in scope (`#review` or folders), SM-2-lite spacing kept in
+- [x] **K6 Memory echoes v2.** *(12.20.0: #review and picked folders, SM-2-lite in the vault, the Echo of the day widget)* An opt-in scope (`#review` or folders), SM-2-lite spacing kept in
       the vault, and an echo widget. *(Oct 17 2.5; V12 E8.)*
 
 ### Then — the work cockpit

@@ -83,6 +83,17 @@ object WidgetLiveData {
      * recently active, hidden ones left out — under the page's names, at most [limit]. The widget
      * shows as many as its height allows (`ProjectsWidgetLayout`).
      */
+    /**
+     * Today's first echo for the Echo widget (K6): a spaced one due first, else a forgotten one;
+     * null when there is none, or on any failure.
+     */
+    suspend fun echoOfTheDay(context: Context): cloud.wafflecommons.pixelbrainreader.data.model.MemoryEcho? = try {
+        val ep = entryPoint(context)
+        // The mode from disk: a process the widget started still holds the default (every folder).
+        ep.modesRepository().reload()
+        ep.memoryEchoRepository().getEchoesForToday(forgottenLimit = 1, spacedLimit = 1).firstOrNull()
+    } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
+
     suspend fun activeProjects(context: Context, limit: Int): WidgetProjectList = try {
         val ep = entryPoint(context)
         // The mode from disk: a process the widget started still holds the default (every project).

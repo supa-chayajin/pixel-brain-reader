@@ -14,6 +14,8 @@
     <string name="widget_today_label">Today\'s Tasks</string>
     <string name="widget_today_desc">See and tick off today\'s tasks in place.</string>
     <string name="widget_chores_label">Chores Due</string>
+    <string name="widget_echo_label">Echo of the day</string>
+    <string name="widget_echo_desc">A note to look at again today: your review notes first, then a forgotten one.</string>
     <string name="widget_projects_label">Projects</string>
     <string name="widget_projects_desc">Your projects, more as you make it taller, with their next action.</string>
     <string name="widget_chores_desc">Chores due today — mark them done and earn XP.</string>

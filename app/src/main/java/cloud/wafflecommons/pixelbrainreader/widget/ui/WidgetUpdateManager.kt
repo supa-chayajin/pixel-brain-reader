@@ -33,7 +33,8 @@ class WidgetUpdateManager @Inject constructor(
             TodayWidget(),
             ChoresWidget(),
             ProjectsWidget(),
-            QuickActionsWidget()
+            QuickActionsWidget(),
+            EchoWidget()
         )
 
     /**

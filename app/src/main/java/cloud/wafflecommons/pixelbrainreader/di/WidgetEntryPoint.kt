@@ -49,4 +49,7 @@ interface WidgetEntryPoint {
 
     /** The mood emoji set the Mood widget draws its buttons with. */
     fun gamificationPreferences(): GamificationPreferences
+
+    /** Today's echo for the Echo widget (K6, 12.20). */
+    fun memoryEchoRepository(): cloud.wafflecommons.pixelbrainreader.data.repository.MemoryEchoRepository
 }
