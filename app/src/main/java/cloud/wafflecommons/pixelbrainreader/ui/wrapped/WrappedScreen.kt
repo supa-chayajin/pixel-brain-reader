@@ -135,7 +135,8 @@ fun WrappedScreen(onNavigateBack: () -> Unit, viewModel: WrappedViewModel = hilt
                 modifier = Modifier.weight(1f)
             ) { page ->
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    WrappedCard(ready.cards[page], ready.faces, page, Modifier.fillMaxSize().widthIn(max = 560.dp))
+                    // The cap first: after fillMaxSize, the width is already fixed and widthIn can't narrow it.
+                    WrappedCard(ready.cards[page], ready.faces, page, Modifier.widthIn(max = 560.dp).fillMaxSize())
                 }
             }
             PageDots(count = ready.cards.size, current = pager.currentPage)
