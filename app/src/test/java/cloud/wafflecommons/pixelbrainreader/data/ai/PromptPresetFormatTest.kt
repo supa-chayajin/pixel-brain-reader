@@ -61,4 +61,14 @@ class PromptPresetFormatTest {
         val preset = PromptPresetFormat.parse("## Free\nAnswer however you like.").single()
         assertTrue(preset.systemPrompt.endsWith(AiLanguage.SYSTEM_DIRECTIVE))
     }
+
+    @Test
+    fun `a preset's title shows without its emojis, as the vault keeps it`() {
+        assertEquals("Boardroom", PromptPresetFormat.plainTitle("🏛️ Boardroom"))
+        assertEquals("Coach", PromptPresetFormat.plainTitle("🧭 Coach"))
+        assertEquals("Plan B", PromptPresetFormat.plainTitle("Plan ✨ B"))
+        assertEquals("Équipe d'été", PromptPresetFormat.plainTitle("Équipe d'été 👩‍💻"))
+        // Nothing but a pictograph: the title as it is.
+        assertEquals("🔥", PromptPresetFormat.plainTitle("🔥"))
+    }
 }

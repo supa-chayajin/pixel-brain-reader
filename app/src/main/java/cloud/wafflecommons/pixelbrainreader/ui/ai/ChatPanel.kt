@@ -57,6 +57,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cloud.wafflecommons.pixelbrainreader.data.ai.ChatScope
 import cloud.wafflecommons.pixelbrainreader.data.ai.NanoState
 import cloud.wafflecommons.pixelbrainreader.data.ai.PromptPreset
+import cloud.wafflecommons.pixelbrainreader.data.ai.PromptPresetFormat
 import cloud.wafflecommons.pixelbrainreader.data.ai.ThenVsNow
 import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
 import cloud.wafflecommons.pixelbrainreader.ui.components.rememberCopyToClipboard
@@ -276,7 +277,7 @@ fun ChatPanel(
                     hint = when {
                         activeScope != null -> "Ask about ${activeScope.label}..."
                         currentMode == ChatMode.ORACLE -> "Ask your Second Brain..."
-                        currentMode == ChatMode.PRESET -> "Message ${activePreset.title}..."
+                        currentMode == ChatMode.PRESET -> "Message ${PromptPresetFormat.plainTitle(activePreset.title)}..."
                         else -> "Spark a creative idea..."
                     },
                     accentColor = persona.accent,
@@ -328,7 +329,8 @@ private fun personaIcon(mode: ChatMode, preset: PromptPreset): ImageVector = whe
 
 private fun personaName(mode: ChatMode, preset: PromptPreset): String = when (mode) {
     ChatMode.ORACLE -> "Cortex"
-    ChatMode.PRESET -> preset.title
+    // The presets' tab, whichever preset is chosen (D9): the chosen one shows in its menu.
+    ChatMode.PRESET -> "Council"
     ChatMode.SCRIBE -> "Spark"
 }
 
@@ -759,7 +761,7 @@ fun BrainModeSwitch(
     var presetMenu by remember { mutableStateOf(false) }
     val modes = listOf(
         Triple(ChatMode.ORACLE, Icons.Rounded.Psychology, "Cortex"),
-        Triple(ChatMode.PRESET, if (activePreset.id == "boardroom") Icons.Rounded.Groups else Icons.Rounded.Tune, activePreset.title),
+        Triple(ChatMode.PRESET, if (activePreset.id == "boardroom") Icons.Rounded.Groups else Icons.Rounded.Tune, "Council"),
         Triple(ChatMode.SCRIBE, Icons.Rounded.AutoAwesome, "Spark")
     )
     Box {
@@ -798,7 +800,7 @@ fun BrainModeSwitch(
             DropdownMenuItem(
                 text = {
                     Column {
-                        Text(preset.title, style = MaterialTheme.typography.bodyLarge)
+                        Text(PromptPresetFormat.plainTitle(preset.title), style = MaterialTheme.typography.bodyLarge)
                         if (preset.description.isNotBlank()) {
                             Text(preset.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
@@ -1024,7 +1026,8 @@ fun EmptyStatePlaceholder(mode: ChatMode, preset: PromptPreset, persona: Persona
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(horizontal = 32.dp)) {
             val subtitle = when (mode) {
                 ChatMode.ORACLE -> "Ask anything: the answer comes from your Second Brain's notes, with its sources."
-                ChatMode.PRESET -> preset.description.ifBlank { "A preset from your vault" } +
+                ChatMode.PRESET -> PromptPresetFormat.plainTitle(preset.title) + ": " +
+                    preset.description.ifBlank { "a preset from your vault" } +
                     if (preset.useNotes) " · grounded in your notes" else ""
                 ChatMode.SCRIBE -> "Brainstorm freely with the on-device AI, away from your notes."
             }

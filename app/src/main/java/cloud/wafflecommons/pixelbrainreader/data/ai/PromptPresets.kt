@@ -108,6 +108,26 @@ object PromptPresetFormat {
         return if (end < 0) text else text.substring(end + 4).removePrefix("\n")
     }
 
+    /**
+     * A preset's title as the UI shows it (12.21, the owner's D9): its emojis and pictographs
+     * dropped, the spaces they leave folded ("🏛️ Boardroom" → "Boardroom"); the title as it is
+     * when nothing else is left. The vault's file keeps its titles.
+     */
+    fun plainTitle(title: String): String {
+        val kept = buildString {
+            var i = 0
+            while (i < title.length) {
+                val cp = title.codePointAt(i)
+                val type = Character.getType(cp)
+                val pictograph = type == Character.OTHER_SYMBOL.toInt() || type == Character.SURROGATE.toInt() ||
+                    cp == 0xFE0F || cp == 0x200D || cp in 0x1F3FB..0x1F3FF || cp in 0xE0020..0xE007F
+                if (!pictograph) appendCodePoint(cp)
+                i += Character.charCount(cp)
+            }
+        }
+        return kept.split(' ').filter { it.isNotBlank() }.joinToString(" ").ifBlank { title.trim() }
+    }
+
     /** "🏛️ Boardroom" → "boardroom": letters and digits, accents dropped. */
     internal fun slug(title: String): String {
         val ascii = Normalizer.normalize(title, Normalizer.Form.NFD).filter { it.code < 128 }
