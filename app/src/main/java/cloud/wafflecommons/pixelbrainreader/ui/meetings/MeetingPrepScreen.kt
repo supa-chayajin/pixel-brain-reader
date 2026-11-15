@@ -86,6 +86,7 @@ class MeetingPrepViewModel @Inject constructor(
     private val unlocker: PrivateVaultUnlocker,
     private val binding: VaultPasswordBinding,
     private val preferences: UserPreferencesRepository,
+    private val reminders: cloud.wafflecommons.pixelbrainreader.data.meetings.MeetingReminderScheduler,
     modesRepository: ModesRepository
 ) : ViewModel() {
 
@@ -204,6 +205,7 @@ class MeetingPrepViewModel @Inject constructor(
         val kind = person.note?.kind ?: return
         viewModelScope.launch {
             preferences.updatePersonLinks { PersonLinks.link(it, cloud.wafflecommons.pixelbrainreader.data.people.MeetingSeries.keyOf(eventId), person.id, kind) }
+            reminders.reschedule()
         }
     }
 
@@ -211,6 +213,7 @@ class MeetingPrepViewModel @Inject constructor(
         val eventId = (_state.value as? PrepState.Ready)?.prep?.entry?.googleEventId ?: return
         viewModelScope.launch {
             preferences.updatePersonLinks { PersonLinks.unlink(it, cloud.wafflecommons.pixelbrainreader.data.people.MeetingSeries.keyOf(eventId)) }
+            reminders.reschedule()
         }
     }
 

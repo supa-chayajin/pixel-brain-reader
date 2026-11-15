@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.rounded.CleaningServices
 import androidx.compose.material.icons.rounded.EditCalendar
+import androidx.compose.material.icons.rounded.Diversity3
 import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Mood
@@ -82,6 +83,7 @@ fun RemindersScreen(
     val checkInEnabled by viewModel.checkInEnabled.collectAsStateWithLifecycle()
     val checkInTime by viewModel.checkInTime.collectAsStateWithLifecycle()
     val meetingPrepEnabled by viewModel.meetingPrepEnabled.collectAsStateWithLifecycle()
+    val oneOnOneEnabled by viewModel.oneOnOneEnabled.collectAsStateWithLifecycle()
     val reviewNotificationsEnabled by viewModel.reviewNotificationsEnabled.collectAsStateWithLifecycle()
     val workLabel by viewModel.workLabel.collectAsStateWithLifecycle()
     val haptic = LocalHapticFeedback.current
@@ -157,6 +159,17 @@ fun RemindersScreen(
                     "about it. In $workLabel mode only; Do Not Disturb silences it.",
                 checked = meetingPrepEnabled,
                 onCheckedChange = viewModel::setMeetingPrepEnabled
+            ) {}
+
+            // --- 1:1 reminders (12.19) ---
+            ReminderSection(
+                icon = Icons.Rounded.Diversity3,
+                iconTint = MaterialTheme.colorScheme.tertiary,
+                title = "1:1 reminders",
+                subtitle = "Thirty minutes before a meeting you linked to a person in its prep, or one titled like a 1:1. " +
+                    "A work person's in $workLabel mode only; Do Not Disturb silences it.",
+                checked = oneOnOneEnabled,
+                onCheckedChange = viewModel::setOneOnOneEnabled
             ) {}
 
             // --- Weekly review & monthly reports (12.13) ---

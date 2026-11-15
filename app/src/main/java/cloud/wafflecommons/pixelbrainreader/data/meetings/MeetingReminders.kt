@@ -10,7 +10,9 @@ import cloud.wafflecommons.pixelbrainreader.data.local.dao.DailyDashboardDao
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.TimelineEntryEntity
 import cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
 import cloud.wafflecommons.pixelbrainreader.data.system.AppClock
+import cloud.wafflecommons.pixelbrainreader.data.people.PersonLinks
 import cloud.wafflecommons.pixelbrainreader.data.workers.MeetingPrepWorker
+import cloud.wafflecommons.pixelbrainreader.data.workers.OneOnOneReminderWorker
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -58,12 +60,14 @@ class MeetingReminderScheduler @Inject constructor(
     suspend fun reschedule() = withContext(Dispatchers.IO) {
         if (VaultWriteGate.readOnly) return@withContext
         val workManager = WorkManager.getInstance(context)
+        val entries = dashboardDao.getTimelineSnapshot(appClock.today.value)
+        val now = LocalDateTime.now()
+        rescheduleOneOnOnes(workManager, entries, now)
         if (!userPrefs.meetingPrepReminders.first()) {
             workManager.cancelAllWorkByTag(MeetingReminders.TAG)
             return@withContext
         }
-        val entries = dashboardDao.getTimelineSnapshot(appClock.today.value)
-        for (due in MeetingReminders.due(entries, LocalDateTime.now())) {
+        for (due in MeetingReminders.due(entries, now)) {
             workManager.enqueueUniqueWork(
                 MeetingReminders.workName(due.eventId),
                 ExistingWorkPolicy.REPLACE,
@@ -71,6 +75,30 @@ class MeetingReminderScheduler @Inject constructor(
                     .setInitialDelay(due.delayMs, TimeUnit.MILLISECONDS)
                     .setInputData(workDataOf(MeetingPrepWorker.KEY_EVENT to due.eventId))
                     .addTag(MeetingReminders.TAG)
+                    .build()
+            )
+        }
+    }
+
+    /**
+     * The 1:1 reminders (12.19, D6), on their own switch: one job per meeting still to come that is
+     * linked to a person or titled like a 1:1. A job whose meeting was unlinked since posts nothing:
+     * its worker checks again.
+     */
+    private suspend fun rescheduleOneOnOnes(workManager: WorkManager, entries: List<TimelineEntryEntity>, now: LocalDateTime) {
+        if (!userPrefs.oneOnOneReminders.first()) {
+            workManager.cancelAllWorkByTag(OneOnOneReminders.TAG)
+            return
+        }
+        val links = PersonLinks.decode(userPrefs.personLinks.first())
+        for (due in OneOnOneReminders.due(entries, links, now)) {
+            workManager.enqueueUniqueWork(
+                OneOnOneReminders.workName(due.eventId),
+                ExistingWorkPolicy.REPLACE,
+                OneTimeWorkRequestBuilder<OneOnOneReminderWorker>()
+                    .setInitialDelay(due.delayMs, TimeUnit.MILLISECONDS)
+                    .setInputData(workDataOf(OneOnOneReminderWorker.KEY_EVENT to due.eventId))
+                    .addTag(OneOnOneReminders.TAG)
                     .build()
             )
         }

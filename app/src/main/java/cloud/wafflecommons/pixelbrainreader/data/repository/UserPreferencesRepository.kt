@@ -230,6 +230,15 @@ class UserPreferencesRepository @Inject constructor(
         context.dataStore.edit { preferences -> preferences[KEY_MEETING_PREP_REMINDERS] = enabled }
     }
 
+    // --- The 1:1 reminder (12.19, D6): 30 minutes before, on by default ---
+    private val KEY_ONE_ON_ONE_REMINDERS = booleanPreferencesKey("one_on_one_reminders")
+
+    val oneOnOneReminders: Flow<Boolean> = setting { it[KEY_ONE_ON_ONE_REMINDERS] ?: true }
+
+    suspend fun setOneOnOneReminders(enabled: Boolean) {
+        context.dataStore.edit { preferences -> preferences[KEY_ONE_ON_ONE_REMINDERS] = enabled }
+    }
+
     // --- Weekly review (12.13, D6): the last week written, so a deleted note isn't written again ---
     private val KEY_WEEKLY_REVIEW_WRITTEN = stringPreferencesKey("weekly_review_written")
 

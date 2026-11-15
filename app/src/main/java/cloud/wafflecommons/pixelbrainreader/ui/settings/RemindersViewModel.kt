@@ -27,6 +27,17 @@ class RemindersViewModel @Inject constructor(
     val meetingPrepEnabled: StateFlow<Boolean> =
         userPrefs.meetingPrepReminders.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
+    /** The 1:1 reminder (12.19, D6): on until switched off. */
+    val oneOnOneEnabled: StateFlow<Boolean> =
+        userPrefs.oneOnOneReminders.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
+    fun setOneOnOneEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            userPrefs.setOneOnOneReminders(enabled)
+            meetingReminderScheduler.reschedule()
+        }
+    }
+
     /** The owner's name for Work mode, for the copy. */
     val workLabel: StateFlow<String> = modesRepository.visibility.map { it.workLabel }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), modesRepository.visibility.value.workLabel)

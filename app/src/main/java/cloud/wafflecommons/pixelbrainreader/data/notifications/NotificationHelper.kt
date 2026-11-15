@@ -32,6 +32,7 @@ object NotificationHelper {
     const val CHANNEL_WORK = "work_nudges"
     const val CHANNEL_CHECKIN = "evening_checkin"
     const val CHANNEL_REVIEWS = "reviews"
+    const val CHANNEL_ONE_ON_ONE = "one_on_one"
 
     // Groups both reminder channels under one "Reminders" category in system settings.
     private const val GROUP_REMINDERS = "reminders"
@@ -45,6 +46,7 @@ object NotificationHelper {
     private const val NOTIF_MONTHLY_REPORTS = 2007
     /** One per meeting: this base plus a hash of the entry, so two meetings never replace each other. */
     private const val NOTIF_MEETING_BASE = 2100
+    private const val NOTIF_ONE_ON_ONE_BASE = 4200
 
     fun ensureChannels(context: Context) {
         val nm = context.getSystemService(NotificationManager::class.java) ?: return
@@ -97,6 +99,16 @@ object NotificationHelper {
                 NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
                 description = "One minute at night: your mood, one line, one thing you're thankful for"
+                group = GROUP_REMINDERS
+            }
+        )
+        nm.createNotificationChannel(
+            NotificationChannel(
+                CHANNEL_ONE_ON_ONE,
+                "1:1 reminders",
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = "Thirty minutes before a meeting linked to a person, or titled like a 1:1"
                 group = GROUP_REMINDERS
             }
         )
@@ -212,6 +224,20 @@ object NotificationHelper {
         val builder = baseBuilder(context, CHANNEL_WORK, title = "$topic in 10 min", text = text)
             .setContentIntent(activityPending(context, 100 + slot, intent))
         notify(context, NOTIF_MEETING_BASE + slot, builder)
+    }
+
+    /**
+     * A 1:1 in 30 minutes (12.19, D6): the calendar's title only, never a name or a point from a
+     * People note (the lock screen shows it). Opens the prep, where the person's card unlocks.
+     */
+    fun postOneOnOne(context: Context, entryId: String, topic: String, linked: Boolean) {
+        ensureChannels(context)
+        val intent = WidgetNav.openIntent(context, WidgetNav.SCREEN_MEETING_PREP, entry = entryId)
+        val text = if (linked) "Your notes on them open in its prep" else "Link it to a person in its prep to see your notes"
+        val slot = entryId.hashCode() and 0x7FF
+        val builder = baseBuilder(context, CHANNEL_ONE_ON_ONE, title = "$topic in 30 min", text = text)
+            .setContentIntent(activityPending(context, 3000 + slot, intent))
+        notify(context, NOTIF_ONE_ON_ONE_BASE + slot, builder)
     }
 
     /**
