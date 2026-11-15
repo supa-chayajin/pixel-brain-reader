@@ -13,6 +13,7 @@ import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -255,19 +256,21 @@ fun FileDetailPane(
                             .padding(horizontal = 16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = fileName,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                        Spacer(Modifier.weight(1f))
+                        // The title gives way to the actions: measured after them, on one line.
+                        Text(
+                            text = fileName,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
                         if (filePath != null && content != null && !isReadOnly) {
                             VaultRulesBadge(path = filePath, content = content, onFix = onContentChange)
                         }
-                        if (onAskNote != null) {
+                        // Ask reads the note as saved: offered while reading; editing has the bulb.
+                        if (onAskNote != null && !isEditing) {
                             IconButton(onClick = onAskNote, modifier = Modifier.size(36.dp)) {
                                 Icon(
                                     imageVector = Icons.Rounded.QuestionAnswer,
@@ -625,34 +628,37 @@ private fun NoteEditor(
             .insertLink(editorValue.text, editorValue.selection.start, path)
         update(TextFieldValue(text, TextRange(caret)))
     }
-    val wide = cloud.wafflecommons.pixelbrainreader.ui.utils.isWideLayout()
-
-    Row(modifier.then(dropModifier)) {
-        Column(modifier = Modifier.weight(1f)) {
-            trigger?.let { active ->
-                EditorAssistBar(
-                    trigger = active,
-                    onEdit = { edit -> update(TextFieldValue(edit.text, TextRange(edit.caret))) },
-                    text = editorValue.text,
-                    caret = editorValue.selection.start
+    // The pane beside the text only when the editor itself has room for both: a wide window split
+    // with the file list doesn't, and the text would wrap at every word.
+    BoxWithConstraints(modifier.then(dropModifier)) {
+        val wide = maxWidth >= RELATED_PANE_WIDTH + RELATED_EDITOR_MIN_WIDTH
+        Row(Modifier.fillMaxSize()) {
+            Column(modifier = Modifier.weight(1f)) {
+                trigger?.let { active ->
+                    EditorAssistBar(
+                        trigger = active,
+                        onEdit = { edit -> update(TextFieldValue(edit.text, TextRange(edit.caret))) },
+                        text = editorValue.text,
+                        caret = editorValue.selection.start
+                    )
+                }
+                if (!wide && trigger == null && related.enabled && relatedNotes.isNotEmpty()) {
+                    RelatedChips(paths = relatedNotes, onLink = linkHere, onOpen = related.onOpenNote)
+                }
+                cloud.wafflecommons.pixelbrainreader.ui.components.ComposeCortexEditor(
+                    value = editorValue,
+                    onValueChange = ::update,
+                    modifier = Modifier.weight(1f).fillMaxWidth()
                 )
             }
-            if (!wide && trigger == null && related.enabled && relatedNotes.isNotEmpty()) {
-                RelatedChips(paths = relatedNotes, onLink = linkHere, onOpen = related.onOpenNote)
+            if (wide && related.enabled) {
+                RelatedPane(
+                    paths = relatedNotes,
+                    onLink = linkHere,
+                    onOpen = related.onOpenNote,
+                    modifier = Modifier.padding(start = 16.dp).width(RELATED_PANE_WIDTH).fillMaxHeight()
+                )
             }
-            cloud.wafflecommons.pixelbrainreader.ui.components.ComposeCortexEditor(
-                value = editorValue,
-                onValueChange = ::update,
-                modifier = Modifier.weight(1f).fillMaxWidth()
-            )
-        }
-        if (wide && related.enabled) {
-            RelatedPane(
-                paths = relatedNotes,
-                onLink = linkHere,
-                onOpen = related.onOpenNote,
-                modifier = Modifier.padding(start = 16.dp).width(RELATED_PANE_WIDTH).fillMaxHeight()
-            )
         }
     }
 }
@@ -667,13 +673,24 @@ private class RelatedSupport(
 private const val RELATED_PAUSE_MS = 1_500L
 private val RELATED_PANE_WIDTH = 260.dp
 
+/** The text's own minimum beside the pane: below it, the related notes go to chips above the text. */
+private val RELATED_EDITOR_MIN_WIDTH = 480.dp
+
 /** A note as the related chips and pane name it: its title, then its folder as people say it. */
 private fun relatedTitle(path: String): Pair<String, String?> =
     cloud.wafflecommons.pixelbrainreader.data.editor.RelatedWriting.linkName(path) to
         path.substringBeforeLast('/', "").substringAfterLast('/').takeIf { it.isNotEmpty() }
             ?.let { folder -> cloud.wafflecommons.pixelbrainreader.data.work.projectDisplayName(folder) }
 
-/** Related notes above the editor on a phone or a folded screen (K5). */
+/** A chip's label: a note named by its date (a daily note, a worklog) also says its folder. */
+private fun relatedChipLabel(path: String): String {
+    val (title, folder) = relatedTitle(path)
+    return if (folder != null && DATE_NAMED.matches(title)) "$title · $folder" else title
+}
+
+private val DATE_NAMED = Regex("""\d{4}-\d{2}-\d{2}.*""")
+
+/** Related notes above the editor, when it has no room for the pane beside it (K5). */
 @Composable
 private fun RelatedChips(paths: List<String>, onLink: (String) -> Unit, onOpen: (String) -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
@@ -687,7 +704,7 @@ private fun RelatedChips(paths: List<String>, onLink: (String) -> Unit, onOpen: 
         androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             items(paths.size) { index ->
                 val path = paths[index]
-                RelatedChip(title = relatedTitle(path).first, onLink = { onLink(path) }, onOpen = { onOpen(path) })
+                RelatedChip(title = relatedChipLabel(path), onLink = { onLink(path) }, onOpen = { onOpen(path) })
             }
         }
     }
@@ -715,7 +732,7 @@ private fun RelatedChip(title: String, onLink: () -> Unit, onOpen: () -> Unit) {
     }
 }
 
-/** Related notes beside the editor on a wide window (K5). */
+/** Related notes beside the editor, when it has room for both (K5). */
 @Composable
 private fun RelatedPane(paths: List<String>, onLink: (String) -> Unit, onOpen: (String) -> Unit, modifier: Modifier) {
     Surface(modifier = modifier, shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceContainerLow) {

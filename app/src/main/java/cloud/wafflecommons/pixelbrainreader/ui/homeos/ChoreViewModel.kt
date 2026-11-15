@@ -8,12 +8,14 @@ import cloud.wafflecommons.pixelbrainreader.data.local.entity.HomeRoomEntity
 import cloud.wafflecommons.pixelbrainreader.data.repository.ChoreRepository
 import cloud.wafflecommons.pixelbrainreader.data.sync.SyncOrchestrator
 import cloud.wafflecommons.pixelbrainreader.data.sync.SyncState
+import cloud.wafflecommons.pixelbrainreader.data.system.AppClock
 import cloud.wafflecommons.pixelbrainreader.domain.gamification.GrantXpUseCase
 import cloud.wafflecommons.pixelbrainreader.domain.homeos.CalculateChoreEntropyUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -27,7 +29,8 @@ class ChoreViewModel @Inject constructor(
     private val choreRepository: ChoreRepository,
     private val calculateChoreEntropyUseCase: CalculateChoreEntropyUseCase,
     private val grantXpUseCase: GrantXpUseCase,
-    private val syncOrchestrator: SyncOrchestrator
+    private val syncOrchestrator: SyncOrchestrator,
+    appClock: AppClock
 ) : ViewModel() {
 
     // Sorted and grouped by Room natively for the UI, carrying each room's identity colour.
@@ -107,8 +110,10 @@ class ChoreViewModel @Inject constructor(
 
     /** The 15-minute reset (E16): recomputed whenever a chore changes. */
     val resetPlan: StateFlow<cloud.wafflecommons.pixelbrainreader.domain.homeos.ChoreReset.Plan> =
-        choreRepository.getAllChoresStream()
-            .map { cloud.wafflecommons.pixelbrainreader.domain.homeos.ChoreReset.plan(it, LocalDate.now()) }
+        // Follows the day (AppClock): a screen left open over midnight re-plans for the new day.
+        combine(choreRepository.getAllChoresStream(), appClock.today) { chores, today ->
+            cloud.wafflecommons.pixelbrainreader.domain.homeos.ChoreReset.plan(chores, today)
+        }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), cloud.wafflecommons.pixelbrainreader.domain.homeos.ChoreReset.Plan.EMPTY)
 
     /** How long a chore takes (E16): set from the reset sheet's quick choices. */

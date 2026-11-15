@@ -55,8 +55,10 @@ fun ChoreDashboardScreen(
     var showReset by remember { mutableStateOf(false) }
     if (showReset) {
         val plan by viewModel.resetPlan.collectAsStateWithLifecycle()
+        val rooms by viewModel.allRooms.collectAsStateWithLifecycle()
         ChoreResetSheet(
             plan = plan,
+            roomNames = rooms.associate { it.id to it.name },
             readOnly = cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate.readOnly,
             onDone = viewModel::doChore,
             onSetMinutes = viewModel::setChoreMinutes,
@@ -362,6 +364,8 @@ fun EmptyChoreState(
 @Composable
 private fun ChoreResetSheet(
     plan: cloud.wafflecommons.pixelbrainreader.domain.homeos.ChoreReset.Plan,
+    /** Room id → name: the same chore often lives in several rooms. */
+    roomNames: Map<String, String>,
     readOnly: Boolean,
     onDone: (String) -> Unit,
     onSetMinutes: (String, Int) -> Unit,
@@ -385,7 +389,11 @@ private fun ChoreResetSheet(
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(chore.name, style = MaterialTheme.typography.bodyLarge)
-                        Text("${chore.minutes} min", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            listOfNotNull("${chore.minutes} min", roomNames[chore.roomId]).joinToString(" · "),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                     if (!readOnly) FilledTonalButton(onClick = { onDone(chore.id) }) { Text("Done") }
                 }
@@ -395,7 +403,12 @@ private fun ChoreResetSheet(
                 Text("Due, with no time yet: how long?", style = MaterialTheme.typography.labelLarge)
                 plan.withoutMinutes.forEach { chore ->
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                        Text(chore.name, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(chore.name, style = MaterialTheme.typography.bodyMedium)
+                            roomNames[chore.roomId]?.let { room ->
+                                Text(room, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
                         listOf(5, 10, 15).forEach { minutes ->
                             AssistChip(
                                 onClick = { onSetMinutes(chore.id, minutes) },

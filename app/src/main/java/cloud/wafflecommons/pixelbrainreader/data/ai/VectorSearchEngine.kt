@@ -14,6 +14,7 @@ import cloud.wafflecommons.pixelbrainreader.data.privatevault.PrivateVaultSessio
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -397,8 +398,12 @@ class VectorSearchEngine @Inject constructor(
      * index dropped first, one path string per note. The whole table used to arrive at once as boxed
      * `List<Float>`s (several KB a passage) next to the old index: Measure retrieval ran the Fold out
      * of its 256 MB heap at the first question (12.19).
+     *
+     * A reload runs to its end even when the search that asked for it is cancelled: Related while
+     * writing (K5) restarts its search at each pause in the typing, and a reload thrown away each
+     * time would never finish on a large vault. The next search then finds the index ready.
      */
-    private suspend fun loadChunkIndex(): List<IndexedChunk> = chunkIndexMutex.withLock {
+    private suspend fun loadChunkIndex(): List<IndexedChunk> = withContext(NonCancellable) { chunkIndexMutex.withLock {
         val signature = embeddingDao.signature()
         chunkIndex?.takeIf { it.signature == signature }?.let { return@withLock it.chunks }
 
@@ -423,7 +428,7 @@ class VectorSearchEngine @Inject constructor(
         if (unreadable > 0) Log.w("RAG_DEBUG", "loadChunkIndex: $unreadable stored vector(s) unreadable, left out")
         chunkIndex = ChunkIndex(signature, chunks)
         chunks
-    }
+    } }
 
     /**
      * Search for relevant notes using cosine similarity.
