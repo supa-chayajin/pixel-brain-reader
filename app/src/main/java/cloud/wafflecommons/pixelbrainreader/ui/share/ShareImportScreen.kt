@@ -46,6 +46,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -66,6 +67,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import cloud.wafflecommons.pixelbrainreader.data.ai.LocalAiManager
+import cloud.wafflecommons.pixelbrainreader.data.privacy.NetPurpose
+import cloud.wafflecommons.pixelbrainreader.data.privacy.PrivacyLedger
 import cloud.wafflecommons.pixelbrainreader.data.ai.NanoState
 import cloud.wafflecommons.pixelbrainreader.data.repository.VaultDiscoveryRepository
 import cloud.wafflecommons.pixelbrainreader.data.vault.VaultSchema
@@ -467,6 +470,11 @@ private fun PageBrowser(url: String, onImport: (html: String, url: String) -> Un
     var progress by remember { mutableIntStateOf(0) }
     var reading by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    // The privacy ledger (13.0, X3): the page shown here is one call, from open to close.
+    DisposableEffect(url) {
+        val token = PrivacyLedger.begin(PrivacyLedger.hostOf(url), NetPurpose.IMPORT)
+        onDispose { PrivacyLedger.end(token) }
+    }
     BackHandler {
         val view = holder.view
         if (view != null && view.canGoBack()) view.goBack() else onClose()

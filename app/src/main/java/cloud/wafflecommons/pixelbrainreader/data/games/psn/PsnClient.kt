@@ -1,5 +1,7 @@
 package cloud.wafflecommons.pixelbrainreader.data.games.psn
 
+import cloud.wafflecommons.pixelbrainreader.data.privacy.NetPurpose
+import cloud.wafflecommons.pixelbrainreader.data.privacy.PrivacyLedger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -31,6 +33,8 @@ interface PsnTransport {
 class OkHttpPsnTransport : PsnTransport {
 
     private val client = OkHttpClient.Builder()
+        // The privacy ledger (13.0, X3): hosts and bytes only, never a token.
+        .eventListenerFactory(PrivacyLedger.events(NetPurpose.GAMES))
         .followRedirects(false)
         .followSslRedirects(false)
         .connectTimeout(20, TimeUnit.SECONDS)

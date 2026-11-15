@@ -3,6 +3,7 @@ package cloud.wafflecommons.pixelbrainreader.data.watch
 import android.util.Log
 import androidx.room.withTransaction
 import cloud.wafflecommons.pixelbrainreader.data.local.AppDatabase
+import cloud.wafflecommons.pixelbrainreader.data.privacy.NetPurpose
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.NewsDao
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.NewsArticleEntity
 import cloud.wafflecommons.pixelbrainreader.data.modes.Visibility
@@ -90,7 +91,7 @@ class WatchRepository @Inject constructor(
 
     /** Null when the feed was read (its cached headlines replaced), else why it wasn't. */
     private suspend fun fetch(feed: Feed, now: Long): String? = try {
-        val xml = loader.download(feed.url).html
+        val xml = loader.download(feed.url, NetPurpose.WATCH).html
         val channel = RssParser().parse(xml)
         val articles = TechWatch.articlesOf(feed, channel.items.map { FeedItem(it.title, it.link, it.pubDate) }, now)
         if (articles.isNotEmpty()) {

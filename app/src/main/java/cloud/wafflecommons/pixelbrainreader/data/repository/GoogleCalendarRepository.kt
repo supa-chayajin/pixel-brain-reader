@@ -1,6 +1,8 @@
 package cloud.wafflecommons.pixelbrainreader.data.repository
 
 import cloud.wafflecommons.pixelbrainreader.data.modes.CalendarLeaves
+import cloud.wafflecommons.pixelbrainreader.data.privacy.NetPurpose
+import cloud.wafflecommons.pixelbrainreader.data.privacy.PrivacyLedger
 import android.util.Log
 import androidx.room.withTransaction
 import cloud.wafflecommons.pixelbrainreader.data.auth.GoogleAuthRepository
@@ -104,22 +106,24 @@ class GoogleCalendarRepository @Inject constructor(
                 // network calls, so a failed or slow fetch left the timeline without its Google
                 // events until the next successful sync.
                 val fetched = mutableListOf<Pair<Event, String>>() // event + calendar label
-                val calendars = service.calendarList().list().execute().items.orEmpty()
-                Log.d(TAG, "Calendars discovered: ${calendars.size} -> ${calendars.map { it.summary ?: it.id }}")
-                for (cal in calendars) {
-                    val events = service.events().list(cal.id)
-                        .setTimeMin(timeMin)
-                        .setTimeMax(timeMax)
-                        .setSingleEvents(true)
-                        // Expand recurring events in the user's local TZ so
-                        // occurrences land on the same calendar day they would
-                        // visually appear in Google Calendar.
-                        .setTimeZone(zone.id)
-                        .setOrderBy("startTime")
-                        .execute()
-                    val items = events.items.orEmpty()
-                    Log.d(TAG, "  '${cal.summary ?: cal.id}': ${items.size} event(s) in window")
-                    items.forEach { evt -> fetched += evt to (cal.summary ?: "Calendar") }
+                PrivacyLedger.measured(PrivacyLedger.hostOf(service.rootUrl), NetPurpose.CALENDAR) {
+                    val calendars = service.calendarList().list().execute().items.orEmpty()
+                    Log.d(TAG, "Calendars discovered: ${calendars.size} -> ${calendars.map { it.summary ?: it.id }}")
+                    for (cal in calendars) {
+                        val events = service.events().list(cal.id)
+                            .setTimeMin(timeMin)
+                            .setTimeMax(timeMax)
+                            .setSingleEvents(true)
+                            // Expand recurring events in the user's local TZ so
+                            // occurrences land on the same calendar day they would
+                            // visually appear in Google Calendar.
+                            .setTimeZone(zone.id)
+                            .setOrderBy("startTime")
+                            .execute()
+                        val items = events.items.orEmpty()
+                        Log.d(TAG, "  '${cal.summary ?: cal.id}': ${items.size} event(s) in window")
+                        items.forEach { evt -> fetched += evt to (cal.summary ?: "Calendar") }
+                    }
                 }
 
                 // 2. Replace today's Google rows in ONE transaction: a single Room invalidation (no
@@ -184,28 +188,30 @@ class GoogleCalendarRepository @Inject constructor(
                 val timeMin = DateTime(startInstant.toEpochMilli(), zone.rules.getOffset(startInstant).totalSeconds / 60)
                 val timeMax = DateTime(endInstant.toEpochMilli(), zone.rules.getOffset(endInstant).totalSeconds / 60)
                 val leaves = mutableListOf<CalendarLeaves.Event>()
-                val owned = service.calendarList().list().execute().items.orEmpty().filter { it.accessRole == "owner" }
-                for (cal in owned) {
-                    var pageToken: String? = null
-                    do {
-                        val page = service.events().list(cal.id)
-                            .setTimeMin(timeMin)
-                            .setTimeMax(timeMax)
-                            .setSingleEvents(true)
-                            .setMaxResults(MAX_RESULTS)
-                            .setPageToken(pageToken)
-                            .execute()
-                        page.items.orEmpty().forEach { evt ->
-                            // All-day events only: they carry a date, not a date-time.
-                            val start = evt.start?.date?.toStringRfc3339()?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: return@forEach
-                            val end = evt.end?.date?.toStringRfc3339()?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: return@forEach
-                            val id = evt.id ?: return@forEach
-                            CalendarLeaves.of(id, evt.summary.orEmpty(), start, end)?.let { leaves += it }
-                        }
-                        pageToken = page.nextPageToken
-                    } while (pageToken != null)
+                PrivacyLedger.measured(PrivacyLedger.hostOf(service.rootUrl), NetPurpose.CALENDAR) {
+                    val owned = service.calendarList().list().execute().items.orEmpty().filter { it.accessRole == "owner" }
+                    for (cal in owned) {
+                        var pageToken: String? = null
+                        do {
+                            val page = service.events().list(cal.id)
+                                .setTimeMin(timeMin)
+                                .setTimeMax(timeMax)
+                                .setSingleEvents(true)
+                                .setMaxResults(MAX_RESULTS)
+                                .setPageToken(pageToken)
+                                .execute()
+                            page.items.orEmpty().forEach { evt ->
+                                // All-day events only: they carry a date, not a date-time.
+                                val start = evt.start?.date?.toStringRfc3339()?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: return@forEach
+                                val end = evt.end?.date?.toStringRfc3339()?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: return@forEach
+                                val id = evt.id ?: return@forEach
+                                CalendarLeaves.of(id, evt.summary.orEmpty(), start, end)?.let { leaves += it }
+                            }
+                            pageToken = page.nextPageToken
+                        } while (pageToken != null)
+                    }
+                    Log.i(TAG, "upcomingLeaves: ${leaves.size} leave(s) in ${owned.size} calendar(s)")
                 }
-                Log.i(TAG, "upcomingLeaves: ${leaves.size} leave(s) in ${owned.size} calendar(s)")
                 Result.success(leaves)
             } catch (e: CancellationException) {
                 throw e

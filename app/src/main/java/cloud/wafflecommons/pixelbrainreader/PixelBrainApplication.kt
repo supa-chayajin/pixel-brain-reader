@@ -66,6 +66,8 @@ class PixelBrainApplication : Application(), Configuration.Provider {
         if (!isMainProcess()) {
             return
         }
+        // 13.0 (X3): the privacy ledger counts from here, before anything talks to the network.
+        cloud.wafflecommons.pixelbrainreader.data.privacy.PrivacyLedger.install(this, appScope)
 
         Thread.setDefaultUncaughtExceptionHandler(
             cloud.wafflecommons.pixelbrainreader.ui.crash.GlobalExceptionHandler(
@@ -147,6 +149,7 @@ class PixelBrainApplication : Application(), Configuration.Provider {
                         safely("Widget snapshot (ON_STOP)") {
                             widgetUpdateManager.get().scheduleSnapshotUpdate()
                         }
+                        cloud.wafflecommons.pixelbrainreader.data.privacy.PrivacyLedger.checkpoint()
                     }
                 }
             }

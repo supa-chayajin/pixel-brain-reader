@@ -60,6 +60,7 @@ import androidx.compose.material.icons.rounded.Work
 import androidx.compose.material.icons.rounded.DateRange
 import androidx.compose.material.icons.rounded.Mood
 import androidx.compose.material.icons.rounded.RssFeed
+import androidx.compose.material.icons.rounded.Policy
 import androidx.compose.material.icons.rounded.SportsEsports
 import androidx.compose.material.icons.rounded.SyncProblem
 import androidx.compose.material.icons.rounded.ViewAgenda
@@ -87,6 +88,7 @@ fun SettingsScreen(
     onNavigateToDailyLayout: () -> Unit = {},
     onNavigateToFeeds: () -> Unit = {},
     onNavigateToPsn: () -> Unit = {},
+    onNavigateToPrivacyLedger: () -> Unit = {},
     onNavigateToHabitConfig: () -> Unit = {},
     onNavigateToHomeConfig: () -> Unit = {},
     onNavigateToReminders: () -> Unit = {},
@@ -323,6 +325,18 @@ fun SettingsScreen(
                     ) {
                         Text("PlayStation Network")
                     }
+                }
+
+                // 13.0 (X3): what left this phone, kept on the phone.
+                ListItem(
+                    modifier = Modifier.clickable {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onNavigateToPrivacyLedger()
+                    },
+                    leadingContent = { Icon(Icons.Rounded.Policy, contentDescription = null) },
+                    supportingContent = { Text("Each host the app talked to, why, and about how much: today and the last 30 days") }
+                ) {
+                    Text("Privacy ledger")
                 }
             }
             }

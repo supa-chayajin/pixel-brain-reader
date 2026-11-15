@@ -3,6 +3,8 @@ package cloud.wafflecommons.pixelbrainreader.data.repository
 import android.util.Log
 import androidx.room.withTransaction
 import cloud.wafflecommons.pixelbrainreader.data.auth.GoogleAuthRepository
+import cloud.wafflecommons.pixelbrainreader.data.privacy.NetPurpose
+import cloud.wafflecommons.pixelbrainreader.data.privacy.PrivacyLedger
 import cloud.wafflecommons.pixelbrainreader.data.local.AppDatabase
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.TaskDao
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.DailyTaskEntity
@@ -101,34 +103,36 @@ class GoogleTaskRepository @Inject constructor(
                 // 1. Fetch EVERYTHING first. Today's Google rows used to be purged before the
                 // network calls, so a failed fetch emptied the task list until the next sync.
                 val fetched = mutableListOf<Task>()
-                val lists = service.tasklists().list().execute().items.orEmpty()
-                Log.d(TAG, "Task lists discovered: ${lists.size} -> ${lists.map { it.title ?: it.id }}")
-                for (list in lists) {
-                    val tasks = service.tasks().list(list.id)
-                        // Include completed + hidden so today's done tasks are imported with
-                        // their real status preserved (Rule 3).
-                        .setShowCompleted(true)
-                        .setShowHidden(true)
-                        // The padded 3-day window can exceed the default page size (20);
-                        // 100 is the API max and is plenty for ~3 days of tasks per list.
-                        .setMaxResults(100)
-                        .setDueMin(dueMin)
-                        .setDueMax(dueMax)
-                        .execute()
+                PrivacyLedger.measured(PrivacyLedger.hostOf(service.rootUrl), NetPurpose.TASKS) {
+                    val lists = service.tasklists().list().execute().items.orEmpty()
+                    Log.d(TAG, "Task lists discovered: ${lists.size} -> ${lists.map { it.title ?: it.id }}")
+                    for (list in lists) {
+                        val tasks = service.tasks().list(list.id)
+                            // Include completed + hidden so today's done tasks are imported with
+                            // their real status preserved (Rule 3).
+                            .setShowCompleted(true)
+                            .setShowHidden(true)
+                            // The padded 3-day window can exceed the default page size (20);
+                            // 100 is the API max and is plenty for ~3 days of tasks per list.
+                            .setMaxResults(100)
+                            .setDueMin(dueMin)
+                            .setDueMax(dueMax)
+                            .execute()
 
-                    // Strict "today only" filter. A single equality check rejects:
-                    //   - tasks with no due date (parseDueToLocalDate returns null)
-                    //   - overdue tasks (dueLocal < today)
-                    //   - future tasks (dueLocal > today)
-                    // Also defends against the server's dueMin/dueMax returning
-                    // boundary rows due to RFC 3339 / time-zone quirks.
-                    val rawCount = tasks.items.orEmpty().size
-                    val todayOnly = tasks.items.orEmpty().filter { gt ->
-                        val dueLocal = parseDueToLocalDate(gt.due, zone)
-                        dueLocal != null && dueLocal == today
+                        // Strict "today only" filter. A single equality check rejects:
+                        //   - tasks with no due date (parseDueToLocalDate returns null)
+                        //   - overdue tasks (dueLocal < today)
+                        //   - future tasks (dueLocal > today)
+                        // Also defends against the server's dueMin/dueMax returning
+                        // boundary rows due to RFC 3339 / time-zone quirks.
+                        val rawCount = tasks.items.orEmpty().size
+                        val todayOnly = tasks.items.orEmpty().filter { gt ->
+                            val dueLocal = parseDueToLocalDate(gt.due, zone)
+                            dueLocal != null && dueLocal == today
+                        }
+                        Log.d(TAG, "  '${list.title ?: list.id}': $rawCount returned, ${todayOnly.size} match today after strict filter")
+                        fetched += todayOnly
                     }
-                    Log.d(TAG, "  '${list.title ?: list.id}': $rawCount returned, ${todayOnly.size} match today after strict filter")
-                    fetched += todayOnly
                 }
 
                 // 2. Replace today's Google rows in ONE transaction: a single Room invalidation and

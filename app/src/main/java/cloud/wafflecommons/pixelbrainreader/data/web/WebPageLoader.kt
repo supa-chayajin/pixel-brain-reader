@@ -5,6 +5,8 @@ import android.os.SystemClock
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
+import cloud.wafflecommons.pixelbrainreader.data.privacy.NetPurpose
+import cloud.wafflecommons.pixelbrainreader.data.privacy.PrivacyLedger
 import cloud.wafflecommons.pixelbrainreader.data.utils.ImportUrlValidator
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
@@ -77,44 +79,49 @@ class WebPageLoader @Inject constructor(@param:ApplicationContext private val co
             ?: throw failure ?: PageUnavailableException(PageProblem.BLOCKED)
     }
 
-    /** The plain download: redirects (HTTP and meta refresh) followed by hand, each one guarded, cookies carried. */
-    suspend fun download(url: String): LoadedPage = withContext(Dispatchers.IO) {
+    /**
+     * The plain download: redirects (HTTP and meta refresh) followed by hand, each one guarded,
+     * cookies carried. Each hop is a call in the privacy ledger for [purpose] (13.0, X3).
+     */
+    suspend fun download(url: String, purpose: NetPurpose = NetPurpose.IMPORT): LoadedPage = withContext(Dispatchers.IO) {
         var current = url
         val cookies = mutableMapOf<String, String>()
         repeat(MAX_REDIRECTS + 1) {
             guard(current)
-            val response = try {
-                Jsoup.connect(current)
-                    .userAgent(DESKTOP_USER_AGENT)
-                    .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-                    .header("Accept-Language", "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7")
-                    .header("Upgrade-Insecure-Requests", "1")
-                    .cookies(cookies)
-                    .timeout(TIMEOUT_MS)
-                    .maxBodySize(MAX_BYTES)
-                    .followRedirects(false)
-                    .execute()
-            } catch (e: HttpStatusException) {
-                throw PageUnavailableException(problemFor(e.statusCode), e.statusCode)
-            } catch (e: UnsupportedMimeTypeException) {
-                throw PageUnavailableException(PageProblem.NOT_HTML, detail = e.mimeType)
+            PrivacyLedger.measured(PrivacyLedger.hostOf(current), purpose) {
+                val response = try {
+                    Jsoup.connect(current)
+                        .userAgent(DESKTOP_USER_AGENT)
+                        .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+                        .header("Accept-Language", "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7")
+                        .header("Upgrade-Insecure-Requests", "1")
+                        .cookies(cookies)
+                        .timeout(TIMEOUT_MS)
+                        .maxBodySize(MAX_BYTES)
+                        .followRedirects(false)
+                        .execute()
+                } catch (e: HttpStatusException) {
+                    throw PageUnavailableException(problemFor(e.statusCode), e.statusCode)
+                } catch (e: UnsupportedMimeTypeException) {
+                    throw PageUnavailableException(PageProblem.NOT_HTML, detail = e.mimeType)
+                }
+                cookies.putAll(response.cookies())
+                if (response.statusCode() in 300..399) {
+                    val location = response.header("Location") ?: throw PageUnavailableException(PageProblem.SERVER, response.statusCode())
+                    current = URI(current).resolve(location.trim()).toString()
+                    // A consent wall (consent.google.com, consent.youtube.com…): only a browser gets past it.
+                    if (URI(current).host?.startsWith("consent.") == true) throw PageUnavailableException(PageProblem.BLOCKED)
+                    return@repeat
+                }
+                val html = response.body()
+                val refresh = metaRefresh(html, current)
+                if (refresh != null) {
+                    current = refresh
+                    return@repeat
+                }
+                if (WebClipper.looksBlocked(html)) throw PageUnavailableException(PageProblem.BLOCKED, response.statusCode())
+                return@withContext LoadedPage(html, current)
             }
-            cookies.putAll(response.cookies())
-            if (response.statusCode() in 300..399) {
-                val location = response.header("Location") ?: throw PageUnavailableException(PageProblem.SERVER, response.statusCode())
-                current = URI(current).resolve(location.trim()).toString()
-                // A consent wall (consent.google.com, consent.youtube.com…): only a browser gets past it.
-                if (URI(current).host?.startsWith("consent.") == true) throw PageUnavailableException(PageProblem.BLOCKED)
-                return@repeat
-            }
-            val html = response.body()
-            val refresh = metaRefresh(html, current)
-            if (refresh != null) {
-                current = refresh
-                return@repeat
-            }
-            if (WebClipper.looksBlocked(html)) throw PageUnavailableException(PageProblem.BLOCKED, response.statusCode())
-            return@withContext LoadedPage(html, current)
         }
         throw PageUnavailableException(PageProblem.NETWORK, detail = "too many redirects")
     }
@@ -129,47 +136,50 @@ class WebPageLoader @Inject constructor(@param:ApplicationContext private val co
         guard(url)
         var best: Pair<LoadedPage, Int>? = null
         var failed = false
-        withContext(Dispatchers.Main) {
-            val webView = WebView(context)
-            val finished = Channel<Boolean>(Channel.CONFLATED)
-            try {
-                webView.configureForImport(loadImages = false)
-                webView.webViewClient = SignallingClient(finished)
-                // A viewport, or pages that measure the window lay out (and load) nothing.
-                webView.layout(0, 0, VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
-                webView.loadUrl(url)
-                withTimeoutOrNull(RENDER_TIMEOUT_MS) {
-                    if (!finished.receive()) {
-                        failed = true
-                        return@withTimeoutOrNull
-                    }
-                    var previous = -1
-                    var blockedSince = 0L
-                    while (true) {
-                        delay(SETTLE_MS)
-                        val html = webView.readDom() ?: continue
-                        val page = LoadedPage(html, webView.url ?: url)
-                        val clip = withContext(Dispatchers.Default) {
-                            if (WebClipper.looksBlocked(html)) null else WebClipper.clip(html, page.url)
+        // The privacy ledger (13.0, X3): the render as one call, the page's own requests included.
+        PrivacyLedger.measured(PrivacyLedger.hostOf(url), NetPurpose.IMPORT) {
+            withContext(Dispatchers.Main) {
+                val webView = WebView(context)
+                val finished = Channel<Boolean>(Channel.CONFLATED)
+                try {
+                    webView.configureForImport(loadImages = false)
+                    webView.webViewClient = SignallingClient(finished)
+                    // A viewport, or pages that measure the window lay out (and load) nothing.
+                    webView.layout(0, 0, VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
+                    webView.loadUrl(url)
+                    withTimeoutOrNull(RENDER_TIMEOUT_MS) {
+                        if (!finished.receive()) {
+                            failed = true
+                            return@withTimeoutOrNull
                         }
-                        // A check that clears itself does so in seconds; one that waits for a human never will.
-                        if (clip == null) {
-                            val now = SystemClock.elapsedRealtime()
-                            if (blockedSince == 0L) blockedSince = now else if (now - blockedSince > BLOCKED_GIVE_UP_MS) break
-                        } else {
-                            blockedSince = 0L
+                        var previous = -1
+                        var blockedSince = 0L
+                        while (true) {
+                            delay(SETTLE_MS)
+                            val html = webView.readDom() ?: continue
+                            val page = LoadedPage(html, webView.url ?: url)
+                            val clip = withContext(Dispatchers.Default) {
+                                if (WebClipper.looksBlocked(html)) null else WebClipper.clip(html, page.url)
+                            }
+                            // A check that clears itself does so in seconds; one that waits for a human never will.
+                            if (clip == null) {
+                                val now = SystemClock.elapsedRealtime()
+                                if (blockedSince == 0L) blockedSince = now else if (now - blockedSince > BLOCKED_GIVE_UP_MS) break
+                            } else {
+                                blockedSince = 0L
+                            }
+                            val words = clip?.words ?: BLOCKED_PAGE
+                            if (words > (best?.second ?: BLOCKED_PAGE)) best = page to words
+                            if (clip?.quality == ClipQuality.FULL) break
+                            // Settled: two reads alike once the page stopped loading.
+                            if (words != BLOCKED_PAGE && words == previous && webView.progress == 100) break
+                            previous = words
                         }
-                        val words = clip?.words ?: BLOCKED_PAGE
-                        if (words > (best?.second ?: BLOCKED_PAGE)) best = page to words
-                        if (clip?.quality == ClipQuality.FULL) break
-                        // Settled: two reads alike once the page stopped loading.
-                        if (words != BLOCKED_PAGE && words == previous && webView.progress == 100) break
-                        previous = words
                     }
+                } finally {
+                    webView.stopLoading()
+                    webView.destroy()
                 }
-            } finally {
-                webView.stopLoading()
-                webView.destroy()
             }
         }
         val page = best?.first ?: throw PageUnavailableException(if (failed) PageProblem.NETWORK else PageProblem.BLOCKED)
@@ -184,7 +194,9 @@ class WebPageLoader @Inject constructor(@param:ApplicationContext private val co
         return try {
             guard(endpoint)
             val oEmbed = withContext(Dispatchers.IO) {
-                Jsoup.connect(endpoint).ignoreContentType(true).userAgent(DESKTOP_USER_AGENT).timeout(TIMEOUT_MS).maxBodySize(MAX_BYTES).execute().body()
+                PrivacyLedger.measured(PrivacyLedger.hostOf(endpoint), NetPurpose.IMPORT) {
+                    Jsoup.connect(endpoint).ignoreContentType(true).userAgent(DESKTOP_USER_AGENT).timeout(TIMEOUT_MS).maxBodySize(MAX_BYTES).execute().body()
+                }
             }
             // The page's description is a bonus: it never holds the card up for long.
             val description = try {

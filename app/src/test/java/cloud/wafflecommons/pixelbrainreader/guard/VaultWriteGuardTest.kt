@@ -54,7 +54,8 @@ class VaultWriteGuardTest {
         "data/usecase/SyncHealthDataUseCase.kt" to "the legacy filesDir/10_Journal folder (vault writes go through FileRepository)",
         "data/ai/VectorSearchEngine.kt" to "the model files copied out of the APK assets",
         "data/repository/VaultExportRepository.kt" to "the export the user picks (it only reads the vault)",
-        "data/local/security/SecretManager.kt" to "the legacy plain preferences file it migrates"
+        "data/local/security/SecretManager.kt" to "the legacy plain preferences file it migrates",
+        "data/privacy/PrivacyLedger.kt" to "filesDir/privacy_ledger, the phone's own record of its traffic (13.0, X3)"
     )
 
     @Test

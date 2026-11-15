@@ -10,6 +10,8 @@ import cloud.wafflecommons.pixelbrainreader.data.guard.GuardFinding
 import cloud.wafflecommons.pixelbrainreader.data.guard.StagedText
 import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
 import cloud.wafflecommons.pixelbrainreader.data.sync.ConflictChangedException
+import cloud.wafflecommons.pixelbrainreader.data.privacy.NetPurpose
+import cloud.wafflecommons.pixelbrainreader.data.privacy.PrivacyLedger
 import cloud.wafflecommons.pixelbrainreader.data.sync.ConflictChoice
 import cloud.wafflecommons.pixelbrainreader.data.sync.ConflictFile
 import cloud.wafflecommons.pixelbrainreader.data.sync.ConflictResolver
@@ -219,16 +221,18 @@ class JGitProvider @Inject constructor(
             rootDir.mkdirs()
             try {
                 val started = System.currentTimeMillis()
-                Git.cloneRepository()
-                    .setURI(remoteUrl)
-                    .setDirectory(rootDir)
-                    .setBranch(branch)
-                    .setDepth(1)
-                    .setCredentialsProvider(provider)
-                    .setTimeout(NETWORK_TIMEOUT_SECONDS)
-                    .setProgressMonitor(AndroidLogProgressMonitor())
-                    .call()
-                    .close()
+                syncTraffic(remoteUrl) {
+                    Git.cloneRepository()
+                        .setURI(remoteUrl)
+                        .setDirectory(rootDir)
+                        .setBranch(branch)
+                        .setDepth(1)
+                        .setCredentialsProvider(provider)
+                        .setTimeout(NETWORK_TIMEOUT_SECONDS)
+                        .setProgressMonitor(AndroidLogProgressMonitor())
+                        .call()
+                        .close()
+                }
                 Log.i("JGitProvider", "Clone of the newest commit done in ${(System.currentTimeMillis() - started) / 1000} s (attempt $attempt); the history follows in steps.")
                 return
             } catch (e: Exception) {
@@ -269,13 +273,15 @@ class JGitProvider @Inject constructor(
                     val before = repairShallowBoundary(repo)
                     try {
                         // Deeper than what is here (the count is at least the current depth): never shortens.
-                        git.fetch()
-                            .setRemote(remoteName)
-                            .setCredentialsProvider(provider)
-                            .setDepth(before.commits + step)
-                            .setTimeout(NETWORK_TIMEOUT_SECONDS)
-                            .setProgressMonitor(AndroidLogProgressMonitor())
-                            .call()
+                        syncTraffic(git) {
+                            git.fetch()
+                                .setRemote(remoteName)
+                                .setCredentialsProvider(provider)
+                                .setDepth(before.commits + step)
+                                .setTimeout(NETWORK_TIMEOUT_SECONDS)
+                                .setProgressMonitor(AndroidLogProgressMonitor())
+                                .call()
+                        }
                     } catch (e: Exception) {
                         // JGit already wrote the boundary the server announced, for a pack that never
                         // came: put back the one that matches what is here.
@@ -538,12 +544,14 @@ class JGitProvider @Inject constructor(
                 val provider = getCredentialsProvider() ?: return@withContext Result.failure(Exception("No API Token found"))
 
                 val results = Git.open(rootDir).use { git ->
-                    git.push()
-                        .setRemote(remoteName)
-                        .setCredentialsProvider(provider)
-                        .setTimeout(NETWORK_TIMEOUT_SECONDS)
-                        .setProgressMonitor(AndroidLogProgressMonitor())
-                        .call()
+                    syncTraffic(git) {
+                        git.push()
+                            .setRemote(remoteName)
+                            .setCredentialsProvider(provider)
+                            .setTimeout(NETWORK_TIMEOUT_SECONDS)
+                            .setProgressMonitor(AndroidLogProgressMonitor())
+                            .call()
+                    }
                 }
                 val rejection = describeRejectedUpdates(results)
                 if (rejection != null) {
@@ -610,11 +618,13 @@ class JGitProvider @Inject constructor(
                     repairShallowBoundaryIfShallow()
                     Git.open(rootDir).use { git ->
                         recoverRepositoryStateIfNeeded(git)
-                        git.fetch()
-                            .setRemote(remoteName)
-                            .setCredentialsProvider(provider)
-                            .setTimeout(NETWORK_TIMEOUT_SECONDS)
-                            .call()
+                        syncTraffic(git) {
+                            git.fetch()
+                                .setRemote(remoteName)
+                                .setCredentialsProvider(provider)
+                                .setTimeout(NETWORK_TIMEOUT_SECONDS)
+                                .call()
+                        }
                         val upstream = git.repository.resolve("refs/remotes/$remoteName/${git.repository.branch}")
                             ?: return@withLock Result.failure(Exception("GitHub's branch isn't known yet"))
                         SyncConflicts.resolve(
@@ -629,11 +639,13 @@ class JGitProvider @Inject constructor(
                             if (held.isNotEmpty()) throw CommitHeldException(held)
                         }
                         SyncConflicts.clear(git.repository.directory)
-                        val results = git.push()
-                            .setRemote(remoteName)
-                            .setCredentialsProvider(provider)
-                            .setTimeout(NETWORK_TIMEOUT_SECONDS)
-                            .call()
+                        val results = syncTraffic(git) {
+                            git.push()
+                                .setRemote(remoteName)
+                                .setCredentialsProvider(provider)
+                                .setTimeout(NETWORK_TIMEOUT_SECONDS)
+                                .call()
+                        }
                         val rejection = describeRejectedUpdates(results)
                         if (rejection != null) Log.w("JGitProvider", "Resolution pushed later: $rejection")
                         Result.success(rejection == null)
@@ -677,13 +689,15 @@ class JGitProvider @Inject constructor(
             repairShallowBoundaryIfShallow()
             Git.open(rootDir).use { git ->
                 recoverRepositoryStateIfNeeded(git)
-                val pullResult = git.pull()
-                    .setRemote(remoteName)
-                    .setRebase(true) // STRICT REBASE — no merge commits
-                    .setCredentialsProvider(provider)
-                    .setTimeout(NETWORK_TIMEOUT_SECONDS)
-                    .setProgressMonitor(AndroidLogProgressMonitor())
-                    .call()
+                val pullResult = syncTraffic(git) {
+                    git.pull()
+                        .setRemote(remoteName)
+                        .setRebase(true) // STRICT REBASE — no merge commits
+                        .setCredentialsProvider(provider)
+                        .setTimeout(NETWORK_TIMEOUT_SECONDS)
+                        .setProgressMonitor(AndroidLogProgressMonitor())
+                        .call()
+                }
 
                 val rebaseResult = pullResult.rebaseResult
                 if (rebaseResult != null) {
@@ -817,14 +831,16 @@ class JGitProvider @Inject constructor(
             val provider = getCredentialsProvider() ?: return@withLock SyncResult.Error(Exception("No API Token found"))
             repairShallowBoundaryIfShallow()
             Git.open(rootDir).use { git ->
-                val result = git.pull()
-                    .setRemote(remoteName)
-                    .setRebase(false)
-                    .setFastForward(MergeCommand.FastForwardMode.FF_ONLY)
-                    .setCredentialsProvider(provider)
-                    .setTimeout(NETWORK_TIMEOUT_SECONDS)
-                    .setProgressMonitor(AndroidLogProgressMonitor())
-                    .call()
+                val result = syncTraffic(git) {
+                    git.pull()
+                        .setRemote(remoteName)
+                        .setRebase(false)
+                        .setFastForward(MergeCommand.FastForwardMode.FF_ONLY)
+                        .setCredentialsProvider(provider)
+                        .setTimeout(NETWORK_TIMEOUT_SECONDS)
+                        .setProgressMonitor(AndroidLogProgressMonitor())
+                        .call()
+                }
                 val status = result.mergeResult?.mergeStatus
                 if (result.isSuccessful && (status == null || status.isSuccessful)) {
                     Log.i("JGitProvider", "Read-only pull (fast-forward only): ${status ?: "nothing to merge"}")
@@ -902,7 +918,7 @@ class JGitProvider @Inject constructor(
             try {
                 val provider = getCredentialsProvider() ?: return@withLock Result.failure(Exception("No API Token found"))
                 Git.open(rootDir).use { git ->
-                    git.fetch().setRemote(remoteName).setCredentialsProvider(provider).setTimeout(NETWORK_TIMEOUT_SECONDS).call()
+                    syncTraffic(git) { git.fetch().setRemote(remoteName).setCredentialsProvider(provider).setTimeout(NETWORK_TIMEOUT_SECONDS).call() }
                     git.reset().setMode(org.eclipse.jgit.api.ResetCommand.ResetType.HARD).setRef("$remoteName/$branch").call()
                     git.clean().setCleanDirectories(true).call()
                 }
@@ -957,13 +973,15 @@ class JGitProvider @Inject constructor(
                     }
 
                     // Step C: Force Push
-                    git.push()
-                        .setRemote("origin")
-                        .setCredentialsProvider(provider)
-                        .setForce(true) // FORCE PUSH
-                        .setTimeout(NETWORK_TIMEOUT_SECONDS)
-                        .setProgressMonitor(AndroidLogProgressMonitor())
-                        .call()
+                    syncTraffic(git) {
+                        git.push()
+                            .setRemote("origin")
+                            .setCredentialsProvider(provider)
+                            .setForce(true) // FORCE PUSH
+                            .setTimeout(NETWORK_TIMEOUT_SECONDS)
+                            .setProgressMonitor(AndroidLogProgressMonitor())
+                            .call()
+                    }
                 }
                 val rejection = describeRejectedUpdates(results)
                 if (rejection != null) {
@@ -1003,6 +1021,16 @@ class JGitProvider @Inject constructor(
             }
         }
     }
+
+    /**
+     * A command that talks to the remote, its traffic in the privacy ledger (13.0, X3): the host and
+     * the bytes, nothing of the repository. The command runs as before, whatever it throws.
+     */
+    private fun <T> syncTraffic(remoteUrl: String?, command: () -> T): T =
+        PrivacyLedger.measured(PrivacyLedger.hostOf(remoteUrl, fallback = "github.com"), NetPurpose.SYNC, command)
+
+    private fun <T> syncTraffic(git: Git, command: () -> T): T =
+        syncTraffic(git.repository.config.getString("remote", "origin", "url"), command)
 
     /**
      * Resolves a [UsernamePasswordCredentialsProvider] using the stored token.

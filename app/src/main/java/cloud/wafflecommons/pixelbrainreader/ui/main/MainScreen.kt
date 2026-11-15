@@ -1404,6 +1404,7 @@ fun MainScreen(
                     onNavigateToDailyLayout = { navController.navigate("daily_layout") },
                     onNavigateToFeeds = { navController.navigate("watch_feeds") },
                     onNavigateToPsn = { navController.navigate(cloud.wafflecommons.pixelbrainreader.ui.games.GamesRoutes.PSN) },
+                    onNavigateToPrivacyLedger = { navController.navigate(cloud.wafflecommons.pixelbrainreader.ui.settings.PRIVACY_LEDGER_ROUTE) },
                     onNavigateToHabitConfig = { navController.navigate("habit_config") },
                     onNavigateToHomeConfig = { navController.navigate(Screen.ROUTE_HOME_CONFIG) },
                     onNavigateToReminders = { navController.navigate("reminders") },
@@ -1447,6 +1448,12 @@ fun MainScreen(
 
             composable("watch_feeds") {
                 cloud.wafflecommons.pixelbrainreader.ui.settings.FeedsScreen(
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
+
+            composable(cloud.wafflecommons.pixelbrainreader.ui.settings.PRIVACY_LEDGER_ROUTE) {
+                cloud.wafflecommons.pixelbrainreader.ui.settings.PrivacyLedgerScreen(
                     onNavigateBack = { navController.popBackStack() }
                 )
             }

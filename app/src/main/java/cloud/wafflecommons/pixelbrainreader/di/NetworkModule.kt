@@ -28,6 +28,8 @@ object NetworkModule {
         }
         return OkHttpClient.Builder()
             .addInterceptor(logging)
+            // The privacy ledger (13.0, X3): each call's host and bytes, its purpose from the host.
+            .eventListenerFactory(cloud.wafflecommons.pixelbrainreader.data.privacy.PrivacyLedger.events(null))
             // Bound every phase so a stalled network can't hang the weather flow
             // indefinitely (callTimeout caps the whole call incl. redirects).
             .connectTimeout(15, TimeUnit.SECONDS)
