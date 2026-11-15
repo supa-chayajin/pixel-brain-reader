@@ -261,7 +261,8 @@ private fun PhaseBar(standing: ExperimentRepository.Standing) {
         Experiments.Phase.DONE -> 1f to 1f
         null -> 0f to 0f
     }
-    val track = MaterialTheme.colorScheme.surfaceContainerHighest
+    // On the tile's surfaceContainerHigh, the outline variant still shows an empty phase.
+    val track = MaterialTheme.colorScheme.outlineVariant
     val usual = MaterialTheme.colorScheme.outline
     val doing = readableOn(MaterialTheme.colorScheme.secondary, MaterialTheme.colorScheme.surfaceContainerHigh)
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {

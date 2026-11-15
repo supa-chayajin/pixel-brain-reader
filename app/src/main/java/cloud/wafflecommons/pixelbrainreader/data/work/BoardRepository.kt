@@ -42,7 +42,8 @@ class BoardRepository @Inject constructor(
 
     suspend fun addBoard(folder: String) = updateConfig { c -> if (folder in c.boards) c else c.copy(boards = (c.boards + folder).sorted()) }
 
-    suspend fun removeBoard(folder: String) = updateConfig { c -> c.copy(boards = c.boards - folder) }
+    /** Drops the board and its WIP limits (E6): a stale limit would come back with the folder. */
+    suspend fun removeBoard(folder: String) = updateConfig { c -> c.copy(boards = c.boards - folder, wip = c.wip - folder) }
 
     /** A column's work-in-progress limit on a board (E6); 0 removes it. */
     suspend fun setWipLimit(folder: String, column: StatusColumn, limit: Int) =
