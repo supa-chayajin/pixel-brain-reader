@@ -6,7 +6,7 @@ import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.ai.LocalAiManager
 import cloud.wafflecommons.pixelbrainreader.data.privatevault.AutoLock
 import cloud.wafflecommons.pixelbrainreader.data.privatevault.PasswordRules
-import cloud.wafflecommons.pixelbrainreader.data.privatevault.PrivateVaultFollowUps
+import cloud.wafflecommons.pixelbrainreader.data.privatevault.PrivateVaultUnlocker
 import cloud.wafflecommons.pixelbrainreader.data.privatevault.PrivateVaultRekey
 import cloud.wafflecommons.pixelbrainreader.data.privatevault.PrivateVaultSession
 import cloud.wafflecommons.pixelbrainreader.data.privatevault.VaultPasswordBinding
@@ -45,7 +45,7 @@ class PrivateJournalViewModel @Inject constructor(
     private val repository: PrivateNoteRepository,
     private val session: PrivateVaultSession,
     private val binding: VaultPasswordBinding,
-    private val followUps: PrivateVaultFollowUps,
+    private val unlocker: PrivateVaultUnlocker,
     private val rekey: PrivateVaultRekey,
     private val preferences: UserPreferencesRepository,
     private val localAiManager: LocalAiManager,
@@ -246,17 +246,14 @@ class PrivateJournalViewModel @Inject constructor(
         isUnlocking = true
         val candidate = password.clone() // the caller wipes its own
         viewModelScope.launch {
-            val valid = try {
-                repository.verifyPassword(candidate)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                false
+            // Verified against the notes, then the session, the binding and the follow-ups (12.19: shared with the prep).
+            val opened = try {
+                unlocker.unlock(candidate, viaBiometric)
             } finally {
                 isUnlocking = false
-            }
-            if (!valid) {
                 Arrays.fill(candidate, '\u0000')
+            }
+            if (!opened) {
                 val message = if (viaBiometric) {
                     "This phone's copy of the password no longer opens the journal: type it once."
                 } else {
@@ -265,16 +262,7 @@ class PrivateJournalViewModel @Inject constructor(
                 _uiState.update { it.copy(errorMessage = message, passwordInput = "") }
                 return@launch
             }
-
-            session.open(candidate) // the screen follows the session (init)
-            try {
-                // Binds a typed password and deletes the readable 12.17 copy (Keystore work: off Main).
-                withContext(Dispatchers.IO) { binding.confirmUnlock(candidate, viaBiometric) }
-            } finally {
-                Arrays.fill(candidate, '\u0000')
-            }
             refreshBiometric()
-            appScope.launch { followUps.afterUnlock() }
         }
     }
 

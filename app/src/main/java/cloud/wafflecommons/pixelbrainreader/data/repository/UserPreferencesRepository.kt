@@ -210,6 +210,17 @@ class UserPreferencesRepository @Inject constructor(
         }
     }
 
+    // --- People (12.19, D5): meeting series linked to a person, on this phone only, neutral ids ---
+    private val KEY_PERSON_LINKS = stringPreferencesKey("person_links")
+
+    /** The links as JSON (data/people/PersonLinks). */
+    val personLinks: Flow<String?> = setting { it[KEY_PERSON_LINKS] }
+
+    /** Changes the links in one edit, so two quick changes can't overwrite each other. */
+    suspend fun updatePersonLinks(transform: (String?) -> String) {
+        context.dataStore.edit { preferences -> preferences[KEY_PERSON_LINKS] = transform(preferences[KEY_PERSON_LINKS]) }
+    }
+
     // --- Meeting prep (12.12, D4): off by default, nothing notifies unless switched on ---
     private val KEY_MEETING_PREP_REMINDERS = booleanPreferencesKey("meeting_prep_reminders")
 

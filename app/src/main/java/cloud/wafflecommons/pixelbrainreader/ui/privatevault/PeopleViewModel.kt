@@ -47,7 +47,8 @@ class PeopleViewModel @Inject constructor(
     private val taskRepository: TaskRepository,
     private val missionLogRepository: MissionLogRepository,
     private val localAiManager: LocalAiManager,
-    private val appClock: AppClock
+    private val appClock: AppClock,
+    private val preferences: cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
 ) : ViewModel() {
 
     data class ListState(
@@ -153,6 +154,8 @@ class PeopleViewModel @Inject constructor(
     fun delete(id: String) {
         viewModelScope.launch {
             attempt("The note couldn't be deleted.") { repository.delete(id) }
+            // The meetings linked to them aren't any more (12.19, D5).
+            preferences.updatePersonLinks { cloud.wafflecommons.pixelbrainreader.data.people.PersonLinks.forget(it, id) }
             if (_openId.value == id) _openId.value = null
         }
     }
