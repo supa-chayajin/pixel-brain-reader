@@ -253,6 +253,9 @@ interview the same day and the as-built notes: `2026-11-14-12.17-games.md`.
 - [ ] **V3 (optional) Fingerprint-bound password.** With T3 off, nothing in the background needs
       the stored password, so it can sit behind a Keystore key that requires user authentication.
       *(RFC-008 §2.1.)*
+- [ ] **D5a Tech watch follow-ups** (owner, 2026-11-15: with 12.18). The block re-reads its feeds
+      when a sync brings a changed `feeds.json` (today only on foreground or a mode change), and
+      the feeds page shows a feed that fails. *(Noted on 2026-11-11.)*
 
 ### 12.19.0 — People & 1:1s (C10)
 
