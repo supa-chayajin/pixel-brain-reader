@@ -6,6 +6,8 @@ import androidx.compose.material.icons.outlined.Interests
 import androidx.compose.material.icons.outlined.Place
 import androidx.compose.material3.ColorScheme
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import cloud.wafflecommons.pixelbrainreader.data.repository.MoodTag
 import cloud.wafflecommons.pixelbrainreader.data.repository.MoodTagCategory
@@ -59,9 +61,32 @@ object MoodTagCategories {
     /** A category card's colors: its container, what sits on it, and the strong color of a picked chip. */
     data class CardColors(val container: Color, val content: Color, val strong: Color, val onStrong: Color)
 
-    fun colors(category: MoodTagCategory, scheme: ColorScheme): CardColors = when (category) {
-        MoodTagCategory.ACTIVITIES -> CardColors(scheme.tertiaryContainer, scheme.onTertiaryContainer, scheme.tertiary, scheme.onTertiary)
-        MoodTagCategory.PEOPLE -> CardColors(scheme.secondaryContainer, scheme.onSecondaryContainer, scheme.secondary, scheme.onSecondary)
-        MoodTagCategory.PLACES -> CardColors(scheme.primaryContainer, scheme.onPrimaryContainer, scheme.primary, scheme.onPrimary)
+    /**
+     * Activities and Places take the theme's tertiary and primary tones. People has a warm pink of its
+     * own: a dynamic theme's secondary palette is always muted, and the owner wanted a colorful sheet
+     * (M5). Its text stays above 4.5:1 in light and dark.
+     */
+    fun colors(category: MoodTagCategory, scheme: ColorScheme): CardColors {
+        val dark = scheme.surface.luminance() < 0.5f
+        return when (category) {
+            MoodTagCategory.ACTIVITIES -> themed(scheme.tertiaryContainer, scheme.onTertiaryContainer, scheme.tertiary, scheme.onTertiary, scheme, dark)
+            MoodTagCategory.PEOPLE -> if (dark) PEOPLE_DARK else PEOPLE_LIGHT
+            MoodTagCategory.PLACES -> themed(scheme.primaryContainer, scheme.onPrimaryContainer, scheme.primary, scheme.onPrimary, scheme, dark)
+        }
     }
+
+    /**
+     * A card in one of the theme's tones. A dynamic dark scheme can hand out a light container (the
+     * API 37 emulator's tertiary one, on 2026-11-15): in a dark theme such a container gives way to
+     * the accent blended into the surface, under the surface's own text, so every card stays dark.
+     */
+    private fun themed(container: Color, onContainer: Color, strong: Color, onStrong: Color, scheme: ColorScheme, dark: Boolean): CardColors =
+        if (dark && container.luminance() > 0.4f) {
+            CardColors(lerp(scheme.surface, strong, 0.35f), scheme.onSurface, strong, onStrong)
+        } else {
+            CardColors(container, onContainer, strong, onStrong)
+        }
+
+    private val PEOPLE_LIGHT = CardColors(Color(0xFFFFD9E2), Color(0xFF3E001D), Color(0xFF9C4068), Color(0xFFFFFFFF))
+    private val PEOPLE_DARK = CardColors(Color(0xFF7D2950), Color(0xFFFFD9E2), Color(0xFFFFB1C8), Color(0xFF5E1133))
 }

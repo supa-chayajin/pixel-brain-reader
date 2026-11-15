@@ -1,11 +1,15 @@
 package cloud.wafflecommons.pixelbrainreader.ui.mood
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -18,7 +22,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
@@ -26,6 +33,8 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import cloud.wafflecommons.pixelbrainreader.data.repository.MoodTag
+import cloud.wafflecommons.pixelbrainreader.data.repository.MoodTagCategory
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -44,7 +53,11 @@ fun MoodCheckInSheet(
     var noteText by remember { mutableStateOf("") }
 
     val moods = remember(emojiSet) { emojiSet.faces.mapIndexed { index, face -> (index + 1) to face } }
-
+    // 12.19 (owner's M5): the mood's color on the picked face, the Save button and a wash at the top.
+    val tone = MoodPalette.of(selectedMood, isSystemInDarkTheme())
+    val moodColor by animateColorAsState(tone.container, label = "moodColor")
+    val onMoodColor by animateColorAsState(tone.content, label = "onMoodColor")
+    val surface = MaterialTheme.colorScheme.surface
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -52,7 +65,12 @@ fun MoodCheckInSheet(
             initialValue = SheetValue.Hidden,
             enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded)
         ),
-        containerColor = MaterialTheme.colorScheme.surface,
+        // The mood's wash runs from the sheet's top edge, drag handle included, into the surface.
+        modifier = Modifier.background(
+            Brush.verticalGradient(0f to lerp(surface, moodColor, 0.5f), 0.35f to surface),
+            BottomSheetDefaults.ExpandedShape
+        ),
+        containerColor = Color.Transparent,
         tonalElevation = 0.dp
     ) {
         Column(
@@ -123,57 +141,32 @@ fun MoodCheckInSheet(
             MoodSelector(
                 selectedMood = selectedMood,
                 onMoodSelected = { selectedMood = it },
-                moods = moods
+                moods = moods,
+                pillColor = moodColor
             )
 
-            // Activities Grid
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.Start
-            ) {
+            // The tags by category (12.19, owner's M4): a colored card each, empty categories left out.
+            if (availableTags.isEmpty()) {
                 Text(
-                    text = "Activities",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(start = 4.dp)
+                    text = "No tags yet. Add some in Settings ▸ Mood Tags.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.fillMaxWidth()
                 )
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                if (availableTags.isEmpty()) {
-                    Text(
-                        text = "No tags yet. Add some in Settings ▸ Mood Tags.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                } else {
-                    FlowRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        availableTags.forEach { tag ->
-                            val isSelected = selectedActivities.contains(tag.name)
-
-                            FilterChip(
-                                selected = isSelected,
-                                onClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    if (isSelected) selectedActivities.remove(tag.name)
-                                    else selectedActivities.add(tag.name)
-                                },
-                                label = { Text(tag.name) },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = MoodTagIcons.resolve(tag).image,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                            )
-                        }
+            } else {
+                MoodTagCategories.grouped(availableTags)
+                    .filter { (_, tags) -> tags.isNotEmpty() }
+                    .forEach { (category, tags) ->
+                        TagCategoryCard(
+                            category = category,
+                            tags = tags,
+                            selected = selectedActivities,
+                            onToggle = { name ->
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                if (name in selectedActivities) selectedActivities.remove(name) else selectedActivities.add(name)
+                            }
+                        )
                     }
-                    Spacer(modifier = Modifier.height(16.dp))
-                }
             }
 
             OutlinedTextField(
@@ -194,10 +187,11 @@ fun MoodCheckInSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
-                shape = MaterialTheme.shapes.medium
+                shape = MaterialTheme.shapes.medium,
+                colors = ButtonDefaults.buttonColors(containerColor = moodColor, contentColor = onMoodColor)
             ) {
                 if (uiState.isLoading) {
-                    CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary)
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp), color = onMoodColor)
                 } else {
                     Text("Save Mood", style = MaterialTheme.typography.titleMedium)
                 }
@@ -206,24 +200,90 @@ fun MoodCheckInSheet(
     }
 }
 
+/** One category's tags in a card of its own color (12.19, M4); a picked chip takes the card's strong color. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun TagCategoryCard(
+    category: MoodTagCategory,
+    tags: List<MoodTag>,
+    selected: List<String>,
+    onToggle: (String) -> Unit
+) {
+    val colors = MoodTagCategories.colors(category, MaterialTheme.colorScheme)
+    val picked = tags.count { it.name in selected }
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.extraLarge,
+        color = colors.container,
+        contentColor = colors.content
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(
+                    modifier = Modifier.size(32.dp).clip(CircleShape).background(colors.strong),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(MoodTagCategories.icon(category), contentDescription = null, tint = colors.onStrong, modifier = Modifier.size(18.dp))
+                }
+                Text(MoodTagCategories.title(category), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                if (picked > 0) {
+                    Spacer(Modifier.weight(1f))
+                    Text("$picked picked", style = MaterialTheme.typography.labelMedium)
+                }
+            }
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                tags.forEach { tag ->
+                    FilterChip(
+                        selected = tag.name in selected,
+                        onClick = { onToggle(tag.name) },
+                        label = { Text(tag.name) },
+                        leadingIcon = {
+                            Icon(MoodTagIcons.resolve(tag).image, contentDescription = null, modifier = Modifier.size(18.dp))
+                        },
+                        shape = CircleShape,
+                        colors = FilterChipDefaults.filterChipColors(
+                            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
+                            labelColor = MaterialTheme.colorScheme.onSurface,
+                            iconColor = colors.strong,
+                            selectedContainerColor = colors.strong,
+                            selectedLabelColor = colors.onStrong,
+                            selectedLeadingIconColor = colors.onStrong
+                        ),
+                        border = null
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * The faces on a pill (12.19, M5): bigger faces that bounce, a wiggle when one is picked, and the
+ * pill behind the picked face in [pillColor] (the mood's color in the check-in sheet).
+ */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun MoodSelector(
     selectedMood: Int,
     onMoodSelected: (Int) -> Unit,
-    moods: List<Pair<Int, String>>
+    moods: List<Pair<Int, String>>,
+    pillColor: Color = MaterialTheme.colorScheme.secondaryContainer
 ) {
     val haptic = LocalHapticFeedback.current
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
-            .height(64.dp)
+            .height(84.dp)
     ) {
         val segmentCount = moods.size
         val segmentWidth = maxWidth / segmentCount
         val indicatorOffset by animateDpAsState(
             targetValue = segmentWidth * (selectedMood - 1),
-            animationSpec = MaterialTheme.motionScheme.fastSpatialSpec(),
+            animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
             label = "indicatorOffset"
         )
 
@@ -235,22 +295,30 @@ fun MoodSelector(
 
         Box(
             modifier = Modifier
-                .padding(4.dp)
+                .padding(6.dp)
                 .offset { IntOffset(indicatorOffset.roundToPx(), 0) }
-                .width(segmentWidth - 8.dp)
+                .width(segmentWidth - 12.dp)
                 .fillMaxHeight()
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.secondaryContainer)
+                .background(pillColor)
         )
 
         Row(modifier = Modifier.fillMaxSize()) {
-            moods.forEachIndexed { index, (score, label) ->
+            moods.forEach { (score, face) ->
                 val isSelected = selectedMood == score
                 val scale by animateFloatAsState(
-                    targetValue = if (isSelected) 1.5f else 0.9f,
-                    animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
-                    label = "scale"
+                    targetValue = if (isSelected) 1.3f else 0.85f,
+                    animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
+                    label = "faceScale"
                 )
+                // A little wiggle when a face is picked.
+                val tilt = remember { Animatable(0f) }
+                LaunchedEffect(isSelected) {
+                    if (isSelected) {
+                        tilt.snapTo(-16f)
+                        tilt.animateTo(0f, spring(dampingRatio = Spring.DampingRatioHighBouncy, stiffness = Spring.StiffnessLow))
+                    }
+                }
 
                 Box(
                     modifier = Modifier
@@ -266,9 +334,13 @@ fun MoodSelector(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = label,
-                        fontSize = 24.sp,
-                        modifier = Modifier.scale(scale)
+                        text = face,
+                        fontSize = 36.sp,
+                        modifier = Modifier.graphicsLayer {
+                            scaleX = scale
+                            scaleY = scale
+                            rotationZ = tilt.value
+                        }
                     )
                 }
             }
