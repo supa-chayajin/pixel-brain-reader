@@ -53,6 +53,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -65,6 +66,7 @@ import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
 import cloud.wafflecommons.pixelbrainreader.data.modes.Visibility
 import cloud.wafflecommons.pixelbrainreader.data.repository.VaultDiscoveryRepository
 import cloud.wafflecommons.pixelbrainreader.data.work.BoardCard
+import cloud.wafflecommons.pixelbrainreader.data.work.BoardFlow
 import cloud.wafflecommons.pixelbrainreader.data.work.BoardRepository
 import cloud.wafflecommons.pixelbrainreader.data.work.BoardsConfig
 import cloud.wafflecommons.pixelbrainreader.data.work.StatusColumn
@@ -139,6 +141,8 @@ class BoardViewModel @Inject constructor(
     fun addBoard(board: String) = run("Couldn't add the board") { repository.addBoard(board) }
     fun removeBoard(board: String) = run("Couldn't remove the board") { repository.removeBoard(board) }
     fun move(card: BoardCard, column: StatusColumn) = run("Couldn't move the card") { repository.move(card, column) }
+    fun setWipLimit(board: String, column: StatusColumn, limit: Int) =
+        run("Couldn't save the limit") { repository.setWipLimit(board, column, limit) }
     fun setDetails(card: BoardCard, nextStep: String?, blockers: String?, target: LocalDate?) =
         run("Couldn't save the card") { repository.setDetails(card, nextStep, blockers, target) }
 
@@ -210,14 +214,17 @@ fun BoardScreen(folder: String, onBack: () -> Unit, onOpenNote: (String) -> Unit
     val today = LocalDate.now()
     val editable = !VaultWriteGate.readOnly
 
-    val columns: List<Pair<String, List<BoardCard>>> = buildList {
+    val config by viewModel.config.collectAsStateWithLifecycle()
+    var limitFor by remember { mutableStateOf<StatusColumn?>(null) }
+    val columns: List<BoardColumn> = buildList {
         // The board opened before may still be in the ViewModel shared with the hub's list: none of its cards.
         val all = cards.orEmpty().filter { it.note.path.startsWith("$folder/") }
         StatusColumn.entries.filter { showArchived || it != StatusColumn.ARCHIVE }.forEach { column ->
-            add(column.label to all.filter { it.note.column == column })
+            add(BoardColumn(column, column.label, all.filter { it.note.column == column }))
         }
-        all.filter { it.note.column == null }.takeIf { it.isNotEmpty() }?.let { add("No status" to it) }
+        all.filter { it.note.column == null }.takeIf { it.isNotEmpty() }?.let { add(BoardColumn(null, "No status", it)) }
     }
+    val onMove: (BoardCard, StatusColumn) -> Unit = { card, column -> viewModel.move(card, column) }
 
     Scaffold(
         topBar = {
@@ -242,13 +249,13 @@ fun BoardScreen(folder: String, onBack: () -> Unit, onOpenNote: (String) -> Unit
                     modifier = Modifier.fillMaxSize().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    columns.forEach { (label, columnCards) ->
+                    columns.forEach { column ->
                         Card(
                             modifier = Modifier.width(280.dp).fillMaxHeight().padding(bottom = NavBarClearance),
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
                         ) {
-                            Text("$label · ${columnCards.size}", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, modifier = Modifier.padding(12.dp))
-                            CardList(columnCards, today, onClick = { selected = it }, modifier = Modifier.weight(1f))
+                            ColumnHeader(column, config, folder, editable, onSetLimit = { limitFor = it })
+                            CardList(column.cards, today, editable, onClick = { selected = it }, onMove = onMove, modifier = Modifier.weight(1f))
                         }
                     }
                 }
@@ -257,14 +264,29 @@ fun BoardScreen(folder: String, onBack: () -> Unit, onOpenNote: (String) -> Unit
                 val current = tab.coerceIn(0, (columns.size - 1).coerceAtLeast(0))
                 Column {
                     PrimaryScrollableTabRow(selectedTabIndex = current, edgePadding = 12.dp) {
-                        columns.forEachIndexed { index, (label, columnCards) ->
-                            Tab(selected = current == index, onClick = { tab = index }, text = { Text("$label ${columnCards.size}") })
+                        columns.forEachIndexed { index, column ->
+                            val over = column.status?.let { BoardFlow.over(config, folder, it, column.cards.size) } == true
+                            Tab(
+                                selected = current == index,
+                                onClick = { tab = index },
+                                text = { Text("${column.label} ${column.cards.size}", color = if (over) MaterialTheme.colorScheme.error else androidx.compose.ui.graphics.Color.Unspecified) }
+                            )
                         }
                     }
-                    CardList(columns.getOrNull(current)?.second.orEmpty(), today, onClick = { selected = it }, modifier = Modifier.weight(1f))
+                    columns.getOrNull(current)?.let { column -> ColumnHeader(column, config, folder, editable, onSetLimit = { limitFor = it }) }
+                    CardList(columns.getOrNull(current)?.cards.orEmpty(), today, editable, onClick = { selected = it }, onMove = onMove, modifier = Modifier.weight(1f))
                 }
             }
         }
+    }
+
+    limitFor?.let { column ->
+        WipLimitDialog(
+            column = column,
+            current = BoardFlow.limitOf(config, folder, column),
+            onSave = { limit -> viewModel.setWipLimit(folder, column, limit); limitFor = null },
+            onDismiss = { limitFor = null }
+        )
     }
 
     selected?.let { card ->
@@ -279,16 +301,110 @@ fun BoardScreen(folder: String, onBack: () -> Unit, onOpenNote: (String) -> Unit
     }
 }
 
+/** A board column: its status (null for the cards without one), its label and cards. */
+private data class BoardColumn(val status: StatusColumn?, val label: String, val cards: List<BoardCard>)
+
+/** A column's name, its count against its WIP limit (E6), and the way to set the limit. */
 @Composable
-private fun CardList(cards: List<BoardCard>, today: LocalDate, onClick: (BoardCard) -> Unit, modifier: Modifier = Modifier) {
+private fun ColumnHeader(column: BoardColumn, config: BoardsConfig, board: String, editable: Boolean, onSetLimit: (StatusColumn) -> Unit) {
+    val status = column.status
+    val limit = status?.let { BoardFlow.limitOf(config, board, it) }
+    val over = limit != null && column.cards.size > limit
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp, top = 4.dp)) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                "${column.label} · ${column.cards.size}" + (limit?.let { " of $it" } ?: ""),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = if (over) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+            )
+            if (over) Text("Over its limit: finish one before starting another.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+        }
+        if (editable && status != null && status != StatusColumn.ARCHIVE) {
+            TextButton(onClick = { onSetLimit(status) }) { Text(if (limit == null) "Set a limit" else "Limit") }
+        }
+    }
+}
+
+@Composable
+private fun WipLimitDialog(column: StatusColumn, current: Int?, onSave: (Int) -> Unit, onDismiss: () -> Unit) {
+    var text by remember { mutableStateOf(current?.toString().orEmpty()) }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("${column.label}: a limit") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("How many cards at most in this column. Past it, the column turns red. Empty: no limit.")
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { value -> text = value.filter { it.isDigit() }.take(3) },
+                    label = { Text("Cards") },
+                    singleLine = true,
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number)
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = { onSave(text.toIntOrNull() ?: 0) }) { Text("Save") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
+@Composable
+private fun CardList(
+    cards: List<BoardCard>,
+    today: LocalDate,
+    editable: Boolean,
+    onClick: (BoardCard) -> Unit,
+    onMove: (BoardCard, StatusColumn) -> Unit,
+    modifier: Modifier = Modifier
+) {
     LazyColumn(
         modifier = modifier.fillMaxWidth(),
         contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = NavBarClearance),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         if (cards.isEmpty()) item { EmptyHint("No card here.") }
-        items(cards, key = { it.note.path }) { card -> BoardCardView(card, today, onClick = { onClick(card) }) }
+        items(cards, key = { it.note.path }) { card ->
+            MoveSwipe(card, editable, onMove) { BoardCardView(card, today, onClick = { onClick(card) }) }
+        }
     }
+}
+
+/** A swipe moves the card one column along the flow (E6): right to the next, left to the previous. */
+@Composable
+private fun MoveSwipe(card: BoardCard, editable: Boolean, onMove: (BoardCard, StatusColumn) -> Unit, content: @Composable () -> Unit) {
+    val next = BoardFlow.next(card.note.column)
+    val previous = BoardFlow.previous(card.note.column)
+    val state = androidx.compose.material3.rememberSwipeToDismissBoxState()
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val currentOnMove by androidx.compose.runtime.rememberUpdatedState(onMove)
+    // One stable callback: SwipeToDismissBox restarts its effect when the lambda changes, which
+    // would move the card twice.
+    val onDismiss = remember(state, card.note.path, next, previous) {
+        { direction: androidx.compose.material3.SwipeToDismissBoxValue ->
+            val target = if (direction == androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd) next else previous
+            target?.let { currentOnMove(card, it) }
+            scope.launch { state.snapTo(androidx.compose.material3.SwipeToDismissBoxValue.Settled) }
+            Unit
+        }
+    }
+    androidx.compose.material3.SwipeToDismissBox(
+        state = state,
+        enableDismissFromStartToEnd = editable && next != null,
+        enableDismissFromEndToStart = editable && previous != null,
+        gesturesEnabled = editable && (next != null || previous != null),
+        onDismiss = onDismiss,
+        backgroundContent = {
+            val toNext = state.dismissDirection == androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd
+            val target = if (toNext) next else previous
+            Box(
+                Modifier.fillMaxSize().padding(horizontal = 16.dp),
+                contentAlignment = if (toNext) Alignment.CenterStart else Alignment.CenterEnd
+            ) {
+                target?.let { Text(if (toNext) "→ ${it.label}" else "${it.label} ←", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary) }
+            }
+        }
+    ) { content() }
 }
 
 @Composable

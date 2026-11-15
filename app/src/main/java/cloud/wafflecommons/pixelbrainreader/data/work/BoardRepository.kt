@@ -44,6 +44,10 @@ class BoardRepository @Inject constructor(
 
     suspend fun removeBoard(folder: String) = updateConfig { c -> c.copy(boards = c.boards - folder) }
 
+    /** A column's work-in-progress limit on a board (E6); 0 removes it. */
+    suspend fun setWipLimit(folder: String, column: StatusColumn, limit: Int) =
+        updateConfig { c -> BoardFlow.withLimit(c, folder, column, limit) }
+
     /** The folder's notes as cards (sub-folders included), most recently updated first. */
     suspend fun cards(folder: String): List<BoardCard> = withContext(Dispatchers.IO) {
         fileContentDao.contentsUnder(folder.trimEnd('/') + "/")

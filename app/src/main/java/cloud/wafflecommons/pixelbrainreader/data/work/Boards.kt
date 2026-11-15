@@ -5,9 +5,12 @@ import cloud.wafflecommons.pixelbrainreader.data.vault.VaultSchema
 import kotlinx.serialization.Serializable
 import java.time.LocalDate
 
-/** The folders shown as boards. Synced in the vault (`10_Journal/system/boards.json`). */
+/**
+ * The folders shown as boards, and each board's work-in-progress limits (E6, 12.21: board folder →
+ * StatusColumn name → limit). Synced in the vault (`10_Journal/system/boards.json`).
+ */
 @Serializable
-data class BoardsConfig(val boards: List<String> = emptyList())
+data class BoardsConfig(val boards: List<String> = emptyList(), val wip: Map<String, Map<String, Int>> = emptyMap())
 
 /** A note on a board, with the card fields kept in its frontmatter (`next_step`, `blockers`, `target_date`). */
 data class BoardCard(
