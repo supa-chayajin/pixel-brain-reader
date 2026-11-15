@@ -1,5 +1,7 @@
 package cloud.wafflecommons.pixelbrainreader.data.ai
 
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 import ai.djl.huggingface.tokenizers.HuggingFaceTokenizer
 import android.content.Context
 import android.util.Base64
@@ -82,8 +84,10 @@ class VectorSearchEngine @Inject constructor(
 
     // TFLite's Interpreter (and the tokenizer feeding it) are NOT thread-safe, and the indexing
     // worker and a chat search used to run inference on the same instance at the same time: a
-    // native crash or silently corrupted vectors.
-    private val inferenceLock = Any()
+    // native crash or silently corrupted vectors. Fair (12.19): indexing takes it passage after
+    // passage, and an unfair monitor let it win again and again while a search waited (17 minutes
+    // on the emulator); a waiting search now goes right after the passage being embedded.
+    private val inferenceLock = ReentrantLock(true)
 
     // Every search used to load the whole embeddings table and re-parse each stored vector from its
     // comma-separated text (hundreds of float parses per chunk, for every chunk, per query).
@@ -347,7 +351,7 @@ class VectorSearchEngine @Inject constructor(
      * invariant. Output is a unit-length vector (the TFLite graph ends in
      * `tf.math.l2_normalize`, so cosine == dot product on these).
      */
-    private fun embedInternal(eng: Engine, text: String): FloatArray = synchronized(inferenceLock) {
+    private fun embedInternal(eng: Engine, text: String): FloatArray = inferenceLock.withLock {
         val inputIds = Array(1) { IntArray(MAX_SEQ_LEN) { 1 } }
         val attentionMask = Array(1) { IntArray(MAX_SEQ_LEN) }
         val encoding = eng.tokenizer.encode(text)
