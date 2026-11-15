@@ -461,6 +461,16 @@ class UserPreferencesRepository @Inject constructor(
         }
     }
 
+    // --- Inbox triage (12.21, E7): notes snoozed until a day, "yyyy-MM-dd|path"; device-only ---
+    private val KEY_INBOX_SNOOZED = androidx.datastore.preferences.core.stringSetPreferencesKey("inbox_snoozed")
+
+    val inboxSnoozed: Flow<Set<String>> = setting { it[KEY_INBOX_SNOOZED] ?: emptySet() }
+
+    /** Applies [change] to the snoozed entries, in one edit. */
+    suspend fun updateInboxSnoozed(change: (Set<String>) -> Set<String>) {
+        context.dataStore.edit { prefs -> prefs[KEY_INBOX_SNOOZED] = change(prefs[KEY_INBOX_SNOOZED] ?: emptySet()) }
+    }
+
     // --- Simpler screens (v12): what the Daily screen shows, the fold, pinned tools ---
     private val KEY_DAILY_SHOWN = androidx.datastore.preferences.core.stringSetPreferencesKey("daily_shown_sections")
     private val KEY_DAILY_MORE_EXPANDED = booleanPreferencesKey("daily_more_expanded")
