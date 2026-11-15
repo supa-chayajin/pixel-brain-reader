@@ -77,6 +77,25 @@ class PrivateNoteRepository @Inject constructor(
         pushScheduler.requestPush()
     }
 
+    /**
+     * Rewrites an encrypted note in a subfolder of `99_Private/` (12.19: People notes,
+     * `People/person-<id>.md.enc`) from its current text: [change] gets the decrypted text (null for
+     * a new note) and returns the new one, all under the session's write lock with [key], so no write
+     * starts from a stale copy. A note that doesn't open is never written over. Atomic, then a push.
+     */
+    suspend fun rewriteEncrypted(relativePath: String, key: PrivateVaultKey, change: (String?) -> String) = withContext(Dispatchers.IO) {
+        require(SUBFOLDER_NOTE.matches(relativePath)) { "Not a private note's path" }
+        VaultWriteGate.check()
+        val target = File(vaultDir, relativePath)
+        session.writeWith(key) { password ->
+            val current = if (target.exists()) cryptoManager.decrypt(target.readBytes(), password) else null
+            val next = change(current)
+            target.parentFile?.mkdirs()
+            writeAtomically(target, cryptoManager.encrypt(next, password))
+        }
+        pushScheduler.requestPush()
+    }
+
     /** The same with a password typed and verified for this one write (the confidentiality guard's "move to private"). */
     suspend fun createNote(filename: String, content: String, password: CharArray) {
         val key = PrivateVaultKey(password.copyOf())
@@ -159,5 +178,8 @@ class PrivateNoteRepository @Inject constructor(
 
     private companion object {
         const val PASSWORD_CHECK_SAMPLE = 2
+
+        /** One folder level, plain names: nothing a path could climb out of `99_Private/` with. */
+        val SUBFOLDER_NOTE = Regex("""^[A-Za-z0-9_][A-Za-z0-9_ -]*/[A-Za-z0-9_][A-Za-z0-9_.-]*\.md\.enc$""")
     }
 }
