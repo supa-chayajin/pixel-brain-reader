@@ -42,7 +42,9 @@ data class ChatMessage(
     val content: String,
     val isUser: Boolean,
     val isStreaming: Boolean = false,
-    val sources: List<String> = emptyList()
+    val sources: List<String> = emptyList(),
+    /** When it was saved (epoch ms); null for the bubble still streaming. */
+    val timestamp: Long? = null
 )
 
 /**
@@ -66,7 +68,8 @@ private fun ChatMessageEntity.toUi(): ChatMessage = ChatMessage(
     content = content,
     isUser = role == "USER",
     isStreaming = false,
-    sources = sources
+    sources = sources,
+    timestamp = timestamp
 )
 
 // Sliding window size injected into the Nano prompt. 6 messages = 3 turns.
