@@ -36,7 +36,7 @@ class CaptureRepositoryTest {
         val context = mockk<Context> { every { this@mockk.filesDir } returns filesDir }
         val noteRepository = mockk<NoteRepository>(relaxed = true)
         val pushScheduler = mockk<VaultPushScheduler>(relaxed = true)
-        val repository = CaptureRepository(noteRepository, SafeFileProvider(context), pushScheduler)
+        val repository = CaptureRepository(noteRepository, SafeFileProvider(context), pushScheduler, mockk(relaxed = true))
         // A capture from the same minute already exists.
         File(filesDir, "vault/00_Inbox/Voice note 2026-10-17 1432.md").apply { parentFile?.mkdirs() }.writeText("x")
 

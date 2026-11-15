@@ -56,6 +56,12 @@ class MainActivity : FragmentActivity() {
     lateinit var shareImportRepository: ShareImportRepository
 
     @Inject
+    lateinit var captureRepository: cloud.wafflecommons.pixelbrainreader.data.repository.CaptureRepository
+
+    @Inject
+    lateinit var photoReader: cloud.wafflecommons.pixelbrainreader.data.capture.PhotoReader
+
+    @Inject
     lateinit var privateVaultSession: cloud.wafflecommons.pixelbrainreader.data.privatevault.PrivateVaultSession
 
     private val viewModel: MainViewModel by viewModels()
@@ -226,6 +232,41 @@ class MainActivity : FragmentActivity() {
         handleIntent(intent)
     }
 
+    /**
+     * An image shared to the app (X2): read on the phone, kept with its note in the inbox. Only from
+     * another app's provider (never a file, never one of ours); a launch for the share ends there.
+     */
+    private fun importSharedPhoto(uri: android.net.Uri?) {
+        val launchedForShare = intent?.action == Intent.ACTION_SEND
+        if (uri == null || !cloud.wafflecommons.pixelbrainreader.data.capture.PhotoCapture.isForeign(uri.scheme, uri.authority, ownAuthorities())) {
+            android.widget.Toast.makeText(this, "That image can't be read", android.widget.Toast.LENGTH_LONG).show()
+            if (launchedForShare) finish()
+            return
+        }
+        lifecycleScope.launch {
+            val saved = try {
+                val photo = photoReader.prepare(uri)
+                captureRepository.savePhotoNote(java.time.LocalDateTime.now(), photo.text, photo.jpeg, "share")
+                true
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                false
+            }
+            val message = if (saved) "Saved to your inbox" else "That image couldn't be read"
+            android.widget.Toast.makeText(this@MainActivity, message, android.widget.Toast.LENGTH_LONG).show()
+            if (launchedForShare) finish()
+        }
+    }
+
+    /** The authorities of this app's own content providers, its libraries' included. */
+    private fun ownAuthorities(): Set<String> =
+        packageManager.getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(PackageManager.GET_PROVIDERS.toLong()))
+            .providers.orEmpty()
+            .flatMap { it.authority.orEmpty().split(';') }
+            .filter { it.isNotBlank() }
+            .toSet()
+
     private fun handleIntent(intent: Intent?) {
         if (intent == null) return
 
@@ -234,6 +275,11 @@ class MainActivity : FragmentActivity() {
             // A read-only device saves nothing: back to the app that shared, with the notice.
             if (VaultWriteGate.refuses()) {
                 finish()
+                return
+            }
+            // 13.0 (X2): an image shared from another app becomes a photo capture in the inbox.
+            if (intent.type?.startsWith("image/") == true) {
+                importSharedPhoto(intent.getParcelableExtra(Intent.EXTRA_STREAM, android.net.Uri::class.java))
                 return
             }
             val text = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()

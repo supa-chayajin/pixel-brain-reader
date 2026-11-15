@@ -21,7 +21,8 @@ import javax.inject.Singleton
 class CaptureRepository @Inject constructor(
     private val noteRepository: NoteRepository,
     private val safeFileProvider: SafeFileProvider,
-    private val pushScheduler: VaultPushScheduler
+    private val pushScheduler: VaultPushScheduler,
+    private val assetRepository: AssetRepository
 ) {
 
     /** Writes a dictated note to the inbox and returns its vault-relative path. */
@@ -45,6 +46,21 @@ class CaptureRepository @Inject constructor(
             path
         }
 
+    /**
+     * A photo capture (13.0, X2): the photo kept in the vault's attachment folder, beside a new
+     * inbox note that shows it first, then [text] (what was typed and what the photo said).
+     */
+    suspend fun savePhotoNote(capturedAt: LocalDateTime, text: String, jpeg: ByteArray, source: String): String =
+        withContext(Dispatchers.IO) {
+            val path = uniquePath("Capture ${capturedAt.format(NAME_TIME)}")
+            val image = assetRepository.saveDropped(path, "image/jpeg", null) { jpeg.inputStream() }
+                ?: throw java.io.IOException("The photo couldn't be kept")
+            val body = cloud.wafflecommons.pixelbrainreader.data.capture.PhotoCapture.body(image.substringAfterLast('/'), text)
+            noteRepository.saveNote(path, renderQuickNote(capturedAt, body, source, PHOTO_TAGS))
+            pushScheduler.requestPush()
+            path
+        }
+
     private fun uniquePath(baseName: String): String {
         var path = "$INBOX/$baseName.md"
         var n = 2
@@ -60,14 +76,17 @@ class CaptureRepository @Inject constructor(
         private val NAME_TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HHmm")
         private val HEADING_TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
 
-        internal fun renderQuickNote(capturedAt: LocalDateTime, text: String, source: String): String = buildString {
+        private val QUICK_TAGS = listOf("inbox", "capture")
+        private val PHOTO_TAGS = listOf("inbox", "capture", "photo")
+
+        internal fun renderQuickNote(capturedAt: LocalDateTime, text: String, source: String, tags: List<String> = QUICK_TAGS): String = buildString {
             val title = "Capture ${capturedAt.format(HEADING_TIME)}"
             append(
                 VaultSchema.frontmatter(
                     title = title,
                     path = "$INBOX/$title.md",
                     date = capturedAt.toLocalDate(),
-                    tags = listOf("inbox", "capture"),
+                    tags = tags,
                     extra = listOf(
                         "source" to source,
                         "captured" to VaultSchema.singleQuoted(capturedAt.withSecond(0).withNano(0).toString())
