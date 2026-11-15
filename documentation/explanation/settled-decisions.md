@@ -186,8 +186,8 @@ mappings are archived (decision 13) — stopped at `v10.0.0`.
 Settings → Knowledge Vault (RAG) → **Private notes in AI answers**, off by default and kept on the
 device. Off: nothing under `99_Private/` (and no `.md.enc` note) is embedded, the vectors already
 embedded are dropped at the next indexing run, and retrieval never ranks nor decrypts a private
-chunk. On: private notes are embedded while the vault password is saved, and reach Chat only
-while the private vault is unlocked in the session. People notes and the encrypted mission log
+chunk. On: private notes are embedded, and reach Chat, only while the private journal is unlocked
+(since 12.18 nothing stores the password readable: #21). People notes and the encrypted mission log
 are never embedded either way. A brief the owner sends on purpose — Beautify in the private
 journal, Ask Coach, a report's optional summary — stays an explicit, visible choice.
 
@@ -197,3 +197,20 @@ embed private notes, and no decision recorded it. The owner chose the opt-in on 
 RFC triage, `documentation/plans/2026-11-10-dream-app-roadmap.md`). With the switch off, nothing
 in the background needs the stored password, so binding it to the fingerprint (V3) becomes
 possible.
+
+## 21. The private journal's password needs the owner
+
+Since 12.18 (V3) the phone keeps the private journal's password only wrapped by an Android Keystore
+key that a strong biometric opens, at each use: the face first when the phone rates it strong, then
+the fingerprint, then the typed password. Never the phone's PIN, which family or a shoulder-surfer
+may know. Nothing reads it in the background: the indexer, Chat's private answers and an encrypted
+mission log use the unlocked session and do without while the journal is locked, which it does
+by itself 5 minutes after it leaves the screen (V2). A new face or fingerprint invalidates the key
+and the password is typed once.
+
+Never store a readable copy of the password again, not even to make a background feature work:
+such a feature runs after an unlock instead (`PrivateVaultFollowUps`).
+
+*Why:* RFC-008 asked for a password only the owner's finger opens; the app had kept it readable so
+background work could use it. The owner chose V3 for 12.18 on 2026-11-15, with face → fingerprint →
+password as the order (`documentation/plans/2026-11-15-12.18-private-vault.md`).

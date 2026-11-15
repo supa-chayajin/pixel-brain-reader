@@ -7,9 +7,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Planned: `documentation/plans/2026-11-10-dream-app-roadmap.md`. Next, 12.18.0: private vault
-hardening (changing its password safely). Hybrid search waits for the golden set's numbers,
-measured on the phone.
+Planned: `documentation/plans/2026-11-10-dream-app-roadmap.md`. Next, 12.19.0: People and 1:1s.
+Hybrid search waits for the golden set's numbers, measured on the phone.
+
+## [12.18.0] — 2026-11-15
+
+Private vault hardening, from the owner's interview the same night, planned in
+`documentation/plans/2026-11-15-12.18-private-vault.md`.
+
+### Security
+
+- **The journal's password needs you (V3).** Until now it was kept readable on the phone, and the
+  fingerprint prompt only guarded the screen. It is now wrapped by a Keystore key that only a
+  strong biometric opens, at each use: your face first when the phone rates it strong, then your
+  fingerprint, then the typed password; never the phone's PIN. Nothing in the background can read
+  it any more. The copy 12.17 kept is wrapped at the first start and deleted at the first unlock
+  that proves the new way in. A new face or fingerprint asks for the password once.
+- **The journal locks itself (V2)** 5 minutes after it leaves the screen (another app, Home, the
+  screen turning off), and at once when you close it. Its menu has Lock now and the delay: at
+  once, 1, 5 or 15 minutes. Locking also ends private notes in Chat answers.
+
+### Added
+
+- **Change password (V1)**, in the journal's menu: the current password again, then the new one
+  twice (12 characters at least). Every encrypted note (the journal, and an encrypted mission
+  log's months, decisions and reports) is re-encrypted in a crash-safe swap: staged outside the
+  vault and read back, then renamed in one pass. A crash is rolled back or finished at the next
+  start, and git never commits a half-swapped vault. The AI index's private passages follow the
+  new password. Older versions in the vault's git history keep the old one, and the screen says
+  so.
+- **The feeds page says how each feed did:** its last read, or why its last try failed (gone,
+  refused, blocked, no answer, not a feed), and Check now.
+
+### Changed
+
+- **Private notes in AI answers** (when on) are embedded while the journal is unlocked instead of
+  from a stored password; indexing starts at the unlock.
+- **An encrypted mission log** works while the journal is unlocked. Focus's "Log it" isn't offered
+  for it, and its monthly report waits for the next unlock. A plain log doesn't change.
+- **The shutdown win** says when it couldn't be logged, instead of claiming it was.
+
+### Fixed
+
+- **A feed added to `feeds.json`**, by a sync or on the feeds page, is read at once instead of up
+  to two hours later, and Daily's Tech watch re-reads when a sync ends.
+- **"Use password"** on the fingerprint prompt no longer shows as an error.
+
+### Notes
+
+- No new dependency or permission; the database doesn't change (three queries added).
+- Settled decision #20 now says private notes are embedded and retrieved only while the journal
+  is unlocked, and #21 records V3: the journal's password is never readable without the owner.
 
 ## [12.17.0] — 2026-11-14
 

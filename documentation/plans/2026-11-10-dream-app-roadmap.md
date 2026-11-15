@@ -244,20 +244,21 @@ interview the same day and the as-built notes: `2026-11-14-12.17-games.md`.
 
 The owner's interview on 2026-11-15 (six decisions: history kept, auto-lock after 5 minutes, V3
 now, 12+ characters, face → fingerprint → password, built that night) and the design:
-`2026-11-15-12.18-private-vault.md`.
+`2026-11-15-12.18-private-vault.md`. Built in 12.18.0 (2026-11-15); the face and fingerprint
+checks on the Fold are the owner's.
 
-- [ ] **V1 Change password.** Re-encrypts every `.md.enc` with a new salt: the journal, the
+- [x] **V1 Change password.** *(12.18.0)* Re-encrypts every `.md.enc` with a new salt: the journal, the
       encrypted mission log and ADRs, People. It must be crash-safe:
   - new copies are staged and checked, then swapped in one pass;
   - both passwords are accepted until the swap ends;
   - a test kills the process mid-way.
 
   *(Oct 17 3.6; V12 E10.)*
-- [ ] **V2 Auto-lock** after N minutes in the background. *(Oct 17 3.6.)*
-- [ ] **V3 (optional) Fingerprint-bound password.** With T3 off, nothing in the background needs
+- [x] **V2 Auto-lock** *(12.18.0; 5 minutes by default, set in the journal's menu)* after N minutes in the background. *(Oct 17 3.6.)*
+- [x] **V3 (optional) Fingerprint-bound password.** *(12.18.0; face → fingerprint → password, settled decision #21)* With T3 off, nothing in the background needs
       the stored password, so it can sit behind a Keystore key that requires user authentication.
       *(RFC-008 §2.1.)*
-- [ ] **D5a Tech watch follow-ups** (owner, 2026-11-15: with 12.18). The block re-reads its feeds
+- [x] **D5a Tech watch follow-ups** *(12.18.0)* (owner, 2026-11-15: with 12.18). The block re-reads its feeds
       when a sync brings a changed `feeds.json` (today only on foreground or a mode change), and
       the feeds page shows a feed that fails. *(Noted on 2026-11-11.)*
 
