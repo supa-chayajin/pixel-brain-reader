@@ -7,9 +7,82 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Planned: `documentation/plans/2026-11-10-dream-app-roadmap.md`. Next, 12.21 the same evening:
-personal experiments, the workshop kit, the toolkit's small wins and capture from anywhere
-(`documentation/plans/2026-11-15-12.21-experiments-and-workshops.md`).
+Planned: `documentation/plans/2026-11-10-dream-app-roadmap.md`. Next: the second brain's part two
+(a smaller embedder, days like this) and the toolkit's last small wins.
+
+## [12.21.0] — 2026-11-15
+
+Experiments, workshops and capture, built the same evening as 12.20 from the owner's interviews
+(D1–D6); planned in `documentation/plans/2026-11-15-12.21-experiments-and-workshops.md`.
+
+### Added
+
+- **Personal experiments (L2):**
+  - Life Stats has an Experiments card: "does doing X change Y?".
+  - Pick a habit you tick for X, and for Y your mood, your sleep, your HRV or the share of your
+    tasks done.
+  - It runs 14 days as usual, then 14 days doing X.
+  - Once the trial is over, the card shows the difference with a 95% interval, or says it can't
+    tell. Your experiments live in the vault.
+- **The workshop kit (W2):** "Run as a workshop" on a meeting with an agenda (Meetings &
+  requests).
+  - Its points become timed steps that share the meeting's length, with a countdown that keeps
+    the screen on.
+  - One capture field files ideas, decisions, actions and questions into a board.
+  - At the end, a French synthesis note beside the meeting, linked from it: the board, how the
+    agenda ran, and Gemini Nano's summary when you ask for it.
+  - The workshop stays on the phone until then; leaving the screen keeps it.
+- **Inbox swipe triage (E7):**
+  - In the toolkit's Inbox, swipe a note right to file it in its suggested folder, or left to see
+    it again in a week.
+  - Delete is a button, with Undo.
+  - Snoozes stay on the phone; the note itself is never touched.
+- **Board swipes and WIP limits (E6):**
+  - Swipe a board's card right or left to move it one column along: To do, In progress, Paused,
+    Done.
+  - Give a column a limit from its header: past it, the count turns red. The limits live in the
+    vault with the boards.
+- **Tabs per mode (E1):**
+  - Modes settings has a table: untick a tab to hide it in that mode; Daily always shows.
+  - The toolkit's chip on Daily is one of the rows, so it can hide outside Work.
+  - The choice lives in the vault.
+- **A leave from the calendar (E3):**
+  - An all-day "Congés" (or "Vacances", "RTT", "Leave"…) in your own Google calendars becomes a
+    leave in Modes, and follows its event when it moves or goes.
+  - Leaves you typed are never touched.
+- **Capture from anywhere (X4):**
+  - A Capture tile in Quick Settings opens one screen: type or dictate, and Save puts a new note
+    in your inbox.
+  - Make Pixel Brain your phone's notes app (Settings › Apps › Default apps › Notes app) and the
+    lock screen's notes shortcut opens the same screen over the lock screen. It shows nothing of
+    the vault there and leads nowhere else.
+
+### Changed
+
+- **Life Stats in one visual system (D7):**
+  - Every card shares one Material 3 Expressive style: one surface and shape, the card's icon on a
+    soft badge of its color, big numbers in tiles.
+  - Colors are kept readable in light and dark themes.
+  - The cards keep their order.
+- **Honest insights as strength bars (D8):** each pair shows its two icons and where it sits
+  between −1 and +1, colored by direction, with the words and N.
+- **Experiments drawn:** each experiment is a tile, its two phases a bar. Once over, the difference
+  is shown with its 95% interval drawn around zero.
+- **Chat's tabs are Cortex, Council and Spark, without emojis (D9):** Council holds Boardroom,
+  Coach and your presets, chosen from its menu and named on its empty screen.
+
+### Notes
+
+- **New in the vault:**
+  - `10_Journal/data/experiments/experiments.json`;
+  - work-in-progress limits in `boards.json`;
+  - the hidden tabs per mode and the calendar's leaves in `context_modes.json`.
+- **Older versions:**
+  - They keep reading all three files.
+  - One editing boards or modes would drop the new fields: the read-only tablet never does.
+- **Kept on the phone:** a workshop under way and the inbox's snoozes.
+- **Not in 12.21:** hiding widgets per mode (E1's other half).
+- **The database stays at version 33.** No new dependency or permission.
 
 ## [12.20.0] — 2026-11-15
 

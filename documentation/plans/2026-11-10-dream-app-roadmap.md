@@ -304,12 +304,12 @@ owner asked for the same morning and the fixes of a full pre-release review.
 
 ### Then — the work cockpit
 
-- [ ] **W2 Workshop kit (C14).** An agenda timer, a capture board, and a French synthesis note at
+- [x] **W2 Workshop kit (C14).** *(12.21.0: from a meeting note's agenda, a four-column board, the French synthesis beside the meeting)* An agenda timer, a capture board, and a French synthesis note at
       the end. *(v11 C14.)*
 - [ ] **W3 Security watch (C12).** A weekly digest note of public advisories (OSV) for a watchlist
       kept in `99_System/`, matched on the device. The desktop tooling scans lockfiles (its own
       RFC); the phone keeps the weekly view and the evidence-report line. *(v11 C12.)*
-- [ ] **W4 Small toolkit wins** *(V12 §8; 12.20.0 shipped E4 and E17)*:
+- [ ] **W4 Small toolkit wins** *(V12 §8; 12.20.0 shipped E4 and E17; 12.21.0 E3, E6, E7 and E1's tabs; E2 and E1's widgets remain)*:
   - mission-log entry templates, one tap from the tile (E4);
   - a leave from an all-day calendar event (E3);
   - board swipe and WIP limits (E6);
@@ -323,7 +323,7 @@ owner asked for the same morning and the fixes of a full pre-release review.
 - [x] **L1 Honest health insights.** *(12.20.0: four pairs in Life Stats over 90 days, from 14 paired days, with N)* Lagged Spearman correlations (sleep → next-day mood, load →
       next-night HRV), shown from N ≥ 14, with N and "a correlation is not a cause".
       *(Oct 17 3.3; V12 6.5.)*
-- [ ] **L2 Personal experiments (N-of-1).** A hypothesis, an intervention habit, a 14-day baseline
+- [x] **L2 Personal experiments (N-of-1).** *(12.21.0: in Life Stats; mood, sleep, HRV or tasks; the result once the trial is over)* A hypothesis, an intervention habit, a 14-day baseline
       then a 14-day trial, with a bootstrap 95% CI. Comes after L1. *(Oct 17 6.4.)*
 - [ ] **L3 Days like this.** Each day becomes one embedded day document, for "find days like
       today". Private notes count only when T3 is on. *(Oct 17 5.2.)*
@@ -338,7 +338,7 @@ owner asked for the same morning and the fixes of a full pre-release review.
       with the image attached. A new dependency (#9). *(Oct 17 6.6.)*
 - [ ] **X3 Privacy ledger.** "What left this phone today": host, bytes and purpose, never content.
       D5 and W3 add network calls worth showing. *(Oct 17 6.7.)*
-- [ ] **X4 Capture from anywhere.** A voice-capture tile, and the system Notes role for
+- [x] **X4 Capture from anywhere.** *(12.21.0: a Capture tile and the Notes role; capture only on the lock screen)* A voice-capture tile, and the system Notes role for
       lock-screen capture. *(Oct 17 6.1 and 3.8.)*
 - [ ] **X5 PixelBrain Wrapped**, private by default. *(Oct 17 5.4.)*
 
