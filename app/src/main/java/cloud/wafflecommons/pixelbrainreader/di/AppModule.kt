@@ -16,7 +16,8 @@ import javax.inject.Singleton
 /**
  * Process-lifetime coroutine scope for work that must outlive any single screen: sync cycles,
  * coalesced vault pushes, clock bookkeeping. A SupervisorJob so one failing child never cancels its
- * siblings; Default dispatcher because callers switch to IO for blocking work themselves.
+ * siblings; Default dispatcher because callers switch to IO for blocking work themselves. An exception
+ * escaping a launch is logged, not a crash (12.19, the owner's call: [AppScopeErrors]).
  */
 @Qualifier
 @Retention(AnnotationRetention.BINARY)
@@ -33,7 +34,7 @@ object AppModule {
     @Provides
     @Singleton
     @ApplicationScope
-    fun provideApplicationScope(): CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    fun provideApplicationScope(): CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default + AppScopeErrors.handler)
 
     /** Every commit goes through the confidentiality guard. */
     @Provides

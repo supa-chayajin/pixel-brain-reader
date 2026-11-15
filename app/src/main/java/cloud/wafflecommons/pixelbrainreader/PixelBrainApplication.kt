@@ -51,7 +51,7 @@ class PixelBrainApplication : Application(), Configuration.Provider {
     @Inject lateinit var privateVaultRekey: dagger.Lazy<cloud.wafflecommons.pixelbrainreader.data.privatevault.PrivateVaultRekey>
 
     /** Application-scoped coroutine scope — survives Activity recreation. */
-    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO + cloud.wafflecommons.pixelbrainreader.di.AppScopeErrors.handler)
 
     override fun onCreate() {
         // The device's role first, before Hilt builds anything that could write the vault
