@@ -7,8 +7,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Planned: `documentation/plans/2026-11-10-dream-app-roadmap.md`. Next, 12.19.0: People and 1:1s.
-Hybrid search waits for the golden set's numbers, measured on the phone.
+Planned: `documentation/plans/2026-11-10-dream-app-roadmap.md`. Next, 12.20 and after: the second
+brain. Hybrid search waits for the golden set's numbers, measured on the phone (Measure retrieval
+runs again from 12.19.0).
+
+## [12.19.0] — 2026-11-15
+
+People & 1:1s, and the mood tags in three categories, from the owner's two interviews the same
+morning; planned in `documentation/plans/2026-11-15-12.19-people.md`. Before the release, a
+review of the whole app found and fixed the crash behind Measure retrieval.
+
+### Added
+
+- **People (P1):**
+  - A People tab in the private journal: one encrypted note per person you have 1:1s with, work
+    or personal (work people show in Work mode only).
+  - Each note is named with a neutral id, so nothing in git says who it is about.
+  - A person's page holds their role, context, open points, your actions and theirs, a dated log
+    of your 1:1s, feedback given and received, and personal details.
+  - The toolkit's People tool opens it.
+- **Meeting prep knows who it's with:**
+  - Link a recurring meeting to a person once, in its prep; the phone remembers it.
+  - Their card (open points, both sides' actions, the last 1:1) shows after your face.
+  - "Write the 1:1 note" opens a dated entry in their note.
+- **A reminder 30 minutes before a 1:1** (a linked meeting, or one titled like a 1:1), on its own
+  switch in Settings → Reminders, on by default. A work person's meeting and a 1:1 title notify in
+  Work mode only. It shows the calendar's title, never anything from a People note.
+- **From a person's page:**
+  - log a decision to the mission log under their role, never their name;
+  - copy one of your actions to today's tasks, in words you edit first;
+  - Ask Coach to prepare the next 1:1. It gets the role, the open points and the actions, never
+    the name, and nothing is saved.
+- **Mood tags in three categories:**
+  - Activities, People and Places, separate from the icon picker's groups.
+  - The Mood Tags page groups them, moves a tag within its category or to another, and asks a new
+    tag's category, preselected from its icon.
+
+### Changed
+
+- **The mood check-in sheet, in color:**
+  - a card per category: Activities, People in pink, Places;
+  - the picked face's pill, a wash at the top and the Save button in the mood's color, from coral
+    to green;
+  - bigger faces that bounce and wiggle when picked.
+
+### Fixed
+
+- **Measure retrieval no longer runs the Fold out of memory.** The search index used to hold every
+  passage at once as a list of boxed floats. It now loads them 2,000 at a time as plain float
+  arrays, after dropping the old index. Chat, Meeting prep, Explain an error and Connections search
+  through the same index.
+- **A search no longer waits behind indexing:** the embedding model's lock is fair, so a waiting
+  search goes right after the passage being embedded.
+- **The unlock checks the password against every private note**, People and an encrypted mission
+  log included. An empty journal no longer accepts a typo.
+- **A background task that fails is logged** instead of crashing the app. Running out of memory
+  still shows the crash screen.
+
+### Notes
+
+- No new dependency or permission, and the database doesn't change.
+- People notes never reach the AI on their own (settled decision #20). Coach's brief is one you
+  send.
 
 ## [12.18.0] — 2026-11-15
 

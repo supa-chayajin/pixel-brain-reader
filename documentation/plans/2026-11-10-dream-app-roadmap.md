@@ -264,11 +264,20 @@ same morning: its face counts as strong and opens the journal.
 
 ### 12.19.0 — People & 1:1s (C10)
 
-- [ ] **P1 People & 1:1s.** Encrypted notes in `99_Private/People/` (role, context, last 1:1, open
+The owner's interview on 2026-11-15 (ten decisions: work and personal people, a People tab in the
+private journal, neutral file names, links made by hand in a meeting's prep, a reminder 30 minutes
+before a 1:1, the write-up in the person's note, feedback and personal details, three extras) and
+the design: `2026-11-15-12.19-people.md`. Built in 12.19.0 (2026-11-15), with the mood tags the
+owner asked for the same morning and the fixes of a full pre-release review.
+
+- [x] **P1 People & 1:1s.** *(12.19.0; D1–D10)* Encrypted notes in `99_Private/People/` (role, context, last 1:1, open
       points, agreed actions), never embedded (already excluded). Names live only there; the
       mission log keeps roles. A reminder comes before a 1:1 calendar event (Work mode,
       `muteWorkNotifications`). The open points show once the vault is unlocked, and they join
       D4's meeting prep. *(v11 C10; V12 11.3.)*
+- [x] **Mood tags by category.** *(12.19.0; the owner's request the same morning, M1–M6)* Three
+      categories (Activities, People, Places) on the Mood Tags page, and a check-in sheet in color:
+      a card per category, the mood's color, livelier faces.
 
 ### 12.20.0 and after — The second brain (each gated on R1)
 
