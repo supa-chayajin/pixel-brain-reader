@@ -118,7 +118,9 @@ fun HabitCard(
     onToggle: () -> Unit,
     onUpdateValue: (Double) -> Unit,
     /** false on a read-only device: the card shows the habit and changes nothing (12.15, S2). */
-    editable: Boolean = true
+    editable: Boolean = true,
+    /** One protected skip a week (E15); null where it isn't offered. */
+    onSkip: (() -> Unit)? = null
 ) {
     val config = habit.config
     // Parse Color. Fallback routed through MaterialTheme so an unparseable
@@ -317,6 +319,15 @@ fun HabitCard(
                             color = themeColor,
                             fontWeight = FontWeight.Bold
                         )
+                    } else if (habit.skippedToday) {
+                        // A protected skip (E15), said plainly: not done, not missed.
+                        Text(
+                            "Skipped · streak kept",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.tertiary
+                        )
+                    } else if (habit.isScheduledToday && onSkip != null && !locked && !habit.skipUsedThisWeek) {
+                        TextButton(onClick = onSkip) { Text("Skip today", style = MaterialTheme.typography.labelMedium) }
                     } else if (habit.isScheduledToday) {
                          Text(
                             "Tap to Complete",

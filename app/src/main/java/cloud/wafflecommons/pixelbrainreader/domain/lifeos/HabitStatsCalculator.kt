@@ -14,7 +14,11 @@ data class HabitDayStats(
     val currentStreak: Int,
     /** Completion of the last 7 days, oldest first (index 6 = the reference day). */
     val history: List<Boolean>,
-    val isScheduledToday: Boolean
+    val isScheduledToday: Boolean,
+    /** The day is a protected skip (E15): the streak carries over it. */
+    val skippedToday: Boolean = false,
+    /** This ISO week's protected skip is used (one a week, E15). */
+    val skipUsedThisWeek: Boolean = false
 )
 
 /**
@@ -56,12 +60,17 @@ object HabitStatsCalculator {
             isComplete(habit, byDate[date.minusDays(offset.toLong()).toString()])
         }
 
+        // One protected skip per ISO week, Monday to Sunday (E15).
+        val monday = date.minusDays((date.dayOfWeek.value - 1).toLong())
+        val weekDays = (0L..6L).map { monday.plusDays(it).toString() }.toSet()
         return HabitDayStats(
             isCompletedToday = completedToday,
             currentValue = todayLog?.value ?: 0.0,
             currentStreak = currentStreak(habit, logs, byDate, date, completedToday, custody),
             history = history,
-            isScheduledToday = HabitScheduler.isScheduledOn(habit, date, lastCompleted, custody)
+            isScheduledToday = HabitScheduler.isScheduledOn(habit, date, lastCompleted, custody),
+            skippedToday = todayLog?.status == HabitStatus.PROTECTED,
+            skipUsedThisWeek = weekDays.any { byDate[it]?.status == HabitStatus.PROTECTED }
         )
     }
 
@@ -91,6 +100,8 @@ object HabitStatsCalculator {
                     checkDate = checkDate.minusDays(1)
                 }
                 !HabitScheduler.isScheduledOn(habit, checkDate, null, custody) -> checkDate = checkDate.minusDays(1)
+                // A protected skip (E15) neither counts nor breaks the streak.
+                byDate[checkDate.toString()]?.status == HabitStatus.PROTECTED -> checkDate = checkDate.minusDays(1)
                 else -> return streak
             }
         }

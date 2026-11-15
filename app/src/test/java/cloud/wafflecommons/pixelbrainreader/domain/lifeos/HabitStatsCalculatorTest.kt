@@ -97,8 +97,36 @@ class HabitStatsCalculatorTest {
 
     private fun done(id: String, date: String) = HabitLogEntry(id, date, 1.0, HabitStatus.COMPLETED, timestamp = 0)
 
+    @Test
+    fun `a protected skip carries the streak over without counting, once a week`() {
+        val habit = HabitConfig(id = "daily", title = "Daily")
+        fun log(daysBack: Long, status: HabitStatus) =
+            HabitLogEntry(habitId = "daily", date = today.minusDays(daysBack).toString(), value = 0.0, status = status, timestamp = 0)
+        val logs = listOf(
+            log(0, HabitStatus.COMPLETED),
+            log(1, HabitStatus.PROTECTED),
+            log(2, HabitStatus.COMPLETED),
+            log(3, HabitStatus.COMPLETED)
+        )
+        val stats = HabitStatsCalculator.compute(habit, logs, today)
+        assertEquals(3, stats.currentStreak)
+        assertEquals(false, stats.skippedToday)
+        // 2026-09-10 is a Thursday: the skip on Wednesday is this week's.
+        assertEquals(true, stats.skipUsedThisWeek)
+        val skippedNow = HabitStatsCalculator.compute(habit, listOf(log(0, HabitStatus.PROTECTED), log(1, HabitStatus.COMPLETED)), today)
+        assertEquals(true, skippedNow.skippedToday)
+        assertEquals(1, skippedNow.currentStreak)
+        // An un-ticked day (SKIPPED) still breaks it.
+        val broken = HabitStatsCalculator.compute(habit, listOf(log(0, HabitStatus.COMPLETED), log(1, HabitStatus.SKIPPED), log(2, HabitStatus.COMPLETED)), today)
+        assertEquals(1, broken.currentStreak)
+        // Last week's skip leaves this week's free.
+        val lastWeek = HabitStatsCalculator.compute(habit, listOf(log(7, HabitStatus.PROTECTED)), today)
+        assertEquals(false, lastWeek.skipUsedThisWeek)
+    }
+
     private fun randomLogs(habitId: String, random: Random): List<HabitLogEntry> {
-        val statuses = HabitStatus.entries
+        // The legacy algorithm predates the protected skip (E15): it is pinned on the statuses it knew.
+        val statuses = HabitStatus.entries - HabitStatus.PROTECTED
         return (0..420).mapNotNull { back ->
             if (random.nextDouble() < 0.35) return@mapNotNull null
             HabitLogEntry(

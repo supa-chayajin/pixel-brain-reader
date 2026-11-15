@@ -309,7 +309,7 @@ owner asked for the same morning and the fixes of a full pre-release review.
 - [ ] **W3 Security watch (C12).** A weekly digest note of public advisories (OSV) for a watchlist
       kept in `99_System/`, matched on the device. The desktop tooling scans lockfiles (its own
       RFC); the phone keeps the weekly view and the evidence-report line. *(v11 C12.)*
-- [ ] **W4 Small toolkit wins** *(V12 §8)*:
+- [ ] **W4 Small toolkit wins** *(V12 §8; 12.20.0 shipped E4 and E17)*:
   - mission-log entry templates, one tap from the tile (E4);
   - a leave from an all-day calendar event (E3);
   - board swipe and WIP limits (E6);
@@ -328,7 +328,7 @@ owner asked for the same morning and the fixes of a full pre-release review.
 - [ ] **L3 Days like this.** Each day becomes one embedded day document, for "find days like
       today". Private notes count only when T3 is on. *(Oct 17 5.2.)*
 - [ ] **L4 Small wins.** Streak protection (E15), a 15-minute chore reset (E16), and dropped images
-      compressed (the ideas list, 6.2).
+      compressed (the ideas list, 6.2). *(12.20.0 shipped E15 and E16; the images remain.)*
 
 ### 13.0 — Platform (each starts from a written plan)
 

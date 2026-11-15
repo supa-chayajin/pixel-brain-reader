@@ -4,7 +4,15 @@ import androidx.compose.runtime.Immutable
 import java.time.LocalTime
 
 enum class HabitType { BOOLEAN, MEASURABLE }
-enum class HabitStatus { COMPLETED, PARTIAL, SKIPPED, FAILED }
+enum class HabitStatus {
+    COMPLETED, PARTIAL, SKIPPED, FAILED,
+
+    /**
+     * A skip that keeps the streak (E15, 12.20; the owner's D14): one a week per habit, neither done
+     * nor missed. SKIPPED stays what un-ticking a habit writes. An older version reads it as FAILED.
+     */
+    PROTECTED
+}
 
 @Immutable
 data class HabitConfig(

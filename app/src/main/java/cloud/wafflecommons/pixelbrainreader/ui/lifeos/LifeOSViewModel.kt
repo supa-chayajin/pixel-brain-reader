@@ -42,7 +42,10 @@ data class HabitWithStats(
     val currentValue: Double, // New field for Measurable
     val currentStreak: Int,
     val history: List<Boolean>, // Last 7 days, boolean status
-    val isScheduledToday: Boolean // [NEW] For visual dimming
+    val isScheduledToday: Boolean, // [NEW] For visual dimming
+    /** A protected skip today, and whether this week's is used (E15). */
+    val skippedToday: Boolean = false,
+    val skipUsedThisWeek: Boolean = false
 )
 
 data class LifeOSUiState(
@@ -152,6 +155,18 @@ class LifeOSViewModel @Inject constructor(
         }
     }
 
+    /** One protected skip a week (E15): the day is neither done nor missed, and the streak carries over. */
+    fun skipHabit(habitId: String) {
+        if (VaultWriteGate.refuses()) return // a read-only device changes nothing
+        val state = uiState.value
+        val stats = state.habitsWithStats.find { it.config.id == habitId } ?: return
+        if (!stats.config.autoSource.isNullOrBlank() || stats.isCompletedToday || stats.skipUsedThisWeek) return
+        val date = state.selectedDate
+        viewModelScope.launch {
+            habitRepository.logHabit(date, HabitLogEntry(habitId, date.toString(), 0.0, HabitStatus.PROTECTED))
+        }
+    }
+
     fun updateHabitValue(habitId: String, newValue: Double) {
         if (VaultWriteGate.refuses()) return // a read-only device changes nothing
         val state = uiState.value
@@ -235,7 +250,9 @@ class LifeOSViewModel @Inject constructor(
                 currentValue = stats.currentValue,
                 currentStreak = stats.currentStreak,
                 history = stats.history,
-                isScheduledToday = stats.isScheduledToday
+                isScheduledToday = stats.isScheduledToday,
+                skippedToday = stats.skippedToday,
+                skipUsedThisWeek = stats.skipUsedThisWeek
             )
         }
 

@@ -194,7 +194,8 @@ fun HabitDashboardScreen(
                                         viewModel.toggleHabit(habitStats.config.id)
                                     },
                                     onUpdateValue = { newVal -> viewModel.updateHabitValue(habitStats.config.id, newVal) },
-                                    editable = !VaultWriteGate.readOnly
+                                    editable = !VaultWriteGate.readOnly,
+                                    onSkip = { viewModel.skipHabit(habitStats.config.id) }
                                 )
                             }
                         }
