@@ -23,7 +23,13 @@ class EchoReviewStore @Inject constructor(
     private val pushScheduler: VaultPushScheduler
 ) {
     @Serializable
-    internal data class Reviews(val reviewed: Map<String, Long> = emptyMap())
+    internal data class Reviews(
+        val reviewed: Map<String, Long> = emptyMap(),
+        /** Spaced echoes (K6, 12.20): each note's schedule. */
+        val spaced: Map<String, SpacedReview.Card> = emptyMap(),
+        /** The folders whose notes come back on that schedule (the owner's D11). */
+        val folders: List<String> = emptyList()
+    )
 
     private val json = Json { ignoreUnknownKeys = true; prettyPrint = true }
     private val mutex = Mutex()
@@ -35,12 +41,43 @@ class EchoReviewStore @Inject constructor(
 
     suspend fun markReviewed(path: String, now: Long) = withContext(Dispatchers.IO) {
         mutex.withLock {
-            val current = read()?.reviewed.orEmpty()
+            val current = read() ?: Reviews()
             // A review only matters for the next few weeks: older entries are dropped.
-            val kept = current.filterValues { now - it < RETENTION_MS } + (path to now)
-            noteRepository.saveNote(PATH, json.encodeToString(Reviews.serializer(), Reviews(kept)))
-            pushScheduler.requestPush()
+            val kept = current.reviewed.filterValues { now - it < RETENTION_MS } + (path to now)
+            write(current.copy(reviewed = kept))
         }
+    }
+
+    /** Spaced echoes (K6): note path → its schedule. */
+    suspend fun spacedCards(): Map<String, SpacedReview.Card> = withContext(Dispatchers.IO) {
+        mutex.withLock { read()?.spaced.orEmpty() }
+    }
+
+    /** Your answer on a spaced echo moves its next return; the file on disk first, as always. */
+    suspend fun answer(path: String, answer: SpacedReview.Answer, today: Long) = withContext(Dispatchers.IO) {
+        mutex.withLock {
+            val current = read() ?: Reviews()
+            val next = SpacedReview.next(current.spaced[path], answer, today)
+            write(current.copy(spaced = current.spaced + (path to next)))
+        }
+    }
+
+    /** The folders picked for spaced echoes. */
+    suspend fun folders(): Set<String> = withContext(Dispatchers.IO) {
+        mutex.withLock { read()?.folders.orEmpty().toSet() }
+    }
+
+    suspend fun setFolders(folders: Set<String>) = withContext(Dispatchers.IO) {
+        mutex.withLock {
+            val current = read() ?: Reviews()
+            write(current.copy(folders = folders.sorted()))
+        }
+    }
+
+    /** Every field is kept: a change to one never drops the others. */
+    private suspend fun write(reviews: Reviews) {
+        noteRepository.saveNote(PATH, json.encodeToString(Reviews.serializer(), reviews))
+        pushScheduler.requestPush()
     }
 
     /** Null when the file is absent or unreadable (moved aside in that case). */

@@ -161,6 +161,22 @@ fun DailyNoteScreen(
     val saveState by viewModel.saveState.collectAsStateWithLifecycle()
     val gratitudes by viewModel.gratitudes.collectAsStateWithLifecycle() // RFC-009
     val memoryEchoes by viewModel.memoryEchoes.collectAsStateWithLifecycle()
+    // Spaced echoes' folders (K6): read when the picker opens.
+    var echoFoldersOpen by remember { mutableStateOf(false) }
+    if (echoFoldersOpen) {
+        val choices by produceState<Pair<List<String>, Set<String>>?>(initialValue = null) { value = viewModel.echoFolderChoices() }
+        choices?.let { (all, picked) ->
+            cloud.wafflecommons.pixelbrainreader.ui.components.EchoFoldersDialog(
+                choices = all,
+                picked = picked,
+                onSave = { folders ->
+                    viewModel.setEchoFolders(folders)
+                    echoFoldersOpen = false
+                },
+                onDismiss = { echoFoldersOpen = false }
+            )
+        }
+    }
     val syncState by viewModel.isSyncing.collectAsStateWithLifecycle()
     val isRefreshing = syncState is SyncState.Syncing
 
@@ -560,7 +576,9 @@ fun DailyNoteScreen(
                                         echoes = memoryEchoes,
                                         onOpenNote = onOpenNote,
                                         onMarkReviewed = viewModel::markEchoReviewed,
-                                        modifier = Modifier.padding(bottom = 16.dp)
+                                        modifier = Modifier.padding(bottom = 16.dp),
+                                        onAnswer = viewModel::answerEcho,
+                                        onChooseFolders = if (cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate.readOnly) null else ({ echoFoldersOpen = true })
                                     )
                                 }
                             }

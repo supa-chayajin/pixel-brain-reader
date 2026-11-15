@@ -301,7 +301,7 @@ class DailyNoteViewModel @Inject constructor(
             // Echoes are a nice-to-have: whatever goes wrong computing them (git history, the
             // index…) must never take the Daily screen down with it.
             try {
-                _memoryEchoes.value = memoryEchoRepository.getDailyEchoes(limit = 2)
+                _memoryEchoes.value = memoryEchoRepository.getEchoesForToday()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -315,6 +315,27 @@ class DailyNoteViewModel @Inject constructor(
         viewModelScope.launch {
             memoryEchoRepository.markEchoReviewed(path)
             _memoryEchoes.value = _memoryEchoes.value.filter { it.path != path }
+        }
+    }
+
+    /** Your answer on a spaced echo moves its next return (K6). */
+    fun answerEcho(path: String, answer: cloud.wafflecommons.pixelbrainreader.data.repository.SpacedReview.Answer) {
+        if (VaultWriteGate.refuses()) return
+        viewModelScope.launch {
+            memoryEchoRepository.answerSpaced(path, answer)
+            _memoryEchoes.value = _memoryEchoes.value.filter { it.path != path }
+        }
+    }
+
+    /** The folders the review picker offers, and the ones picked (K6). */
+    suspend fun echoFolderChoices(): Pair<List<String>, Set<String>> =
+        memoryEchoRepository.folderChoices() to memoryEchoRepository.reviewFolders()
+
+    fun setEchoFolders(folders: Set<String>) {
+        if (VaultWriteGate.refuses()) return
+        viewModelScope.launch {
+            memoryEchoRepository.setReviewFolders(folders)
+            refreshMemoryEchoes()
         }
     }
 

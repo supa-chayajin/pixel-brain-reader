@@ -63,6 +63,72 @@ class MemoryEchoRepository @Inject constructor(
         echoReviewStore.markReviewed(path, now)
     }
 
+    /**
+     * Today's echoes (K6, 12.20): the spaced ones due first (notes tagged #review and the notes of
+     * the picked folders, the owner's D11), then forgotten notes as before.
+     */
+    suspend fun getEchoesForToday(
+        forgottenLimit: Int = 2,
+        spacedLimit: Int = 3,
+        now: Long = System.currentTimeMillis()
+    ): List<MemoryEcho> = withContext(Dispatchers.IO) {
+        val spaced = spacedEchoes(spacedLimit)
+        val forgotten = getDailyEchoes(forgottenLimit + spaced.size, now)
+            .filter { echo -> spaced.none { it.path == echo.path } }
+            .take(forgottenLimit)
+        spaced + forgotten
+    }
+
+    private suspend fun spacedEchoes(limit: Int): List<MemoryEcho> {
+        val folders = echoReviewStore.folders()
+        val visibility = modesRepository.visibility.value
+        val files = fileDao.getAllFiles().firstOrNull().orEmpty().filter { entity ->
+            entity.type == "file" && entity.path.endsWith(".md") && !entity.path.startsWith("99_Private") &&
+                entity.path.split('/').none { it.startsWith(".") } && visibility.isVisible(entity.path)
+        }
+        val byPath = files.associateBy { it.path }
+        val tagged = fileContentDao.pathsContaining("review")
+            .filter { it in byPath && SpacedReview.tagged(fileContentDao.getContent(it).orEmpty()) }
+        val inScope = (byPath.keys.filter { SpacedReview.inFolders(it, folders) } + tagged).distinct()
+        if (inScope.isEmpty()) return emptyList()
+        val cards = echoReviewStore.spacedCards()
+        val today = appClock.today.value.toEpochDay()
+        return SpacedReview.due(inScope, cards, today, limit).mapNotNull { path ->
+            val entity = byPath[path] ?: return@mapNotNull null
+            val card = cards[path]
+            toEcho(entity, days = 0).copy(
+                spaced = true,
+                urgencyLabel = when {
+                    card == null -> "New to review"
+                    card.due < today -> "Review · ${today - card.due} days late"
+                    else -> "Review today"
+                }
+            )
+        }
+    }
+
+    suspend fun answerSpaced(path: String, answer: SpacedReview.Answer) =
+        echoReviewStore.answer(path, answer, appClock.today.value.toEpochDay())
+
+    suspend fun reviewFolders(): Set<String> = echoReviewStore.folders()
+
+    suspend fun setReviewFolders(folders: Set<String>) = echoReviewStore.setFolders(folders)
+
+    /** The vault's folders, two levels deep, for the review picker; private and hidden ones aside. */
+    suspend fun folderChoices(): List<String> = withContext(Dispatchers.IO) {
+        fileDao.getAllFiles().firstOrNull().orEmpty().asSequence()
+            .map { it.path }
+            .filter { it.endsWith(".md") }
+            .flatMap { path ->
+                val parts = path.split('/').dropLast(1)
+                listOfNotNull(parts.getOrNull(0), parts.take(2).takeIf { it.size == 2 }?.joinToString("/"))
+            }
+            .filterNot { folder -> folder.startsWith("99_Private") || folder.split('/').any { it.startsWith(".") } }
+            .distinct()
+            .sorted()
+            .toList()
+    }
+
     private suspend fun toEcho(entity: FileEntity, days: Long): MemoryEcho {
         val snippet = cleanSnippet(fileContentDao.getContent(entity.path).orEmpty())
         return MemoryEcho(
