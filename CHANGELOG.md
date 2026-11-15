@@ -7,9 +7,91 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Planned: `documentation/plans/2026-11-10-dream-app-roadmap.md`. Next, 12.20 and after: the second
-brain. Hybrid search waits for the golden set's numbers, measured on the phone (Measure retrieval
-runs again from 12.19.0).
+Planned: `documentation/plans/2026-11-10-dream-app-roadmap.md`. Next, 12.21 the same evening:
+personal experiments, the workshop kit, the toolkit's small wins and capture from anywhere
+(`documentation/plans/2026-11-15-12.21-experiments-and-workshops.md`).
+
+## [12.20.0] — 2026-11-15
+
+The second brain, part one, and the small wins of the life OS. Built in one afternoon from the
+owner's interviews the same day (D1–D14, C1–C4); planned in
+`documentation/plans/2026-11-15-12.20-second-brain.md`.
+
+### Added
+
+- **Hybrid search (R2):** Chat's grounded answers re-rank the notes found by meaning with the words
+  they share with your question. Words never bring in a note on their own, so a question your notes
+  don't answer still gets "not in your notes". On by default; Settings › Knowledge Vault turns it
+  off. Measure retrieval shows the hybrid's own recall.
+- **Ask this note or this folder (K2):**
+  - An Ask button in an open note's header, and "Ask this folder" in a folder's long-press menu.
+  - Chat opens on Cortex with the scope as a chip you can clear.
+  - A note that fits is read whole. A longer one is read in parts, each summarized for your
+    question. One too long for that is answered from its closest passages.
+  - Your question keeps its scope in the history. Private notes can't be asked.
+- **Continue:** an answer that stops at Gemini Nano's output cap offers to go on from the same
+  context.
+- **Time-travel questions (K4):**
+  - Ask Cortex "what did I think about X a year ago?" ("il y a un an", "en mars 2025", "l'an
+    dernier"…).
+  - It reads each note about X as it stood then, from git, and as it is now, and sums up the shift
+    in three lines.
+  - Each source chip opens that note then against now, word by word.
+- **Time Machine v2 (K3):**
+  - A note's history follows it across renames; an old version opens under its old name.
+  - The words that changed inside each changed line are marked.
+  - A note the last sync changed opens its history on "Since your last sync", and the file list
+    marks those notes and their folders.
+- **Related while writing (K5):**
+  - While you edit, the three notes closest to the paragraph you're writing appear: chips above
+    the text, or a pane beside it when the editor is wide enough for both.
+  - A tap links the note at the caret, a long-press opens it. Never a private note.
+  - The bulb in the header shows or hides them.
+- **Honest health insights (L1):** a Life Stats card with how four pairs moved together over 90
+  days. The pairs are sleep → next-day mood, steps → that night's sleep, sleep → next-day tasks and
+  mood → next-night HRV. Each shows from 14 paired days, with N, and the card says a correlation is
+  not a cause.
+- **Spaced echoes (K6):**
+  - Notes tagged #review, and the notes of the folders you pick ("Review folders" on Daily's echo
+    block), come back on a widening schedule: Again, Good or Easy.
+  - The schedule and the folders live in the vault.
+- **Echo of the day widget (K6):** today's echo; a tap opens Daily.
+- **Toolkit widget (E17):** in Work mode, today's mission-log entries, the next meeting and the
+  week's load signal.
+- **Mission-log templates (E4):** save an entry as a template; one tap logs it from the add sheet
+  the Quick Settings tile opens, a long-press removes it.
+- **The 15-minute reset (E16):**
+  - Chores take minutes, set when you add one or from the reset itself.
+  - The reset picks the most overdue chores that fit 15 minutes, each with its room.
+- **Streak protection (E15):** once a week per habit, "Skip today" keeps the streak; the day shows
+  as skipped, neither done nor missed.
+
+### Changed
+
+- **Chat, in bubbles (C1–C4):**
+  - Questions and answers both in bubbles, in each persona's colors: Cortex primary, the preset
+    secondary, Spark tertiary.
+  - An answer has its avatar, its sources as note titles, Copy and Save to Inbox.
+  - Material 3 Expressive's loading indicator while the model thinks; new bubbles spring in.
+  - An empty conversation shows the persona's avatar, its name and what it does.
+
+### Fixed
+
+- **A long note title no longer pushes the header's buttons off the screen:** the title shortens
+  instead. Ask this note shows while reading; the related-notes bulb while editing.
+- **The scope of Ask this note or folder holds on every Chat screen:** one kept in the back stack
+  used to take it while another showed.
+- **Ask and Ask Coach open Chat as its tab:** the Repo tab came back to Chat instead of the list.
+- **A question typed with a trailing newline** no longer shows an empty line in its bubble.
+
+### Notes
+
+- **The database goes to version 33, in place:** a chore's minutes, so nothing local is lost.
+- **Older versions and the vault:**
+  - An older version reading a protected skip sees a missed day (the read-only tablet, until it
+    updates).
+  - An older version editing chores or mission-log settings would drop the new fields.
+- No new dependency or permission.
 
 ## [12.19.0] — 2026-11-15
 
