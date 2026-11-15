@@ -110,6 +110,7 @@ fun LifeStatsScreen(
                     item { TodayVitalsCard(uiState) }
                     item { RecoveryCard() }
                     item { HealthInsightsCard() }
+                    item { ExperimentsCard() }
                     item { MoodVsHeartRateChartCard(uiState.moodHistory) }
                     item { MoodSummaryCard(uiState) }
                     item { CompletionRingsCard(uiState, globalCompletion) }

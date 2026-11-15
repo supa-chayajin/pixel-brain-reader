@@ -9,6 +9,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -26,12 +27,20 @@ class HealthInsightsRepository @Inject constructor(
     private val noteRepository: NoteRepository,
     private val dashboardDao: DailyDashboardDao
 ) {
-    suspend fun insights(today: LocalDate): List<HealthInsights.Insight> = withContext(Dispatchers.IO) {
+    suspend fun insights(today: LocalDate): List<HealthInsights.Insight> {
         val last = today.minusDays(1)
-        val first = last.minusDays(HealthInsights.WINDOW_DAYS.toLong() - 1)
-        // One night more: a day's steps and mood pair with the night that ends the next day.
-        val nights = recoveryRepository.history(today, HealthInsights.WINDOW_DAYS + 1).nights.associateBy { it.date }
-        val steps = healthMetricsRepository.getMetricsHistoryFlow(last, HealthInsights.WINDOW_DAYS).first()
+        return HealthInsights.of(days(last.minusDays(HealthInsights.WINDOW_DAYS.toLong() - 1), last))
+    }
+
+    /**
+     * The measured days from [first] to [last], then the night after [last] alone: a day's steps
+     * and mood pair with the night that ends the next day. Shared with the experiments (L2).
+     */
+    suspend fun days(first: LocalDate, last: LocalDate): List<HealthInsights.Day> = withContext(Dispatchers.IO) {
+        val count = ChronoUnit.DAYS.between(first, last).toInt() + 1
+        if (count <= 0) return@withContext emptyList()
+        val nights = recoveryRepository.history(last.plusDays(1), count + 1).nights.associateBy { it.date }
+        val steps = healthMetricsRepository.getMetricsHistoryFlow(last, count).first()
             .mapNotNull { metrics ->
                 val date = runCatching { LocalDate.parse(metrics.date) }.getOrNull() ?: return@mapNotNull null
                 metrics.steps.takeIf { it > 0 }?.let { date to it.toDouble() }
@@ -39,7 +48,7 @@ class HealthInsightsRepository @Inject constructor(
         val moods = moodRepository.getMoodsBetween(first, last).first()
             .groupBy { it.date }
             .mapValues { (_, entries) -> entries.map { it.score.toDouble() }.average() }
-        val days = (0..HealthInsights.WINDOW_DAYS).map { first.plusDays(it.toLong()) }.map { date ->
+        (0..count).map { first.plusDays(it.toLong()) }.map { date ->
             val night = nights[date]
             HealthInsights.Day(
                 date = date,
@@ -50,7 +59,6 @@ class HealthInsightsRepository @Inject constructor(
                 tasksDone = if (date.isAfter(last)) null else tasksDone(date)
             )
         }
-        HealthInsights.of(days)
     }
 
     /** The share of the day's tasks ticked; null for a day without tasks. */

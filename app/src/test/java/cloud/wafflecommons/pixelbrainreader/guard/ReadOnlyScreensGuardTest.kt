@@ -52,7 +52,9 @@ class ReadOnlyScreensGuardTest {
         "ui/work/ExplainErrorScreen.kt",
         "ui/daily/DailyNoteScreen.kt",
         "ui/daily/GratitudeSection.kt",
-        "ui/components/NoteTimeMachineSheet.kt"
+        "ui/components/NoteTimeMachineSheet.kt",
+        // Life Stats' experiments card (12.21, L2): New and Remove only where the vault can change.
+        "ui/lifestats/ExperimentsCard.kt"
     )
 
     @Test
