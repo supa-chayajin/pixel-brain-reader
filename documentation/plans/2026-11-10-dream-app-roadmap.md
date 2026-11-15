@@ -320,7 +320,7 @@ owner asked for the same morning and the fixes of a full pre-release review.
 
 ### Then — the private life OS
 
-- [ ] **L1 Honest health insights.** Lagged Spearman correlations (sleep → next-day mood, load →
+- [x] **L1 Honest health insights.** *(12.20.0: four pairs in Life Stats over 90 days, from 14 paired days, with N)* Lagged Spearman correlations (sleep → next-day mood, load →
       next-night HRV), shown from N ≥ 14, with N and "a correlation is not a cause".
       *(Oct 17 3.3; V12 6.5.)*
 - [ ] **L2 Personal experiments (N-of-1).** A hypothesis, an intervention habit, a 14-day baseline
