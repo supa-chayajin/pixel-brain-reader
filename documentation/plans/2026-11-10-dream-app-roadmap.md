@@ -334,13 +334,13 @@ owner asked for the same morning and the fixes of a full pre-release review.
 
 - [ ] **X1 Wear OS companion** (RFC-007, deferred on 2026-11-04). Tiles for mood, the next action
       and focus; voice capture to the inbox. It needs a new module and new dependencies (#9).
-- [ ] **X2 Capture anything.** A photo goes through on-device text recognition into an inbox note,
+- [x] **X2 Capture anything.** *(13.0.0: the Capture screen once unlocked, and an image shared to the app; ML Kit bundled)* A photo goes through on-device text recognition into an inbox note,
       with the image attached. A new dependency (#9). *(Oct 17 6.6.)*
-- [ ] **X3 Privacy ledger.** "What left this phone today": host, bytes and purpose, never content.
+- [x] **X3 Privacy ledger.** *(13.0.0: Settings › Integrations; today and 30 days; sizes from the phone's own count)* "What left this phone today": host, bytes and purpose, never content.
       D5 and W3 add network calls worth showing. *(Oct 17 6.7.)*
 - [x] **X4 Capture from anywhere.** *(12.21.0: a Capture tile and the Notes role; capture only on the lock screen)* A voice-capture tile, and the system Notes role for
       lock-screen capture. *(Oct 17 6.1 and 3.8.)*
-- [ ] **X5 PixelBrain Wrapped**, private by default. *(Oct 17 5.4.)*
+- [x] **X5 PixelBrain Wrapped**, private by default. *(13.0.0: the year so far, cards from Life Stats; nothing written)* *(Oct 17 5.4.)*
 
 ## 4. Gates (every release)
 

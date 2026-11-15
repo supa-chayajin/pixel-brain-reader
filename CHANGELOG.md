@@ -8,7 +8,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 Planned: `documentation/plans/2026-11-10-dream-app-roadmap.md`. Next: the second brain's part two
-(a smaller embedder, days like this) and the toolkit's last small wins.
+(a smaller embedder, days like this), the toolkit's last small wins, and the Wear OS companion
+(X1) once it has a plan.
+
+## [13.0.0] — 2026-11-15
+
+The platform's lean cut, built the night 12.21 shipped, from the owner's decisions D1–D5; planned
+in `documentation/plans/2026-11-15-13.0-platform.md`. The Wear OS companion (X1) stays deferred.
+
+### Added
+
+- **Where a note lives (D5):** a note's header shows its folder under its title ("20_Projects ›
+  21_App › Notes", "Vault root" at the top). A long path gives up its middle first. Tap it to open
+  that folder in the file list: beside the note on a wide window, back to the list wherever the
+  note fills the window (a phone, a tablet in portrait).
+- **The privacy ledger (X3):** Settings › Integrations › Privacy ledger shows what left this
+  phone.
+  - Today first, then each of the last 30 days, with each host the app talked to, why (vault sync,
+    the Google imports, weather, web imports, the tech watch, PlayStation…), how many calls and
+    about how many bytes each way.
+  - Only hosts and sizes are kept, never what was sent, on the phone only.
+  - The sizes come from the phone's own count of the app's traffic while each call runs, so
+    nothing is counted twice. What ran while no named call did shows as "Not named", such as a
+    library's own reports.
+- **Your year so far (X5):** a button in Life Stats opens swipeable cards for the year: notes
+  written and edited with their top folders, your tags, mood and its best month, habits and the
+  longest run, sleep and steps, games, and your level.
+  - A card without data is left out, and every number is a count or an average of measured days.
+  - Work notes are counted but never named outside Work mode, and their tags stay out.
+  - Nothing of it is written to the vault or kept once the page closes.
+- **Capture anything (X2):** a photo becomes an inbox note.
+  - In the Capture screen, once the phone is unlocked, add a photo: its text is read on the phone
+    (ML Kit's bundled model, offline from the first photo) and joins what you typed, and the photo
+    is kept beside the note, at most 1600 pixels on its longest side.
+  - Share an image to Pixel Brain from another app and it lands in your inbox the same way.
+  - Over the lock screen there's no photo button: the picker would show your gallery.
+
+### Notes
+
+- **New dependency:** `com.google.mlkit:text-recognition` 16.0.1 (Latin, bundled), approved by the
+  owner (D2); it adds ML Kit's OCR libraries to the APK.
+- **Nothing new in the vault's formats:** the photo capture is an ordinary inbox note with an
+  attachment, tagged `photo`; the ledger and Wrapped write nothing to the vault.
+- **Before the first login,** the Capture tile, the lock screen's notes shortcut and a shared image
+  ask you to log in first: the first copy of the vault would replace what they saved.
 
 ## [12.21.0] — 2026-11-15
 
@@ -80,6 +123,8 @@ Experiments, workshops and capture, built the same evening as 12.20 from the own
 - **Older versions:**
   - They keep reading all three files.
   - One editing boards or modes would drop the new fields: the read-only tablet never does.
+- **Released inside 13.0.0:** 12.21.0 has no APK of its own; its tag marks its release commit (the
+  owner's call, to build and check on the Fold once).
 - **Kept on the phone:** a workshop under way and the inbox's snoozes.
 - **Not in 12.21:** hiding widgets per mode (E1's other half).
 - **The database stays at version 33.** No new dependency or permission.
