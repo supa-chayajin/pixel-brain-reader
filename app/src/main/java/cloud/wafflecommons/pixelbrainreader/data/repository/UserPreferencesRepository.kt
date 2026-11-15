@@ -198,6 +198,18 @@ class UserPreferencesRepository @Inject constructor(
         }
     }
 
+    // --- The tech watch's feed statuses (12.18, D5a): device state, never the vault ---
+    private val KEY_WATCH_FEED_STATUS = stringPreferencesKey("watch_feed_status")
+
+    /** Each feed's last read and last failure, as JSON (data/watch/FeedStatuses). */
+    val watchFeedStatus: Flow<String?> = setting { it[KEY_WATCH_FEED_STATUS] }
+
+    suspend fun setWatchFeedStatus(json: String) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_WATCH_FEED_STATUS] = json
+        }
+    }
+
     // --- Meeting prep (12.12, D4): off by default, nothing notifies unless switched on ---
     private val KEY_MEETING_PREP_REMINDERS = booleanPreferencesKey("meeting_prep_reminders")
 
