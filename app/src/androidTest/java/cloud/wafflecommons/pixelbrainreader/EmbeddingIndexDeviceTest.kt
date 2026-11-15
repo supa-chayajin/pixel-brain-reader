@@ -85,7 +85,8 @@ class EmbeddingIndexDeviceTest {
     @Test
     fun aStoppedRunResumesTheNoteThroughTheRealModel() = runBlocking {
         val engine = VectorSearchEngine(
-            context, db.embeddingDao(), CryptoManager(), PrivateVaultSession(CryptoManager()),
+            context, db.embeddingDao(), CryptoManager(),
+            PrivateVaultSession(CryptoManager(), UserPreferencesRepository(context), kotlinx.coroutines.MainScope()),
             dagger.Lazy<ModesRepository> { error("not used by embed") },
             dagger.Lazy<UserPreferencesRepository> { error("not used by embed") }
         )

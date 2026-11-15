@@ -1,6 +1,12 @@
 package cloud.wafflecommons.pixelbrainreader.data.privatevault
 
 import cloud.wafflecommons.pixelbrainreader.data.local.security.CryptoManager
+import cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
+import io.mockk.every
+import io.mockk.mockk
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -13,7 +19,12 @@ import org.junit.Test
 /** The private journal's session (12.18, V3): the only readable copy of the password, in memory. */
 class PrivateVaultSessionTest {
 
-    private val session = PrivateVaultSession(CryptoManager())
+    private val preferences: UserPreferencesRepository = mockk {
+        every { privateAutoLockMinutes } returns flowOf(5)
+    }
+
+    // The auto-lock's timer runs in this scope; its virtual clock never advances here.
+    private val session = PrivateVaultSession(CryptoManager(), preferences, TestScope())
     private val password = "correct horse battery".toCharArray()
 
     @Test
@@ -54,6 +65,21 @@ class PrivateVaultSessionTest {
         } catch (e: PrivateVaultLockedException) {
             assertEquals("Unlock the private journal to use the encrypted log.", e.message)
         }
+    }
+
+    @Test
+    fun `set to lock at once, the journal leaving the screen locks it`() {
+        val atOnce = PrivateVaultSession(
+            CryptoManager(),
+            mockk { every { privateAutoLockMinutes } returns flowOf(0) },
+            TestScope(UnconfinedTestDispatcher())
+        )
+        atOnce.hold()
+        atOnce.open(password)
+        assertTrue("on screen, nothing counts down", atOnce.isOpen())
+        atOnce.release()
+        assertFalse(atOnce.isOpen())
+        assertFalse(atOnce.unlocked.value)
     }
 
     @Test

@@ -4,10 +4,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.ai.LocalAiManager
+import cloud.wafflecommons.pixelbrainreader.data.privatevault.AutoLock
 import cloud.wafflecommons.pixelbrainreader.data.privatevault.PrivateVaultFollowUps
 import cloud.wafflecommons.pixelbrainreader.data.privatevault.PrivateVaultSession
 import cloud.wafflecommons.pixelbrainreader.data.privatevault.VaultPasswordBinding
 import cloud.wafflecommons.pixelbrainreader.data.repository.PrivateNoteRepository
+import cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
 import cloud.wafflecommons.pixelbrainreader.di.ApplicationScope
 import cloud.wafflecommons.pixelbrainreader.ui.components.SaveState
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -18,12 +20,16 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -38,6 +44,7 @@ class PrivateJournalViewModel @Inject constructor(
     private val session: PrivateVaultSession,
     private val binding: VaultPasswordBinding,
     private val followUps: PrivateVaultFollowUps,
+    private val preferences: UserPreferencesRepository,
     private val localAiManager: LocalAiManager,
     @param:ApplicationScope private val appScope: CoroutineScope
 ) : ViewModel() {
@@ -89,6 +96,15 @@ class PrivateJournalViewModel @Inject constructor(
 
     /** The face or fingerprint can unlock: the password is bound to the biometric key (V3). */
     val biometricReady = _biometricReady.asStateFlow()
+
+    /** How long the journal waits off screen before it locks (V2), as the menu offers it. */
+    val autoLockMinutes: StateFlow<Int> = preferences.privateAutoLockMinutes
+        .map { AutoLock.minutesOrDefault(it) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, AutoLock.DEFAULT_MINUTES)
+
+    fun setAutoLockMinutes(minutes: Int) {
+        viewModelScope.launch { preferences.setPrivateAutoLockMinutes(AutoLock.minutesOrDefault(minutes)) }
+    }
 
     init {
         refreshBiometric()

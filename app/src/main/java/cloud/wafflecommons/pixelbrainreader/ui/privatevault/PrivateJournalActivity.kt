@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.lifecycle.Lifecycle
@@ -55,6 +56,8 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
+import cloud.wafflecommons.pixelbrainreader.data.privatevault.AutoLock
+import cloud.wafflecommons.pixelbrainreader.data.privatevault.PrivateVaultSession
 import cloud.wafflecommons.pixelbrainreader.data.privatevault.VaultPasswordBinding
 import cloud.wafflecommons.pixelbrainreader.ui.components.ComposeCortexEditor
 import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
@@ -76,7 +79,11 @@ import javax.inject.Inject
 class PrivateJournalActivity : FragmentActivity() {
 
     @Inject lateinit var binding: VaultPasswordBinding
+    @Inject lateinit var session: PrivateVaultSession
     private val viewModel: PrivateJournalViewModel by viewModels()
+
+    /** The prompt comes up at the first start, and on a return after the auto-lock: not after "Use password". */
+    private var promptOnStart = true
     private lateinit var executor: Executor
     private lateinit var biometricPrompt: BiometricPrompt
     private lateinit var promptInfo: BiometricPrompt.PromptInfo
@@ -106,10 +113,22 @@ class PrivateJournalActivity : FragmentActivity() {
         }
         
         setupBiometrics()
-        // Auto-launch unless already unlocked (e.g. rotation)
-        if (viewModel.uiState.value.isLocked) {
-           launchBiometric()
-        }
+    }
+
+    /** On screen: the session doesn't count down (12.18, V2). */
+    override fun onStart() {
+        super.onStart()
+        session.hold()
+        if (promptOnStart && !session.isOpen()) launchBiometric()
+        promptOnStart = false
+    }
+
+    /** Off screen (another app, Home, the screen turning off): the auto-lock's delay starts. */
+    override fun onStop() {
+        // Unlocked when it left: if the auto-lock closes it meanwhile, the return asks again.
+        promptOnStart = session.isOpen()
+        session.release()
+        super.onStop()
     }
 
     /**
@@ -377,7 +396,8 @@ fun PrivateVaultScreen(
                              CortexIconButton(onClick = onBack) {
                                  Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
                              }
-                         }
+                         },
+                         actions = { JournalMenu(viewModel) }
                      )
                  },
                  floatingActionButton = {
@@ -430,6 +450,73 @@ fun PrivateVaultScreen(
                  }
              }
         }
+    }
+}
+
+/** The journal's menu (12.18): lock now, and how long it waits off screen before it locks (V2). */
+@Composable
+private fun JournalMenu(viewModel: PrivateJournalViewModel) {
+    val autoLock by viewModel.autoLockMinutes.collectAsStateWithLifecycle()
+    var open by remember { mutableStateOf(false) }
+    var choosingDelay by remember { mutableStateOf(false) }
+
+    CortexIconButton(onClick = { open = true }) {
+        Icon(Icons.Default.MoreVert, "More")
+    }
+    DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        DropdownMenuItem(
+            text = { Text("Lock now") },
+            leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
+            onClick = {
+                open = false
+                viewModel.lockNow()
+            }
+        )
+        DropdownMenuItem(
+            text = { Text("Auto-lock: ${AutoLock.label(autoLock).replaceFirstChar { it.lowercase() }}") },
+            leadingIcon = { Icon(Icons.Default.Timer, contentDescription = null) },
+            onClick = {
+                open = false
+                choosingDelay = true
+            }
+        )
+    }
+
+    if (choosingDelay) {
+        AlertDialog(
+            onDismissRequest = { choosingDelay = false },
+            title = { Text("Auto-lock") },
+            text = {
+                Column {
+                    Text(
+                        "When the journal leaves the screen (another app, Home, the screen turning off), it locks " +
+                            "after this delay. Locking also ends private notes in Chat answers.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    AutoLock.CHOICES.forEach { minutes ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    viewModel.setAutoLockMinutes(minutes)
+                                    choosingDelay = false
+                                }
+                                .padding(vertical = 4.dp)
+                        ) {
+                            RadioButton(selected = minutes == autoLock, onClick = null)
+                            Spacer(Modifier.width(12.dp))
+                            Text(AutoLock.label(minutes), style = MaterialTheme.typography.bodyLarge)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { choosingDelay = false }) { Text("Done") }
+            }
+        )
     }
 }
 

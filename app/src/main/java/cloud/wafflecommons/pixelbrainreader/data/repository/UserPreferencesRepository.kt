@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.floatPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -179,6 +180,21 @@ class UserPreferencesRepository @Inject constructor(
     suspend fun setPrivateNotesInAi(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[KEY_PRIVATE_NOTES_IN_AI] = enabled
+        }
+    }
+
+    // --- The private journal's auto-lock (12.18, V2; owner, 2026-11-15) ---
+    private val KEY_PRIVATE_AUTO_LOCK = intPreferencesKey("private_auto_lock_minutes")
+
+    /**
+     * Minutes after the journal leaves the screen before it locks: 0 (at once), 1, 5 or 15; 5 until
+     * the owner picks another (privatevault.AutoLock checks the value). Device-only.
+     */
+    val privateAutoLockMinutes: Flow<Int> = setting { it[KEY_PRIVATE_AUTO_LOCK] ?: 5 }
+
+    suspend fun setPrivateAutoLockMinutes(minutes: Int) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_PRIVATE_AUTO_LOCK] = minutes
         }
     }
 
