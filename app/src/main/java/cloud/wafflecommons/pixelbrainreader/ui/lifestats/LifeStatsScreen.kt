@@ -9,6 +9,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.automirrored.rounded.ShowChart
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.Checklist
 import androidx.compose.material.icons.rounded.DonutLarge
@@ -54,6 +55,8 @@ fun LifeStatsScreen(
     onNavigateBack: () -> Unit,
     onNavigateToHabits: () -> Unit = {},
     onNavigateToChores: () -> Unit = {},
+    /** Your year so far (13.0, X5). */
+    onOpenWrapped: () -> Unit = {},
     viewModel: LifeStatsViewModel = hiltViewModel(),
     modesViewModel: cloud.wafflecommons.pixelbrainreader.ui.modes.ModesViewModel = hiltViewModel()
 ) {
@@ -68,6 +71,16 @@ fun LifeStatsScreen(
             cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
                 title = "Life Stats",
                 actions = {
+                    // X5 (13.0): first, so Habits and Chores keep their places at the end.
+                    FilledTonalIconButton(
+                        onClick = onOpenWrapped,
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    ) {
+                        Icon(Icons.Rounded.AutoAwesome, "Your year so far")
+                    }
                     FilledTonalIconButton(
                         onClick = onNavigateToHabits,
                         colors = IconButtonDefaults.filledTonalIconButtonColors(

@@ -1452,6 +1452,12 @@ fun MainScreen(
                 )
             }
 
+            composable(cloud.wafflecommons.pixelbrainreader.ui.wrapped.WRAPPED_ROUTE) {
+                cloud.wafflecommons.pixelbrainreader.ui.wrapped.WrappedScreen(
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
+
             composable(cloud.wafflecommons.pixelbrainreader.ui.settings.PRIVACY_LEDGER_ROUTE) {
                 cloud.wafflecommons.pixelbrainreader.ui.settings.PrivacyLedgerScreen(
                     onNavigateBack = { navController.popBackStack() }
@@ -1548,7 +1554,8 @@ fun MainScreen(
                      onNavigateToChores = {
                          if (navController.previousBackStackEntry?.destination?.route == Screen.HomeOS) navController.popBackStack()
                          else navController.navigate(Screen.HomeOS)
-                     }
+                     },
+                     onOpenWrapped = { navController.navigate(cloud.wafflecommons.pixelbrainreader.ui.wrapped.WRAPPED_ROUTE) }
                  )
             }
             
