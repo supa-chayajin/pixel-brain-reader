@@ -4,7 +4,9 @@ import cloud.wafflecommons.pixelbrainreader.data.ai.ChatSeed
 import cloud.wafflecommons.pixelbrainreader.data.ai.ChatScope
 import cloud.wafflecommons.pixelbrainreader.data.ai.ChatScopeRepository
 import cloud.wafflecommons.pixelbrainreader.data.ai.ChatSeedRepository
+import cloud.wafflecommons.pixelbrainreader.data.ai.NoteTimeTravel
 import cloud.wafflecommons.pixelbrainreader.data.ai.ScopedContext
+import cloud.wafflecommons.pixelbrainreader.data.ai.ThenVsNow
 import cloud.wafflecommons.pixelbrainreader.data.ai.SearchHit
 import cloud.wafflecommons.pixelbrainreader.data.ai.LocalAiManager
 import cloud.wafflecommons.pixelbrainreader.data.ai.NanoException
@@ -101,6 +103,7 @@ class ChatViewModelTest {
     private val chatSeedRepository = ChatSeedRepository()
     private val chatScopeRepository = ChatScopeRepository()
     private val scopedContext: ScopedContext = mockk()
+    private val noteTimeTravel: NoteTimeTravel = mockk()
     private lateinit var fakeRepo: FakeChatRepository
 
     private lateinit var viewModel: ChatViewModel
@@ -118,8 +121,35 @@ class ChatViewModelTest {
             presetRepository = presetRepository,
             chatSeedRepository = chatSeedRepository,
             chatScopeRepository = chatScopeRepository,
-            scopedContext = scopedContext
+            scopedContext = scopedContext,
+            noteTimeTravel = noteTimeTravel
         )
+    }
+
+    @Test
+    fun `a question about the past compares each note then and now, and keeps the day`() = runTest {
+        val day = java.time.LocalDate.now().minusYears(1)
+        coEvery { noteRetrieval.search(match { !it.contains("il y a") }, any()) } returns listOf(
+            SearchHit("Garden/Plan.md", "passage", isPrivate = false)
+        )
+        coEvery { noteTimeTravel.asOf("Garden/Plan.md", day) } returns "Tomates en avril."
+        coEvery { noteTimeTravel.now("Garden/Plan.md") } returns "Tomates en mai."
+        every {
+            localAiManager.generateAugmentedResponseStream(
+                any(),
+                match { it?.contains("Tomates en avril.") == true && it.contains("Tomates en mai.") },
+                any(),
+                match { it.contains("Compare ce que ces notes disaient") }
+            )
+        } returns flowOf("Avril, puis mai.")
+
+        viewModel.sendMessage("Que pensais-je du jardin il y a un an ?")
+        advanceUntilIdle()
+
+        val answer = fakeRepo.snapshot("RAG")[1]
+        assertEquals("Avril, puis mai.", answer.content)
+        assertEquals(day, ThenVsNow.dayOf(answer.sources))
+        assertEquals(listOf("Garden/Plan.md"), ThenVsNow.notesOf(answer.sources))
     }
 
     // --- K2 (12.20): Ask this note / this folder, and Continue ---

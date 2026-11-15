@@ -30,6 +30,7 @@ import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.remote.GitCommitDto
 import cloud.wafflecommons.pixelbrainreader.data.sync.SyncChange
 import cloud.wafflecommons.pixelbrainreader.data.utils.LineDiff
+import cloud.wafflecommons.pixelbrainreader.data.utils.NoteDiff
 import cloud.wafflecommons.pixelbrainreader.data.utils.WordDiff
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -67,15 +68,8 @@ private fun dateOf(millis: Long): String = COMMIT_DATE.format(Instant.ofEpochMil
 
 /** The rows and their word highlights, off the main thread. */
 private suspend fun loaded(old: String, new: String, restorable: String?): RevisionState.Loaded = withContext(Dispatchers.Default) {
-    val rows = LineDiff.fold(LineDiff.compute(old = old, new = new))
-    val kinds = rows.map { (it as? LineDiff.Row.Line)?.kind ?: LineDiff.Kind.UNCHANGED }
-    val words = HashMap<Int, List<WordDiff.Piece>>()
-    for ((removed, added) in WordDiff.pairs(kinds)) {
-        val result = WordDiff.of((rows[removed] as LineDiff.Row.Line).text, (rows[added] as LineDiff.Row.Line).text)
-        words[removed] = result.old
-        words[added] = result.new
-    }
-    RevisionState.Loaded(restorable, rows, words)
+    val diff = NoteDiff.of(old, new)
+    RevisionState.Loaded(restorable, diff.rows, diff.words)
 }
 
 /**
@@ -274,7 +268,7 @@ fun NoteTimeMachineSheet(
                                 else "This version is identical to the current note."
                             )
                         } else {
-                            DiffList(rows = state.rows, words = state.words, modifier = Modifier.weight(1f))
+                            NoteDiffList(rows = state.rows, words = state.words, modifier = Modifier.weight(1f))
                         }
                     }
                 }
@@ -286,8 +280,9 @@ fun NoteTimeMachineSheet(
 private val ADDED_TEXT = Color(0xFF4CAF50)
 private val REMOVED_TEXT = Color(0xFFE57373)
 
+/** A note's line diff with the changed words marked: the Time Machine's, and a time-travel answer's (K4). */
 @Composable
-private fun DiffList(rows: List<LineDiff.Row>, words: Map<Int, List<WordDiff.Piece>>, modifier: Modifier = Modifier) {
+internal fun NoteDiffList(rows: List<LineDiff.Row>, words: Map<Int, List<WordDiff.Piece>>, modifier: Modifier = Modifier) {
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),

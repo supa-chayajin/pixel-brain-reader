@@ -16,6 +16,11 @@ import cloud.wafflecommons.pixelbrainreader.data.ai.NanoState
 import cloud.wafflecommons.pixelbrainreader.data.ai.PromptPreset
 import cloud.wafflecommons.pixelbrainreader.data.ai.PromptPresetRepository
 import cloud.wafflecommons.pixelbrainreader.data.ai.NoteRetrieval
+import cloud.wafflecommons.pixelbrainreader.data.ai.NoteTimeTravel
+import cloud.wafflecommons.pixelbrainreader.data.ai.ScopedReading
+import cloud.wafflecommons.pixelbrainreader.data.ai.ThenVsNow
+import cloud.wafflecommons.pixelbrainreader.data.ai.TimeTravelQuestion
+import cloud.wafflecommons.pixelbrainreader.data.utils.NoteDiff
 import cloud.wafflecommons.pixelbrainreader.data.ai.ScopedContext
 import cloud.wafflecommons.pixelbrainreader.data.ai.SearchHit
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.ChatMessageEntity
@@ -75,6 +80,9 @@ private fun ChatMessageEntity.toUi(): ChatMessage = ChatMessage(
     sources = sources,
     timestamp = timestamp
 )
+
+/** A time-travel answer's note then against now (K4): what its sheet shows. */
+data class ThenVsNowView(val path: String, val day: java.time.LocalDate, val diff: NoteDiff, val existedThen: Boolean)
 
 /** A continuation (K2): what your turn shows, and what the model is asked (French, settled decision #5). */
 private const val CONTINUE_SHOWN = "Continue"
@@ -174,7 +182,8 @@ class ChatViewModel @Inject constructor(
     private val presetRepository: PromptPresetRepository,
     private val chatSeedRepository: ChatSeedRepository,
     private val chatScopeRepository: ChatScopeRepository,
-    private val scopedContext: ScopedContext
+    private val scopedContext: ScopedContext,
+    private val noteTimeTravel: NoteTimeTravel
 ) : ViewModel() {
 
     // --- Mode (UI-only state) ------------------------------------------------
@@ -254,6 +263,25 @@ class ChatViewModel @Inject constructor(
     private var lastContext: String? = null
     private var lastSources: List<String> = emptyList()
 
+    /** A time-travel answer's note, as it stood then against now (K4), while its sheet is open. */
+    var thenVsNow by mutableStateOf<ThenVsNowView?>(null)
+        private set
+
+    fun openThenVsNow(path: String, day: java.time.LocalDate) {
+        viewModelScope.launch {
+            val then = noteTimeTravel.asOf(path, day)
+            val now = noteTimeTravel.now(path).orEmpty()
+            val diff = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                NoteDiff.of(ScopedReading.body(then.orEmpty()), ScopedReading.body(now))
+            }
+            thenVsNow = ThenVsNowView(path = path, day = day, diff = diff, existedThen = then != null)
+        }
+    }
+
+    fun closeThenVsNow() {
+        thenVsNow = null
+    }
+
     fun setMode(mode: ChatMode) {
         _currentMode.value = mode
     }
@@ -317,6 +345,13 @@ class ChatViewModel @Inject constructor(
             val grounded = mode == ChatMode.ORACLE || (mode == ChatMode.PRESET && preset.useNotes)
             // A scope applies to the grounded surfaces only (K2).
             val scope = chatScopeRepository.scope.value?.takeIf { grounded && !continuation }
+            // A question about the past (K4, D9): "il y a un an", "en mars 2025"… on the whole vault.
+            val travel = if (grounded && scope == null && !continuation) {
+                TimeTravelQuestion.parse(asked, java.time.LocalDate.now())
+            } else {
+                null
+            }
+            var nanoQuery = asked
 
             // 1. Persist user turn immediately, with its scope so the history shows it (D7).
             chatRepository.addMessage(
@@ -339,6 +374,19 @@ class ChatViewModel @Inject constructor(
                 continuation -> {
                     ragContext = lastContext
                     sources = lastSources
+                }
+                travel != null -> {
+                    loadingStage = "🕰️ Looking back to " +
+                        travel.then.format(java.time.format.DateTimeFormatter.ofLocalizedDate(java.time.format.FormatStyle.MEDIUM)) + "…"
+                    // The notes about the question today, each read as it stood then and as it is now.
+                    val paths = noteRetrieval.search(travel.topic, limit = RAG_TOP_K)
+                        .map { it.fileId }.distinct().take(ThenVsNow.NOTES)
+                    val notes = paths.map { path ->
+                        ThenVsNow.Note(path, then = noteTimeTravel.asOf(path, travel.then), now = noteTimeTravel.now(path))
+                    }
+                    ragContext = ThenVsNow.context(notes, travel.then)
+                    sources = if (ragContext == null) emptyList() else listOf(ThenVsNow.mark(travel.then)) + paths
+                    if (ragContext != null) nanoQuery = ThenVsNow.ask(asked, travel.then)
                 }
                 grounded -> {
                     loadingStage = if (scope == null) "🔎 Searching your Second Brain…" else "🔎 Reading ${scope.label}…"
@@ -378,7 +426,7 @@ class ChatViewModel @Inject constructor(
                         systemPrompt = persona,
                         ragContext = ragContext,
                         chatHistory = priorHistory,
-                        currentQuery = asked
+                        currentQuery = nanoQuery
                     ).collect { delta ->
                         // First token: drop the "Asking…" label — the bubble takes over.
                         if (loadingStage != null) loadingStage = null

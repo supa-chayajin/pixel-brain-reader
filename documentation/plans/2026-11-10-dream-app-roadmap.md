@@ -293,7 +293,7 @@ owner asked for the same morning and the fixes of a full pre-release review.
       the 256-token cap. *(Oct 17 3.2; V12 E12 and 11.2-B.)*
 - [x] **K3 Time Machine v2.** *(12.20.0: renames followed through the commit that made them, word highlights, "Since your last sync" first and marked in the file list)* Word-level highlights, renames followed, and "changed since my last
       sync". *(Oct 17 2.4; V12 E9.)*
-- [ ] **K4 Time-travel questions.** "What did I think about X a year ago?" Git gives the note as
+- [x] **K4 Time-travel questions.** *(12.20.0: asked in Chat, each note then vs now from git, the day kept in the answer's sources, the diff from its chip)* "What did I think about X a year ago?" Git gives the note as
       it was on that date; the app shows then vs now and a 3-line summary of the shift. Comes after
       K3. *(Oct 17 5.3.)*
 - [x] **K5 Related while writing.** *(12.20.0: chips on a phone, a side pane on a wide window, a tap links, a long-press opens)* The 3 notes closest to the current paragraph: a side pane when

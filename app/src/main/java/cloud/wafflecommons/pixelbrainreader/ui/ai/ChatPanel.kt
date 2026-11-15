@@ -57,6 +57,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cloud.wafflecommons.pixelbrainreader.data.ai.ChatScope
 import cloud.wafflecommons.pixelbrainreader.data.ai.NanoState
 import cloud.wafflecommons.pixelbrainreader.data.ai.PromptPreset
+import cloud.wafflecommons.pixelbrainreader.data.ai.ThenVsNow
 import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
 import cloud.wafflecommons.pixelbrainreader.ui.components.rememberCopyToClipboard
 import cloud.wafflecommons.pixelbrainreader.ui.main.MarkwonContent
@@ -115,6 +116,18 @@ fun ChatPanel(
 
     val persona = animatedPersonaColors(currentMode)
     val nanoState by viewModel.nanoState.collectAsStateWithLifecycle()
+
+    // A time-travel answer's note, then against now (K4).
+    viewModel.thenVsNow?.let { view ->
+        ThenVsNowSheet(
+            view = view,
+            onDismiss = viewModel::closeThenVsNow,
+            onOpenNote = { path ->
+                viewModel.closeThenVsNow()
+                onSourceClick(path)
+            }
+        )
+    }
 
     if (showClearConfirm) {
         ClearChatDialog(
@@ -206,6 +219,7 @@ fun ChatPanel(
                                             preset = activePreset,
                                             onInsert = onInsertContent,
                                             onSourceClick = onSourceClick,
+                                            onThenVsNow = viewModel::openThenVsNow,
                                             onContinue = if (message.id == viewModel.continuableAnswerId) viewModel::continueAnswer else null
                                         )
                                     }
@@ -449,10 +463,14 @@ private fun AnswerBubble(
     preset: PromptPreset,
     onInsert: (text: String, sources: List<String>) -> Unit,
     onSourceClick: (String) -> Unit,
+    onThenVsNow: (path: String, day: java.time.LocalDate) -> Unit,
     onContinue: (() -> Unit)?
 ) {
+    // A time-travel answer (K4) keeps the day it looked back to among its sources.
+    val lookedBack = remember(message.sources) { ThenVsNow.dayOf(message.sources) }
+    val notes = remember(message.sources) { ThenVsNow.notesOf(message.sources) }
     // An answer that is only a warning (the model missing, a timeout) sits in the error colors.
-    val problem = message.content.startsWith("⚠️") && message.sources.isEmpty()
+    val problem = message.content.startsWith("⚠️") && notes.isEmpty()
     val container = if (problem) MaterialTheme.colorScheme.errorContainer else persona.answer
     val content = if (problem) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurface
     Column(modifier = Modifier.fillMaxWidth().padding(end = 24.dp)) {
@@ -478,19 +496,36 @@ private fun AnswerBubble(
                         )
                     }
 
-                    if (message.sources.isNotEmpty()) {
+                    if (notes.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(10.dp))
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
                         Spacer(modifier = Modifier.height(4.dp))
+                        if (lookedBack != null) {
+                            Text(
+                                text = "Then and now: tap a note to compare it with " + shortDate(lookedBack),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            message.sources.forEach { source ->
-                                SourceChip(source = source, persona = persona, onClick = { onSourceClick(source) })
+                            notes.forEach { source ->
+                                SourceChip(
+                                    source = source,
+                                    persona = persona,
+                                    onClick = { if (lookedBack != null) onThenVsNow(source, lookedBack) else onSourceClick(source) }
+                                )
                             }
                         }
                     }
 
                     if (!message.isStreaming && message.content.isNotBlank() && !problem) {
-                        AnswerActions(message = message, persona = persona, onInsert = onInsert, onContinue = onContinue)
+                        AnswerActions(
+                            message = message,
+                            persona = persona,
+                            onSave = { onInsert(message.content, notes) },
+                            onContinue = onContinue
+                        )
                     } else {
                         Spacer(Modifier.height(6.dp))
                     }
@@ -532,7 +567,7 @@ private fun SourceChip(source: String, persona: PersonaColors, onClick: () -> Un
 private fun AnswerActions(
     message: ChatMessage,
     persona: PersonaColors,
-    onInsert: (text: String, sources: List<String>) -> Unit,
+    onSave: () -> Unit,
     onContinue: (() -> Unit)?
 ) {
     val copy = rememberCopyToClipboard()
@@ -554,10 +589,66 @@ private fun AnswerActions(
             Spacer(Modifier.width(ButtonDefaults.IconSpacing))
             Text("Copy")
         }
-        TextButton(onClick = { onInsert(message.content, message.sources) }, colors = colors) {
+        TextButton(onClick = onSave, colors = colors) {
             Icon(Icons.Outlined.SaveAlt, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
             Spacer(Modifier.width(ButtonDefaults.IconSpacing))
             Text("Save to Inbox")
+        }
+    }
+}
+
+/** A day as the chat shows it, in the device's medium date format. */
+@Composable
+private fun shortDate(day: java.time.LocalDate): String {
+    val locale = Locale.current.platformLocale
+    return remember(day, locale) {
+        DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(locale).format(day)
+    }
+}
+
+/** A time-travel answer's note as it stood then against now, word by word (K4). */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ThenVsNowSheet(view: ThenVsNowView, onDismiss: () -> Unit, onOpenNote: (String) -> Unit) {
+    val sheetState = rememberBottomSheetState(
+        initialValue = SheetValue.Hidden,
+        enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded)
+    )
+    val day = shortDate(view.day)
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = MaterialTheme.colorScheme.surface) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.85f)
+                .padding(horizontal = 20.dp, vertical = 8.dp)
+        ) {
+            Text(
+                text = view.path.substringAfterLast('/').removeSuffix(".md"),
+                style = MaterialTheme.typography.titleLarge
+            )
+            Text(
+                text = if (view.existedThen) "$day, then today" else "Not written yet on $day: all of it is new",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(12.dp))
+            if (view.diff.rows.isEmpty()) {
+                Text(
+                    "Unchanged since then.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f)
+                )
+            } else {
+                cloud.wafflecommons.pixelbrainreader.ui.components.NoteDiffList(
+                    rows = view.diff.rows,
+                    words = view.diff.words,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            TextButton(onClick = { onOpenNote(view.path) }, modifier = Modifier.align(Alignment.End)) {
+                Text("Open the note")
+            }
         }
     }
 }
