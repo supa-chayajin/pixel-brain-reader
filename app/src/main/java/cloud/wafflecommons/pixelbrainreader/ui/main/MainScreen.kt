@@ -1311,11 +1311,13 @@ fun MainScreen(
                                             lastSync = uiState.selectedFilePath?.let { path -> lastSyncDigest?.changeFor(path) },
                                             onRestoreRevision = { restored -> viewModel.restoreRevision(restored) },
                                             filePath = uiState.selectedFilePath,
-                                            // D5 (13.0): the folder in the list beside the note; a phone steps back to the list.
+                                            // D5 (13.0): the folder in the list beside the note. Where the window shows one
+                                            // pane (a phone, and a medium window such as a portrait tablet: 600 dp is not
+                                            // yet two panes), step back to the list, or the tap changes nothing in sight.
                                             onOpenFolder = { folder ->
                                                 viewModel.loadFolder(folder)
                                                 if (uiState.isFocusMode) viewModel.toggleFocusMode()
-                                                if (!isLargeScreen && navigator.canNavigateBack()) {
+                                                if (baseDirective.maxHorizontalPartitions < 2 && navigator.canNavigateBack()) {
                                                     scope.launch { navigator.navigateBack() }
                                                 }
                                             },
