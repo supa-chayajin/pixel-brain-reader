@@ -4,7 +4,6 @@ import cloud.wafflecommons.pixelbrainreader.data.work.projectDisplayName
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.getAndUpdate
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -58,8 +57,9 @@ data class ChatScope(val path: String, val isFolder: Boolean) {
 }
 
 /**
- * Hands a scope from a note's header or a folder's menu to the chat, like [ChatSeedRepository]: the
- * screen [offer]s it and opens Chat, whose ViewModel [take]s it once. Lives as long as the process.
+ * The scope grounded questions answer from, set by a note's header or a folder's menu and kept
+ * until it is cleared. Every Chat screen reads this one: a Chat screen kept alive in the saved back
+ * stack used to take it while navigation showed a new one without it. Lives as long as the process.
  */
 @Singleton
 class ChatScopeRepository @Inject constructor() {
@@ -70,5 +70,7 @@ class ChatScopeRepository @Inject constructor() {
         _scope.value = scope
     }
 
-    fun take(): ChatScope? = _scope.getAndUpdate { null }
+    fun clear() {
+        _scope.value = null
+    }
 }

@@ -47,10 +47,11 @@ class ChatScopeTest {
     }
 
     @Test
-    fun `an offered scope is taken once`() {
+    fun `an offered scope stays for every Chat screen until it is cleared`() {
         val repository = ChatScopeRepository()
         repository.offer(ChatScope.note("Ideas.md")!!)
-        assertEquals("Ideas.md", repository.take()?.path)
-        assertNull(repository.take())
+        assertEquals("Ideas.md", repository.scope.value?.path)
+        repository.clear()
+        assertNull(repository.scope.value)
     }
 }

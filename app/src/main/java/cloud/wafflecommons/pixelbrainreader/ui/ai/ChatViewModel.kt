@@ -241,14 +241,10 @@ class ChatViewModel @Inject constructor(
 
     // --- Scope (K2, 12.20): one note or a folder, from its header or its menu ---
 
-    private val _scope = MutableStateFlow<ChatScope?>(null)
-
     /** What the grounded surfaces answer from until it is cleared; null = the whole vault. */
-    val scope: StateFlow<ChatScope?> = _scope.asStateFlow()
+    val scope: StateFlow<ChatScope?> = chatScopeRepository.scope
 
-    fun clearScope() {
-        _scope.value = null
-    }
+    fun clearScope() = chatScopeRepository.clear()
 
     /** The answer that stopped at the model's output cap, which the Continue chip extends. */
     var continuableAnswerId by mutableStateOf<String?>(null)
@@ -320,7 +316,7 @@ class ChatViewModel @Inject constructor(
             val modeStorage = storageOf(mode, preset)
             val grounded = mode == ChatMode.ORACLE || (mode == ChatMode.PRESET && preset.useNotes)
             // A scope applies to the grounded surfaces only (K2).
-            val scope = _scope.value?.takeIf { grounded && !continuation }
+            val scope = chatScopeRepository.scope.value?.takeIf { grounded && !continuation }
 
             // 1. Persist user turn immediately, with its scope so the history shows it (D7).
             chatRepository.addMessage(
@@ -484,11 +480,9 @@ class ChatViewModel @Inject constructor(
                 sendMessage(seed.message)
             }
         }
-        // "Ask this note / folder" (K2): take the offered scope once and answer from it on Cortex.
+        // "Ask this note / folder" (K2): a new scope opens Cortex, which answers from it.
         viewModelScope.launch {
             chatScopeRepository.scope.filterNotNull().collect {
-                val scope = chatScopeRepository.take() ?: return@collect
-                _scope.value = scope
                 _currentMode.value = ChatMode.ORACLE
             }
         }

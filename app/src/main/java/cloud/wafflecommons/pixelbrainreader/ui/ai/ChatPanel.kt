@@ -430,7 +430,8 @@ private fun QuestionBubble(message: ChatMessage, run: BubbleRun, persona: Person
                             )
                         }
                     }
-                    Text(text = message.content, style = MaterialTheme.typography.bodyLarge)
+                    // A question typed with a trailing newline shows no empty line.
+                    Text(text = message.content.trimEnd(), style = MaterialTheme.typography.bodyLarge)
                 }
             }
         }
