@@ -83,6 +83,44 @@ class PrivateVaultSessionTest {
     }
 
     @Test
+    fun `nobody gets the password while it changes`() {
+        session.open(password)
+        session.beginChange()
+        assertNull(session.password())
+        assertNull(session.key())
+        assertFalse(session.isOpen())
+        session.endChange(null) // the change failed: the session is as it was
+        assertArrayEquals(password, session.password())
+    }
+
+    @Test
+    fun `a save taken before a change of password writes with the new one, and never with the old`() = runTest {
+        session.open(password)
+        val key = session.key()!!
+        session.beginChange()
+        session.endChange("a brand new password".toCharArray())
+        assertEquals("a brand new password", session.writeWith(key) { it.concatToString() })
+
+        session.lock()
+        try {
+            session.writeWith(key) { fail("the old password wrote after the change") }
+            fail("expected the locked session to refuse")
+        } catch (e: PrivateVaultLockedException) {
+            // nothing may write with the old password once the journal is locked
+        }
+        key.wipe()
+    }
+
+    @Test
+    fun `a lock during a change stays locked`() {
+        session.open(password)
+        session.beginChange()
+        session.lock()
+        session.endChange("a brand new password".toCharArray())
+        assertFalse(session.isOpen())
+    }
+
+    @Test
     fun `a save asked for just before a lock still lands with its key`() = runTest {
         session.open(password)
         val key = session.key()!!

@@ -20,8 +20,12 @@ import javax.inject.Singleton
 /** The private journal is locked: its password is only in memory while it is unlocked (12.18, V3). */
 class PrivateVaultLockedException(message: String = "Unlock the private journal first.") : IOException(message)
 
-/** One operation's hold on the password: a copy the caller wipes once the operation is done. */
-class PrivateVaultKey internal constructor(internal val password: CharArray) {
+/**
+ * One operation's hold on the password: a copy the caller wipes once the operation is done, and the
+ * password's generation (a change of password bumps it, so a save taken before the change writes
+ * with the new password instead of the old one).
+ */
+class PrivateVaultKey internal constructor(internal val password: CharArray, internal val generation: Long = 0) {
     fun wipe() = password.fill('\u0000')
 }
 
@@ -34,7 +38,8 @@ class PrivateVaultKey internal constructor(internal val password: CharArray) {
  * and once none does, it locks after the owner's delay (5 minutes by default). Every read checks the
  * deadline first, so a phone that slept through the timer still locks on its next read.
  *
- * Encrypted writes run under [writeLock].
+ * Encrypted writes run under [writeLock], which a change of password holds from its check to its last
+ * rename (V1); meanwhile nobody gets the password.
  */
 @Singleton
 class PrivateVaultSession @Inject constructor(
@@ -47,6 +52,8 @@ class PrivateVaultSession @Inject constructor(
 
     // Guarded by [guard].
     private var password: CharArray? = null
+    private var generation = 0L
+    private var changing = false
     private val autoLock = AutoLock()
     private var timer: Job? = null
 
@@ -58,7 +65,7 @@ class PrivateVaultSession @Inject constructor(
     /** True while the journal is unlocked. */
     val unlocked: StateFlow<Boolean> = _unlocked.asStateFlow()
 
-    /** Encrypted writes take it, so two of them never interleave. */
+    /** Encrypted writes take it, so two of them never interleave; a change of password holds it throughout. */
     val writeLock = Mutex()
 
     init {
@@ -76,22 +83,22 @@ class PrivateVaultSession @Inject constructor(
         deadline?.let { schedule(it) }
     }
 
-    /** True when the password can be used now. */
+    /** True when the password can be used now (unlocked, and no change of password running). */
     fun isOpen(): Boolean {
         expireIfDue()
-        return synchronized(guard) { password != null }
+        return synchronized(guard) { password != null && !changing }
     }
 
     /** A key for one operation, or null while locked. The caller wipes it. */
     fun key(): PrivateVaultKey? {
         expireIfDue()
-        return synchronized(guard) { password?.let { PrivateVaultKey(it.copyOf()) } }
+        return synchronized(guard) { password?.takeUnless { changing }?.let { PrivateVaultKey(it.copyOf(), generation) } }
     }
 
     /** A copy of the password for one read, or null while locked. The caller wipes it. */
     fun password(): CharArray? {
         expireIfDue()
-        return synchronized(guard) { password?.copyOf() }
+        return synchronized(guard) { password?.takeUnless { changing }?.copyOf() }
     }
 
     /** Runs [block] with the password under [writeLock]; [locked] is thrown while the session is locked. */
@@ -107,9 +114,15 @@ class PrivateVaultSession @Inject constructor(
         }
     }
 
-    /** Runs a write under [writeLock] with [key]'s password: a save taken just before a lock still lands. */
+    /**
+     * Runs a write under [writeLock] with [key]'s password: a save taken just before a lock still lands.
+     * A key from before a change of password writes with the new one, and only while the journal is
+     * unlocked: once locked, nothing may write with the old one.
+     */
     suspend fun <T> writeWith(key: PrivateVaultKey, block: suspend (CharArray) -> T): T = writeLock.withLock {
-        val current = key.password.copyOf()
+        val current = synchronized(guard) {
+            if (key.generation == generation) key.password.copyOf() else password?.copyOf()
+        } ?: throw PrivateVaultLockedException()
         try {
             block(current)
         } finally {
@@ -144,6 +157,27 @@ class PrivateVaultSession @Inject constructor(
             _unlocked.value = false
         }
         cryptoManager.clearKeyCache()
+    }
+
+    /** A change of password starts (V1): nobody else gets the password until [endChange]. Call it under [writeLock]. */
+    internal fun beginChange() {
+        synchronized(guard) { changing = true }
+    }
+
+    /** The change ended: with its [newPassword] once the swap went through, as it was otherwise. */
+    internal fun endChange(newPassword: CharArray?) {
+        synchronized(guard) {
+            if (newPassword != null) {
+                generation++ // keys taken before the change never write with the old password again
+                // Locked meanwhile (a logout): it stays locked.
+                password?.let {
+                    it.fill('\u0000')
+                    password = newPassword.copyOf()
+                }
+            }
+            changing = false
+        }
+        if (newPassword != null) cryptoManager.clearKeyCache()
     }
 
     private fun schedule(deadline: Long) {

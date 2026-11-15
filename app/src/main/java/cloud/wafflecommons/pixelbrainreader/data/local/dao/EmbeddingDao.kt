@@ -76,6 +76,16 @@ interface EmbeddingDao {
     /** Every embedded note's path, once. */
     @Query("SELECT DISTINCT fileId FROM embeddings")
     suspend fun fileIds(): List<String>
+
+    /** The private passages, still encrypted with the vault password (a change of password re-encrypts them, 12.18 V1). */
+    @Query("SELECT id, content FROM embeddings WHERE isPrivate = 1")
+    suspend fun privateContents(): List<EmbeddingContentRow>
+
+    @Query("UPDATE embeddings SET content = :content WHERE id = :id")
+    suspend fun setContent(id: String, content: String)
+
+    @Query("DELETE FROM embeddings WHERE isPrivate = 1")
+    suspend fun deletePrivate()
 }
 
 /**

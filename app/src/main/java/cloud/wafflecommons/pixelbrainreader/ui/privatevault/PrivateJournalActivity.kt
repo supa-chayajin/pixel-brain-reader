@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Password
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.*
@@ -57,6 +58,7 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.privatevault.AutoLock
+import cloud.wafflecommons.pixelbrainreader.data.privatevault.PasswordRules
 import cloud.wafflecommons.pixelbrainreader.data.privatevault.PrivateVaultSession
 import cloud.wafflecommons.pixelbrainreader.data.privatevault.VaultPasswordBinding
 import cloud.wafflecommons.pixelbrainreader.ui.components.ComposeCortexEditor
@@ -459,6 +461,7 @@ private fun JournalMenu(viewModel: PrivateJournalViewModel) {
     val autoLock by viewModel.autoLockMinutes.collectAsStateWithLifecycle()
     var open by remember { mutableStateOf(false) }
     var choosingDelay by remember { mutableStateOf(false) }
+    var changingPassword by remember { mutableStateOf(false) }
 
     CortexIconButton(onClick = { open = true }) {
         Icon(Icons.Default.MoreVert, "More")
@@ -480,6 +483,20 @@ private fun JournalMenu(viewModel: PrivateJournalViewModel) {
                 choosingDelay = true
             }
         )
+        if (!VaultWriteGate.readOnly) {
+            DropdownMenuItem(
+                text = { Text("Change password") },
+                leadingIcon = { Icon(Icons.Default.Password, contentDescription = null) },
+                onClick = {
+                    open = false
+                    changingPassword = true
+                }
+            )
+        }
+    }
+
+    if (changingPassword) {
+        ChangePasswordDialog(viewModel, onClose = { changingPassword = false })
     }
 
     if (choosingDelay) {
@@ -518,6 +535,103 @@ private fun JournalMenu(viewModel: PrivateJournalViewModel) {
             }
         )
     }
+}
+
+/**
+ * Changing the journal's password (12.18, V1): every private note is re-encrypted, crash-safe. The
+ * current password is typed again; git history keeps the old versions under it (owner's D1).
+ */
+@Composable
+private fun ChangePasswordDialog(viewModel: PrivateJournalViewModel, onClose: () -> Unit) {
+    val change by viewModel.passwordChange.collectAsStateWithLifecycle()
+    // Plain remember, never saved state: a password has no place in a saved instance bundle.
+    var current by remember { mutableStateOf("") }
+    var new by remember { mutableStateOf("") }
+    var repeat by remember { mutableStateOf("") }
+    val working = change is PrivateJournalViewModel.PasswordChange.Working
+    val close = {
+        viewModel.dismissPasswordChange()
+        onClose()
+    }
+
+    AlertDialog(
+        onDismissRequest = { if (!working) close() },
+        title = { Text("Change password") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                when (val state = change) {
+                    is PrivateJournalViewModel.PasswordChange.Done -> Text(
+                        "Password changed: ${state.files} private note(s) re-encrypted with the new one.",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    else -> {
+                        Text(
+                            "Every private note is re-encrypted with the new password. Your vault's history keeps " +
+                                "older versions of them under the current one.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        OutlinedTextField(
+                            value = current,
+                            onValueChange = { current = it },
+                            label = { Text("Current password") },
+                            singleLine = true,
+                            enabled = !working,
+                            visualTransformation = PasswordVisualTransformation(),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = new,
+                            onValueChange = { new = it },
+                            label = { Text("New password") },
+                            supportingText = { Text("At least ${PasswordRules.MIN_LENGTH} characters") },
+                            singleLine = true,
+                            enabled = !working,
+                            visualTransformation = PasswordVisualTransformation(),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = repeat,
+                            onValueChange = { repeat = it },
+                            label = { Text("New password again") },
+                            singleLine = true,
+                            enabled = !working,
+                            visualTransformation = PasswordVisualTransformation(),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        if (state is PrivateJournalViewModel.PasswordChange.Working) {
+                            LinearProgressIndicator(
+                                progress = { if (state.total > 0) state.done.toFloat() / state.total else 0f },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Text(
+                                if (state.total > 0) "Re-encrypting ${state.done} of ${state.total} notes…" else "Checking every note…",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        if (state is PrivateJournalViewModel.PasswordChange.Problem) {
+                            Text(state.message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            if (change is PrivateJournalViewModel.PasswordChange.Done) {
+                TextButton(onClick = close) { Text("Done") }
+            } else {
+                Button(
+                    onClick = { viewModel.changePassword(current, new, repeat) },
+                    enabled = !working && current.isNotEmpty() && new.isNotEmpty() && repeat.isNotEmpty()
+                ) { Text("Change") }
+            }
+        },
+        dismissButton = {
+            if (change !is PrivateJournalViewModel.PasswordChange.Done) {
+                TextButton(onClick = close, enabled = !working) { Text("Cancel") }
+            }
+        }
+    )
 }
 
 @Composable

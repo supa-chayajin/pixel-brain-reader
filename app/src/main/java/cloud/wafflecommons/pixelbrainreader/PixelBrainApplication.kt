@@ -48,6 +48,7 @@ class PixelBrainApplication : Application(), Configuration.Provider {
     @Inject lateinit var objectiveRepository: dagger.Lazy<cloud.wafflecommons.pixelbrainreader.data.work.ObjectiveRepository>
     @Inject lateinit var psnAccount: dagger.Lazy<cloud.wafflecommons.pixelbrainreader.data.games.psn.PsnAccount>
     @Inject lateinit var vaultPasswordBinding: dagger.Lazy<cloud.wafflecommons.pixelbrainreader.data.privatevault.VaultPasswordBinding>
+    @Inject lateinit var privateVaultRekey: dagger.Lazy<cloud.wafflecommons.pixelbrainreader.data.privatevault.PrivateVaultRekey>
 
     /** Application-scoped coroutine scope — survives Activity recreation. */
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -77,6 +78,8 @@ class PixelBrainApplication : Application(), Configuration.Provider {
         // 12.18 (V3): the private journal's password, readable until 12.17, goes behind the biometric
         // key at once (a device setting: a read-only device too). The first unlock deletes the old copy.
         appScope.launch { safely("Private vault binding") { vaultPasswordBinding.get().migrateLegacy() } }
+        // 12.18 (V1): a change of password a crash interrupted is finished (or dropped) before anything commits.
+        if (!VaultWriteGate.readOnly) appScope.launch { safely("Private vault password change") { privateVaultRekey.get().resumeAtStart() } }
         // Today's health numbers + health-driven habits, refreshed each time the app is opened.
         appScope.launch { safely("Foreground refresher") { foregroundRefresher.get().start() } }
         if (!VaultWriteGate.readOnly) scheduleDailyBurnWork()

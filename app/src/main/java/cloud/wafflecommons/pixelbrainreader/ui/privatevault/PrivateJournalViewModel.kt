@@ -5,7 +5,9 @@ import androidx.lifecycle.viewModelScope
 import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.ai.LocalAiManager
 import cloud.wafflecommons.pixelbrainreader.data.privatevault.AutoLock
+import cloud.wafflecommons.pixelbrainreader.data.privatevault.PasswordRules
 import cloud.wafflecommons.pixelbrainreader.data.privatevault.PrivateVaultFollowUps
+import cloud.wafflecommons.pixelbrainreader.data.privatevault.PrivateVaultRekey
 import cloud.wafflecommons.pixelbrainreader.data.privatevault.PrivateVaultSession
 import cloud.wafflecommons.pixelbrainreader.data.privatevault.VaultPasswordBinding
 import cloud.wafflecommons.pixelbrainreader.data.repository.PrivateNoteRepository
@@ -44,6 +46,7 @@ class PrivateJournalViewModel @Inject constructor(
     private val session: PrivateVaultSession,
     private val binding: VaultPasswordBinding,
     private val followUps: PrivateVaultFollowUps,
+    private val rekey: PrivateVaultRekey,
     private val preferences: UserPreferencesRepository,
     private val localAiManager: LocalAiManager,
     @param:ApplicationScope private val appScope: CoroutineScope
@@ -104,6 +107,60 @@ class PrivateJournalViewModel @Inject constructor(
 
     fun setAutoLockMinutes(minutes: Int) {
         viewModelScope.launch { preferences.setPrivateAutoLockMinutes(AutoLock.minutesOrDefault(minutes)) }
+    }
+
+    /** A change of password (V1), as its dialog shows it. */
+    sealed interface PasswordChange {
+        data object Idle : PasswordChange
+        data class Working(val done: Int, val total: Int) : PasswordChange
+        data class Done(val files: Int) : PasswordChange
+        data class Problem(val message: String) : PasswordChange
+    }
+
+    private val _passwordChange = MutableStateFlow<PasswordChange>(PasswordChange.Idle)
+    val passwordChange: StateFlow<PasswordChange> = _passwordChange.asStateFlow()
+
+    /**
+     * Re-encrypts every private note with [new] (12.18, V1). Runs in the application scope: leaving
+     * the screen mid-way doesn't stop it (and a crash is finished or rolled back at the next start).
+     */
+    fun changePassword(current: String, new: String, repeat: String) {
+        if (VaultWriteGate.refuses() || _passwordChange.value is PasswordChange.Working) return
+        PasswordRules.problem(current, new, repeat)?.let {
+            _passwordChange.value = PasswordChange.Problem(it)
+            return
+        }
+        _passwordChange.value = PasswordChange.Working(0, 0)
+        val currentChars = current.toCharArray()
+        val newChars = new.toCharArray()
+        appScope.launch {
+            try {
+                val result = rekey.change(currentChars, newChars) { done, total ->
+                    _passwordChange.value = PasswordChange.Working(done, total)
+                }
+                _passwordChange.value = when (result) {
+                    is PrivateVaultRekey.Result.Changed -> PasswordChange.Done(result.files)
+                    PrivateVaultRekey.Result.WrongPassword -> PasswordChange.Problem("The current password is wrong.")
+                    PrivateVaultRekey.Result.Locked -> PasswordChange.Problem("The journal locked meanwhile: unlock it and try again.")
+                    PrivateVaultRekey.Result.ReadOnly -> PasswordChange.Problem("Read-only device: change it on your phone.")
+                    is PrivateVaultRekey.Result.Unreadable -> PasswordChange.Problem(
+                        "${result.names.size} note(s) don't open with this password: ${result.names.joinToString()}. Nothing was changed."
+                    )
+                    is PrivateVaultRekey.Result.NotChanged -> PasswordChange.Problem(result.reason)
+                }
+                if (result is PrivateVaultRekey.Result.Changed) {
+                    refreshFiles()
+                    refreshBiometric()
+                }
+            } finally {
+                Arrays.fill(currentChars, '\u0000')
+                Arrays.fill(newChars, '\u0000')
+            }
+        }
+    }
+
+    fun dismissPasswordChange() {
+        if (_passwordChange.value !is PasswordChange.Working) _passwordChange.value = PasswordChange.Idle
     }
 
     init {

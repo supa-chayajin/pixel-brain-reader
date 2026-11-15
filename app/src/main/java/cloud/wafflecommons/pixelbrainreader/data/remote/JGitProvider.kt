@@ -428,6 +428,11 @@ class JGitProvider @Inject constructor(
     suspend fun commit(message: String): Result<Unit> = withContext(Dispatchers.IO) {
         // A read-only device never stages nor commits anything.
         if (VaultWriteGate.readOnly) return@withContext Result.failure(ReadOnlyDeviceException())
+        // A change of the private journal's password is mid-swap (12.18, V1): until it ends the vault
+        // holds notes under both passwords, and that state never reaches GitHub.
+        if (cloud.wafflecommons.pixelbrainreader.data.privatevault.RekeyFiles.swapPending(context.filesDir)) {
+            return@withContext Result.failure(IllegalStateException("A change of the private journal's password is still finishing."))
+        }
         gitMutex.withLock {
             cleanStaleLocksIfNeeded()
             try {
