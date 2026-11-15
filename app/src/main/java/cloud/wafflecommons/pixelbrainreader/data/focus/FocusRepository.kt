@@ -76,7 +76,9 @@ class FocusRepository @Inject constructor(
         if (VaultWriteGate.readOnly) return
         grantXp(FocusSession.xpFor(session.minutes))
         val notes = edited(session)
-        platform.postDone(session.minutes, notes, canLog = !modesRepository.currentVisibility().muteWorkNotifications)
+        // An encrypted log needs the private journal unlocked (12.18, V3), which a notification can't ask for.
+        val canLog = !modesRepository.currentVisibility().muteWorkNotifications && !missionLogRepository.reloadSettings().encrypted
+        platform.postDone(session.minutes, notes, canLog = canLog)
     }
 
     /** The notes of [session], kept only while they exist and aren't generated. */

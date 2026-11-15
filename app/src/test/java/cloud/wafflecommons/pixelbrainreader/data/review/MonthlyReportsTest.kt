@@ -13,7 +13,7 @@ import cloud.wafflecommons.pixelbrainreader.data.work.LogEntry
 import cloud.wafflecommons.pixelbrainreader.data.work.LogKind
 import cloud.wafflecommons.pixelbrainreader.data.work.MissionLogRepository
 import cloud.wafflecommons.pixelbrainreader.data.work.MissionLogSettings
-import cloud.wafflecommons.pixelbrainreader.data.work.VaultPasswordMissingException
+import cloud.wafflecommons.pixelbrainreader.data.privatevault.PrivateVaultLockedException
 import cloud.wafflecommons.pixelbrainreader.data.work.WorkNote
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -136,7 +136,7 @@ class MonthlyReportsTest {
 
     @Test
     fun `a failing work report spares the personal one, and the month is tried again`() = runTest {
-        coEvery { evidenceRepository.figures(any(), EvidenceScope.WORK) } throws VaultPasswordMissingException()
+        coEvery { evidenceRepository.figures(any(), EvidenceScope.WORK) } throws PrivateVaultLockedException()
 
         assertEquals(listOf(WrittenReport(personalPath, EvidenceScope.PERSONAL)), repository.writeDue(lastNight))
         coVerify(exactly = 0) { userPrefs.setMonthlyReportsWritten(any()) }

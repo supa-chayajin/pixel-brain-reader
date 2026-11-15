@@ -25,4 +25,17 @@ class IndexingScheduler @Inject constructor(
             IndexingWorker.request()
         )
     }
+
+    /**
+     * A run after the current one, or now when none is running. The private journal's unlock uses it
+     * (12.18, V3): a run that started while it was locked left the private notes out.
+     */
+    fun startAfterCurrent() {
+        if (VaultWriteGate.readOnly) return
+        WorkManager.getInstance(context).enqueueUniqueWork(
+            IndexingWorker.UNIQUE_WORK_NAME,
+            ExistingWorkPolicy.APPEND_OR_REPLACE,
+            IndexingWorker.request()
+        )
+    }
 }

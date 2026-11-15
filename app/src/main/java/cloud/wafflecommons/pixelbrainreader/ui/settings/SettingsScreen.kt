@@ -459,7 +459,7 @@ fun SettingsScreen(
                         Text("Private notes in AI answers", style = MaterialTheme.typography.titleSmall)
                         Text(
                             text = if (uiState.privateNotesInAi) {
-                                "On: your private vault is embedded while its password is saved, and Chat reads it while the vault is unlocked."
+                                "On: while the private journal is unlocked, its notes are embedded and Chat reads them."
                             } else {
                                 "Off: your private vault is never embedded, and Chat never reads it."
                             },

@@ -4,7 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.ai.LocalAiManager
-import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
+import cloud.wafflecommons.pixelbrainreader.data.privatevault.PrivateVaultFollowUps
+import cloud.wafflecommons.pixelbrainreader.data.privatevault.PrivateVaultSession
+import cloud.wafflecommons.pixelbrainreader.data.privatevault.VaultPasswordBinding
 import cloud.wafflecommons.pixelbrainreader.data.repository.PrivateNoteRepository
 import cloud.wafflecommons.pixelbrainreader.di.ApplicationScope
 import cloud.wafflecommons.pixelbrainreader.ui.components.SaveState
@@ -33,7 +35,9 @@ import javax.inject.Inject
 @HiltViewModel
 class PrivateJournalViewModel @Inject constructor(
     private val repository: PrivateNoteRepository,
-    private val secretManager: SecretManager,
+    private val session: PrivateVaultSession,
+    private val binding: VaultPasswordBinding,
+    private val followUps: PrivateVaultFollowUps,
     private val localAiManager: LocalAiManager,
     @param:ApplicationScope private val appScope: CoroutineScope
 ) : ViewModel() {
@@ -73,9 +77,7 @@ class PrivateJournalViewModel @Inject constructor(
     val uiEvent = _uiEvent.receiveAsFlow()
 
     // --- Session Management ---
-    // CACHED SESSION KEY (In-Memory Only)
-    // We do NOT expose this in the StateFlow to avoid leaking it to UI loggers/inspector.
-    private var sessionPassword: CharArray? = null
+    // The password lives in PrivateVaultSession (memory only, 12.18 V3), never in this state.
 
     /** A password check is running (it derives a key). Main thread only. */
     private var isUnlocking = false
@@ -83,7 +85,25 @@ class PrivateJournalViewModel @Inject constructor(
     /** Last content written per note path: autosave and the pause flush skip unchanged notes. Main thread only. */
     private val savedContents = mutableMapOf<String, String>()
 
+    private val _biometricReady = MutableStateFlow(false)
+
+    /** The face or fingerprint can unlock: the password is bound to the biometric key (V3). */
+    val biometricReady = _biometricReady.asStateFlow()
+
     init {
+        refreshBiometric()
+        // Locked from anywhere (a logout, the auto-lock): the open note leaves the screen too.
+        session.unlocked
+            .onEach { unlocked ->
+                when {
+                    !unlocked && !_uiState.value.isLocked -> showLocked()
+                    unlocked && _uiState.value.isLocked -> {
+                        _uiState.update { it.copy(isLocked = false, errorMessage = null, passwordInput = "") }
+                        refreshFiles()
+                    }
+                }
+            }
+            .launchIn(viewModelScope)
         // Auto-Save Pipeline
         _autoSaveTriggerFlow
             .debounce(1500L) // Wait for 1.5 seconds of typing pause
@@ -108,7 +128,18 @@ class PrivateJournalViewModel @Inject constructor(
     fun unlockWithPassword() {
         val input = _uiState.value.passwordInput
         if (input.isNotEmpty()) {
-            unlock(input.toCharArray())
+            val chars = input.toCharArray()
+            unlock(chars, viaBiometric = false)
+            Arrays.fill(chars, '\u0000')
+        }
+    }
+
+    private fun refreshBiometric() {
+        viewModelScope.launch {
+            _biometricReady.value = withContext(Dispatchers.IO) {
+                binding.migrateLegacy()
+                binding.available() && binding.isBound()
+            }
         }
     }
 
@@ -134,13 +165,13 @@ class PrivateJournalViewModel @Inject constructor(
 
     /**
      * Unlocks the vault with [password] once it is VERIFIED to open the existing notes. Any password
-     * used to be accepted and saved: a typo then encrypted every new note with the wrong key and
-     * overwrote the stored password used by biometric unlock and private search.
+     * used to be accepted and saved: a typo then encrypted every new note with the wrong key.
+     * [viaBiometric]: it came from the biometric key (V3); a typed one is bound to it afterwards.
      */
-    fun unlock(password: CharArray) {
+    fun unlock(password: CharArray, viaBiometric: Boolean) {
         if (password.isEmpty() || isUnlocking) return
         isUnlocking = true
-        val candidate = password.clone() // Clone for safety
+        val candidate = password.clone() // the caller wipes its own
         viewModelScope.launch {
             val valid = try {
                 repository.verifyPassword(candidate)
@@ -153,27 +184,36 @@ class PrivateJournalViewModel @Inject constructor(
             }
             if (!valid) {
                 Arrays.fill(candidate, '\u0000')
-                _uiState.update { it.copy(errorMessage = "Wrong password", passwordInput = "") }
+                val message = if (viaBiometric) {
+                    "This phone's copy of the password no longer opens the journal: type it once."
+                } else {
+                    "Wrong password"
+                }
+                _uiState.update { it.copy(errorMessage = message, passwordInput = "") }
                 return@launch
             }
 
-            // 1. Cache in memory
-            sessionPassword?.let { Arrays.fill(it, ' ') }
-            sessionPassword = candidate
-            secretManager.setPrivateVaultSessionUnlocked(true)
-            // 2. Persist for biometric unlock and private search (Keystore-backed: off Main).
-            withContext(Dispatchers.IO) { secretManager.saveVaultPassword(String(candidate)) }
-            // 3. Update UI State
-            _uiState.update { it.copy(isLocked = false, errorMessage = null, passwordInput = "") }
-            refreshFiles()
+            session.open(candidate) // the screen follows the session (init)
+            try {
+                // Binds a typed password and deletes the readable 12.17 copy (Keystore work: off Main).
+                withContext(Dispatchers.IO) { binding.confirmUnlock(candidate, viaBiometric) }
+            } finally {
+                Arrays.fill(candidate, '\u0000')
+            }
+            refreshBiometric()
+            appScope.launch { followUps.afterUnlock() }
         }
     }
 
+    /** Locks now: the password and its keys leave memory. */
+    fun lockNow() = lockVault()
+
     private fun lockVault(reason: String? = null) {
-        sessionPassword?.let { Arrays.fill(it, ' ') }
-        sessionPassword = null // Wipe key
-        secretManager.setPrivateVaultSessionUnlocked(false)
-        repository.forgetKeys()
+        session.lock()
+        showLocked(reason)
+    }
+
+    private fun showLocked(reason: String? = null) {
         savedContents.clear()
         _uiState.update {
             it.copy(
@@ -188,16 +228,18 @@ class PrivateJournalViewModel @Inject constructor(
     // --- Operations ---
 
     fun openNote(file: File) {
-        // Check Cache
-        val pwd = sessionPassword ?: run {
-            // Session Expired
+        val key = session.key() ?: run {
             lockVault("Session expired. Please unlock again.")
             return
         }
 
         viewModelScope.launch {
             try {
-                val content = repository.readNote(file, pwd)
+                val content = try {
+                    repository.readNote(file, key)
+                } finally {
+                    key.wipe()
+                }
                 savedContents[file.path] = content
                 _uiState.update {
                     it.copy(
@@ -222,8 +264,8 @@ class PrivateJournalViewModel @Inject constructor(
                 // 1. Validate
                 if (filename.isBlank()) return@launch
 
-                // 2. Check Cache
-                val pwd = sessionPassword ?: run {
+                // 2. The session's password
+                val key = session.key() ?: run {
                     _uiEvent.send(UiEvent.ShowToast("Session expired. Please re-authenticate."))
                     lockVault("Session expired")
                     return@launch
@@ -232,7 +274,11 @@ class PrivateJournalViewModel @Inject constructor(
                 val safeName = if (filename.endsWith(".md.enc")) filename else "$filename.md.enc"
 
                 // 3. Create
-                repository.createNote(safeName, initialContent, pwd)
+                try {
+                    repository.createNote(safeName, initialContent, key)
+                } finally {
+                    key.wipe()
+                }
 
                 // 4. Force Refresh immediately
                 val updatedFiles = repository.getPrivateNotes()
@@ -296,16 +342,13 @@ class PrivateJournalViewModel @Inject constructor(
         // derivation, the encryption and the push entirely.
         if (savedContents[file.path] == content) return
 
-        // Check Cache
-        val pwd = sessionPassword ?: run {
-            lockVault("Session expired during save.")
-            return
-        }
+        // Locked meanwhile: the save already asked for (the pause flush) holds its own key.
+        val key = session.key() ?: return
 
         viewModelScope.launch {
             _saveState.value = SaveState.SAVING
             try {
-                repository.createNote(file.name, content, pwd) // Overwrite
+                repository.createNote(file.name, content, key) // Overwrite
                 savedContents[file.path] = content
                 refreshFiles()
             } catch (e: CancellationException) {
@@ -314,6 +357,8 @@ class PrivateJournalViewModel @Inject constructor(
                 _uiState.update { it.copy(errorMessage = "Save Failed: ${e.message}") }
                 _saveState.value = SaveState.ERROR
                 return@launch
+            } finally {
+                key.wipe()
             }
             if (_uiState.value.editorContent != content) {
                 // The user kept typing while this version was being written.
@@ -359,29 +404,27 @@ class PrivateJournalViewModel @Inject constructor(
      * viewModelScope is already cancelled here, and with it any autosave or pause flush still in
      * flight — closing the journal right after typing lost the last edits (a session's first save also
      * derives the key, which takes a moment). They are saved from the application scope, and the
-     * derived keys are dropped once nothing needs them any more.
+     * derived keys are dropped once nothing needs them any more. Closing the journal locks it.
      */
     override fun onCleared() {
         val state = _uiState.value
         val file = state.selectedFile
-        val pwd = sessionPassword
-        sessionPassword = null
-        secretManager.setPrivateVaultSessionUnlocked(false)
+        val key = session.key()
+        session.lock()
         val content = state.editorContent
-        if (VaultWriteGate.readOnly || file == null || pwd == null || state.isLocked || savedContents[file.path] == content) {
-            pwd?.let { Arrays.fill(it, ' ') }
-            repository.forgetKeys()
+        if (VaultWriteGate.readOnly || file == null || key == null || state.isLocked || savedContents[file.path] == content) {
+            key?.wipe()
             return
         }
         appScope.launch {
             try {
-                repository.createNote(file.name, content, pwd)
+                repository.createNote(file.name, content, key)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 android.util.Log.e("PrivateVM", "Final save of the open note failed")
             } finally {
-                Arrays.fill(pwd, ' ')
+                key.wipe()
                 repository.forgetKeys()
             }
         }

@@ -34,6 +34,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import cloud.wafflecommons.pixelbrainreader.data.privatevault.PrivateVaultLockedException
 import cloud.wafflecommons.pixelbrainreader.data.daily.ShutdownRepository
 import cloud.wafflecommons.pixelbrainreader.data.daily.ShutdownState
 import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
@@ -104,8 +105,29 @@ class ShutdownViewModel @Inject constructor(
     fun someday(task: DailyTaskEntity) = act { day -> repository.toSomeday(day, task) }
     fun letGo(task: DailyTaskEntity) = act { day -> repository.letGo(day, task) }
 
+    private val _winLoggedDay = MutableStateFlow<java.time.LocalDate?>(null)
+
+    /** The day whose win went into the mission log. */
+    val winLoggedDay: StateFlow<java.time.LocalDate?> = _winLoggedDay.asStateFlow()
+
+    private val _winProblem = MutableStateFlow<String?>(null)
+
+    /** Why the win didn't go in: an encrypted log while the private journal is locked, a failed write. */
+    val winProblem: StateFlow<String?> = _winProblem.asStateFlow()
+
     fun logWin(text: String) {
-        viewModelScope.launch { repository.logWin(text) }
+        val day = _state.value?.day ?: return
+        _winProblem.value = null
+        viewModelScope.launch {
+            try {
+                repository.logWin(text)
+                _winLoggedDay.value = day
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _winProblem.value = (e as? PrivateVaultLockedException)?.message ?: "The win couldn't be logged."
+            }
+        }
     }
 
     fun closeDay() {
@@ -145,12 +167,13 @@ fun ShutdownBanner(
     onSomeday: (DailyTaskEntity) -> Unit,
     onLetGo: (DailyTaskEntity) -> Unit,
     onLogWin: (String) -> Unit,
+    winLogged: Boolean,
+    winProblem: String?,
     onOpenInbox: () -> Unit,
     onCloseDay: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var win by rememberSaveable(state.day) { mutableStateOf("") }
-    var logged by rememberSaveable(state.day) { mutableStateOf(false) }
     ElevatedCard(
         modifier = modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.large,
@@ -202,7 +225,7 @@ fun ShutdownBanner(
                 )
             }
             if (state.canLogWin) {
-                if (logged) {
+                if (winLogged) {
                     Text(
                         text = "Today's win is in the mission log.",
                         style = MaterialTheme.typography.bodySmall,
@@ -219,12 +242,16 @@ fun ShutdownBanner(
                             modifier = Modifier.weight(1f)
                         )
                         TextButton(
-                            onClick = {
-                                onLogWin(win)
-                                logged = true
-                            },
+                            onClick = { onLogWin(win) },
                             enabled = win.isNotBlank()
                         ) { Text("Log") }
+                    }
+                    winProblem?.let {
+                        Text(
+                            text = it,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
                     }
                 }
             }

@@ -4,6 +4,8 @@ import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import android.content.Context
 import android.util.Log
 import cloud.wafflecommons.pixelbrainreader.data.local.security.CryptoManager
+import cloud.wafflecommons.pixelbrainreader.data.privatevault.PrivateVaultKey
+import cloud.wafflecommons.pixelbrainreader.data.privatevault.PrivateVaultSession
 import cloud.wafflecommons.pixelbrainreader.data.sync.VaultPushScheduler
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
@@ -22,7 +24,8 @@ import javax.inject.Singleton
 class PrivateNoteRepository @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val cryptoManager: CryptoManager,
-    private val pushScheduler: VaultPushScheduler
+    private val pushScheduler: VaultPushScheduler,
+    private val session: PrivateVaultSession
 ) {
 
     private val vaultDir: File
@@ -50,16 +53,19 @@ class PrivateNoteRepository @Inject constructor(
      *
      * The ciphertext is written atomically: a crash mid-write used to leave a truncated file that no
      * longer authenticates — the whole note lost. And each save (the editor autosaves after every
-     * typing pause) used to run its own commit + network push inline.
+     * typing pause) used to run its own commit + network push inline. It runs under the session's
+     * write lock with [key], taken when the save was asked for: a save asked just before a lock lands.
      */
-    suspend fun createNote(filename: String, content: String, password: CharArray) = withContext(Dispatchers.IO) {
+    suspend fun createNote(filename: String, content: String, key: PrivateVaultKey) = withContext(Dispatchers.IO) {
         // A title is not a path: separators would write outside the private folder.
         val baseName = filename.replace('/', '-').replace('\\', '-')
         val safeName = if (baseName.endsWith(".md.enc")) baseName else "$baseName.md.enc"
 
         try {
-            val encryptedBytes = cryptoManager.encrypt(content, password)
-            writeAtomically(File(vaultDir, safeName), encryptedBytes)
+            session.writeWith(key) { password ->
+                val encryptedBytes = cryptoManager.encrypt(content, password)
+                writeAtomically(File(vaultDir, safeName), encryptedBytes)
+            }
             // No filename/path/size logging — private files leak identifying
             // info through any of those (the filename IS the note title).
         } catch (e: CancellationException) {
@@ -71,15 +77,25 @@ class PrivateNoteRepository @Inject constructor(
         pushScheduler.requestPush()
     }
 
+    /** The same with a password typed and verified for this one write (the confidentiality guard's "move to private"). */
+    suspend fun createNote(filename: String, content: String, password: CharArray) {
+        val key = PrivateVaultKey(password.copyOf())
+        try {
+            createNote(filename, content, key)
+        } finally {
+            key.wipe()
+        }
+    }
+
     /**
      * Reads and decrypts a note.
      */
-    suspend fun readNote(file: File, password: CharArray): String = withContext(Dispatchers.IO) {
+    suspend fun readNote(file: File, key: PrivateVaultKey): String = withContext(Dispatchers.IO) {
         if (!file.exists()) throw IOException("File not found")
 
         try {
             val fileBytes = file.readBytes()
-            return@withContext cryptoManager.decrypt(fileBytes, password)
+            return@withContext cryptoManager.decrypt(fileBytes, key.password)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

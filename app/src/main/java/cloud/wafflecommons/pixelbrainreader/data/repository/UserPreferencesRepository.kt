@@ -171,8 +171,8 @@ class UserPreferencesRepository @Inject constructor(
     private val KEY_PRIVATE_NOTES_IN_AI = booleanPreferencesKey("private_notes_in_ai")
 
     /**
-     * Whether the private vault reaches the AI: embedded while its password is saved, and handed
-     * to Chat while it is unlocked. Off by default (owner, 2026-11-10): a device-only choice.
+     * Whether the private vault reaches the AI: embedded, and handed to Chat, only while the private
+     * journal is unlocked (12.18, V3). Off by default (owner, 2026-11-10): a device-only choice.
      */
     val privateNotesInAi: Flow<Boolean> = setting { it[KEY_PRIVATE_NOTES_IN_AI] ?: false }
 

@@ -15,15 +15,6 @@ import javax.inject.Singleton
 class SecretManager @Inject constructor(
     @param:ApplicationContext private val context: Context
 ) {
-    @Volatile
-    private var privateVaultUnlocked: Boolean = false
-
-    fun setPrivateVaultSessionUnlocked(unlocked: Boolean) {
-        privateVaultUnlocked = unlocked
-    }
-
-    fun isPrivateVaultSessionUnlocked(): Boolean = privateVaultUnlocked
-
     companion object {
         private const val VAULT_FILENAME = "secure_vault"
         private const val LEGACY_PREFS_NAME = "secure_prefs"
@@ -32,7 +23,11 @@ class SecretManager @Inject constructor(
         private const val KEY_REPO_OWNER = "repo_owner"
         private const val KEY_REPO_NAME = "repo_name"
         const val KEY_PROVIDER = "provider_type"
+        // Until 12.17 the private vault's password, readable: only the 12.18 migration reads it, once.
         private const val KEY_VAULT_PASSWORD = "vault_master_password"
+
+        // 12.18 (V3): the password wrapped by the biometric key (VaultPasswordBinding).
+        private const val KEY_WRAPPED_VAULT_PASSWORD = "vault_password_wrapped"
 
         // V6: Google ecosystem auth tokens (Credential Manager + AuthorizationClient).
         private const val KEY_GOOGLE_EMAIL = "google_email"
@@ -163,19 +158,30 @@ class SecretManager @Inject constructor(
     }
 
     fun clear() {
-        privateVaultUnlocked = false
         encryptedPrefs.edit { clear() }
     }
 
-    /**
-     * V2.0: Private Vault Password Management
-     */
-    fun saveVaultPassword(password: String) {
-        encryptedPrefs.edit { putString(KEY_VAULT_PASSWORD, password) }
+    // --- The private vault's password (12.18, V3) ----------------------------
+    // Never stored readable again: only wrapped by a key a strong biometric opens
+    // (data/privatevault/VaultPasswordBinding). Settled decision #21.
+
+    /** The readable copy 12.17 kept. Only VaultPasswordBinding's migration reads it. */
+    fun legacyVaultPassword(): String? = encryptedPrefs.getString(KEY_VAULT_PASSWORD, null)
+
+    fun clearLegacyVaultPassword() {
+        encryptedPrefs.edit { remove(KEY_VAULT_PASSWORD) }
     }
 
-    fun getVaultPassword(): String? {
-        return encryptedPrefs.getString(KEY_VAULT_PASSWORD, null)
+    fun saveWrappedVaultPassword(wrapped: ByteArray) {
+        encryptedPrefs.edit { putString(KEY_WRAPPED_VAULT_PASSWORD, java.util.Base64.getEncoder().encodeToString(wrapped)) }
+    }
+
+    fun wrappedVaultPassword(): ByteArray? = encryptedPrefs.getString(KEY_WRAPPED_VAULT_PASSWORD, null)?.let {
+        runCatching { java.util.Base64.getDecoder().decode(it) }.getOrNull()
+    }
+
+    fun clearWrappedVaultPassword() {
+        encryptedPrefs.edit { remove(KEY_WRAPPED_VAULT_PASSWORD) }
     }
 
     // --- V6: Google ecosystem credentials -------------------------------------

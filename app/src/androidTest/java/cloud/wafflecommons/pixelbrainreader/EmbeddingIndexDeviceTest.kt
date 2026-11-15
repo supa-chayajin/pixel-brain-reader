@@ -14,7 +14,7 @@ import cloud.wafflecommons.pixelbrainreader.data.local.dao.absorbMtimeDrift
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.EmbeddingEntity
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.FileEntity
 import cloud.wafflecommons.pixelbrainreader.data.local.security.CryptoManager
-import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
+import cloud.wafflecommons.pixelbrainreader.data.privatevault.PrivateVaultSession
 import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
 import kotlinx.coroutines.runBlocking
@@ -85,7 +85,7 @@ class EmbeddingIndexDeviceTest {
     @Test
     fun aStoppedRunResumesTheNoteThroughTheRealModel() = runBlocking {
         val engine = VectorSearchEngine(
-            context, db.embeddingDao(), CryptoManager(), SecretManager(context),
+            context, db.embeddingDao(), CryptoManager(), PrivateVaultSession(CryptoManager()),
             dagger.Lazy<ModesRepository> { error("not used by embed") },
             dagger.Lazy<UserPreferencesRepository> { error("not used by embed") }
         )

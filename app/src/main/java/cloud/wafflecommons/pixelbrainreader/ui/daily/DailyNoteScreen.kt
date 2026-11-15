@@ -133,6 +133,8 @@ fun DailyNoteScreen(
     // The end of the workday (12.14, D8): re-read each time Daily shows.
     val shutdown by shutdownViewModel.state.collectAsStateWithLifecycle()
     val shutdownOffer by shutdownViewModel.offer.collectAsStateWithLifecycle()
+    val winLoggedDay by shutdownViewModel.winLoggedDay.collectAsStateWithLifecycle()
+    val winProblem by shutdownViewModel.winProblem.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { shutdownViewModel.reload() }
     // A sync stopped on a conflict (12.15, S1): re-read each time Daily shows, so a resolution clears it.
     val syncConflict by syncConflictViewModel.pending.collectAsStateWithLifecycle()
@@ -473,6 +475,8 @@ fun DailyNoteScreen(
                                 onSomeday = shutdownViewModel::someday,
                                 onLetGo = shutdownViewModel::letGo,
                                 onLogWin = shutdownViewModel::logWin,
+                                winLogged = winLoggedDay == wrapUp.day,
+                                winProblem = winProblem,
                                 onOpenInbox = onOpenInbox,
                                 onCloseDay = shutdownViewModel::closeDay
                             )

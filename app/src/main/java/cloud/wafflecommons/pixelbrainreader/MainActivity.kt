@@ -55,6 +55,9 @@ class MainActivity : FragmentActivity() {
     @Inject
     lateinit var shareImportRepository: ShareImportRepository
 
+    @Inject
+    lateinit var privateVaultSession: cloud.wafflecommons.pixelbrainreader.data.privatevault.PrivateVaultSession
+
     private val viewModel: MainViewModel by viewModels()
 
     /**
@@ -159,6 +162,7 @@ class MainActivity : FragmentActivity() {
                                     // Clearing the Keystore-backed prefs is disk + crypto work: keep it off
                                     // the main thread, and only show the login screen once it is done.
                                     lifecycleScope.launch {
+                                        privateVaultSession.lock()
                                         withContext(Dispatchers.IO) { secretManager.clear() }
                                         loginState = false
                                     }

@@ -26,7 +26,8 @@ import cloud.wafflecommons.pixelbrainreader.data.local.dao.EmbeddingDao
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.FileDao
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.FileEntity
 import cloud.wafflecommons.pixelbrainreader.data.local.security.CryptoManager
-import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
+import cloud.wafflecommons.pixelbrainreader.data.privatevault.PrivateVaultLockedException
+import cloud.wafflecommons.pixelbrainreader.data.privatevault.PrivateVaultSession
 import cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.VaultDiscoveryRepository
 import cloud.wafflecommons.pixelbrainreader.data.vault.MirrorNotes
@@ -73,7 +74,7 @@ class IndexingWorker @AssistedInject constructor(
     private val database: AppDatabase,
     private val userPrefs: UserPreferencesRepository,
     private val cryptoManager: CryptoManager,
-    private val secretManager: SecretManager
+    private val privateVaultSession: PrivateVaultSession
 ) : CoroutineWorker(appContext, workerParams) {
 
     /** What a run did: the progress Settings shows and the summary the log keeps (counts only, no paths). */
@@ -121,14 +122,13 @@ class IndexingWorker @AssistedInject constructor(
             val vaultRoot = File(applicationContext.filesDir, "vault")
             val alreadyEmbedded = embeddingDao.fileIds().toHashSet()
             val ordered = indexingOrder(candidates, alreadyEmbedded) { File(vaultRoot, it).length() }
-            val password = secretManager.getVaultPassword()?.takeIf { it.isNotBlank() }
             val embedder = NoteEmbedder(RoomPassageStore(database, embeddingDao), vectorSearchEngine::embed)
             val tally = Tally(ordered.size)
             Log.i(TAG, "IndexingWorker start: ${ordered.size} note(s) to embed, ${alreadyEmbedded.size} embedded, attempt $runAttemptCount")
 
             for (entity in ordered) {
                 if (budget.exhausted()) return@withContext handOver(tally)
-                val outcome = embedNote(entity, vaultRoot, password, embedder, budget, tally)
+                val outcome = embedNote(entity, vaultRoot, embedder, budget, tally)
                 if (outcome is NoteEmbedder.Outcome.Stopped) return@withContext handOver(tally)
                 tally.notesDone++
                 reportProgress(tally)
@@ -176,7 +176,6 @@ class IndexingWorker @AssistedInject constructor(
     private suspend fun embedNote(
         entity: FileEntity,
         vaultRoot: File,
-        password: String?,
         embedder: NoteEmbedder,
         budget: RunBudget,
         tally: Tally
@@ -195,9 +194,18 @@ class IndexingWorker @AssistedInject constructor(
             val codec: PassageCodec
             val text: String
             if (isPrivate) {
-                val secret = password ?: return null // the candidates already need a saved password
-                codec = PrivatePassageCodec(cryptoManager, secret)
-                text = withPassword(secret) { cryptoManager.decrypt(file.readBytes(), it) }
+                // Only while the journal is unlocked (12.18, V3): its session holds the only readable
+                // password. A lock mid-run leaves the rest for the next unlock, vectors kept.
+                val secret = privateVaultSession.password() ?: run {
+                    Log.d(TAG, "  private note left for the next unlock")
+                    return null
+                }
+                codec = PrivatePassageCodec(cryptoManager, privateVaultSession)
+                text = try {
+                    cryptoManager.decrypt(file.readBytes(), secret)
+                } finally {
+                    secret.fill('\u0000')
+                }
             } else {
                 codec = PassageCodec.Plain
                 text = file.readText()
@@ -261,9 +269,9 @@ class IndexingWorker @AssistedInject constructor(
 
     private suspend fun filterEmbeddingCandidates(files: List<FileEntity>): List<FileEntity> {
         val today = java.time.LocalDate.now()
-        // Settled decision #20: private notes only when the owner switched them on, and only with a
-        // saved password to decrypt them (checked before the model is loaded).
-        val includePrivate = userPrefs.privateNotesInAi.first() && !secretManager.getVaultPassword().isNullOrBlank()
+        // Settled decision #20: private notes only when the owner switched them on, and only while the
+        // journal is unlocked to decrypt them (12.18, V3; checked before the model is loaded).
+        val includePrivate = userPrefs.privateNotesInAi.first() && privateVaultSession.isOpen()
         val candidates = embeddingCandidates(files, today, includePrivate)
         if (candidates.isEmpty() && files.isNotEmpty()) {
             val byType = files.groupingBy { it.type }.eachCount()
@@ -272,13 +280,27 @@ class IndexingWorker @AssistedInject constructor(
         return candidates
     }
 
-    /** A private note's passages are kept encrypted (AES-GCM, the vault password), read back to be reused. */
-    private class PrivatePassageCodec(private val crypto: CryptoManager, private val password: String) : PassageCodec {
-        override suspend fun encode(text: String): String =
-            withPassword(password) { Base64.encodeToString(crypto.encrypt(text, it), Base64.NO_WRAP) }
+    /**
+     * A private note's passages are kept encrypted (AES-GCM, the vault password), read back to be
+     * reused. Each one asks the session for the password: a lock mid-note stops the note.
+     */
+    private class PrivatePassageCodec(private val crypto: CryptoManager, private val session: PrivateVaultSession) : PassageCodec {
+        override suspend fun encode(text: String): String {
+            val password = session.password() ?: throw PrivateVaultLockedException()
+            return try {
+                Base64.encodeToString(crypto.encrypt(text, password), Base64.NO_WRAP)
+            } finally {
+                password.fill('\u0000')
+            }
+        }
 
         override suspend fun decode(stored: String): String? = try {
-            withPassword(password) { crypto.decrypt(Base64.decode(stored, Base64.NO_WRAP), it) }
+            val password = session.password() ?: return null
+            try {
+                crypto.decrypt(Base64.decode(stored, Base64.NO_WRAP), password)
+            } finally {
+                password.fill('\u0000')
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -324,8 +346,8 @@ class IndexingWorker @AssistedInject constructor(
          * Notes worth embedding. Settled decision #3 (CLAUDE.md): today's journal is NOT embedded —
          * it changes all day, so its vectors would be stale within minutes and every run would pay
          * a model load for it — and neither is `99_System` (machine JSON, noise for retrieval).
-         * Private notes only with [includePrivate]: the owner's switch is on and a vault password is
-         * stored (settled decision #20), checked BEFORE the model is loaded.
+         * Private notes only with [includePrivate]: the owner's switch is on and the private journal
+         * is unlocked (settled decision #20; 12.18, V3), checked BEFORE the model is loaded.
          * People notes never: what is written about a person is not something to retrieve into an
          * AI answer. Nor the encrypted mission log: work content outside any work folder would
          * reach AI answers in every mode. Nor Claude's memory mirrored from the desktop (settled
@@ -363,15 +385,5 @@ class IndexingWorker @AssistedInject constructor(
          */
         internal fun neverEmbedded(fileIds: List<String>, includePrivate: Boolean = true): List<String> =
             fileIds.filter { MirrorNotes.isClaudeMemory(it) || (!includePrivate && isPrivatePath(it)) }
-    }
-}
-
-/** Runs [block] with the password as a char array, wiped afterwards. */
-private inline fun <T> withPassword(password: String, block: (CharArray) -> T): T {
-    val chars = password.toCharArray()
-    try {
-        return block(chars)
-    } finally {
-        java.util.Arrays.fill(chars, ' ')
     }
 }

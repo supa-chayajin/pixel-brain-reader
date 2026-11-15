@@ -3,7 +3,8 @@ package cloud.wafflecommons.pixelbrainreader.data.work
 import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import android.content.Context
 import cloud.wafflecommons.pixelbrainreader.data.local.security.CryptoManager
-import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
+import cloud.wafflecommons.pixelbrainreader.data.privatevault.PrivateVaultLockedException
+import cloud.wafflecommons.pixelbrainreader.data.privatevault.PrivateVaultSession
 import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.FileRepository
 import cloud.wafflecommons.pixelbrainreader.data.sync.VaultPushScheduler
@@ -24,12 +25,8 @@ import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.time.LocalDate
 import java.time.YearMonth
-import java.util.Arrays
 import javax.inject.Inject
 import javax.inject.Singleton
-
-/** The encrypted log needs the private vault's password, stored when the vault was last unlocked. */
-class VaultPasswordMissingException : Exception("Unlock the private vault once on this phone to use the encrypted log.")
 
 /**
  * The mission log (#1): one markdown file per month, plain in a vault folder or encrypted in the
@@ -41,7 +38,7 @@ class MissionLogRepository @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val fileRepository: FileRepository,
     private val cryptoManager: CryptoManager,
-    private val secretManager: SecretManager,
+    private val privateVaultSession: PrivateVaultSession,
     private val pushScheduler: VaultPushScheduler,
     private val modesRepository: dagger.Lazy<ModesRepository>
 ) {
@@ -191,33 +188,31 @@ class MissionLogRepository @Inject constructor(
             fileRepository.saveFileLocally(path, content)
             return
         }
-        val bytes = withPassword { password -> cryptoManager.encrypt(content, password) }
-        val target = File(vaultDir, path).apply { parentFile?.mkdirs() }
-        val staging = File(context.filesDir, "private_staging").apply { mkdirs() }
-        val temp = File(staging, "${target.name}.${System.nanoTime()}.tmp")
-        try {
-            FileOutputStream(temp).use { out ->
-                out.write(bytes)
-                out.fd.sync()
-            }
+        // The encryption and the file under the session's write lock: never half of one with each password.
+        withPassword { password ->
+            val bytes = cryptoManager.encrypt(content, password)
+            val target = File(vaultDir, path).apply { parentFile?.mkdirs() }
+            val staging = File(context.filesDir, "private_staging").apply { mkdirs() }
+            val temp = File(staging, "${target.name}.${System.nanoTime()}.tmp")
             try {
-                Files.move(temp.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
-            } catch (e: AtomicMoveNotSupportedException) {
-                Files.move(temp.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
+                FileOutputStream(temp).use { out ->
+                    out.write(bytes)
+                    out.fd.sync()
+                }
+                try {
+                    Files.move(temp.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+                } catch (e: AtomicMoveNotSupportedException) {
+                    Files.move(temp.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
+                }
+            } finally {
+                if (temp.exists()) temp.delete()
             }
-        } finally {
-            if (temp.exists()) temp.delete()
         }
     }
 
-    private suspend fun <T> withPassword(block: suspend (CharArray) -> T): T {
-        val password = secretManager.getVaultPassword()?.toCharArray() ?: throw VaultPasswordMissingException()
-        return try {
-            block(password)
-        } finally {
-            Arrays.fill(password, '\u0000')
-        }
-    }
+    /** The encrypted log's password: the private journal's session (12.18, V3), only while it is unlocked. */
+    private suspend fun <T> withPassword(block: suspend (CharArray) -> T): T =
+        privateVaultSession.withPassword(locked = { PrivateVaultLockedException(LOCKED_MESSAGE) }, block = block)
 
     private val vaultDir: File get() = File(context.filesDir, "vault")
 
@@ -225,5 +220,8 @@ class MissionLogRepository @Inject constructor(
         const val SETTINGS_PATH = "10_Journal/system/mission_log.json"
         /** Where an encrypted log keeps its monthly reports (D7). */
         const val REPORTS_FOLDER = "Rapports"
+
+        /** An encrypted log while the private journal is locked (12.18, V3). */
+        const val LOCKED_MESSAGE = "Unlock the private journal to use the encrypted log."
     }
 }

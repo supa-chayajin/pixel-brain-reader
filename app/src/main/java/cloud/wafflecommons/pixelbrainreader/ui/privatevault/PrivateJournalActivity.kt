@@ -7,6 +7,7 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -38,6 +39,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -53,11 +55,14 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
+import cloud.wafflecommons.pixelbrainreader.data.privatevault.VaultPasswordBinding
 import cloud.wafflecommons.pixelbrainreader.ui.components.ComposeCortexEditor
 import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
 import cloud.wafflecommons.pixelbrainreader.ui.theme.PixelBrainReaderTheme
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.time.Instant
 import java.time.LocalDateTime
@@ -70,7 +75,7 @@ import javax.inject.Inject
 @AndroidEntryPoint
 class PrivateJournalActivity : FragmentActivity() {
 
-    @Inject lateinit var secretManager: cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
+    @Inject lateinit var binding: VaultPasswordBinding
     private val viewModel: PrivateJournalViewModel by viewModels()
     private lateinit var executor: Executor
     private lateinit var biometricPrompt: BiometricPrompt
@@ -107,46 +112,64 @@ class PrivateJournalActivity : FragmentActivity() {
         }
     }
 
+    /**
+     * 12.18 (V3, owner's D5): the prompt opens the password's biometric key, so only a strong
+     * biometric can answer it. The system tries the face first when the phone rates it strong, then
+     * the fingerprint; "Use password" is the last resort and the phone's PIN never opens it.
+     */
     private fun setupBiometrics() {
         executor = ContextCompat.getMainExecutor(this)
         biometricPrompt = BiometricPrompt(this, executor,
             object : BiometricPrompt.AuthenticationCallback() {
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
                     super.onAuthenticationError(errorCode, errString)
-                     viewModel.onAuthError("Auth Error: $errString")
+                    // "Use password" and a dismissal are choices, not errors.
+                    if (errorCode in CHOSEN_EXITS) return
+                    viewModel.onAuthError(errString.toString())
                 }
 
                 override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                     super.onAuthenticationSucceeded(result)
-                    
-                    // Retrieve Password securely
-                    val storedPwd = secretManager.getVaultPassword()
-                    if (!storedPwd.isNullOrEmpty()) {
-                        val pwdChars = storedPwd.toCharArray()
-                        viewModel.unlock(pwdChars)
-                        java.util.Arrays.fill(pwdChars, ' ')
-                    } else {
-                        // Biometric Success, but no password stored.
-                        // Force manual unlock to set the password.
-                        android.widget.Toast.makeText(this@PrivateJournalActivity, "Please unlock with password to enable biometrics.", android.widget.Toast.LENGTH_LONG).show()
+                    val cipher = result.cryptoObject?.cipher ?: run {
+                        viewModel.onAuthError("Type your password.")
+                        return
                     }
-                }
-
-                override fun onAuthenticationFailed() {
-                    super.onAuthenticationFailed()
-                    viewModel.onAuthError("Authentication failed")
+                    lifecycleScope.launch {
+                        val password = withContext(Dispatchers.Default) { binding.unwrap(cipher) }
+                        if (password == null) {
+                            viewModel.onAuthError("This phone's copy of the password can't be read: type it once.")
+                            return@launch
+                        }
+                        viewModel.unlock(password, viaBiometric = true)
+                        java.util.Arrays.fill(password, '\u0000')
+                    }
                 }
             })
 
         promptInfo = BiometricPrompt.PromptInfo.Builder()
-            .setTitle("Unlock Private Vault")
-            .setSubtitle("Log in using your biometric credential")
-            .setNegativeButtonText("Use Password")
+            .setTitle("Unlock the private journal")
+            .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
+            .setNegativeButtonText("Use password")
+            // A recognized face opens the journal at once, without a confirm tap.
+            .setConfirmationRequired(false)
             .build()
     }
 
+    /** Asks for the face or fingerprint when the password is bound; without a binding the password is typed. */
     private fun launchBiometric() {
-        biometricPrompt.authenticate(promptInfo)
+        lifecycleScope.launch {
+            val cipher = withContext(Dispatchers.IO) { binding.cipherForUnlock() } ?: return@launch
+            if (!lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return@launch
+            biometricPrompt.authenticate(promptInfo, BiometricPrompt.CryptoObject(cipher))
+        }
+    }
+
+    private companion object {
+        val CHOSEN_EXITS = setOf(
+            BiometricPrompt.ERROR_NEGATIVE_BUTTON,
+            BiometricPrompt.ERROR_USER_CANCELED,
+            BiometricPrompt.ERROR_CANCELED
+        )
     }
 }
 
@@ -240,16 +263,26 @@ fun PrivateVaultScreen(
                 )
                 
                 Spacer(modifier = Modifier.height(48.dp))
-                
-                Button(
-                    onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onAuthenticate()
-                    },
-                    modifier = Modifier.fillMaxWidth().height(56.dp),
-                    shape = MaterialTheme.shapes.large
-                ) {
-                    Text("Unlock with Biometrics")
+
+                // Only once the password is bound to the biometric key (V3): before, the password is typed.
+                val biometricReady by viewModel.biometricReady.collectAsStateWithLifecycle()
+                if (biometricReady) {
+                    // The system's own words for the strong biometrics enrolled ("Use face or fingerprint").
+                    val unlockLabel = remember(context) {
+                        context.getSystemService(android.hardware.biometrics.BiometricManager::class.java)
+                            ?.getStrings(android.hardware.biometrics.BiometricManager.Authenticators.BIOMETRIC_STRONG)
+                            ?.buttonLabel?.toString()
+                    } ?: "Unlock with biometrics"
+                    Button(
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onAuthenticate()
+                        },
+                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                        shape = MaterialTheme.shapes.large
+                    ) {
+                        Text(unlockLabel)
+                    }
                 }
                 
                 if (state.errorMessage != null) {

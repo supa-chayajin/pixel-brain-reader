@@ -8,7 +8,7 @@ import androidx.core.content.edit
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.EmbeddingDao
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.EmbeddingTableSignature
 import cloud.wafflecommons.pixelbrainreader.data.local.security.CryptoManager
-import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
+import cloud.wafflecommons.pixelbrainreader.data.privatevault.PrivateVaultSession
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -23,7 +23,7 @@ import javax.inject.Singleton
 /**
  * Resolved top-K result. [content] is ALWAYS plaintext at this point —
  * the engine just-in-time decrypts private chunks using the cached vault
- * password from [SecretManager]. If the vault is locked at query time
+ * password from [PrivateVaultSession]. If the vault is locked at query time
  * (no password cached), private hits are silently dropped from the result
  * so the rest of the pipeline never sees encrypted bytes by accident.
  */
@@ -57,7 +57,7 @@ class VectorSearchEngine @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val embeddingDao: EmbeddingDao,
     private val cryptoManager: CryptoManager,
-    private val secretManager: SecretManager,
+    private val privateVaultSession: PrivateVaultSession,
     private val modesRepository: dagger.Lazy<cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository>,
     private val userPreferences: dagger.Lazy<cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository>
 ) {
@@ -471,43 +471,44 @@ class VectorSearchEngine @Inject constructor(
         val contentById = embeddingDao.getContents(candidates.map { it.chunk.id })
             .associate { it.id to it.content }
 
-        val vaultPassword = secretManager.getVaultPassword()
-        // Private chunks only while the private journal is unlocked in this session.
-        val isVaultUnlocked = secretManager.isPrivateVaultSessionUnlocked() && !vaultPassword.isNullOrBlank()
+        // Private chunks only while the private journal is unlocked: its session holds the only
+        // readable copy of the password (12.18, V3).
+        val sessionPassword = privateVaultSession.password()
         var privateDecrypted = 0
         var privateDropped = 0
         val hits = mutableListOf<SearchHit>()
-        for (scored in candidates) {
-            if (hits.size >= limit) break
-            val chunk = scored.chunk
-            val content = contentById[chunk.id] ?: continue // removed since the index was loaded
+        try {
+            for (scored in candidates) {
+                if (hits.size >= limit) break
+                val chunk = scored.chunk
+                val content = contentById[chunk.id] ?: continue // removed since the index was loaded
 
-            if (chunk.isPrivate) {
-                if (!isVaultUnlocked || vaultPassword.isNullOrBlank()) {
-                    privateDropped++
-                    continue
+                if (chunk.isPrivate) {
+                    if (sessionPassword == null) {
+                        privateDropped++
+                        continue
+                    }
+                    val plaintext = try {
+                        val ciphertext = Base64.decode(content, Base64.NO_WRAP)
+                        cryptoManager.decrypt(ciphertext, sessionPassword)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Log.w(
+                            "RAG_DEBUG",
+                            "Failed to decrypt private chunk for ${chunk.fileId}: ${e.message}"
+                        )
+                        privateDropped++
+                        continue
+                    }
+                    privateDecrypted++
+                    hits.add(SearchHit(chunk.fileId, plaintext, isPrivate = true))
+                } else {
+                    hits.add(SearchHit(chunk.fileId, content, isPrivate = false))
                 }
-                val pwd = vaultPassword.toCharArray()
-                val plaintext = try {
-                    val ciphertext = Base64.decode(content, Base64.NO_WRAP)
-                    cryptoManager.decrypt(ciphertext, pwd)
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    Log.w(
-                        "RAG_DEBUG",
-                        "Failed to decrypt private chunk for ${chunk.fileId}: ${e.message}"
-                    )
-                    privateDropped++
-                    continue
-                } finally {
-                    java.util.Arrays.fill(pwd, ' ')
-                }
-                privateDecrypted++
-                hits.add(SearchHit(chunk.fileId, plaintext, isPrivate = true))
-            } else {
-                hits.add(SearchHit(chunk.fileId, content, isPrivate = false))
             }
+        } finally {
+            sessionPassword?.fill('\u0000')
         }
 
         Log.d(
