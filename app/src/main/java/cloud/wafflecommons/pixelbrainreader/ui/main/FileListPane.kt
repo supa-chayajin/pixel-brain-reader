@@ -5,6 +5,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -23,6 +24,7 @@ import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.QuestionAnswer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -62,7 +64,9 @@ fun FileListPane(
     onRenameFile: (String, GithubFileDto) -> Unit,
     onDeleteFile: (GithubFileDto) -> Unit,
     onAnalyzeFolder: () -> Unit,
-    onMoveFile: (GithubFileDto) -> Unit = {}
+    onMoveFile: (GithubFileDto) -> Unit = {},
+    /** "Ask this folder" in a folder's long-press menu (K2, 12.20); null where Chat can't be asked. */
+    onAskFolder: ((String) -> Unit)? = null
 ) {
     val haptic = LocalHapticFeedback.current
     
@@ -330,10 +334,35 @@ fun FileListPane(
                                 }
                             }
                         ) {
-                            FileItemCard(file = file, onClick = {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) 
-                                if (file.type == "dir") onFolderClick(file.path) else onFileClick(file)
-                            })
+                            // A folder Chat may answer from has a long-press menu (K2, D5).
+                            val askable = onAskFolder != null && file.type == "dir" &&
+                                cloud.wafflecommons.pixelbrainreader.data.ai.ChatScope.allows(file.path, isFolder = true)
+                            var folderMenu by remember { mutableStateOf(false) }
+                            Box {
+                                FileItemCard(
+                                    file = file,
+                                    onClick = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        if (file.type == "dir") onFolderClick(file.path) else onFileClick(file)
+                                    },
+                                    onLongClick = if (askable) {
+                                        {
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            folderMenu = true
+                                        }
+                                    } else null
+                                )
+                                DropdownMenu(expanded = folderMenu, onDismissRequest = { folderMenu = false }) {
+                                    DropdownMenuItem(
+                                        text = { Text("Ask this folder") },
+                                        leadingIcon = { Icon(Icons.Rounded.QuestionAnswer, contentDescription = null) },
+                                        onClick = {
+                                            folderMenu = false
+                                            onAskFolder?.invoke(file.path)
+                                        }
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -347,10 +376,12 @@ fun FileListPane(
 }
 
 @Composable
-fun FileItemCard(file: GithubFileDto, onClick: () -> Unit) {
+fun FileItemCard(file: GithubFileDto, onClick: () -> Unit, onLongClick: (() -> Unit)? = null) {
     Card(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.large)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
         shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerLow

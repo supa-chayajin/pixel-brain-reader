@@ -45,6 +45,7 @@ import androidx.compose.material.icons.rounded.Computer
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Hub
 import androidx.compose.material.icons.rounded.Psychology
+import androidx.compose.material.icons.rounded.QuestionAnswer
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
@@ -148,7 +149,9 @@ fun FileDetailPane(
     /** Hands the note off to a desktop session (a link to it); null when it can't be. */
     onHandOff: (() -> Unit)? = null,
     /** Asks the Coach about the week a weekly review covers (12.13, D6); null for any other note. */
-    onAskCoach: (() -> Unit)? = null
+    onAskCoach: (() -> Unit)? = null,
+    /** "Ask this note" (K2, 12.20): Chat on this note alone; null where it can't be asked. */
+    onAskNote: (() -> Unit)? = null
 ) {
     var showTimeMachine by rememberSaveable { mutableStateOf(false) }
     var showConnections by rememberSaveable { mutableStateOf(false) }
@@ -246,6 +249,15 @@ fun FileDetailPane(
                         Spacer(Modifier.weight(1f))
                         if (filePath != null && content != null && !isReadOnly) {
                             VaultRulesBadge(path = filePath, content = content, onFix = onContentChange)
+                        }
+                        if (onAskNote != null) {
+                            IconButton(onClick = onAskNote, modifier = Modifier.size(36.dp)) {
+                                Icon(
+                                    imageVector = Icons.Rounded.QuestionAnswer,
+                                    contentDescription = "Ask this note",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                         if (onAskCoach != null) {
                             IconButton(onClick = onAskCoach, modifier = Modifier.size(36.dp)) {

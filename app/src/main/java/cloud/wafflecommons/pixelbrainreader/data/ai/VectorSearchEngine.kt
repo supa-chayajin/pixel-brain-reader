@@ -429,9 +429,15 @@ class VectorSearchEngine @Inject constructor(
      * Search for relevant notes using cosine similarity.
      * Returns up to [limit] top-scoring chunks with plaintext content.
      * Private chunks are decrypted just-in-time using the cached vault password;
-     * if the vault is locked, those hits are dropped from the result.
+     * if the vault is locked, those hits are dropped from the result. [within], when given, keeps
+     * only the passages of the notes it accepts (K2's scopes, 12.20): ranked among themselves.
      */
-    suspend fun search(query: String, limit: Int = 6, ignoreVisibility: Boolean = false): List<SearchHit> = withContext(Dispatchers.IO) {
+    suspend fun search(
+        query: String,
+        limit: Int = 6,
+        ignoreVisibility: Boolean = false,
+        within: ((String) -> Boolean)? = null
+    ): List<SearchHit> = withContext(Dispatchers.IO) {
         Log.d("RAG_DEBUG", "search: query='${query.take(80).replace("\n", " ")}' (len=${query.length})")
         ensureSchemaVersion()
 
@@ -463,10 +469,15 @@ class VectorSearchEngine @Inject constructor(
         // not purged yet still never reach an answer.
         val visibility = modesRepository.get().visibility.value
         val includePrivate = userPreferences.get().privateNotesInAi.first()
+        // The golden-set harness measures the retriever, not the mode: it asks with every folder visible.
+        val visible: ((String) -> Boolean)? =
+            if (!ignoreVisibility && (visibility.hideWork || visibility.hidePrivate)) visibility::isVisible else null
         val chunks = RagRanking.eligible(
             loadChunkIndex(),
-            // The golden-set harness measures the retriever, not the mode: it asks with every folder visible.
-            isVisible = if (!ignoreVisibility && (visibility.hideWork || visibility.hidePrivate)) visibility::isVisible else null,
+            isVisible = when {
+                visible != null && within != null -> { fileId -> visible(fileId) && within(fileId) }
+                else -> visible ?: within
+            },
             includePrivate = includePrivate
         )
         val ranking = RagRanking.rank(queryVector, chunks)

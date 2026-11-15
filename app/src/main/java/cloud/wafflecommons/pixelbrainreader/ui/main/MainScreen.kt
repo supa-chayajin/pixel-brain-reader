@@ -588,7 +588,8 @@ fun MainScreen(
     viewModel: MainViewModel = hiltViewModel(),
     shareImportViewModel: cloud.wafflecommons.pixelbrainreader.ui.share.ShareImportViewModel = hiltViewModel(),
     moodViewModel: cloud.wafflecommons.pixelbrainreader.ui.mood.MoodViewModel = hiltViewModel(),
-    weeklyCoachViewModel: cloud.wafflecommons.pixelbrainreader.ui.review.WeeklyCoachViewModel = hiltViewModel()
+    weeklyCoachViewModel: cloud.wafflecommons.pixelbrainreader.ui.review.WeeklyCoachViewModel = hiltViewModel(),
+    chatScopeViewModel: cloud.wafflecommons.pixelbrainreader.ui.ai.ChatScopeViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -1244,6 +1245,13 @@ fun MainScreen(
                                                     onMoveFile = { file ->
                                                         fileToMove = file
                                                         viewModel.prepareMove(file)
+                                                    },
+                                                    // K2 (12.20): Chat on a folder; no AI on a read-only device.
+                                                    onAskFolder = if (VaultWriteGate.readOnly) null else { path ->
+                                                        cloud.wafflecommons.pixelbrainreader.data.ai.ChatScope.folder(path)?.let { scope ->
+                                                            chatScopeViewModel.ask(scope)
+                                                            navController.navigate(Screen.Chat)
+                                                        }
                                                     }
                                                 )
                                             }
@@ -1304,7 +1312,12 @@ fun MainScreen(
                                             // A weekly review asks the Coach about its week (12.13, D6), then opens Chat.
                                             onAskCoach = uiState.selectedFilePath
                                                 ?.takeIf(weeklyCoachViewModel::canAsk)
-                                                ?.let { path -> { weeklyCoachViewModel.askCoach(path) { navController.navigate(Screen.Chat) } } }
+                                                ?.let { path -> { weeklyCoachViewModel.askCoach(path) { navController.navigate(Screen.Chat) } } },
+                                            // K2 (12.20): Chat on this note alone; never a private note, no AI read-only.
+                                            onAskNote = uiState.selectedFilePath
+                                                ?.takeUnless { VaultWriteGate.readOnly }
+                                                ?.let(cloud.wafflecommons.pixelbrainreader.data.ai.ChatScope::note)
+                                                ?.let { scope -> { chatScopeViewModel.ask(scope); navController.navigate(Screen.Chat) } }
                                         )
                                     } else {
                                         cloud.wafflecommons.pixelbrainreader.ui.components.WelcomeScreen()

@@ -17,12 +17,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.SaveAlt
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Bolt
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.Groups
+import androidx.compose.material.icons.rounded.KeyboardDoubleArrowDown
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Psychology
 import androidx.compose.material.icons.rounded.Tune
@@ -51,6 +54,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import cloud.wafflecommons.pixelbrainreader.data.ai.ChatScope
 import cloud.wafflecommons.pixelbrainreader.data.ai.NanoState
 import cloud.wafflecommons.pixelbrainreader.data.ai.PromptPreset
 import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
@@ -89,11 +93,15 @@ fun ChatPanel(
     val streaming by viewModel.streamingMessage.collectAsStateWithLifecycle()
 
     // The streaming bubble joins once Nano's first words arrive; until then the thinking bubble
-    // stands in for it.
+    // stands in for it. The saved answer keeps its id: once the history holds it, it replaces it.
     val displayedMessages = remember(persistedHistory, streaming) {
-        val live = streaming?.takeIf { it.content.isNotBlank() }
+        val live = streaming?.takeIf { live -> live.content.isNotBlank() && persistedHistory.none { it.id == live.id } }
         if (live != null) persistedHistory + live else persistedHistory
     }
+    val scope by viewModel.scope.collectAsStateWithLifecycle()
+    val grounded = currentMode == ChatMode.ORACLE || (currentMode == ChatMode.PRESET && activePreset.useNotes)
+    // The scope a grounded question answers from (K2); the other surfaces ignore it.
+    val activeScope = scope?.takeIf { grounded }
     val thinking = viewModel.loadingStage != null && streaming?.content.isNullOrBlank()
 
     // Confirmation state for the top-bar "clear conversation" action.
@@ -197,7 +205,8 @@ fun ChatPanel(
                                             mode = currentMode,
                                             preset = activePreset,
                                             onInsert = onInsertContent,
-                                            onSourceClick = onSourceClick
+                                            onSourceClick = onSourceClick,
+                                            onContinue = if (message.id == viewModel.continuableAnswerId) viewModel::continueAnswer else null
                                         )
                                     }
                                 }
@@ -228,6 +237,15 @@ fun ChatPanel(
                     modifier = Modifier.padding(start = 24.dp, top = 4.dp, bottom = 2.dp)
                 )
 
+                if (activeScope != null) {
+                    ScopeChip(
+                        scope = activeScope,
+                        persona = persona,
+                        onClear = viewModel::clearScope,
+                        modifier = Modifier.padding(start = 16.dp, top = 6.dp)
+                    )
+                }
+
                 StealthInputBar(
                     textState = textState,
                     onTextChange = { textState = it },
@@ -241,10 +259,11 @@ fun ChatPanel(
                         }
                     },
                     isLoading = viewModel.loadingStage != null,
-                    hint = when (currentMode) {
-                        ChatMode.ORACLE -> "Ask your Second Brain..."
-                        ChatMode.PRESET -> "Message ${activePreset.title}..."
-                        ChatMode.SCRIBE -> "Spark a creative idea..."
+                    hint = when {
+                        activeScope != null -> "Ask about ${activeScope.label}..."
+                        currentMode == ChatMode.ORACLE -> "Ask your Second Brain..."
+                        currentMode == ChatMode.PRESET -> "Message ${activePreset.title}..."
+                        else -> "Spark a creative idea..."
                     },
                     accentColor = persona.accent,
                     accentContentColor = persona.onAccent
@@ -384,6 +403,8 @@ private fun SpringIn(fresh: Boolean, fromEnd: Boolean, content: @Composable () -
 @Composable
 private fun QuestionBubble(message: ChatMessage, run: BubbleRun, persona: PersonaColors, maxWidth: Dp) {
     val fresh = remember(message.id) { message.isFresh() }
+    // The note or folder the question was asked about (K2, D7), kept in its sources.
+    val askedIn = remember(message.sources) { ChatScope.decode(message.sources) }
     Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
         SpringIn(fresh = fresh, fromEnd = true) {
             Surface(
@@ -392,11 +413,25 @@ private fun QuestionBubble(message: ChatMessage, run: BubbleRun, persona: Person
                 contentColor = persona.onContainer,
                 modifier = Modifier.widthIn(max = maxWidth)
             ) {
-                Text(
-                    text = message.content,
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
-                )
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    if (askedIn != null) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 4.dp)) {
+                            Icon(
+                                if (askedIn.isFolder) Icons.Outlined.Folder else Icons.Outlined.Description,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = askedIn.label,
+                                style = MaterialTheme.typography.labelMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                    Text(text = message.content, style = MaterialTheme.typography.bodyLarge)
+                }
             }
         }
         if (!run.continuesBelow) MessageTime(message)
@@ -412,7 +447,8 @@ private fun AnswerBubble(
     mode: ChatMode,
     preset: PromptPreset,
     onInsert: (text: String, sources: List<String>) -> Unit,
-    onSourceClick: (String) -> Unit
+    onSourceClick: (String) -> Unit,
+    onContinue: (() -> Unit)?
 ) {
     // An answer that is only a warning (the model missing, a timeout) sits in the error colors.
     val problem = message.content.startsWith("⚠️") && message.sources.isEmpty()
@@ -453,7 +489,7 @@ private fun AnswerBubble(
                     }
 
                     if (!message.isStreaming && message.content.isNotBlank() && !problem) {
-                        AnswerActions(message = message, persona = persona, onInsert = onInsert)
+                        AnswerActions(message = message, persona = persona, onInsert = onInsert, onContinue = onContinue)
                     } else {
                         Spacer(Modifier.height(6.dp))
                     }
@@ -490,11 +526,28 @@ private fun SourceChip(source: String, persona: PersonaColors, onClick: () -> Un
     )
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun AnswerActions(message: ChatMessage, persona: PersonaColors, onInsert: (text: String, sources: List<String>) -> Unit) {
+private fun AnswerActions(
+    message: ChatMessage,
+    persona: PersonaColors,
+    onInsert: (text: String, sources: List<String>) -> Unit,
+    onContinue: (() -> Unit)?
+) {
     val copy = rememberCopyToClipboard()
     val colors = ButtonDefaults.textButtonColors(contentColor = persona.accent)
-    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(top = 2.dp)) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(top = 2.dp)) {
+        // The answer stopped at the model's output cap: one tap asks for the rest (K2).
+        if (onContinue != null) {
+            FilledTonalButton(
+                onClick = onContinue,
+                colors = ButtonDefaults.filledTonalButtonColors(containerColor = persona.container, contentColor = persona.onContainer)
+            ) {
+                Icon(Icons.Rounded.KeyboardDoubleArrowDown, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+                Spacer(Modifier.width(ButtonDefaults.IconSpacing))
+                Text("Continue")
+            }
+        }
         TextButton(onClick = { copy(message.content) }, colors = colors) {
             Icon(Icons.Outlined.ContentCopy, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
             Spacer(Modifier.width(ButtonDefaults.IconSpacing))
@@ -506,6 +559,40 @@ private fun AnswerActions(message: ChatMessage, persona: PersonaColors, onInsert
             Text("Save to Inbox")
         }
     }
+}
+
+/** The note or folder grounded questions answer from (K2); a tap goes back to the whole vault. */
+@Composable
+private fun ScopeChip(scope: ChatScope, persona: PersonaColors, onClear: () -> Unit, modifier: Modifier = Modifier) {
+    InputChip(
+        selected = true,
+        onClick = onClear,
+        label = {
+            Text(
+                text = "Asking: ${scope.label}",
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.widthIn(max = 280.dp)
+            )
+        },
+        leadingIcon = {
+            Icon(
+                if (scope.isFolder) Icons.Outlined.Folder else Icons.Outlined.Description,
+                contentDescription = null,
+                modifier = Modifier.size(InputChipDefaults.IconSize)
+            )
+        },
+        trailingIcon = {
+            Icon(Icons.Rounded.Close, contentDescription = "Ask the whole vault", modifier = Modifier.size(InputChipDefaults.IconSize))
+        },
+        colors = InputChipDefaults.inputChipColors(
+            selectedContainerColor = persona.container,
+            selectedLabelColor = persona.onContainer,
+            selectedLeadingIconColor = persona.onContainer,
+            selectedTrailingIconColor = persona.onContainer
+        ),
+        modifier = modifier
+    )
 }
 
 /** Until Nano's first words: Material 3 Expressive's loading indicator and what is happening. */

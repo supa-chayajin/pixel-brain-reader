@@ -53,6 +53,22 @@ class NoteRetrievalTest {
     }
 
     @Test
+    fun `a scope keeps the meaning search to its notes and the words to its folder`() = runTest {
+        every { prefs.hybridSearch } returns flowOf(true)
+        val folder = ChatScope.folder("20_Projects/21_Garden")!!
+        coEvery { vectors.search("q", limit = 20, within = any()) } returns listOf(
+            hit("20_Projects/21_Garden/a.md"), hit("20_Projects/21_Garden/b.md")
+        )
+        coEvery { discovery.fullTextHits("q", limit = 200, anyTerm = true) } returns words("elsewhere/b.md", "20_Projects/21_Garden/b.md")
+
+        assertEquals(
+            listOf("20_Projects/21_Garden/b.md", "20_Projects/21_Garden/a.md"),
+            retrieval.search("q", 6, folder).map { it.fileId }
+        )
+        coVerify { vectors.search("q", limit = 20, within = match { it("20_Projects/21_Garden/x.md") && !it("elsewhere/x.md") }) }
+    }
+
+    @Test
     fun `a failing word search leaves the meaning order`() = runTest {
         every { prefs.hybridSearch } returns flowOf(true)
         coEvery { vectors.search("q", limit = 20) } returns listOf(hit("a.md"), hit("b.md"))

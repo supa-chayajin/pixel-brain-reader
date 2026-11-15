@@ -7,6 +7,8 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cloud.wafflecommons.pixelbrainreader.data.ai.AiLanguage
+import cloud.wafflecommons.pixelbrainreader.data.ai.ChatScope
+import cloud.wafflecommons.pixelbrainreader.data.ai.ChatScopeRepository
 import cloud.wafflecommons.pixelbrainreader.data.ai.ChatSeedRepository
 import cloud.wafflecommons.pixelbrainreader.data.ai.LocalAiManager
 import cloud.wafflecommons.pixelbrainreader.data.ai.NanoException
@@ -14,6 +16,8 @@ import cloud.wafflecommons.pixelbrainreader.data.ai.NanoState
 import cloud.wafflecommons.pixelbrainreader.data.ai.PromptPreset
 import cloud.wafflecommons.pixelbrainreader.data.ai.PromptPresetRepository
 import cloud.wafflecommons.pixelbrainreader.data.ai.NoteRetrieval
+import cloud.wafflecommons.pixelbrainreader.data.ai.ScopedContext
+import cloud.wafflecommons.pixelbrainreader.data.ai.SearchHit
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.ChatMessageEntity
 import cloud.wafflecommons.pixelbrainreader.data.repository.ChatRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -71,6 +75,11 @@ private fun ChatMessageEntity.toUi(): ChatMessage = ChatMessage(
     sources = sources,
     timestamp = timestamp
 )
+
+/** A continuation (K2): what your turn shows, and what the model is asked (French, settled decision #5). */
+private const val CONTINUE_SHOWN = "Continue"
+private const val CONTINUE_ASKED =
+    "Continue ta réponse précédente exactement là où elle s'est arrêtée, sans répéter ce qui est déjà écrit."
 
 // Sliding window size injected into the Nano prompt. 6 messages = 3 turns.
 // Higher values risk REQUEST_TOO_LARGE on long messages, especially with RAG context.
@@ -163,7 +172,9 @@ class ChatViewModel @Inject constructor(
     private val chatRepository: ChatRepository,
     private val noteRetrieval: NoteRetrieval,
     private val presetRepository: PromptPresetRepository,
-    private val chatSeedRepository: ChatSeedRepository
+    private val chatSeedRepository: ChatSeedRepository,
+    private val chatScopeRepository: ChatScopeRepository,
+    private val scopedContext: ScopedContext
 ) : ViewModel() {
 
     // --- Mode (UI-only state) ------------------------------------------------
@@ -228,6 +239,25 @@ class ChatViewModel @Inject constructor(
     /** The in-flight generation launched by [sendMessage], so [resetChat] can cancel it. */
     private var generationJob: Job? = null
 
+    // --- Scope (K2, 12.20): one note or a folder, from its header or its menu ---
+
+    private val _scope = MutableStateFlow<ChatScope?>(null)
+
+    /** What the grounded surfaces answer from until it is cleared; null = the whole vault. */
+    val scope: StateFlow<ChatScope?> = _scope.asStateFlow()
+
+    fun clearScope() {
+        _scope.value = null
+    }
+
+    /** The answer that stopped at the model's output cap, which the Continue chip extends. */
+    var continuableAnswerId by mutableStateOf<String?>(null)
+        private set
+
+    /** What the last answer read, so a continuation reads the same. */
+    private var lastContext: String? = null
+    private var lastSources: List<String> = emptyList()
+
     fun setMode(mode: ChatMode) {
         _currentMode.value = mode
     }
@@ -269,22 +299,36 @@ class ChatViewModel @Inject constructor(
      */
     fun sendMessage(query: String) {
         if (query.isBlank()) return
+        send(shown = query, asked = query, continuation = false)
+    }
+
+    /** Your "Continue", then the model goes on from what the stopped answer read (K2). */
+    fun continueAnswer() {
+        if (continuableAnswerId == null) return
+        send(shown = CONTINUE_SHOWN, asked = CONTINUE_ASKED, continuation = true)
+    }
+
+    private fun send(shown: String, asked: String, continuation: Boolean) {
         // One answer at a time: a second send used to start a parallel generation that wrote into
         // the same streaming bubble.
         if (generationJob?.isActive == true) return
+        continuableAnswerId = null
 
         generationJob = viewModelScope.launch {
             val mode = _currentMode.value
             val preset = currentPreset()
             val modeStorage = storageOf(mode, preset)
             val grounded = mode == ChatMode.ORACLE || (mode == ChatMode.PRESET && preset.useNotes)
+            // A scope applies to the grounded surfaces only (K2).
+            val scope = _scope.value?.takeIf { grounded && !continuation }
 
-            // 1. Persist user turn immediately.
+            // 1. Persist user turn immediately, with its scope so the history shows it (D7).
             chatRepository.addMessage(
                 ChatMessageEntity(
                     mode = modeStorage,
                     role = "USER",
-                    content = query
+                    content = shown,
+                    sources = scope?.let { listOf(it.encode()) } ?: emptyList()
                 )
             )
 
@@ -295,26 +339,41 @@ class ChatViewModel @Inject constructor(
             // 3. RAG context (single search call, reuse for both grounding + citations).
             var sources = emptyList<String>()
             var ragContext: String? = null
-            if (grounded) {
-                loadingStage = "🔎 Searching your Second Brain…"
-                // Hybrid when switched on (R2, 12.20): words re-rank, never add a note.
-                val hits = noteRetrieval.search(query, limit = RAG_TOP_K)
-                val (context, usedHits) = buildRagContext(hits)
-                ragContext = context
-                sources = usedHits.map { it.fileId }.distinct()
-                Log.d(
-                    "RAG_DEBUG",
-                    "ChatViewModel.sendMessage($mode): hits=${hits.size} " +
-                        "sources=$sources contextLen=${ragContext?.length ?: 0}"
-                )
-            } else {
-                Log.d("RAG_DEBUG", "ChatViewModel.sendMessage($mode): RAG search skipped")
+            when {
+                continuation -> {
+                    ragContext = lastContext
+                    sources = lastSources
+                }
+                grounded -> {
+                    loadingStage = if (scope == null) "🔎 Searching your Second Brain…" else "🔎 Reading ${scope.label}…"
+                    // Hybrid when switched on (R2, 12.20): words re-rank, never add a note.
+                    val (context, used) = when {
+                        scope == null -> retrieved(noteRetrieval.search(asked, limit = RAG_TOP_K))
+                        scope.isFolder -> retrieved(noteRetrieval.search(asked, limit = RAG_TOP_K, scope = scope))
+                        // A note: whole or in chained summaries (D6); too long for that, its closest passages.
+                        else -> scopedContext.readNote(scope, asked) { loadingStage = it }
+                            ?.let { it.context to it.sources }
+                            ?: retrieved(noteRetrieval.search(asked, limit = RAG_TOP_K, scope = scope))
+                    }
+                    ragContext = context
+                    sources = used
+                    Log.d(
+                        "RAG_DEBUG",
+                        "ChatViewModel.send($mode, scoped=${scope != null}): " +
+                            "sources=${sources.size} contextLen=${ragContext?.length ?: 0}"
+                    )
+                }
+                else -> Log.d("RAG_DEBUG", "ChatViewModel.send($mode): RAG search skipped")
             }
+            lastContext = ragContext
+            lastSources = sources
 
-            // 4. On-device Nano STREAMING call.
+            // 4. On-device Nano STREAMING call. The saved answer keeps the streaming bubble's id,
+            // so it replaces it in place.
             loadingStage = "🔒 Asking Gemini Nano (on-device)…"
+            val answerId = java.util.UUID.randomUUID().toString()
             _streamingMessage.value =
-                ChatMessage(content = "", isUser = false, isStreaming = true, sources = sources)
+                ChatMessage(id = answerId, content = "", isUser = false, isStreaming = true, sources = sources)
             val sb = StringBuilder()
             val persona = personaFor(mode, preset)
             try {
@@ -323,7 +382,7 @@ class ChatViewModel @Inject constructor(
                         systemPrompt = persona,
                         ragContext = ragContext,
                         chatHistory = priorHistory,
-                        currentQuery = query
+                        currentQuery = asked
                     ).collect { delta ->
                         // First token: drop the "Asking…" label — the bubble takes over.
                         if (loadingStage != null) loadingStage = null
@@ -335,18 +394,21 @@ class ChatViewModel @Inject constructor(
                 val finalText = sb.toString()
                 chatRepository.addMessage(
                     ChatMessageEntity(
+                        id = answerId,
                         mode = modeStorage,
                         role = "MODEL",
                         content = finalText.ifBlank { "⚠️ The on-device model returned no response." },
                         sources = if (finalText.isBlank()) emptyList() else sources
                     )
                 )
+                if (finalText.isNotBlank() && localAiManager.lastStreamStoppedAtCap) continuableAnswerId = answerId
                 _streamingMessage.value = null
             } catch (e: TimeoutCancellationException) {
                 loadingStage = null
                 val partial = sb.toString()
                 chatRepository.addMessage(
                     ChatMessageEntity(
+                        id = answerId,
                         mode = modeStorage,
                         role = "MODEL",
                         content = if (partial.isNotBlank()) "$partial\n\n⚠️ (response interrupted — timed out)"
@@ -364,6 +426,7 @@ class ChatViewModel @Inject constructor(
                 val partial = sb.toString()
                 chatRepository.addMessage(
                     ChatMessageEntity(
+                        id = answerId,
                         mode = modeStorage,
                         role = "MODEL",
                         content = if (partial.isNotBlank()) partial else "⚠️ " + describeFailure(e),
@@ -374,6 +437,10 @@ class ChatViewModel @Inject constructor(
             }
         }
     }
+
+    /** Retrieved passages as the context the model reads and the notes they came from. */
+    private fun retrieved(hits: List<SearchHit>): Pair<String?, List<String>> =
+        buildRagContext(hits).let { (context, used) -> context to used.map { it.fileId }.distinct() }
 
     private fun describeFailure(e: Throwable): String = when (e) {
         is NanoException.ContextExceeded -> "Your message is too long for the on-device model."
@@ -395,6 +462,7 @@ class ChatViewModel @Inject constructor(
         val job = generationJob
         generationJob = null
         loadingStage = null
+        continuableAnswerId = null
         _streamingMessage.value = null
         viewModelScope.launch {
             job?.cancelAndJoin()
@@ -414,6 +482,14 @@ class ChatViewModel @Inject constructor(
                 generationJob?.join()
                 selectPreset(seed.presetId)
                 sendMessage(seed.message)
+            }
+        }
+        // "Ask this note / folder" (K2): take the offered scope once and answer from it on Cortex.
+        viewModelScope.launch {
+            chatScopeRepository.scope.filterNotNull().collect {
+                val scope = chatScopeRepository.take() ?: return@collect
+                _scope.value = scope
+                _currentMode.value = ChatMode.ORACLE
             }
         }
     }

@@ -288,7 +288,7 @@ owner asked for the same morning and the fixes of a full pre-release review.
       full 256, because the export hard-codes the shape (`resizeInput` fails on a RESHAPE). A
       dynamic-length export of the same weights would keep today's vectors (no re-index) at ~2.5×
       less compute, before any int8 gain.
-- [ ] **K2 Ask this note / this folder.** Chat scoped to one note or a folder, with chained
+- [x] **K2 Ask this note / this folder.** *(12.20.0: the note header's Ask, a folder's long-press menu, chained summaries, Continue at the cap)* Chat scoped to one note or a folder, with chained
       summaries for notes longer than Nano's window, and a Continue chip when an answer stops at
       the 256-token cap. *(Oct 17 3.2; V12 E12 and 11.2-B.)*
 - [ ] **K3 Time Machine v2.** Word-level highlights, renames followed, and "changed since my last

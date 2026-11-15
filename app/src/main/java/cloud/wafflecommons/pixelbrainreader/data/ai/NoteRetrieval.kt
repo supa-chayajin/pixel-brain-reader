@@ -18,20 +18,34 @@ class NoteRetrieval @Inject constructor(
     private val vaultDiscoveryRepository: VaultDiscoveryRepository,
     private val userPreferences: UserPreferencesRepository
 ) {
-    suspend fun search(query: String, limit: Int): List<SearchHit> {
-        if (!userPreferences.hybridSearch.first()) return vectorSearchEngine.search(query, limit = limit)
-        val byMeaning = vectorSearchEngine.search(query, limit = maxOf(limit, HybridRanking.CANDIDATES))
+    /** [scope], when given, keeps only its notes (K2, 12.20): a folder's, or one note's passages. */
+    suspend fun search(query: String, limit: Int, scope: ChatScope? = null): List<SearchHit> {
+        val within: ((String) -> Boolean)? = scope?.let { it::contains }
+        if (!userPreferences.hybridSearch.first()) return vectorSearchEngine.search(query, limit = limit, within = within)
+        val byMeaning = vectorSearchEngine.search(query, limit = maxOf(limit, HybridRanking.CANDIDATES), within = within)
         // Nothing above the floor: "not in your notes" (settled decision #2), whatever the words say.
         if (byMeaning.isEmpty()) return emptyList()
-        return HybridRanking.fuse(byMeaning, { it.fileId }, wordRanks(query)).take(limit)
+        return HybridRanking.fuse(byMeaning, { it.fileId }, wordRanks(query, scope)).take(limit)
     }
 
-    /** Full-text search's notes for [query], best first; a failure leaves the meaning order alone. */
-    suspend fun wordRanks(query: String): List<String> = try {
-        vaultDiscoveryRepository.fullTextHits(query, limit = HybridRanking.CANDIDATES, anyTerm = true).map { it.path }
+    /**
+     * Full-text search's notes for [query], best first, inside [scope] when given (asked wider then
+     * filtered, the ranking being vault-wide); a failure leaves the meaning order alone.
+     */
+    suspend fun wordRanks(query: String, scope: ChatScope? = null): List<String> = try {
+        val asked = if (scope == null) HybridRanking.CANDIDATES else SCOPED_WORD_CANDIDATES
+        vaultDiscoveryRepository.fullTextHits(query, limit = asked, anyTerm = true)
+            .map { it.path }
+            .filter { scope == null || scope.contains(it) }
+            .take(HybridRanking.CANDIDATES)
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
         emptyList()
+    }
+
+    private companion object {
+        /** Full-text hits read before keeping a scope's: its notes rarely lead the vault-wide ranking. */
+        const val SCOPED_WORD_CANDIDATES = 200
     }
 }

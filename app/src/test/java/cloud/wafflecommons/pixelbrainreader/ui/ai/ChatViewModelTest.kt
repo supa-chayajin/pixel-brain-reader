@@ -1,7 +1,11 @@
 package cloud.wafflecommons.pixelbrainreader.ui.ai
 
 import cloud.wafflecommons.pixelbrainreader.data.ai.ChatSeed
+import cloud.wafflecommons.pixelbrainreader.data.ai.ChatScope
+import cloud.wafflecommons.pixelbrainreader.data.ai.ChatScopeRepository
 import cloud.wafflecommons.pixelbrainreader.data.ai.ChatSeedRepository
+import cloud.wafflecommons.pixelbrainreader.data.ai.ScopedContext
+import cloud.wafflecommons.pixelbrainreader.data.ai.SearchHit
 import cloud.wafflecommons.pixelbrainreader.data.ai.LocalAiManager
 import cloud.wafflecommons.pixelbrainreader.data.ai.NanoException
 import cloud.wafflecommons.pixelbrainreader.data.ai.NanoState
@@ -16,6 +20,7 @@ import io.mockk.just
 import io.mockk.runs
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -94,6 +99,8 @@ class ChatViewModelTest {
     }
     private val nanoStateFlow = MutableStateFlow<NanoState>(NanoState.Ready)
     private val chatSeedRepository = ChatSeedRepository()
+    private val chatScopeRepository = ChatScopeRepository()
+    private val scopedContext: ScopedContext = mockk()
     private lateinit var fakeRepo: FakeChatRepository
 
     private lateinit var viewModel: ChatViewModel
@@ -109,8 +116,95 @@ class ChatViewModelTest {
             chatRepository = fakeRepo.real,
             noteRetrieval = noteRetrieval,
             presetRepository = presetRepository,
-            chatSeedRepository = chatSeedRepository
+            chatSeedRepository = chatSeedRepository,
+            chatScopeRepository = chatScopeRepository,
+            scopedContext = scopedContext
         )
+    }
+
+    // --- K2 (12.20): Ask this note / this folder, and Continue ---
+
+    @Test
+    fun `an offered folder opens Cortex on it, and the question keeps its scope`() = runTest {
+        val folder = ChatScope.folder("20_Projects/21_Garden")!!
+        coEvery { noteRetrieval.search("when?", any(), folder) } returns listOf(
+            SearchHit("20_Projects/21_Garden/Plan.md", "[Note: Plan] Tomatoes in April", isPrivate = false)
+        )
+        every {
+            localAiManager.generateAugmentedResponseStream(any(), match { it?.contains("Tomatoes") == true }, any(), "when?")
+        } returns flowOf("En avril.")
+
+        viewModel.setMode(ChatMode.SCRIBE)
+        chatScopeRepository.offer(folder)
+        advanceUntilIdle()
+        assertEquals(ChatMode.ORACLE, viewModel.currentMode.value)
+        assertEquals(folder, viewModel.scope.value)
+
+        viewModel.sendMessage("when?")
+        advanceUntilIdle()
+
+        val persisted = fakeRepo.snapshot("RAG")
+        assertEquals(folder, ChatScope.decode(persisted[0].sources))
+        assertEquals("En avril.", persisted[1].content)
+        assertEquals(listOf("20_Projects/21_Garden/Plan.md"), persisted[1].sources)
+        viewModel.clearScope()
+        assertNull(viewModel.scope.value)
+    }
+
+    @Test
+    fun `a note is read through its own text, without searching the vault`() = runTest {
+        val note = ChatScope.note("Ideas.md")!!
+        coEvery { scopedContext.readNote(note, "what?", any()) } returns ScopedContext.Reading("[Note : Ideas]\nA garden.", listOf("Ideas.md"))
+        every {
+            localAiManager.generateAugmentedResponseStream(any(), "[Note : Ideas]\nA garden.", any(), "what?")
+        } returns flowOf("Un jardin.")
+
+        chatScopeRepository.offer(note)
+        advanceUntilIdle()
+        viewModel.sendMessage("what?")
+        advanceUntilIdle()
+
+        coVerify(exactly = 0) { noteRetrieval.search(any(), any(), any()) }
+        assertEquals(listOf("Ideas.md"), fakeRepo.snapshot("RAG")[1].sources)
+    }
+
+    @Test
+    fun `a note too long for chained summaries is answered from its closest passages`() = runTest {
+        val note = ChatScope.note("Ideas.md")!!
+        coEvery { scopedContext.readNote(note, "what?", any()) } returns null
+        coEvery { noteRetrieval.search("what?", any(), note) } returns listOf(SearchHit("Ideas.md", "passage", isPrivate = false))
+        every { localAiManager.generateAugmentedResponseStream(any(), "passage", any(), "what?") } returns flowOf("Voilà.")
+
+        chatScopeRepository.offer(note)
+        advanceUntilIdle()
+        viewModel.sendMessage("what?")
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { noteRetrieval.search("what?", any(), note) }
+        assertEquals("Voilà.", fakeRepo.snapshot("RAG")[1].content)
+    }
+
+    @Test
+    fun `an answer stopped at the cap offers Continue, which reads the same context without searching`() = runTest {
+        every { localAiManager.lastStreamStoppedAtCap } returns true
+        coEvery { noteRetrieval.search("q", any()) } returns listOf(SearchHit("a.md", "ctx", isPrivate = false))
+        every { localAiManager.generateAugmentedResponseStream(any(), any(), any(), any()) } returns flowOf("a long answer")
+
+        viewModel.sendMessage("q")
+        advanceUntilIdle()
+        val answer = fakeRepo.snapshot("RAG")[1]
+        assertEquals(answer.id, viewModel.continuableAnswerId)
+
+        every { localAiManager.lastStreamStoppedAtCap } returns false
+        viewModel.continueAnswer()
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { noteRetrieval.search(any(), any()) }
+        verify { localAiManager.generateAugmentedResponseStream(any(), "ctx", any(), match { it.startsWith("Continue ta réponse") }) }
+        val persisted = fakeRepo.snapshot("RAG")
+        assertEquals("Continue", persisted[2].content)
+        assertEquals(listOf("a.md"), persisted[3].sources)
+        assertNull(viewModel.continuableAnswerId)
     }
 
     @Test

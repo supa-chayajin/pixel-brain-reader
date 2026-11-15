@@ -312,11 +312,14 @@ class LocalAiManager @Inject constructor(
             val start = System.currentTimeMillis()
             var chunks = 0
             var chars = 0
+            var finish: Int? = null
+            lastStreamStoppedAtCap = false
             try {
                 val request = request(prompt)
                 ensureModel().generateContentStream(request).collect { response ->
                     val text = response.candidates.firstOrNull()?.text
                     val finishReason = response.candidates.firstOrNull()?.finishReason
+                    finishReason?.let { finish = it }
                     chunks++
                     if (chunks <= 5 || chunks % 25 == 0 || finishReason != null) {
                         Log.d(tag, "stream chunk #$chunks len=${text?.length ?: 0} finishReason=$finishReason at ${System.currentTimeMillis() - start}ms")
@@ -327,12 +330,22 @@ class LocalAiManager @Inject constructor(
                     }
                 }
                 Log.i(tag, "generateContentStream done: $chunks chunks, $chars chars in ${System.currentTimeMillis() - start}ms")
+                lastStreamStoppedAtCap = finish == Candidate.FinishReason.MAX_TOKENS
             } catch (e: GenAiException) {
                 logGenAiException("generateContentStream", e)
                 throw mapGenAiException(e)
             }
         }
     }.flowOn(Dispatchers.IO)
+
+    /**
+     * Whether the last streamed answer stopped at [MAX_OUTPUT_TOKENS] rather than ending by itself:
+     * Chat then offers to continue it (K2, 12.20). Streams run one at a time under the session
+     * lock, so the stream a caller just collected is the one this describes.
+     */
+    @Volatile
+    var lastStreamStoppedAtCap: Boolean = false
+        private set
 
     /**
      * Settings' "Run a test", and by itself after each completed download: one request through the
