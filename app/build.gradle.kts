@@ -293,6 +293,8 @@ dependencies {
     implementation(libs.djl.android.tokenizer.native)
     implementation(libs.kotlinx.coroutines.guava)
     implementation(libs.mlkit.genai.prompt)
+    // Capture anything (13.0, X2): a photo's text read on the phone, the model in the APK.
+    implementation(libs.mlkit.text.recognition)
 
     // Home Screen Widget (Jetpack Glance)
     implementation(libs.androidx.glance.appwidget)

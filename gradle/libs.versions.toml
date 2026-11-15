@@ -26,6 +26,8 @@ biometric = "1.2.0-alpha05"
 datastore = "1.1.1"
 coroutinesPlayServices = "1.7.3"
 mlkitGenai = "1.0.0-alpha1"
+# 13.0 (X2, owner's D2): on-device text recognition, the bundled Latin model (offline from the first photo).
+mlkitTextRecognition = "16.0.1"
 vico = "1.13.0"
 remoteCreationCore = "1.0.0-alpha03"
 # Stable connect-client. A second, older "1.1.0-alpha07" entry used to sit next to it; deleting
@@ -118,6 +120,7 @@ androidx-biometric = { group = "androidx.biometric", name = "biometric", version
 # FORCE: Task to Coroutine Adapter
 kotlinx-coroutines-play-services = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-play-services", version.ref = "coroutinesPlayServices" }
 mlkit-genai-prompt = { group = "com.google.mlkit", name = "genai-prompt", version.ref = "mlkitGenai" }
+mlkit-text-recognition = { group = "com.google.mlkit", name = "text-recognition", version.ref = "mlkitTextRecognition" }
 jgit = { group = "org.eclipse.jgit", name = "org.eclipse.jgit", version = "6.8.0.202311291450-r" }
 kaml = { group = "com.charleskorn.kaml", name = "kaml", version = "0.60.0" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version = "1.6.3" }
