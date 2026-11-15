@@ -1311,6 +1311,14 @@ fun MainScreen(
                                             lastSync = uiState.selectedFilePath?.let { path -> lastSyncDigest?.changeFor(path) },
                                             onRestoreRevision = { restored -> viewModel.restoreRevision(restored) },
                                             filePath = uiState.selectedFilePath,
+                                            // D5 (13.0): the folder in the list beside the note; a phone steps back to the list.
+                                            onOpenFolder = { folder ->
+                                                viewModel.loadFolder(folder)
+                                                if (uiState.isFocusMode) viewModel.toggleFocusMode()
+                                                if (!isLargeScreen && navigator.canNavigateBack()) {
+                                                    scope.launch { navigator.navigateBack() }
+                                                }
+                                            },
                                             onOpenNote = { path -> viewModel.openVaultFile(path) },
                                             // Hand off this note (C13): a link to it, on its own project when it has one.
                                             // Never a private note: its name would land in a plain file.

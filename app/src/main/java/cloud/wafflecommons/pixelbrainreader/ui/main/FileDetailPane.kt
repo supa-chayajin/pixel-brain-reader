@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBars
@@ -154,6 +155,8 @@ fun FileDetailPane(
     onFetchRevisionContent: (suspend (commitId: String, path: String?) -> String?)? = null,
     onRestoreRevision: ((String) -> Unit)? = null,
     filePath: String? = null,
+    /** Opens the note's folder in the file list (13.0, D5); null leaves its location shown, not tappable. */
+    onOpenFolder: ((String) -> Unit)? = null,
     onOpenNote: (String) -> Unit = {},
     /** Hands the note off to a desktop session (a link to it); null when it can't be. */
     onHandOff: (() -> Unit)? = null,
@@ -252,18 +255,15 @@ fun FileDetailPane(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(56.dp)
+                            .heightIn(min = 56.dp)
                             .padding(horizontal = 16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // The title gives way to the actions: measured after them, on one line.
-                        Text(
-                            text = fileName,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
+                        // The title gives way to the actions: measured after them, its folder under it (D5).
+                        NoteTitle(
+                            name = fileName,
+                            path = filePath,
+                            onOpenFolder = onOpenFolder,
                             modifier = Modifier.weight(1f)
                         )
                         if (filePath != null && content != null && !isReadOnly) {
