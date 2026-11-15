@@ -29,6 +29,10 @@ interface ChoreDao {
     @Query("UPDATE chores SET lastDoneDate = :date WHERE id = :choreId")
     suspend fun updateLastDoneDate(choreId: String, date: String)
 
+    /** A chore's minutes (E16, 12.20). */
+    @Query("UPDATE chores SET minutes = :minutes WHERE id = :choreId")
+    suspend fun updateMinutes(choreId: String, minutes: Int)
+
     @Delete
     suspend fun deleteChore(chore: ChoreEntity)
 }

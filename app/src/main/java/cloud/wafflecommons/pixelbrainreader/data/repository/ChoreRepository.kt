@@ -68,7 +68,9 @@ class ChoreRepository @Inject constructor(
         val icon: String? = null,
         val createdAt: Long = 0L,
         val sortOrder: Int? = null,
-        val archived: Boolean? = null
+        val archived: Boolean? = null,
+        /** E16 (12.20): absent in older files, ignored by older versions (Gson). */
+        val minutes: Int? = null
     )
 
     // --- Rooms (live data) ----------------------------------------------------
@@ -102,6 +104,12 @@ class ChoreRepository @Inject constructor(
 
     suspend fun updateLastDoneDate(choreId: String, date: String) {
         choreDao.updateLastDoneDate(choreId, date)
+        onHomeConfigChanged()
+    }
+
+    /** How long a chore takes (E16), mirrored to the vault like every home change. */
+    suspend fun updateMinutes(choreId: String, minutes: Int) {
+        choreDao.updateMinutes(choreId, minutes.coerceIn(0, 600))
         onHomeConfigChanged()
     }
 
@@ -255,7 +263,8 @@ class ChoreRepository @Inject constructor(
         icon = icon,
         createdAt = createdAt,
         sortOrder = sortOrder,
-        archived = archived
+        archived = archived,
+        minutes = minutes.takeIf { it > 0 }
     )
 
     /** [fallbackCreatedAt] applies when the JSON has no createdAt (keeps the sort order stable). */
@@ -269,6 +278,7 @@ class ChoreRepository @Inject constructor(
         icon = icon ?: "cleaning_services",
         createdAt = if (createdAt > 0L) createdAt else fallbackCreatedAt,
         sortOrder = sortOrder ?: 0,
-        archived = archived ?: false
+        archived = archived ?: false,
+        minutes = minutes ?: 0
     )
 }

@@ -105,7 +105,19 @@ class ChoreViewModel @Inject constructor(
         )
     }
 
-    fun addChoreWithRoomId(name: String, roomId: String, frequencyDays: Int, baseEffort: Int, pastDays: Int = 0) {
+    /** The 15-minute reset (E16): recomputed whenever a chore changes. */
+    val resetPlan: StateFlow<cloud.wafflecommons.pixelbrainreader.domain.homeos.ChoreReset.Plan> =
+        choreRepository.getAllChoresStream()
+            .map { cloud.wafflecommons.pixelbrainreader.domain.homeos.ChoreReset.plan(it, LocalDate.now()) }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), cloud.wafflecommons.pixelbrainreader.domain.homeos.ChoreReset.Plan.EMPTY)
+
+    /** How long a chore takes (E16): set from the reset sheet's quick choices. */
+    fun setChoreMinutes(choreId: String, minutes: Int) {
+        if (VaultWriteGate.refuses()) return // a read-only device changes nothing
+        viewModelScope.launch(Dispatchers.IO) { choreRepository.updateMinutes(choreId, minutes) }
+    }
+
+    fun addChoreWithRoomId(name: String, roomId: String, frequencyDays: Int, baseEffort: Int, pastDays: Int = 0, minutes: Int = 0) {
         if (VaultWriteGate.refuses()) return // a read-only device changes nothing
         viewModelScope.launch(Dispatchers.IO) {
             val randomId = java.util.UUID.randomUUID().toString()
@@ -118,7 +130,8 @@ class ChoreViewModel @Inject constructor(
                     roomId = roomId,
                     baseEffort = baseEffort,
                     frequencyDays = safeFreq,
-                    lastDoneDate = LocalDate.now().minusDays(pastDays.toLong()).toString()
+                    lastDoneDate = LocalDate.now().minusDays(pastDays.toLong()).toString(),
+                    minutes = minutes.coerceIn(0, 600)
                 )
             )
         }

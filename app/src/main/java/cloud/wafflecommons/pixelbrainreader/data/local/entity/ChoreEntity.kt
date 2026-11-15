@@ -1,6 +1,7 @@
 package cloud.wafflecommons.pixelbrainreader.data.local.entity
 
 import androidx.compose.runtime.Immutable
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
@@ -20,5 +21,7 @@ data class ChoreEntity(
     val icon: String = "cleaning_services", // Material icon alias
     val createdAt: Long = System.currentTimeMillis(), // Epoch for stable sorting
     val sortOrder: Int = 0, // Manual ordering within a room (from the vault's chores.json)
-    val archived: Boolean = false // Hidden from the dashboard when true; still preserved on export
+    val archived: Boolean = false, // Hidden from the dashboard when true; still preserved on export
+    /** How long it takes, for the 15-minute reset (E16, 12.20); 0 = not said. Added in place (32 → 33). */
+    @ColumnInfo(defaultValue = "0") val minutes: Int = 0
 )

@@ -28,6 +28,7 @@ fun AddChoreBottomSheet(
     var name by remember { mutableStateOf("") }
     var selectedRoomId by remember { mutableStateOf("") }
     var frequencyDays by remember { mutableStateOf("") }
+    var minutes by remember { mutableStateOf("") }
     var baseEffort by remember { mutableFloatStateOf(30f) }
     var isExpanded by remember { mutableStateOf(false) }
 
@@ -123,6 +124,19 @@ fun AddChoreBottomSheet(
                 singleLine = true
             )
 
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // How long it takes (E16): the 15-minute reset picks by it.
+            OutlinedTextField(
+                value = minutes,
+                onValueChange = { minutes = it.filter { char -> char.isDigit() }.take(3) },
+                label = { Text("Minutes (optional)") },
+                placeholder = { Text("For the 15-minute reset") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+
             Spacer(modifier = Modifier.height(24.dp))
 
             Text(
@@ -149,7 +163,8 @@ fun AddChoreBottomSheet(
                         name = name,
                         roomId = selectedRoomId,
                         frequencyDays = finalFreq,
-                        baseEffort = baseEffort.roundToInt()
+                        baseEffort = baseEffort.roundToInt(),
+                        minutes = minutes.toIntOrNull() ?: 0
                     )
                     onDismiss()
                 },

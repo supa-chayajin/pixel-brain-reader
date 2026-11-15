@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.staggeredgrid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.rounded.CleaningServices
+import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -50,6 +51,18 @@ fun ChoreDashboardScreen(
     // measured on the content, which the side rail narrows.
     val columns = if (isMediumOrWider()) StaggeredGridCells.Adaptive(minSize = CardMinWidth) else StaggeredGridCells.Fixed(1)
 
+    // The 15-minute reset (E16, the owner's D13).
+    var showReset by remember { mutableStateOf(false) }
+    if (showReset) {
+        val plan by viewModel.resetPlan.collectAsStateWithLifecycle()
+        ChoreResetSheet(
+            plan = plan,
+            readOnly = cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate.readOnly,
+            onDone = viewModel::doChore,
+            onSetMinutes = viewModel::setChoreMinutes,
+            onDismiss = { showReset = false }
+        )
+    }
     Scaffold(
         topBar = {
             @OptIn(ExperimentalMaterial3Api::class)
@@ -57,6 +70,16 @@ fun ChoreDashboardScreen(
                 title = "Chores",
                 subtitle = "Get something done today",
                 actions = {
+                    // The 15-minute reset (E16).
+                    FilledTonalIconButton(
+                        onClick = { showReset = true },
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    ) {
+                        Icon(Icons.Rounded.Timer, "15-minute reset")
+                    }
                     FilledTonalIconButton(
                         onClick = onNavigateToStats,
                         colors = IconButtonDefaults.filledTonalIconButtonColors(
@@ -331,5 +354,58 @@ fun EmptyChoreState(
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             modifier = Modifier.padding(top = 8.dp)
         )
+    }
+}
+
+/** The 15-minute reset (E16): the chores that fit, and quick times for the due ones without one. */
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun ChoreResetSheet(
+    plan: cloud.wafflecommons.pixelbrainreader.domain.homeos.ChoreReset.Plan,
+    readOnly: Boolean,
+    onDone: (String) -> Unit,
+    onSetMinutes: (String, Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded))
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text("15-minute reset", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(
+                text = if (plan.picks.isEmpty()) "Nothing due fits 15 minutes." else "${plan.minutes} minutes, the most overdue first.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            plan.picks.forEach { chore ->
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(chore.name, style = MaterialTheme.typography.bodyLarge)
+                        Text("${chore.minutes} min", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    if (!readOnly) FilledTonalButton(onClick = { onDone(chore.id) }) { Text("Done") }
+                }
+            }
+            if (plan.withoutMinutes.isNotEmpty() && !readOnly) {
+                HorizontalDivider()
+                Text("Due, with no time yet: how long?", style = MaterialTheme.typography.labelLarge)
+                plan.withoutMinutes.forEach { chore ->
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        Text(chore.name, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                        listOf(5, 10, 15).forEach { minutes ->
+                            AssistChip(
+                                onClick = { onSetMinutes(chore.id, minutes) },
+                                label = { Text("$minutes min") },
+                                modifier = Modifier.padding(start = 6.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }

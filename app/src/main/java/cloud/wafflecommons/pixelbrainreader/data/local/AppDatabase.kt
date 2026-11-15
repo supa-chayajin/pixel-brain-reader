@@ -41,7 +41,7 @@ import cloud.wafflecommons.pixelbrainreader.data.local.entity.ChoreEntity
         ChoreEntity::class, // V4.6 Home OS
         cloud.wafflecommons.pixelbrainreader.data.local.entity.ChatMessageEntity::class // Nano chat memory (RAG + CREATIVE)
     ],
-    version = 32, // a habit's custody "Days" choice (MIGRATION_31_32)
+    version = 33, // a chore's minutes, for the 15-minute reset (MIGRATION_32_33)
     exportSchema = false
 )
 @androidx.room.TypeConverters(RoomTypeConverters::class)
@@ -72,6 +72,13 @@ abstract class AppDatabase : RoomDatabase() {
         val MIGRATION_31_32 = object : Migration(31, 32) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE habit_configs ADD COLUMN custody TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
+        /** 32 → 33: a chore's minutes (E16, 12.20), added in place like 31 → 32. */
+        val MIGRATION_32_33 = object : Migration(32, 33) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE chores ADD COLUMN minutes INTEGER NOT NULL DEFAULT 0")
             }
         }
     }
