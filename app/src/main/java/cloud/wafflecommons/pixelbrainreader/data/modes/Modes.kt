@@ -82,7 +82,9 @@ data class ModesConfig(
     /** Outside work hours with the child home (custody on); [outsideHoursMode] is the mode without. */
     val withChildMode: ContextMode = ContextMode.OFF,
     /** The personal projects Perso shows (project roots); empty = every one of them. */
-    val personalProjects: List<String> = emptyList()
+    val personalProjects: List<String> = emptyList(),
+    /** The tabs each mode hides (E1, 12.21): [ModeTabs] keys. */
+    val hiddenTabs: Map<ContextMode, List<String>> = emptyMap()
 ) {
     fun appearance(): ModeAppearance = ModeAppearance(modeStyles, toolkitName)
 
@@ -118,7 +120,9 @@ data class Visibility(
     /** How the screens call the child ("With <label>"). */
     val childLabel: String = CustodySchedule.DEFAULT_NAME,
     /** The project roots Perso shows; empty = every personal project. */
-    val personalProjects: List<String> = emptyList()
+    val personalProjects: List<String> = emptyList(),
+    /** The tabs this mode hides (E1): [ModeTabs] keys. */
+    val hiddenTabs: Set<String> = emptySet()
 ) {
     fun label(mode: ContextMode = this.mode): String = appearance.label(mode)
     /** The user's name for Work mode, for "hidden outside … mode" hints. */

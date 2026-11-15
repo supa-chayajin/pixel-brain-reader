@@ -162,13 +162,14 @@ private fun ExpressiveNavBar(
     isLargeScreen: Boolean,
     order: List<String>,
     onSelect: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    hidden: Set<String> = emptySet()
 ) {
     val navShadowColor = navShadowColor()
 
     // The first four of the user's order = the folded set (four since 12.17, owner's D9: Games made
     // eight tabs, and three left too many out of reach). Unfolded reveals the rest.
-    val ordered = navDestinations(currentRoute, isViewingDailyNote, order)
+    val ordered = navDestinations(currentRoute, isViewingDailyNote, order, hidden)
     val regular = if (isLargeScreen) ordered else ordered.take(FOLDED_TABS)
     val dailySelected = currentRoute == Screen.DailyNote
 
@@ -289,10 +290,11 @@ private fun ExpressiveNavRail(
     isViewingDailyNote: Boolean,
     order: List<String>,
     onSelect: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    hidden: Set<String> = emptySet()
 ) {
     val navShadowColor = navShadowColor()
-    val regular = navDestinations(currentRoute, isViewingDailyNote, order)
+    val regular = navDestinations(currentRoute, isViewingDailyNote, order, hidden)
     val dailySelected = currentRoute == Screen.DailyNote
 
     Box(
@@ -380,7 +382,7 @@ private data class NavDest(val route: String, val icon: ImageVector, val label: 
  * The regular tabs (all but Daily) in the user's custom order; a destination absent from the saved
  * order (one added in a later app version) is appended, so nothing ever disappears from the bar.
  */
-private fun navDestinations(currentRoute: String?, isViewingDailyNote: Boolean, order: List<String>): List<NavDest> =
+private fun navDestinations(currentRoute: String?, isViewingDailyNote: Boolean, order: List<String>, hidden: Set<String> = emptySet()): List<NavDest> =
     inNavOrder(
         order,
         listOfNotNull(
@@ -407,7 +409,7 @@ private fun navDestinations(currentRoute: String?, isViewingDailyNote: Boolean, 
                     currentRoute == cloud.wafflecommons.pixelbrainreader.ui.games.GamesRoutes.GAME
             )
         )
-    ) { it.route }
+    ) { it.route }.filterNot { it.route in hidden }
 
 /** How many tabs the floating bar shows below 600 dp (the folded phone). */
 private const val FOLDED_TABS = 4
@@ -758,6 +760,8 @@ fun MainScreen(
 
     // Custom nav-bar order (persisted); drives the order of the regular tabs.
     val navBarOrder by viewModel.navBarOrder.collectAsStateWithLifecycle()
+    // The tabs the current mode hides (E1).
+    val hiddenTabs by viewModel.hiddenTabs.collectAsStateWithLifecycle()
 
     // Smart Active State Logic — follows the real day (a date remembered once went stale after midnight).
     val today by viewModel.today.collectAsStateWithLifecycle()
@@ -901,7 +905,8 @@ fun MainScreen(
                 currentRoute = currentRoute,
                 isViewingDailyNote = isViewingDailyNote,
                 order = navBarOrder,
-                onSelect = navigateToTab
+                onSelect = navigateToTab,
+                hidden = hiddenTabs
             )
         }
         Box(
@@ -1572,7 +1577,8 @@ fun MainScreen(
                 isLargeScreen = isLargeScreen,
                 order = navBarOrder,
                 onSelect = navigateToTab,
-                modifier = Modifier.align(Alignment.BottomCenter)
+                modifier = Modifier.align(Alignment.BottomCenter),
+                hidden = hiddenTabs
             )
         }
     }

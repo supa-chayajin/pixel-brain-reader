@@ -131,6 +131,11 @@ class ModesViewModel @Inject constructor(
         cfg.copy(personalProjects = roots.sorted())
     }
 
+    /** Hides [key] in [mode], or shows it again (E1). */
+    fun toggleTab(mode: cloud.wafflecommons.pixelbrainreader.data.modes.ContextMode, key: String) = update { cfg ->
+        cloud.wafflecommons.pixelbrainreader.data.modes.ModeTabs.toggled(cfg, mode, key)
+    }
+
     /** A blank [ModeStyle] puts the default name and icon back. */
     fun setModeStyle(mode: ContextMode, style: ModeStyle) = update { cfg ->
         val styles = if (style == ModeStyle()) cfg.modeStyles - mode else cfg.modeStyles + (mode to style)

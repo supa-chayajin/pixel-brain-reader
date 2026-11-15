@@ -169,6 +169,11 @@ class MainViewModel @Inject constructor(
     // pull-to-refresh indicators. Null when no repo sync is running.
     val repoSyncStatus: StateFlow<String?> = repository.syncStatus
 
+    /** The tabs the current mode hides (E1, 12.21). */
+    val hiddenTabs: StateFlow<Set<String>> = modesRepository.visibility
+        .map { it.hiddenTabs }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptySet())
+
     // Persisted custom order of the regular nav-bar destinations (the "Daily" button is fixed).
     val navBarOrder: StateFlow<List<String>> = userPrefs.navBarOrder
         .stateIn(

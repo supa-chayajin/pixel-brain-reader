@@ -165,7 +165,8 @@ class ModesRepository @Inject constructor(
             resolved.mode, resolved.source, safe, cfg.workFolders, resolved.leave, cfg.appearance(),
             withChild = resolved.withChild,
             childLabel = cfg.custody.label,
-            personalProjects = cfg.personalProjects
+            personalProjects = cfg.personalProjects,
+            hiddenTabs = ModeTabs.hiddenIn(cfg, resolved.mode)
         )
     }
 

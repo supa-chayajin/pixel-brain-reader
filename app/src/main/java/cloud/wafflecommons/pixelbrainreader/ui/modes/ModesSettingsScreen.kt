@@ -153,6 +153,41 @@ fun ModesSettingsScreen(onBack: () -> Unit, viewModel: ModesViewModel = hiltView
             }
         }
 
+        // Per-mode tabs (E1, 12.21): a tick shows the tab in that mode.
+        SectionCard(
+            title = "Tabs per mode",
+            icon = Icons.Rounded.Apps,
+            subtitle = "Untick a tab to hide it in that mode. Daily always shows."
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Text("", modifier = Modifier.weight(1f))
+                ContextMode.entries.forEach { mode ->
+                    Text(
+                        appearance.label(mode),
+                        style = MaterialTheme.typography.labelMedium,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        modifier = Modifier.width(72.dp)
+                    )
+                }
+            }
+            cloud.wafflecommons.pixelbrainreader.data.modes.ModeTabs.KEYS.forEach { key ->
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Text(tabLabel(key, appearance.toolkitName), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                    ContextMode.entries.forEach { mode ->
+                        androidx.compose.foundation.layout.Box(contentAlignment = Alignment.Center, modifier = Modifier.width(72.dp)) {
+                            Checkbox(
+                                checked = key !in config.hiddenTabs[mode].orEmpty(),
+                                onCheckedChange = { viewModel.toggleTab(mode, key) },
+                                enabled = editable
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         SectionCard(
             title = "Schedule",
             icon = Icons.Rounded.Schedule,
@@ -402,6 +437,21 @@ fun ModesSettingsScreen(onBack: () -> Unit, viewModel: ModesViewModel = hiltView
 }
 
 /** The mode for some hours off: Perso or Off. */
+@Composable
+/** A tab's name in the per-mode table (E1). */
+private fun tabLabel(key: String, toolkitName: String): String = when (key) {
+    "home" -> "Repo"
+    "habits" -> "Habits"
+    "home_os" -> "Chores"
+    "chat" -> "Chat"
+    "mood" -> "Mood"
+    "stats" -> "Stats"
+    "projects" -> "Projects"
+    "games" -> "Games"
+    cloud.wafflecommons.pixelbrainreader.data.modes.ModeTabs.TOOLKIT -> "$toolkitName (Daily's chip)"
+    else -> key
+}
+
 @Composable
 private fun OutsideHoursChoice(
     title: String,

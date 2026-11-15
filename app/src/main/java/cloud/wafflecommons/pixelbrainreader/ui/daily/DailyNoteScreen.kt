@@ -371,18 +371,21 @@ fun DailyNoteScreen(
                             visibility = visibility,
                             onClick = { showModeSheet = true }
                         )
-                        Spacer(Modifier.width(8.dp))
-                        androidx.compose.material3.AssistChip(
-                            onClick = onOpenWork,
-                            label = { Text(visibility.appearance.toolkitName) },
-                            leadingIcon = {
-                                Icon(
-                                    Icons.Rounded.Apps,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        )
+                        // The mode may hide the tools hub's chip (E1, 12.21).
+                        if (cloud.wafflecommons.pixelbrainreader.data.modes.ModeTabs.TOOLKIT !in visibility.hiddenTabs) {
+                            Spacer(Modifier.width(8.dp))
+                            androidx.compose.material3.AssistChip(
+                                onClick = onOpenWork,
+                                label = { Text(visibility.appearance.toolkitName) },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Rounded.Apps,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            )
+                        }
                     }
                 }
                 LazyVerticalStaggeredGrid(
