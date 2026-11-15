@@ -56,25 +56,36 @@ object GoldenSet {
     }
 
     /** What each search brought back for a question, best first (vault paths). */
-    data class Outcome(val question: GoldenQuestion, val byMeaning: List<String>, val byWords: List<String>)
+    data class Outcome(
+        val question: GoldenQuestion,
+        val byMeaning: List<String>,
+        val byWords: List<String>,
+        /** The hybrid search's notes (R2): [byMeaning]'s candidates re-ranked by words. */
+        val byHybrid: List<String> = emptyList()
+    )
 
     data class Report(
         val questions: Int,
         /** Mean recall@[K] over the questions with expected notes. */
         val meaningRecall: Double,
         val wordsRecall: Double,
+        /** The hybrid search's own recall@[K] (R2, 12.20). */
+        val hybridRecall: Double,
         /** Both lists' top [K] together: the ceiling a hybrid search could reach. */
         val eitherRecall: Double,
         val negatives: Int,
-        /** Negatives the vector search left empty, as the 0.35 floor should. */
+        /**
+         * Negatives the vector search left empty, as the 0.35 floor should. The hybrid's are the
+         * same by construction: words never add a note (R2, D2).
+         */
         val negativesClean: Int,
         /** Questions none of whose notes came back. */
         val missed: List<String>
     ) {
         fun summary(): String = String.format(
             Locale.ROOT,
-            "%d questions · recall@%d: meaning %.2f, words %.2f, either %.2f · negatives clean %d/%d%s",
-            questions, K, meaningRecall, wordsRecall, eitherRecall, negativesClean, negatives,
+            "%d questions · recall@%d: meaning %.2f, words %.2f, hybrid %.2f, either %.2f · negatives clean %d/%d%s",
+            questions, K, meaningRecall, wordsRecall, hybridRecall, eitherRecall, negativesClean, negatives,
             if (missed.isEmpty()) "" else " · missed ${missed.joinToString(", ")}"
         )
     }
@@ -85,12 +96,14 @@ object GoldenSet {
         fun mean(values: List<Double>) = if (values.isEmpty()) 0.0 else values.sum() / values.size
         val meaning = positives.map { recall(it.byMeaning.take(K), it.question.expected) }
         val words = positives.map { recall(it.byWords.take(K), it.question.expected) }
+        val hybrid = positives.map { recall(it.byHybrid.take(K), it.question.expected) }
         val either = positives.map { recall(it.byMeaning.take(K) + it.byWords.take(K), it.question.expected) }
         val negatives = outcomes.filter { it.question.isNegative }
         return Report(
             questions = outcomes.size,
             meaningRecall = mean(meaning),
             wordsRecall = mean(words),
+            hybridRecall = mean(hybrid),
             eitherRecall = mean(either),
             negatives = negatives.size,
             negativesClean = negatives.count { it.byMeaning.isEmpty() },

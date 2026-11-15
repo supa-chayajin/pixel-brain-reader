@@ -109,7 +109,9 @@ class SettingsViewModel @Inject constructor(
         val isGoogleAccountLinked: Boolean = false,
         val soundEffectsEnabled: Boolean = false,
         // Settled decision #20: the private vault reaches the AI only when switched on.
-        val privateNotesInAi: Boolean = false
+        val privateNotesInAi: Boolean = false,
+        // R2 (12.20): Chat's notes re-ranked by shared words; on by default.
+        val hybridSearch: Boolean = true
     )
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -249,6 +251,10 @@ class SettingsViewModel @Inject constructor(
 
         userPrefs.privateNotesInAi.onEach { enabled ->
             _uiState.value = _uiState.value.copy(privateNotesInAi = enabled)
+        }.launchIn(viewModelScope)
+
+        userPrefs.hybridSearch.onEach { enabled ->
+            _uiState.value = _uiState.value.copy(hybridSearch = enabled)
         }.launchIn(viewModelScope)
 
         userPrefs.soundEffectsEnabled.onEach { enabled ->
@@ -393,6 +399,11 @@ class SettingsViewModel @Inject constructor(
      * indexing run follows too, so switching off drops the private vectors and switching on embeds
      * the private notes now rather than at the next manual run.
      */
+    /** Hybrid search on or off (R2, 12.20): Chat's next question follows it. */
+    fun setHybridSearch(enabled: Boolean) {
+        viewModelScope.launch { userPrefs.setHybridSearch(enabled) }
+    }
+
     fun setPrivateNotesInAi(enabled: Boolean) {
         if (VaultWriteGate.readOnly) return // no AI on a read-only device
         viewModelScope.launch {

@@ -43,7 +43,7 @@ class GoldenSetTest {
         val (q1, q2, q3) = GoldenSet.parse(note)
         val report = GoldenSet.score(
             listOf(
-                GoldenSet.Outcome(q1, byMeaning = listOf("30_Areas/Recipes/Carbo.md"), byWords = emptyList()),
+                GoldenSet.Outcome(q1, byMeaning = listOf("30_Areas/Recipes/Carbo.md"), byWords = emptyList(), byHybrid = listOf("30_Areas/Recipes/Carbo.md")),
                 GoldenSet.Outcome(q2, byMeaning = emptyList(), byWords = listOf("20_Projects/Tools/RFC_A.md")),
                 GoldenSet.Outcome(q3, byMeaning = emptyList(), byWords = listOf("x.md"))
             )
@@ -51,9 +51,10 @@ class GoldenSetTest {
         assertEquals(0.5, report.meaningRecall, 1e-9) // Q01 1.0, Q02 0.0
         assertEquals(0.25, report.wordsRecall, 1e-9) // Q01 0.0, Q02 0.5
         assertEquals(0.75, report.eitherRecall, 1e-9) // Q01 1.0, Q02 0.5
+        assertEquals(0.5, report.hybridRecall, 1e-9) // Q01 1.0, Q02 0.0
         assertEquals(1, report.negativesClean)
         assertEquals(emptyList<String>(), report.missed)
-        assertEquals("3 questions · recall@5: meaning 0.50, words 0.25, either 0.75 · negatives clean 1/1", report.summary())
+        assertEquals("3 questions · recall@5: meaning 0.50, words 0.25, hybrid 0.50, either 0.75 · negatives clean 1/1", report.summary())
     }
 
     @Test

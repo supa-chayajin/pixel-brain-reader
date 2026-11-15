@@ -183,6 +183,21 @@ class UserPreferencesRepository @Inject constructor(
         }
     }
 
+    // --- Hybrid search (R2, 12.20; the owner's D3, 2026-11-15) ---
+    private val KEY_HYBRID_SEARCH = booleanPreferencesKey("hybrid_search")
+
+    /**
+     * Whether Chat's notes are re-ranked by the words they share with the question
+     * (`NoteRetrieval`). On by default; Settings → Knowledge Vault turns it off. Device-only.
+     */
+    val hybridSearch: Flow<Boolean> = setting { it[KEY_HYBRID_SEARCH] ?: true }
+
+    suspend fun setHybridSearch(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_HYBRID_SEARCH] = enabled
+        }
+    }
+
     // --- The private journal's auto-lock (12.18, V2; owner, 2026-11-15) ---
     private val KEY_PRIVATE_AUTO_LOCK = intPreferencesKey("private_auto_lock_minutes")
 

@@ -479,6 +479,32 @@ fun SettingsScreen(
 
                 Spacer(Modifier.height(12.dp))
 
+                // R2 (12.20): words re-rank what meaning found, never add a note on their own.
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Hybrid search", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            text = if (uiState.hybridSearch) {
+                                "On: Chat ranks the notes it finds by meaning higher when they share words with your question. Words never bring in a note on their own."
+                            } else {
+                                "Off: Chat ranks notes by meaning only."
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = uiState.hybridSearch,
+                        onCheckedChange = { checked ->
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            viewModel.setHybridSearch(checked)
+                        },
+                        enabled = !VaultWriteGate.readOnly
+                    )
+                }
+
+                Spacer(Modifier.height(12.dp))
+
                 Button(
                     onClick = { viewModel.triggerVaultIndexing() },
                     modifier = Modifier.fillMaxWidth(),

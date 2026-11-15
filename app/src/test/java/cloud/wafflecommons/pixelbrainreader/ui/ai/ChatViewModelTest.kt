@@ -7,7 +7,7 @@ import cloud.wafflecommons.pixelbrainreader.data.ai.NanoException
 import cloud.wafflecommons.pixelbrainreader.data.ai.NanoState
 import cloud.wafflecommons.pixelbrainreader.data.ai.PromptPresetFormat
 import cloud.wafflecommons.pixelbrainreader.data.ai.PromptPresetRepository
-import cloud.wafflecommons.pixelbrainreader.data.ai.VectorSearchEngine
+import cloud.wafflecommons.pixelbrainreader.data.ai.NoteRetrieval
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.ChatMessageEntity
 import cloud.wafflecommons.pixelbrainreader.data.repository.ChatRepository
 import io.mockk.coEvery
@@ -87,7 +87,7 @@ class ChatViewModelTest {
     val mainDispatcherRule = MainDispatcherRule()
 
     private val localAiManager: LocalAiManager = mockk(relaxed = true)
-    private val vectorSearchEngine: VectorSearchEngine = mockk(relaxed = true)
+    private val noteRetrieval: NoteRetrieval = mockk(relaxed = true)
     private val presetRepository: PromptPresetRepository = mockk {
         every { presets } returns MutableStateFlow(PromptPresetFormat.DEFAULTS)
         coEvery { reload() } just runs
@@ -102,12 +102,12 @@ class ChatViewModelTest {
     fun setup() {
         every { localAiManager.nanoState } returns nanoStateFlow
         // RAG default: empty hits unless a test overrides.
-        coEvery { vectorSearchEngine.search(any(), any()) } returns emptyList()
+        coEvery { noteRetrieval.search(any(), any()) } returns emptyList()
         fakeRepo = FakeChatRepository()
         viewModel = ChatViewModel(
             localAiManager = localAiManager,
             chatRepository = fakeRepo.real,
-            vectorSearchEngine = vectorSearchEngine,
+            noteRetrieval = noteRetrieval,
             presetRepository = presetRepository,
             chatSeedRepository = chatSeedRepository
         )
@@ -211,7 +211,7 @@ class ChatViewModelTest {
 
     @Test
     fun `the Boardroom preset searches the notes and keeps its BOARDROOM history`() = runTest {
-        coEvery { vectorSearchEngine.search("arch query", any()) } returns listOf(
+        coEvery { noteRetrieval.search("arch query", any()) } returns listOf(
             cloud.wafflecommons.pixelbrainreader.data.ai.SearchHit(
                 fileId = "20_Projects/21_Waffle_Framework/Architecture.md",
                 content = "Clean Architecture Core Rules",
@@ -253,7 +253,7 @@ class ChatViewModelTest {
         viewModel.sendMessage("a hard 1:1")
         advanceUntilIdle()
 
-        coVerify(exactly = 0) { vectorSearchEngine.search(any(), any()) }
+        coVerify(exactly = 0) { noteRetrieval.search(any(), any()) }
         assertEquals(listOf("a hard 1:1", "Reformulation…"), fakeRepo.snapshot("PRESET:coach").map { it.content })
         assertTrue(fakeRepo.snapshot("BOARDROOM").isEmpty())
     }

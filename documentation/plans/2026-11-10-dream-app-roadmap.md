@@ -106,7 +106,7 @@ climbs through 12.10 (1300) and 12.18 (1380), but 13.0.0 would then come out at 
   The phone answers "have I seen this before, and what did I do?"; fixing the code stays with the
   desktop tooling (it has its own "explain this error" RFC). **A plan for review comes before any
   code** (owner, 2026-11-10). *(v11 C8.)*
-- [ ] **R2 Hybrid retrieval.** Reciprocal-rank fusion of the FTS4 top 20 and the vector top 20,
+- [x] **R2 Hybrid retrieval.** *(12.20.0: words only re-rank the notes found by meaning, the owner's D2, on with a switch; the golden set on the Fold said meaning 0.77, words 0.82, either 0.93)* Reciprocal-rank fusion of the FTS4 top 20 and the vector top 20,
       with the 0.35 floor kept on the vector side (#2). It ships in this release only if R1 shows
       recall@6 up and no off-topic context; otherwise it waits.
 

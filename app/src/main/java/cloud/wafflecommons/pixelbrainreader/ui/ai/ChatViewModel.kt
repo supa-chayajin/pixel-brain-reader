@@ -13,7 +13,7 @@ import cloud.wafflecommons.pixelbrainreader.data.ai.NanoException
 import cloud.wafflecommons.pixelbrainreader.data.ai.NanoState
 import cloud.wafflecommons.pixelbrainreader.data.ai.PromptPreset
 import cloud.wafflecommons.pixelbrainreader.data.ai.PromptPresetRepository
-import cloud.wafflecommons.pixelbrainreader.data.ai.VectorSearchEngine
+import cloud.wafflecommons.pixelbrainreader.data.ai.NoteRetrieval
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.ChatMessageEntity
 import cloud.wafflecommons.pixelbrainreader.data.repository.ChatRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -158,7 +158,7 @@ internal fun buildRagContext(
 class ChatViewModel @Inject constructor(
     private val localAiManager: LocalAiManager,
     private val chatRepository: ChatRepository,
-    private val vectorSearchEngine: VectorSearchEngine,
+    private val noteRetrieval: NoteRetrieval,
     private val presetRepository: PromptPresetRepository,
     private val chatSeedRepository: ChatSeedRepository
 ) : ViewModel() {
@@ -294,7 +294,8 @@ class ChatViewModel @Inject constructor(
             var ragContext: String? = null
             if (grounded) {
                 loadingStage = "🔎 Searching your Second Brain…"
-                val hits = vectorSearchEngine.search(query, limit = RAG_TOP_K)
+                // Hybrid when switched on (R2, 12.20): words re-rank, never add a note.
+                val hits = noteRetrieval.search(query, limit = RAG_TOP_K)
                 val (context, usedHits) = buildRagContext(hits)
                 ragContext = context
                 sources = usedHits.map { it.fileId }.distinct()
