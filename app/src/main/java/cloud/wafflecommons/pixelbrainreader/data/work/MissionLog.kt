@@ -49,12 +49,23 @@ data class LogEntry(
     val sourceLine: String? = null
 )
 
-/** Where the log lives and the roles offered when capturing. Synced in the vault. */
+/**
+ * A frequent entry, one tap from the add sheet the Quick Settings tile opens (E4, 12.20): its text,
+ * its kind (a [LogKind] name) and its role.
+ */
+@Serializable
+data class LogTemplate(val text: String, val kind: String = LogKind.FACT.name, val role: String? = null) {
+    /** The kind it logs; an unknown name (a newer version's) logs a fact. */
+    fun logKind(): LogKind = LogKind.entries.firstOrNull { it.name == kind } ?: LogKind.FACT
+}
+
+/** Where the log lives, the roles offered when capturing and the templates. Synced in the vault. */
 @Serializable
 data class MissionLogSettings(
     val folder: String = DEFAULT_FOLDER,
     val encrypted: Boolean = false,
-    val roles: List<String> = DEFAULT_ROLES
+    val roles: List<String> = DEFAULT_ROLES,
+    val templates: List<LogTemplate> = emptyList()
 ) {
     companion object {
         const val DEFAULT_FOLDER = "30_Areas/Mission log"

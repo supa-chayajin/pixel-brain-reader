@@ -106,6 +106,29 @@ class MissionLogViewModel @Inject constructor(
         repository.updateSettings { it.copy(roles = it.roles - role) }
     }
 
+    /** One tap on a template logs it now (E4). */
+    fun logTemplate(template: cloud.wafflecommons.pixelbrainreader.data.work.LogTemplate) = run("Couldn't save the entry") {
+        val entry = LogEntry(
+            at = java.time.LocalDateTime.now().withSecond(0).withNano(0),
+            kind = template.logKind(),
+            text = template.text,
+            role = template.role
+        )
+        repository.add(entry)
+        _month.value = YearMonth.from(entry.at)
+    }
+
+    /** Keeps an entry as a template, once (E4). */
+    fun saveTemplate(template: cloud.wafflecommons.pixelbrainreader.data.work.LogTemplate) = run("Couldn't save the settings") {
+        repository.updateSettings { s ->
+            if (s.templates.any { it.text.equals(template.text, ignoreCase = true) }) s else s.copy(templates = s.templates + template)
+        }
+    }
+
+    fun removeTemplate(template: cloud.wafflecommons.pixelbrainreader.data.work.LogTemplate) = run("Couldn't save the settings") {
+        repository.updateSettings { it.copy(templates = it.templates - template) }
+    }
+
     private fun run(failure: String, block: suspend () -> Unit) {
         viewModelScope.launch {
             try {

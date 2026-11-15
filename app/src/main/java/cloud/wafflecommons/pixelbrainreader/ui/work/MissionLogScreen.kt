@@ -3,6 +3,12 @@ package cloud.wafflecommons.pixelbrainreader.ui.work
 import cloud.wafflecommons.pixelbrainreader.ui.utils.centeredMaxWidth
 import android.widget.Toast
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material3.Surface
+import androidx.compose.material3.minimumInteractiveComponentSize
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -228,7 +234,14 @@ fun MissionLogScreen(
             onDismiss = {
                 adding = false
                 editing = null
-            }
+            },
+            templates = settings.templates,
+            onUseTemplate = { template ->
+                viewModel.logTemplate(template)
+                adding = false
+            },
+            onSaveTemplate = viewModel::saveTemplate,
+            onRemoveTemplate = viewModel::removeTemplate
         )
     }
 }
@@ -367,7 +380,12 @@ internal fun LogEntrySheet(
     onSave: (LogEntry) -> Unit,
     onDelete: (() -> Unit)?,
     onDismiss: () -> Unit,
-    onCreateDecisionNote: (() -> Unit)? = null
+    onCreateDecisionNote: (() -> Unit)? = null,
+    /** Frequent entries (E4): one tap logs one, a long-press removes it. */
+    templates: List<cloud.wafflecommons.pixelbrainreader.data.work.LogTemplate> = emptyList(),
+    onUseTemplate: (cloud.wafflecommons.pixelbrainreader.data.work.LogTemplate) -> Unit = {},
+    onSaveTemplate: ((cloud.wafflecommons.pixelbrainreader.data.work.LogTemplate) -> Unit)? = null,
+    onRemoveTemplate: (cloud.wafflecommons.pixelbrainreader.data.work.LogTemplate) -> Unit = {}
 ) {
     val context = LocalContext.current
     var kind by remember { mutableStateOf(initial?.kind ?: LogKind.FACT) }
@@ -396,6 +414,35 @@ internal fun LogEntrySheet(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(if (initial == null) "Log" else "Edit entry", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            // Templates (E4): one tap logs the entry as it is, a long-press removes the template.
+            if (initial == null && templates.isNotEmpty()) {
+                Text("One tap logs it", style = MaterialTheme.typography.labelLarge)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    templates.forEach { template ->
+                        val shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+                        Surface(
+                            shape = shape,
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier
+                                .minimumInteractiveComponentSize()
+                                .clip(shape)
+                                .combinedClickable(
+                                    onClickLabel = "Log it now",
+                                    onLongClickLabel = "Remove the template",
+                                    onClick = { onUseTemplate(template) },
+                                    onLongClick = { onRemoveTemplate(template) }
+                                )
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                                Icon(template.logKind().icon(), contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text(template.text, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 220.dp))
+                            }
+                        }
+                    }
+                }
+            }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 LogKind.entries.forEach { option ->
                     FilterChip(
@@ -464,6 +511,12 @@ internal fun LogEntrySheet(
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 if (onDelete != null) TextButton(onClick = onDelete) { Text("Delete", color = MaterialTheme.colorScheme.error) }
                 Box(Modifier.weight(1f))
+                if (initial == null && onSaveTemplate != null) {
+                    TextButton(
+                        onClick = { onSaveTemplate(cloud.wafflecommons.pixelbrainreader.data.work.LogTemplate(text.trim(), kind.name, role)) },
+                        enabled = text.isNotBlank()
+                    ) { Text("Save as template") }
+                }
                 TextButton(onClick = onDismiss) { Text("Cancel") }
                 Button(
                     enabled = text.isNotBlank(),
