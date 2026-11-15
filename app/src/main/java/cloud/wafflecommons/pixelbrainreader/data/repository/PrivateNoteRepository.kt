@@ -104,12 +104,18 @@ class PrivateNoteRepository @Inject constructor(
     }
 
     /**
-     * True when [password] opens the vault: it decrypts one of the most recent notes. An empty vault
+     * True when [password] opens the vault: it decrypts one of the two newest encrypted notes
+     * anywhere under `99_Private/` (the journal, People, an encrypted mission log). An empty vault
      * accepts any password (it becomes the vault's password). Two notes are tried, so one damaged
-     * file can't lock the user out.
+     * file can't lock the user out. Only the journal's own notes used to be tried: with an empty
+     * journal, a typo was accepted while People notes sat under the real password.
      */
     suspend fun verifyPassword(password: CharArray): Boolean = withContext(Dispatchers.IO) {
-        val candidates = getPrivateNotes().take(PASSWORD_CHECK_SAMPLE)
+        val candidates = vaultDir.walkTopDown()
+            .filter { it.isFile && it.name.endsWith(".md.enc", ignoreCase = true) }
+            .sortedByDescending { it.lastModified() }
+            .take(PASSWORD_CHECK_SAMPLE)
+            .toList()
         if (candidates.isEmpty()) return@withContext true
         candidates.any { file ->
             try {
