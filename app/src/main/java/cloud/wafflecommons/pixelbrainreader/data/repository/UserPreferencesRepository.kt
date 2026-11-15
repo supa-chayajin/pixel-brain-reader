@@ -183,6 +183,18 @@ class UserPreferencesRepository @Inject constructor(
         }
     }
 
+    // --- Related while writing (K5, 12.20) ---
+    private val KEY_RELATED_WHILE_WRITING = booleanPreferencesKey("related_while_writing")
+
+    /** Whether the editor shows the notes closest to the paragraph being written. On by default. */
+    val relatedWhileWriting: Flow<Boolean> = setting { it[KEY_RELATED_WHILE_WRITING] ?: true }
+
+    suspend fun setRelatedWhileWriting(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_RELATED_WHILE_WRITING] = enabled
+        }
+    }
+
     // --- Hybrid search (R2, 12.20; the owner's D3, 2026-11-15) ---
     private val KEY_HYBRID_SEARCH = booleanPreferencesKey("hybrid_search")
 

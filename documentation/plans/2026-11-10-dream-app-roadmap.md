@@ -296,7 +296,7 @@ owner asked for the same morning and the fixes of a full pre-release review.
 - [ ] **K4 Time-travel questions.** "What did I think about X a year ago?" Git gives the note as
       it was on that date; the app shows then vs now and a 3-line summary of the shift. Comes after
       K3. *(Oct 17 5.3.)*
-- [ ] **K5 Related while writing.** The 3 notes closest to the current paragraph: a side pane when
+- [x] **K5 Related while writing.** *(12.20.0: chips on a phone, a side pane on a wide window, a tap links, a long-press opens)* The 3 notes closest to the current paragraph: a side pane when
       unfolded, chips when folded. Inference runs off the main thread, behind the inference lock.
       *(Oct 17 5.1.)*
 - [ ] **K6 Memory echoes v2.** An opt-in scope (`#review` or folders), SM-2-lite spacing kept in

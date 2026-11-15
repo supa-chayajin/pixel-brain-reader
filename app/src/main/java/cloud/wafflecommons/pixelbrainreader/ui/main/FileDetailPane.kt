@@ -5,6 +5,12 @@ import cloud.wafflecommons.pixelbrainreader.ui.utils.ReadingMaxWidth
 import cloud.wafflecommons.pixelbrainreader.ui.utils.centeredMaxWidth
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material.icons.rounded.Lightbulb
+import androidx.compose.material3.minimumInteractiveComponentSize
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -141,6 +147,7 @@ fun FileDetailPane(
     onCreateNew: () -> Unit = {},
     onSave: () -> Unit = {},
     moodViewModel: MoodViewModel = hiltViewModel(),
+    relatedNotesViewModel: RelatedNotesViewModel = hiltViewModel(),
     onFetchHistory: (suspend () -> List<cloud.wafflecommons.pixelbrainreader.data.remote.GitCommitDto>)? = null,
     /** A version's text at a commit, under the note's path then (null: today's); K3 follows renames. */
     onFetchRevisionContent: (suspend (commitId: String, path: String?) -> String?)? = null,
@@ -158,6 +165,12 @@ fun FileDetailPane(
 ) {
     var showTimeMachine by rememberSaveable { mutableStateOf(false) }
     var showConnections by rememberSaveable { mutableStateOf(false) }
+    val relatedEnabled by relatedNotesViewModel.enabled.collectAsStateWithLifecycle()
+    val related = RelatedSupport(
+        enabled = relatedEnabled,
+        find = relatedNotesViewModel::closestTo,
+        onOpenNote = onOpenNote
+    )
     if (showConnections && filePath != null) {
         ConnectionsSheet(
             path = filePath,
@@ -293,6 +306,19 @@ fun FileDetailPane(
                                 )
                             }
                         }
+                        // Related while writing (K5): shown or hidden while editing, kept on the device.
+                        if (isEditing && !isReadOnly) {
+                            IconButton(
+                                onClick = { relatedNotesViewModel.setEnabled(!relatedEnabled) },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Lightbulb,
+                                    contentDescription = if (relatedEnabled) "Hide related notes" else "Show related notes",
+                                    tint = if (relatedEnabled) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
                         if (onFetchHistory != null) {
                             IconButton(
                                 onClick = { showTimeMachine = true },
@@ -358,6 +384,7 @@ fun FileDetailPane(
                                             content = content,
                                             onContentChange = onContentChange,
                                             notePath = filePath,
+                                            related = related,
                                             modifier = Modifier
                                                 .fillMaxSize()
                                                 .windowInsetsPadding(WindowInsets.navigationBars)
@@ -376,6 +403,7 @@ fun FileDetailPane(
                                             content = content,
                                             onContentChange = onContentChange,
                                             notePath = filePath,
+                                            related = related,
                                             modifier = Modifier
                                                 .weight(1f)
                                                 .fillMaxWidth()
@@ -393,6 +421,7 @@ fun FileDetailPane(
                                             content = content,
                                             onContentChange = onContentChange,
                                             notePath = filePath,
+                                            related = related,
                                             modifier = Modifier
                                                 .fillMaxSize()
                                                 .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars))
@@ -537,6 +566,7 @@ private fun NoteEditor(
     content: String,
     onContentChange: (String) -> Unit,
     notePath: String?,
+    related: RelatedSupport,
     modifier: Modifier
 ) {
     var editorValue by remember(fileKey) { mutableStateOf(TextFieldValue(content)) }
@@ -575,20 +605,168 @@ private fun NoteEditor(
         update(TextFieldValue(before + inserted + editorValue.text.substring(at), TextRange(at + inserted.length)))
     }
 
-    Column(modifier.then(dropModifier)) {
-        trigger?.let { active ->
-            EditorAssistBar(
-                trigger = active,
-                onEdit = { edit -> update(TextFieldValue(edit.text, TextRange(edit.caret))) },
-                text = editorValue.text,
-                caret = editorValue.selection.start
+    // Related while writing (K5): the notes closest to the paragraph at the caret, 1.5 s after the
+    // typing stops; the next keystroke cancels the wait (produceState restarts on its keys).
+    val paragraph = remember(editorValue.text, editorValue.selection.start) {
+        cloud.wafflecommons.pixelbrainreader.data.editor.RelatedWriting.paragraphAt(editorValue.text, editorValue.selection.start)
+    }
+    val relatedNotes by produceState(initialValue = emptyList<String>(), related.enabled, paragraph, notePath) {
+        if (!related.enabled) {
+            value = emptyList()
+            return@produceState
+        }
+        if (paragraph == null) return@produceState
+        kotlinx.coroutines.delay(RELATED_PAUSE_MS)
+        value = related.find(paragraph, notePath)
+    }
+    // A tap links the note at the caret (the owner's D8); a long-press opens it.
+    val linkHere: (String) -> Unit = { path ->
+        val (text, caret) = cloud.wafflecommons.pixelbrainreader.data.editor.RelatedWriting
+            .insertLink(editorValue.text, editorValue.selection.start, path)
+        update(TextFieldValue(text, TextRange(caret)))
+    }
+    val wide = cloud.wafflecommons.pixelbrainreader.ui.utils.isWideLayout()
+
+    Row(modifier.then(dropModifier)) {
+        Column(modifier = Modifier.weight(1f)) {
+            trigger?.let { active ->
+                EditorAssistBar(
+                    trigger = active,
+                    onEdit = { edit -> update(TextFieldValue(edit.text, TextRange(edit.caret))) },
+                    text = editorValue.text,
+                    caret = editorValue.selection.start
+                )
+            }
+            if (!wide && trigger == null && related.enabled && relatedNotes.isNotEmpty()) {
+                RelatedChips(paths = relatedNotes, onLink = linkHere, onOpen = related.onOpenNote)
+            }
+            cloud.wafflecommons.pixelbrainreader.ui.components.ComposeCortexEditor(
+                value = editorValue,
+                onValueChange = ::update,
+                modifier = Modifier.weight(1f).fillMaxWidth()
             )
         }
-        cloud.wafflecommons.pixelbrainreader.ui.components.ComposeCortexEditor(
-            value = editorValue,
-            onValueChange = ::update,
-            modifier = Modifier.weight(1f).fillMaxWidth()
+        if (wide && related.enabled) {
+            RelatedPane(
+                paths = relatedNotes,
+                onLink = linkHere,
+                onOpen = related.onOpenNote,
+                modifier = Modifier.padding(start = 16.dp).width(RELATED_PANE_WIDTH).fillMaxHeight()
+            )
+        }
+    }
+}
+
+/** What the editor needs for Related while writing (K5): on or off, the finder, and opening a note. */
+private class RelatedSupport(
+    val enabled: Boolean,
+    val find: suspend (paragraph: String, notePath: String?) -> List<String>,
+    val onOpenNote: (String) -> Unit
+)
+
+private const val RELATED_PAUSE_MS = 1_500L
+private val RELATED_PANE_WIDTH = 260.dp
+
+/** A note as the related chips and pane name it: its title, then its folder as people say it. */
+private fun relatedTitle(path: String): Pair<String, String?> =
+    cloud.wafflecommons.pixelbrainreader.data.editor.RelatedWriting.linkName(path) to
+        path.substringBeforeLast('/', "").substringAfterLast('/').takeIf { it.isNotEmpty() }
+            ?.let { folder -> cloud.wafflecommons.pixelbrainreader.data.work.projectDisplayName(folder) }
+
+/** Related notes above the editor on a phone or a folded screen (K5). */
+@Composable
+private fun RelatedChips(paths: List<String>, onLink: (String) -> Unit, onOpen: (String) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+        Icon(
+            imageVector = Icons.Rounded.Lightbulb,
+            contentDescription = "Related notes",
+            tint = MaterialTheme.colorScheme.tertiary,
+            modifier = Modifier.size(18.dp)
         )
+        Spacer(Modifier.width(8.dp))
+        androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(paths.size) { index ->
+                val path = paths[index]
+                RelatedChip(title = relatedTitle(path).first, onLink = { onLink(path) }, onOpen = { onOpen(path) })
+            }
+        }
+    }
+}
+
+@Composable
+private fun RelatedChip(title: String, onLink: () -> Unit, onOpen: () -> Unit) {
+    val shape = RoundedCornerShape(8.dp)
+    Surface(
+        shape = shape,
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+        modifier = Modifier
+            .minimumInteractiveComponentSize()
+            .clip(shape)
+            .combinedClickable(onClickLabel = "Link it here", onLongClickLabel = "Open it", onClick = onLink, onLongClick = onOpen)
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelLarge,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp).widthIn(max = 220.dp)
+        )
+    }
+}
+
+/** Related notes beside the editor on a wide window (K5). */
+@Composable
+private fun RelatedPane(paths: List<String>, onLink: (String) -> Unit, onOpen: (String) -> Unit, modifier: Modifier) {
+    Surface(modifier = modifier, shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceContainerLow) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Rounded.Lightbulb, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Related", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            }
+            Spacer(Modifier.height(8.dp))
+            if (paths.isEmpty()) {
+                Text(
+                    "Notes close to the paragraph you're writing show up here.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            paths.forEach { path ->
+                val (title, folder) = relatedTitle(path)
+                val shape = RoundedCornerShape(12.dp)
+                Surface(
+                    shape = shape,
+                    color = MaterialTheme.colorScheme.tertiaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp)
+                        .clip(shape)
+                        .combinedClickable(
+                            onClickLabel = "Link it here",
+                            onLongClickLabel = "Open it",
+                            onClick = { onLink(path) },
+                            onLongClick = { onOpen(path) }
+                        )
+                ) {
+                    Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                        Text(title, style = MaterialTheme.typography.labelLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        if (folder != null) {
+                            Text(folder, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                }
+            }
+            if (paths.isNotEmpty()) {
+                Text(
+                    "Tap to link it here · hold to open it",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
     }
 }
 
