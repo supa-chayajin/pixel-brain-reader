@@ -36,6 +36,9 @@ object PhotoCapture {
      * and never one of this app's own providers ([ownAuthorities]), which would read its private
      * files on another app's behalf.
      */
-    fun isForeign(scheme: String?, authority: String?, ownAuthorities: Set<String>): Boolean =
-        scheme == "content" && !authority.isNullOrBlank() && authority !in ownAuthorities
+    fun isForeign(scheme: String?, authority: String?, ownAuthorities: Set<String>): Boolean {
+        // Android opens `content://<user>@<authority>` with <authority>'s provider: compare that.
+        val provider = authority?.substringAfterLast('@')
+        return scheme == "content" && !provider.isNullOrBlank() && provider !in ownAuthorities
+    }
 }

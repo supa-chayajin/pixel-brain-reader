@@ -51,6 +51,10 @@ class PhotoCaptureTest {
         val own = setOf("cloud.wafflecommons.pixelbrainreader.fileprovider", "cloud.wafflecommons.pixelbrainreader.androidx-startup")
         assertTrue(PhotoCapture.isForeign("content", "com.google.android.apps.photos.contentprovider", own))
         assertFalse(PhotoCapture.isForeign("content", "cloud.wafflecommons.pixelbrainreader.fileprovider", own))
+        // A user prefix reaches the same provider: still one of ours.
+        assertFalse(PhotoCapture.isForeign("content", "0@cloud.wafflecommons.pixelbrainreader.fileprovider", own))
+        assertFalse(PhotoCapture.isForeign("content", "0@", own))
+        assertTrue(PhotoCapture.isForeign("content", "0@com.google.android.apps.photos.contentprovider", own))
         assertFalse(PhotoCapture.isForeign("file", null, own))
         assertFalse(PhotoCapture.isForeign("content", null, own))
         assertFalse(PhotoCapture.isForeign("content", " ", own))
