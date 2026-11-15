@@ -1,5 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.data.repository
 
+import cloud.wafflecommons.pixelbrainreader.data.modes.CalendarLeaves
 import android.util.Log
 import androidx.room.withTransaction
 import cloud.wafflecommons.pixelbrainreader.data.auth.GoogleAuthRepository
@@ -29,6 +30,9 @@ import javax.inject.Singleton
 
 private const val TAG = "GoogleCalendarRepo"
 private const val APP_NAME = "PixelBrainReader"
+
+/** The Calendar API's largest page: 120 days of one calendar rarely need a second. */
+private const val MAX_RESULTS = 2500
 
 /**
  * Google Calendar one-way importer (Google -> Room).
@@ -159,6 +163,54 @@ class GoogleCalendarRepository @Inject constructor(
                 throw e
             } catch (e: Exception) {
                 Log.e(TAG, "Calendar import failed", e)
+                Result.failure(e)
+            }
+        }
+
+    /**
+     * The all-day events named like a leave in the next [CalendarLeaves.DAYS_AHEAD] days (E3,
+     * 12.21), from the calendars the account owns: a colleague's "Congés" on a shared calendar
+     * isn't the owner's. An empty success when Google sync is off or signed out.
+     */
+    suspend fun upcomingLeaves(today: LocalDate = LocalDate.now()): Result<List<CalendarLeaves.Event>> =
+        withContext(Dispatchers.IO) {
+            if (!userPreferences.isGoogleSyncEnabled.first()) return@withContext Result.success(emptyList())
+            val token = authRepository.getValidAccessToken() ?: return@withContext Result.success(emptyList())
+            try {
+                val service = buildService(token)
+                val zone = ZoneId.systemDefault()
+                val startInstant = today.atStartOfDay(zone).toInstant()
+                val endInstant = today.plusDays(CalendarLeaves.DAYS_AHEAD.toLong()).atStartOfDay(zone).toInstant()
+                val timeMin = DateTime(startInstant.toEpochMilli(), zone.rules.getOffset(startInstant).totalSeconds / 60)
+                val timeMax = DateTime(endInstant.toEpochMilli(), zone.rules.getOffset(endInstant).totalSeconds / 60)
+                val leaves = mutableListOf<CalendarLeaves.Event>()
+                val owned = service.calendarList().list().execute().items.orEmpty().filter { it.accessRole == "owner" }
+                for (cal in owned) {
+                    var pageToken: String? = null
+                    do {
+                        val page = service.events().list(cal.id)
+                            .setTimeMin(timeMin)
+                            .setTimeMax(timeMax)
+                            .setSingleEvents(true)
+                            .setMaxResults(MAX_RESULTS)
+                            .setPageToken(pageToken)
+                            .execute()
+                        page.items.orEmpty().forEach { evt ->
+                            // All-day events only: they carry a date, not a date-time.
+                            val start = evt.start?.date?.toStringRfc3339()?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: return@forEach
+                            val end = evt.end?.date?.toStringRfc3339()?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: return@forEach
+                            val id = evt.id ?: return@forEach
+                            CalendarLeaves.of(id, evt.summary.orEmpty(), start, end)?.let { leaves += it }
+                        }
+                        pageToken = page.nextPageToken
+                    } while (pageToken != null)
+                }
+                Log.i(TAG, "upcomingLeaves: ${leaves.size} leave(s) in ${owned.size} calendar(s)")
+                Result.success(leaves)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "upcomingLeaves failed: ${e.javaClass.simpleName}")
                 Result.failure(e)
             }
         }

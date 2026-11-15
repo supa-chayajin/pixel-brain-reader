@@ -301,8 +301,9 @@ fun ModesSettingsScreen(onBack: () -> Unit, viewModel: ModesViewModel = hiltView
             config.leavePeriods.forEach { leave ->
                 RemovableRow(
                     title = leave.label.ifBlank { "Leave" },
-                    subtitle = "${leave.start} → ${leave.end}",
-                    onRemove = if (editable) {
+                    // A leave the calendar made follows its event (E3): change it in the calendar.
+                    subtitle = "${leave.start} → ${leave.end}" + if (leave.fromCalendar) " · from your calendar" else "",
+                    onRemove = if (editable && !leave.fromCalendar) {
                         { viewModel.removeLeave(leave) }
                     } else {
                         null

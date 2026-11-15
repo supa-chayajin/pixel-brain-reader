@@ -43,9 +43,20 @@ data class ModeAppearance(
     }
 }
 
-/** A leave: the mode is Off for every day from [start] to [end] (ISO dates, inclusive). */
+/**
+ * A leave: the mode is Off for every day from [start] to [end] (ISO dates, inclusive). One the
+ * calendar made (E3, 12.21) carries [source] `calendar` and its event's id, and follows its event.
+ */
 @Serializable
-data class LeavePeriod(val start: String, val end: String, val label: String = "") {
+data class LeavePeriod(
+    val start: String,
+    val end: String,
+    val label: String = "",
+    val source: String = "",
+    val eventId: String = ""
+) {
+    val fromCalendar: Boolean get() = source == CalendarLeaves.SOURCE
+
     fun contains(date: LocalDate): Boolean = runCatching {
         !date.isBefore(LocalDate.parse(start)) && !date.isAfter(LocalDate.parse(end))
     }.getOrDefault(false)

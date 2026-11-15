@@ -284,6 +284,14 @@ class SyncOrchestrator @Inject constructor(
             )
             // Today's meetings still to come get their prep notification (when switched on).
             if (calRes.isSuccess) meetingReminders.get().reschedule()
+            // An all-day "Congés" in the owner's calendars becomes a leave (E3, 12.21).
+            if (calRes.isSuccess) {
+                googleCalendarRepository.upcomingLeaves().onSuccess { leaves ->
+                    if (modesRepository.get().syncCalendarLeaves(leaves, LocalDate.now())) {
+                        Log.i(TAG, "Phase 2.5: leaves from the calendar updated (${leaves.size})")
+                    }
+                }
+            }
             taskRes.fold(
                 onSuccess = { Log.i(TAG, "Phase 2.5: Tasks import returned $it task(s)") },
                 onFailure = { Log.w(TAG, "Phase 2.5: Tasks import failed", it) }

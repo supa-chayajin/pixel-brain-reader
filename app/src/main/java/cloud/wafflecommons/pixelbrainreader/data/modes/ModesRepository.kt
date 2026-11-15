@@ -116,6 +116,16 @@ class ModesRepository @Inject constructor(
         compute(cfg, overrideOf(prefs), prefs[KEY_SCREEN_SHARE_SAFE] ?: false)
     }
 
+    /**
+     * The calendar's leaves (E3): [events] replace the leaves the calendar made, typed ones untouched;
+     * written only when something changed. True when it wrote.
+     */
+    suspend fun syncCalendarLeaves(events: List<CalendarLeaves.Event>, today: java.time.LocalDate): Boolean {
+        if (CalendarLeaves.merge(currentConfig().leavePeriods, events, today) == null) return false
+        updateConfig { cfg -> CalendarLeaves.merge(cfg.leavePeriods, events, today)?.let { cfg.copy(leavePeriods = it) } ?: cfg }
+        return true
+    }
+
     /** Applies [transform] to the configuration ON DISK (settled decision #8) and syncs it. */
     suspend fun updateConfig(transform: (ModesConfig) -> ModesConfig) = withContext(Dispatchers.IO) {
         writeMutex.withLock {

@@ -67,6 +67,7 @@ class SyncOrchestratorTest {
         coEvery { jGit.headId() } returns "abc"
         coEvery { health.invoke(any()) } returns Result.success(Unit)
         coEvery { calendar.syncTodayEvents(any()) } returns Result.success(0)
+        coEvery { calendar.upcomingLeaves(any()) } returns Result.success(emptyList())
         coEvery { tasks.syncPendingTasks(any()) } returns Result.success(0)
         coEvery { vault.reindexAll(any()) } returns emptyList()
 
