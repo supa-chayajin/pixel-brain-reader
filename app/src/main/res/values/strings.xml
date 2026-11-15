@@ -43,5 +43,7 @@
     <string name="tile_mode_label">Mode</string>
     <string name="tile_log_label">Log</string>
     <string name="tile_focus_label">Focus</string>
+    <string name="tile_capture_label">Capture</string>
+    <string name="capture_label">Capture</string>
     <string name="tile_game_label">Game</string>
 </resources>

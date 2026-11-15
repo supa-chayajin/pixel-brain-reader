@@ -271,6 +271,40 @@
             </intent-filter>
         </service>
 
+        <!--
+            Capture from anywhere (12.21, X4): the capture screen alone, in its own task, over the
+            lock screen too. CREATE_NOTE makes the app eligible for Android's Notes role (the lock
+            screen's note shortcut). It reads nothing from the intent.
+        -->
+        <activity
+            android:name=".ui.capture.QuickCaptureActivity"
+            android:exported="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:launchMode="singleTask"
+            android:label="@string/capture_label"
+            android:theme="@style/Theme.PixelBrainReader"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.CREATE_NOTE" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <!-- Quick Settings: capture a note into the inbox (12.21, X4). -->
+        <service
+            android:name=".ui.capture.CaptureTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_tile_capture"
+            android:label="@string/tile_capture_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
         <!-- Quick Settings: log a mission-log entry. -->
         <service
             android:name=".ui.work.MissionLogTileService"
