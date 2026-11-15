@@ -1255,7 +1255,7 @@ fun MainScreen(
                                                     onAskFolder = if (VaultWriteGate.readOnly) null else { path ->
                                                         cloud.wafflecommons.pixelbrainreader.data.ai.ChatScope.folder(path)?.let { scope ->
                                                             chatScopeViewModel.ask(scope)
-                                                            navController.navigate(Screen.Chat)
+                                                            navigateToTab(Screen.Chat)
                                                         }
                                                     }
                                                 )
@@ -1321,12 +1321,13 @@ fun MainScreen(
                                             // A weekly review asks the Coach about its week (12.13, D6), then opens Chat.
                                             onAskCoach = uiState.selectedFilePath
                                                 ?.takeIf(weeklyCoachViewModel::canAsk)
-                                                ?.let { path -> { weeklyCoachViewModel.askCoach(path) { navController.navigate(Screen.Chat) } } },
+                                                // Chat opens as its tab: a second Chat pushed over the list left the tabs' saved stacks lost.
+                                                ?.let { path -> { weeklyCoachViewModel.askCoach(path) { navigateToTab(Screen.Chat) } } },
                                             // K2 (12.20): Chat on this note alone; never a private note, no AI read-only.
                                             onAskNote = uiState.selectedFilePath
                                                 ?.takeUnless { VaultWriteGate.readOnly }
                                                 ?.let(cloud.wafflecommons.pixelbrainreader.data.ai.ChatScope::note)
-                                                ?.let { scope -> { chatScopeViewModel.ask(scope); navController.navigate(Screen.Chat) } }
+                                                ?.let { scope -> { chatScopeViewModel.ask(scope); navigateToTab(Screen.Chat) } }
                                         )
                                     } else {
                                         cloud.wafflecommons.pixelbrainreader.ui.components.WelcomeScreen()
