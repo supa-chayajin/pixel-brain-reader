@@ -242,6 +242,10 @@ interview the same day and the as-built notes: `2026-11-14-12.17-games.md`.
 
 ### 12.18.0 — Private vault hardening
 
+The owner's interview on 2026-11-15 (six decisions: history kept, auto-lock after 5 minutes, V3
+now, 12+ characters, face → fingerprint → password, built that night) and the design:
+`2026-11-15-12.18-private-vault.md`.
+
 - [ ] **V1 Change password.** Re-encrypts every `.md.enc` with a new salt: the journal, the
       encrypted mission log and ADRs, People. It must be crash-safe:
   - new copies are staged and checked, then swapped in one pass;
