@@ -60,7 +60,9 @@ data class GitCommitDto(
     val shortId: String,
     val author: String,
     val message: String,
-    val timestamp: Long
+    val timestamp: Long,
+    /** The note's path in this commit: an older name before a rename (K3, 12.20); null = today's. */
+    val path: String? = null
 )
 
 /**
@@ -1132,7 +1134,8 @@ class JGitProvider @Inject constructor(
     }
 
     /**
-     * Retrieve the commit history for a single file in the local vault.
+     * A note's history, newest first, followed across renames (K3, 12.20): each commit carries the
+     * path the note had in it, so a version from before a rename opens under its old name.
      */
     suspend fun getFileCommitHistory(relativePath: String, limit: Int = 15): List<GitCommitDto> = withContext(Dispatchers.IO) {
         gitMutex.withLock {
@@ -1140,17 +1143,45 @@ class JGitProvider @Inject constructor(
             if (!gitDir.isDirectory) return@withContext emptyList()
             try {
                 Git.open(rootDir).use { git ->
+                    val repo = git.repository
+                    val head = repo.resolve("HEAD") ?: return@use emptyList()
                     // A shallow clone's oldest commit holds every file without having changed it.
-                    val boundary = shallowBoundary(git.repository)
-                    val logs = git.log().addPath(relativePath).setMaxCount(limit).call().filterNot { it in boundary }
-                    logs.map { commit ->
-                        GitCommitDto(
-                            commitId = commit.id.name,
-                            shortId = commit.id.abbreviate(7).name(),
-                            author = commit.authorIdent.name,
-                            message = commit.shortMessage,
-                            timestamp = commit.commitTime.toLong() * 1000L
+                    val boundary = shallowBoundary(repo)
+                    org.eclipse.jgit.revwalk.RevWalk(repo).use { walk ->
+                        // Each rename, keyed by the commit that made it: the walk judges commits ahead
+                        // of handing them over, so a rename is reported before its commit comes. That
+                        // commit still holds the new name; the ones before it, the old.
+                        val renamedAt = HashMap<org.eclipse.jgit.lib.ObjectId, String>()
+                        val follow = org.eclipse.jgit.revwalk.FollowFilter.create(
+                            relativePath,
+                            repo.config.get(org.eclipse.jgit.diff.DiffConfig.KEY)
                         )
+                        follow.renameCallback = object : org.eclipse.jgit.revwalk.RenameCallback() {
+                            override fun renamed(entry: org.eclipse.jgit.diff.DiffEntry) = Unit
+
+                            override fun renamed(entry: org.eclipse.jgit.diff.DiffEntry, commit: org.eclipse.jgit.revwalk.RevCommit) {
+                                renamedAt[commit.toObjectId()] = entry.oldPath
+                            }
+                        }
+                        walk.treeFilter = follow
+                        walk.markStart(walk.parseCommit(head))
+                        val history = mutableListOf<GitCommitDto>()
+                        var path = relativePath
+                        for (commit in walk) {
+                            val pathInCommit = path
+                            renamedAt[commit.toObjectId()]?.let { path = it }
+                            if (commit in boundary) continue
+                            history += GitCommitDto(
+                                commitId = commit.id.name,
+                                shortId = commit.id.abbreviate(7).name(),
+                                author = commit.authorIdent.name,
+                                message = commit.shortMessage,
+                                timestamp = commit.commitTime.toLong() * 1000L,
+                                path = pathInCommit.takeIf { it != relativePath }
+                            )
+                            if (history.size >= limit) break
+                        }
+                        history
                     }
                 }
             } catch (e: Exception) {

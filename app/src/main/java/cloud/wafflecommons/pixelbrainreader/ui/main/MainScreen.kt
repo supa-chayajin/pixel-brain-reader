@@ -589,9 +589,13 @@ fun MainScreen(
     shareImportViewModel: cloud.wafflecommons.pixelbrainreader.ui.share.ShareImportViewModel = hiltViewModel(),
     moodViewModel: cloud.wafflecommons.pixelbrainreader.ui.mood.MoodViewModel = hiltViewModel(),
     weeklyCoachViewModel: cloud.wafflecommons.pixelbrainreader.ui.review.WeeklyCoachViewModel = hiltViewModel(),
-    chatScopeViewModel: cloud.wafflecommons.pixelbrainreader.ui.ai.ChatScopeViewModel = hiltViewModel()
+    chatScopeViewModel: cloud.wafflecommons.pixelbrainreader.ui.ai.ChatScopeViewModel = hiltViewModel(),
+    syncMarksViewModel: SyncMarksViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    // What the last sync brought (K3, D4): marked in the file list, opened first in a note's history.
+    val lastSyncDigest by syncMarksViewModel.lastSync.collectAsStateWithLifecycle()
+    val changedBySync = remember(lastSyncDigest) { lastSyncDigest?.brought ?: emptySet() }
 
     // Window size + pane directive are computed BEFORE the navigator so its
     // scaffoldValue is derived from the SAME (focus-aware) directive the scaffold
@@ -1246,6 +1250,7 @@ fun MainScreen(
                                                         fileToMove = file
                                                         viewModel.prepareMove(file)
                                                     },
+                                                    changedBySync = changedBySync,
                                                     // K2 (12.20): Chat on a folder; no AI on a read-only device.
                                                     onAskFolder = if (VaultWriteGate.readOnly) null else { path ->
                                                         cloud.wafflecommons.pixelbrainreader.data.ai.ChatScope.folder(path)?.let { scope ->
@@ -1294,7 +1299,11 @@ fun MainScreen(
                                             // Encrypted notes are ciphertext in git: no history view for them.
                                             onFetchHistory = if (uiState.selectedFileName?.endsWith(".enc") == true) null
                                                 else ({ viewModel.getFileCommitHistory() }),
-                                            onFetchRevisionContent = { commitId -> viewModel.getFileContentAtCommit(commitId = commitId) },
+                                            onFetchRevisionContent = { commitId, path ->
+                                                if (path != null) viewModel.getFileContentAtCommit(path = path, commitId = commitId)
+                                                else viewModel.getFileContentAtCommit(commitId = commitId)
+                                            },
+                                            lastSync = uiState.selectedFilePath?.let { path -> lastSyncDigest?.changeFor(path) },
                                             onRestoreRevision = { restored -> viewModel.restoreRevision(restored) },
                                             filePath = uiState.selectedFilePath,
                                             onOpenNote = { path -> viewModel.openVaultFile(path) },

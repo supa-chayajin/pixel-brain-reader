@@ -142,7 +142,8 @@ fun FileDetailPane(
     onSave: () -> Unit = {},
     moodViewModel: MoodViewModel = hiltViewModel(),
     onFetchHistory: (suspend () -> List<cloud.wafflecommons.pixelbrainreader.data.remote.GitCommitDto>)? = null,
-    onFetchRevisionContent: (suspend (String) -> String?)? = null,
+    /** A version's text at a commit, under the note's path then (null: today's); K3 follows renames. */
+    onFetchRevisionContent: (suspend (commitId: String, path: String?) -> String?)? = null,
     onRestoreRevision: ((String) -> Unit)? = null,
     filePath: String? = null,
     onOpenNote: (String) -> Unit = {},
@@ -151,7 +152,9 @@ fun FileDetailPane(
     /** Asks the Coach about the week a weekly review covers (12.13, D6); null for any other note. */
     onAskCoach: (() -> Unit)? = null,
     /** "Ask this note" (K2, 12.20): Chat on this note alone; null where it can't be asked. */
-    onAskNote: (() -> Unit)? = null
+    onAskNote: (() -> Unit)? = null,
+    /** What the last sync did to this note, which its history opens on (K3, D4); null if nothing. */
+    lastSync: cloud.wafflecommons.pixelbrainreader.data.sync.SyncChange? = null
 ) {
     var showTimeMachine by rememberSaveable { mutableStateOf(false) }
     var showConnections by rememberSaveable { mutableStateOf(false) }
@@ -180,6 +183,7 @@ fun FileDetailPane(
             commits = commitHistory,
             isLoading = isLoadingHistory,
             onFetchRevisionContent = onFetchRevisionContent,
+            lastSync = lastSync,
             onRestoreContent = { restored ->
                 onRestoreRevision(restored)
                 showTimeMachine = false

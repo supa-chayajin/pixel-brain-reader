@@ -5,9 +5,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material3.*
@@ -16,19 +18,30 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.remote.GitCommitDto
+import cloud.wafflecommons.pixelbrainreader.data.sync.SyncChange
 import cloud.wafflecommons.pixelbrainreader.data.utils.LineDiff
+import cloud.wafflecommons.pixelbrainreader.data.utils.WordDiff
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+
+/** What the sheet shows beyond the list: one version, or what the last sync brought (K3, 12.20). */
+private sealed interface Pick {
+    data class Version(val commit: GitCommitDto) : Pick
+    data object LastSync : Pick
+}
 
 /** What the sheet knows about the version picked in the history list. */
 private sealed interface RevisionState {
@@ -37,11 +50,39 @@ private sealed interface RevisionState {
     /** The note did not exist in that commit (e.g. the commit deleted it), or git could not read it. */
     data object Unreadable : RevisionState
 
-    data class Loaded(val content: String, val rows: List<LineDiff.Row>) : RevisionState
+    /**
+     * The line diff, the words that changed inside its paired lines (K3), and the text Restore
+     * puts back: null when there is none (a note the last sync added).
+     */
+    data class Loaded(
+        val restorable: String?,
+        val rows: List<LineDiff.Row>,
+        val words: Map<Int, List<WordDiff.Piece>>
+    ) : RevisionState
 }
 
 private val COMMIT_DATE: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
 
+private fun dateOf(millis: Long): String = COMMIT_DATE.format(Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()))
+
+/** The rows and their word highlights, off the main thread. */
+private suspend fun loaded(old: String, new: String, restorable: String?): RevisionState.Loaded = withContext(Dispatchers.Default) {
+    val rows = LineDiff.fold(LineDiff.compute(old = old, new = new))
+    val kinds = rows.map { (it as? LineDiff.Row.Line)?.kind ?: LineDiff.Kind.UNCHANGED }
+    val words = HashMap<Int, List<WordDiff.Piece>>()
+    for ((removed, added) in WordDiff.pairs(kinds)) {
+        val result = WordDiff.of((rows[removed] as LineDiff.Row.Line).text, (rows[added] as LineDiff.Row.Line).text)
+        words[removed] = result.old
+        words[added] = result.new
+    }
+    RevisionState.Loaded(restorable, rows, words)
+}
+
+/**
+ * A note's history (Time Machine). Since 12.20 (K3) it follows the note across renames, marks the
+ * words that changed inside each changed line, and opens on what the last sync brought when the
+ * last pull changed this note ([lastSync]; the owner's D4).
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NoteTimeMachineSheet(
@@ -49,49 +90,55 @@ fun NoteTimeMachineSheet(
     currentContent: String,
     commits: List<GitCommitDto>,
     isLoading: Boolean,
-    onFetchRevisionContent: suspend (String) -> String?,
+    /** A version's text: at [commitId], under the note's path then (null: today's path). */
+    onFetchRevisionContent: suspend (commitId: String, path: String?) -> String?,
     onRestoreContent: (String) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    lastSync: SyncChange? = null
 ) {
     val sheetState = rememberBottomSheetState(
         initialValue = SheetValue.Hidden,
         enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded)
     )
-    var selectedCommit by remember { mutableStateOf<GitCommitDto?>(null) }
+    var pick by remember { mutableStateOf<Pick?>(if (lastSync != null) Pick.LastSync else null) }
     var revision by remember { mutableStateOf<RevisionState>(RevisionState.Loading) }
     var confirmRestore by remember { mutableStateOf(false) }
 
-    LaunchedEffect(selectedCommit) {
-        val commit = selectedCommit ?: return@LaunchedEffect
+    LaunchedEffect(pick) {
+        val current = pick ?: return@LaunchedEffect
         revision = RevisionState.Loading
-        val content = onFetchRevisionContent(commit.commitId)
-        revision = if (content == null) {
-            // Never treat "unreadable" as an empty note: restoring it would erase the note.
-            RevisionState.Unreadable
-        } else {
-            val rows = withContext(Dispatchers.Default) {
-                LineDiff.fold(LineDiff.compute(old = content, new = currentContent))
+        revision = when (current) {
+            is Pick.Version -> {
+                val content = onFetchRevisionContent(current.commit.commitId, current.commit.path)
+                // Never treat "unreadable" as an empty note: restoring it would erase the note.
+                if (content == null) RevisionState.Unreadable else loaded(old = content, new = currentContent, restorable = content)
             }
-            RevisionState.Loaded(content, rows)
+            Pick.LastSync -> {
+                val sync = lastSync ?: return@LaunchedEffect
+                val before = if (sync.isNew) "" else onFetchRevisionContent(sync.beforeHead, null)
+                val after = onFetchRevisionContent(sync.afterHead, null)
+                if (before == null || after == null) RevisionState.Unreadable
+                else loaded(old = before, new = after, restorable = before.takeUnless { sync.isNew })
+            }
         }
     }
 
     val loaded = revision as? RevisionState.Loaded
-    if (confirmRestore && loaded != null) {
+    val restorable = loaded?.restorable
+    if (confirmRestore && restorable != null) {
+        val versionFrom = when (val current = pick) {
+            is Pick.Version -> "the version from ${dateOf(current.commit.timestamp)}"
+            Pick.LastSync -> "the version from before your last sync"
+            null -> "that version"
+        }
         AlertDialog(
             onDismissRequest = { confirmRestore = false },
             title = { Text("Restore this version?") },
-            text = {
-                Text(
-                    "The current text of the note is replaced by the version from " +
-                        "${selectedCommit?.let { COMMIT_DATE.format(Instant.ofEpochMilli(it.timestamp).atZone(ZoneId.systemDefault())) }}. " +
-                        "You can undo it right after."
-                )
-            },
+            text = { Text("The current text of the note is replaced by $versionFrom. You can undo it right after.") },
             confirmButton = {
                 Button(onClick = {
                     confirmRestore = false
-                    onRestoreContent(loaded.content)
+                    onRestoreContent(restorable)
                     onDismiss()
                 }) { Text("Restore") }
             },
@@ -117,8 +164,8 @@ fun NoteTimeMachineSheet(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (selectedCommit != null) {
-                    IconButton(onClick = { selectedCommit = null }) {
+                if (pick != null) {
+                    IconButton(onClick = { pick = null }) {
                         Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back to versions")
                     }
                 } else {
@@ -132,12 +179,20 @@ fun NoteTimeMachineSheet(
                 Spacer(Modifier.width(8.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = if (selectedCommit == null) "Version history" else "Changes since ${selectedCommit?.shortId}",
+                        text = when (val current = pick) {
+                            null -> "Version history"
+                            is Pick.Version -> "Changes since ${current.commit.shortId}"
+                            Pick.LastSync -> "Since your last sync"
+                        },
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = filePath.substringAfterLast("/"),
+                        text = if (pick == Pick.LastSync && lastSync != null) {
+                            "What GitHub brought on ${dateOf(lastSync.atMillis)} · ${filePath.substringAfterLast("/")}"
+                        } else {
+                            filePath.substringAfterLast("/")
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -146,22 +201,28 @@ fun NoteTimeMachineSheet(
 
             Spacer(Modifier.height(16.dp))
 
-            if (isLoading) {
+            val current = pick
+            if (current == null && isLoading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
-            } else if (selectedCommit == null) {
-                if (commits.isEmpty()) {
+            } else if (current == null) {
+                if (commits.isEmpty() && lastSync == null) {
                     CenteredMessage("No git history for this note yet.")
                 } else {
                     LazyColumn(
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.fillMaxSize()
                     ) {
-                        items(commits) { commit ->
+                        if (lastSync != null) {
+                            item(key = "last-sync") {
+                                LastSyncItem(sync = lastSync, onClick = { pick = Pick.LastSync })
+                            }
+                        }
+                        items(commits, key = { it.commitId }) { commit ->
                             CommitHistoryItem(
                                 commit = commit,
-                                onClick = { selectedCommit = commit }
+                                onClick = { pick = Pick.Version(commit) }
                             )
                         }
                     }
@@ -172,7 +233,8 @@ fun NoteTimeMachineSheet(
                         CircularProgressIndicator()
                     }
                     RevisionState.Unreadable -> CenteredMessage(
-                        "This version can't be restored: the note doesn't exist in that commit."
+                        if (current == Pick.LastSync) "The note's text from that sync can't be read."
+                        else "This version can't be restored: the note doesn't exist in that commit."
                     )
                     is RevisionState.Loaded -> Column(modifier = Modifier.fillMaxSize()) {
                         Row(
@@ -183,13 +245,16 @@ fun NoteTimeMachineSheet(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = selectedCommit?.message.orEmpty(),
+                                text = when (current) {
+                                    is Pick.Version -> current.commit.message
+                                    Pick.LastSync -> if (lastSync?.isNew == true) "New in your last sync." else "Changed by your last sync."
+                                },
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Medium,
                                 modifier = Modifier.weight(1f)
                             )
                             // A read-only device reads the history and restores nothing (12.15, S2).
-                            if (!VaultWriteGate.readOnly) Button(
+                            if (!VaultWriteGate.readOnly && state.restorable != null) Button(
                                 onClick = { confirmRestore = true },
                                 enabled = state.rows.isNotEmpty(),
                                 colors = ButtonDefaults.buttonColors(
@@ -204,9 +269,12 @@ fun NoteTimeMachineSheet(
                         }
 
                         if (state.rows.isEmpty()) {
-                            CenteredMessage("This version is identical to the current note.")
+                            CenteredMessage(
+                                if (current == Pick.LastSync) "Your last sync didn't change this note's text."
+                                else "This version is identical to the current note."
+                            )
                         } else {
-                            DiffList(rows = state.rows, modifier = Modifier.weight(1f))
+                            DiffList(rows = state.rows, words = state.words, modifier = Modifier.weight(1f))
                         }
                     }
                 }
@@ -215,8 +283,11 @@ fun NoteTimeMachineSheet(
     }
 }
 
+private val ADDED_TEXT = Color(0xFF4CAF50)
+private val REMOVED_TEXT = Color(0xFFE57373)
+
 @Composable
-private fun DiffList(rows: List<LineDiff.Row>, modifier: Modifier = Modifier) {
+private fun DiffList(rows: List<LineDiff.Row>, words: Map<Int, List<WordDiff.Piece>>, modifier: Modifier = Modifier) {
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
@@ -227,7 +298,7 @@ private fun DiffList(rows: List<LineDiff.Row>, modifier: Modifier = Modifier) {
                 .fillMaxSize()
                 .padding(12.dp)
         ) {
-            items(rows) { row ->
+            itemsIndexed(rows) { index, row ->
                 when (row) {
                     is LineDiff.Row.Gap -> Text(
                         text = "⋯ ${row.count} unchanged line${if (row.count == 1) "" else "s"}",
@@ -237,21 +308,27 @@ private fun DiffList(rows: List<LineDiff.Row>, modifier: Modifier = Modifier) {
                     )
                     is LineDiff.Row.Line -> {
                         val (bgColor, textColor, prefix) = when (row.kind) {
-                            LineDiff.Kind.ADDED -> Triple(
-                                Color(0xFF1B5E20).copy(alpha = 0.2f),
-                                Color(0xFF4CAF50),
-                                "+ "
-                            )
-                            LineDiff.Kind.REMOVED -> Triple(
-                                Color(0xFFB71C1C).copy(alpha = 0.2f),
-                                Color(0xFFE57373),
-                                "- "
-                            )
-                            LineDiff.Kind.UNCHANGED -> Triple(
-                                Color.Transparent,
-                                MaterialTheme.colorScheme.onSurface,
-                                "  "
-                            )
+                            LineDiff.Kind.ADDED -> Triple(Color(0xFF1B5E20).copy(alpha = 0.2f), ADDED_TEXT, "+ ")
+                            LineDiff.Kind.REMOVED -> Triple(Color(0xFFB71C1C).copy(alpha = 0.2f), REMOVED_TEXT, "- ")
+                            LineDiff.Kind.UNCHANGED -> Triple(Color.Transparent, MaterialTheme.colorScheme.onSurface, "  ")
+                        }
+                        // The words that changed inside a changed line stand out (K3).
+                        val pieces = words[index]
+                        val text = if (pieces == null) {
+                            buildAnnotatedString { append(prefix + row.text) }
+                        } else {
+                            buildAnnotatedString {
+                                append(prefix)
+                                for (piece in pieces) {
+                                    if (piece.changed) {
+                                        withStyle(SpanStyle(background = textColor.copy(alpha = 0.32f), fontWeight = FontWeight.Bold)) {
+                                            append(piece.text)
+                                        }
+                                    } else {
+                                        append(piece.text)
+                                    }
+                                }
+                            }
                         }
                         Row(
                             modifier = Modifier
@@ -260,7 +337,7 @@ private fun DiffList(rows: List<LineDiff.Row>, modifier: Modifier = Modifier) {
                                 .padding(vertical = 2.dp, horizontal = 4.dp)
                         ) {
                             Text(
-                                text = prefix + row.text,
+                                text = text,
                                 fontFamily = FontFamily.Monospace,
                                 fontSize = 12.sp,
                                 color = textColor
@@ -285,11 +362,35 @@ private fun CenteredMessage(message: String) {
     }
 }
 
+/** The first entry when the last pull changed this note (K3, D4). */
+@Composable
+private fun LastSyncItem(sync: SyncChange, onClick: () -> Unit) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick),
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.CloudDownload, contentDescription = null)
+            Spacer(Modifier.width(12.dp))
+            Column {
+                Text("Since your last sync", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text(
+                    text = (if (sync.isNew) "New from GitHub" else "Changed on GitHub") + " · " + dateOf(sync.atMillis),
+                    style = MaterialTheme.typography.labelSmall
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun CommitHistoryItem(commit: GitCommitDto, onClick: () -> Unit) {
-    val dateStr = remember(commit.timestamp) {
-        COMMIT_DATE.format(Instant.ofEpochMilli(commit.timestamp).atZone(ZoneId.systemDefault()))
-    }
+    val dateStr = remember(commit.timestamp) { dateOf(commit.timestamp) }
 
     Surface(
         modifier = Modifier
@@ -332,6 +433,14 @@ private fun CommitHistoryItem(commit: GitCommitDto, onClick: () -> Unit) {
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            // Before a rename, the note had another name (K3).
+            commit.path?.let { then ->
+                Text(
+                    text = "Named ${then.substringAfterLast('/').removeSuffix(".md")} then",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.tertiary
+                )
+            }
         }
     }
 }

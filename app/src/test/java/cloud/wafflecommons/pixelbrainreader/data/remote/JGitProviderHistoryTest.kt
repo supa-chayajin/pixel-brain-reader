@@ -100,6 +100,27 @@ class JGitProviderHistoryTest {
         assertNull(provider.getFileContentAtCommit(NOTE, "0123456789abcdef0123456789abcdef01234567"))
     }
 
+    @Test
+    fun `history follows the note across a rename, each version under the name it had then`() = runBlocking {
+        seedRemote(NOTE, "v1\n")
+        cloneWithHistory()
+        val vault = File(filesDir, "vault")
+        val renamed = "20_Projects/Garden/plan-renamed.md"
+        File(vault, renamed).parentFile!!.mkdirs()
+        assertTrue(note().renameTo(File(vault, renamed)))
+        assertTrue(provider.commit("rename note").isSuccess)
+        File(vault, renamed).writeText("v1\nv2\n")
+        assertTrue(provider.commit("edit renamed").isSuccess)
+
+        val history = provider.getFileCommitHistory(renamed)
+
+        assertEquals(listOf("edit renamed", "rename note", "seed"), history.map { it.message })
+        // Today's name reads as null; before the rename, the old one.
+        assertEquals(listOf(null, null, NOTE), history.map { it.path })
+        val seed = history.last()
+        assertEquals("v1\n", provider.getFileContentAtCommit(seed.path ?: renamed, seed.commitId))
+    }
+
     private fun note(): File = File(File(filesDir, "vault"), NOTE)
 
     /** Creates the bare remote seeded with one commit on `main` holding [path] = [content]. */

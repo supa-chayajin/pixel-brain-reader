@@ -27,9 +27,23 @@ data class SyncDigest(
     val deleted: List<String>,
     val dismissed: Boolean = false,
     /** What concerns you, per project (C4): your TODO lines, Claude's reports, hand-offs picked up. */
-    val forYou: List<ProjectNews> = emptyList()
+    val forYou: List<ProjectNews> = emptyList(),
+    /** HEAD before and after that pull (K3, 12.20): a note's "Since your last sync". Null in older digests. */
+    val beforeHead: String? = null,
+    val afterHead: String? = null
 ) {
     val total: Int get() = added.size + modified.size + deleted.size
+
+    /** The notes the pull brought or changed: the file list marks them (K3, the owner's D4). */
+    val brought: Set<String> get() = (added + modified).toSet()
+
+    /** What the pull did to [path], for its history; null when it didn't touch it or the heads aren't known. */
+    fun changeFor(path: String): SyncChange? {
+        if (path !in added && path !in modified) return null
+        val before = beforeHead ?: return null
+        val after = afterHead ?: return null
+        return SyncChange(beforeHead = before, afterHead = after, atMillis = atMillis, isNew = path in added)
+    }
 
     /** The top folders the changes landed in, busiest first. */
     fun folders(): List<Pair<String, Int>> = (added + modified + deleted)
@@ -51,6 +65,9 @@ data class SyncDigest(
         }
     }
 }
+
+/** What one pull did to a note: its text at [beforeHead] (none when [isNew]) became its text at [afterHead]. */
+data class SyncChange(val beforeHead: String, val afterHead: String, val atMillis: Long, val isNew: Boolean)
 
 /** Keeps the last pull's digest (in `filesDir`, it is about this device's syncs) until dismissed. */
 @Singleton
@@ -85,7 +102,7 @@ class SyncDigestRepository @Inject constructor(
             val changes = jGitProvider.changesBetween(beforeHead, after)
             val digest = SyncDigest.of(changes, System.currentTimeMillis())
             if (digest.total == 0) return
-            save(digest.copy(forYou = forYou(changes, beforeHead, after)))
+            save(digest.copy(forYou = forYou(changes, beforeHead, after), beforeHead = beforeHead, afterHead = after))
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

@@ -291,7 +291,7 @@ owner asked for the same morning and the fixes of a full pre-release review.
 - [x] **K2 Ask this note / this folder.** *(12.20.0: the note header's Ask, a folder's long-press menu, chained summaries, Continue at the cap)* Chat scoped to one note or a folder, with chained
       summaries for notes longer than Nano's window, and a Continue chip when an answer stops at
       the 256-token cap. *(Oct 17 3.2; V12 E12 and 11.2-B.)*
-- [ ] **K3 Time Machine v2.** Word-level highlights, renames followed, and "changed since my last
+- [x] **K3 Time Machine v2.** *(12.20.0: renames followed through the commit that made them, word highlights, "Since your last sync" first and marked in the file list)* Word-level highlights, renames followed, and "changed since my last
       sync". *(Oct 17 2.4; V12 E9.)*
 - [ ] **K4 Time-travel questions.** "What did I think about X a year ago?" Git gives the note as
       it was on that date; the app shows then vs now and a 3-line summary of the shift. Comes after

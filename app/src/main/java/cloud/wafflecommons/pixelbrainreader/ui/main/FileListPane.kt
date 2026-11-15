@@ -30,6 +30,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
@@ -66,7 +68,9 @@ fun FileListPane(
     onAnalyzeFolder: () -> Unit,
     onMoveFile: (GithubFileDto) -> Unit = {},
     /** "Ask this folder" in a folder's long-press menu (K2, 12.20); null where Chat can't be asked. */
-    onAskFolder: ((String) -> Unit)? = null
+    onAskFolder: ((String) -> Unit)? = null,
+    /** The notes the last sync brought or changed, marked here with their folders (K3, D4). */
+    changedBySync: Set<String> = emptySet()
 ) {
     val haptic = LocalHapticFeedback.current
     
@@ -338,9 +342,14 @@ fun FileListPane(
                             val askable = onAskFolder != null && file.type == "dir" &&
                                 cloud.wafflecommons.pixelbrainreader.data.ai.ChatScope.allows(file.path, isFolder = true)
                             var folderMenu by remember { mutableStateOf(false) }
+                            val synced = remember(changedBySync, file.path, file.type) {
+                                file.path in changedBySync ||
+                                    (file.type == "dir" && changedBySync.any { it.startsWith(file.path + "/") })
+                            }
                             Box {
                                 FileItemCard(
                                     file = file,
+                                    changedBySync = synced,
                                     onClick = {
                                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                         if (file.type == "dir") onFolderClick(file.path) else onFileClick(file)
@@ -376,7 +385,13 @@ fun FileListPane(
 }
 
 @Composable
-fun FileItemCard(file: GithubFileDto, onClick: () -> Unit, onLongClick: (() -> Unit)? = null) {
+fun FileItemCard(
+    file: GithubFileDto,
+    onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
+    /** The last sync brought or changed it (K3): a dot after its name. */
+    changedBySync: Boolean = false
+) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -424,8 +439,18 @@ fun FileItemCard(file: GithubFileDto, onClick: () -> Unit, onLongClick: (() -> U
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
                     )
+                    if (changedBySync) {
+                        Box(
+                            modifier = Modifier
+                                .padding(start = 8.dp)
+                                .size(8.dp)
+                                .background(MaterialTheme.colorScheme.tertiary, CircleShape)
+                                .semantics { contentDescription = "Changed by the last sync" }
+                        )
+                    }
                 }
                 if (file.lastModified != null) {
                     val dateFormatted = remember(file.lastModified) {
