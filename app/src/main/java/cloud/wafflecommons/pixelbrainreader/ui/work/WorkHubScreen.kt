@@ -10,6 +10,7 @@ import androidx.compose.material.icons.automirrored.rounded.EventNote
 import androidx.compose.material.icons.rounded.BarChart
 import androidx.compose.material.icons.rounded.BeachAccess
 import androidx.compose.material.icons.rounded.BugReport
+import androidx.compose.material.icons.rounded.Diversity3
 import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.Flag
 import androidx.compose.material.icons.rounded.Groups
@@ -129,6 +130,15 @@ fun WorkHubScreen(
     val breakdown by viewModel.breakdown.collectAsStateWithLifecycle()
     val pinned by viewModel.pinned.collectAsStateWithLifecycle()
     var showAll by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    // People lives in the private journal, behind its unlock (12.19, the owner's D2).
+    fun open(tool: HubTool) {
+        if (tool == HubTool.PEOPLE) {
+            context.startActivity(cloud.wafflecommons.pixelbrainreader.ui.privatevault.PrivateJournalActivity.peopleIntent(context))
+        } else {
+            onOpen(tool.route)
+        }
+    }
 
     FormScaffold(title = visibility.appearance.toolkitName, onBack = onBack) {
         if (visibility.hideWork) {
@@ -160,7 +170,7 @@ fun WorkHubScreen(
         val otherTools = HubTool.entries.filter { it.id !in pinned }
         // Two per row on a wide window (CardGrid), pinned first as always.
         CardGrid(pinnedTools) { tool, cardModifier ->
-            HubCard(tool, pinned = true, onPin = { viewModel.setPinned(tool, it) }, onClick = { onOpen(tool.route) }, modifier = cardModifier)
+            HubCard(tool, pinned = true, onPin = { viewModel.setPinned(tool, it) }, onClick = { open(tool) }, modifier = cardModifier)
         }
         if (otherTools.isNotEmpty()) {
             androidx.compose.material3.TextButton(onClick = { showAll = !showAll }) {
@@ -173,7 +183,7 @@ fun WorkHubScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 CardGrid(otherTools) { tool, cardModifier ->
-                    HubCard(tool, pinned = false, onPin = { viewModel.setPinned(tool, it) }, onClick = { onOpen(tool.route) }, modifier = cardModifier)
+                    HubCard(tool, pinned = false, onPin = { viewModel.setPinned(tool, it) }, onClick = { open(tool) }, modifier = cardModifier)
                 }
             }
         }
@@ -220,7 +230,11 @@ enum class HubTool(
         cloud.wafflecommons.pixelbrainreader.ui.main.V11Routes.LEAVE),
     EXPLAIN_ERROR("explain_error", "Explain an error", Icons.Rounded.BugReport,
         "Paste an error: where your notes and runbooks met it before, a short explanation, a bug note.",
-        cloud.wafflecommons.pixelbrainreader.ui.main.V11Routes.EXPLAIN_ERROR);
+        cloud.wafflecommons.pixelbrainreader.ui.main.V11Routes.EXPLAIN_ERROR),
+    PEOPLE("people", "People & 1:1s", Icons.Rounded.Diversity3,
+        "Encrypted notes on the people you have 1:1s with: open points, actions, feedback, a log of your 1:1s.",
+        // Not a screen of the main window: People opens the private journal (12.19, the owner's D2).
+        "people");
 
     companion object {
         /** Pinned until the user chooses: the everyday ones. */

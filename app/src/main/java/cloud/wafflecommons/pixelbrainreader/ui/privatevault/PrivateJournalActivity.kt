@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -83,6 +84,7 @@ class PrivateJournalActivity : FragmentActivity() {
     @Inject lateinit var binding: VaultPasswordBinding
     @Inject lateinit var session: PrivateVaultSession
     private val viewModel: PrivateJournalViewModel by viewModels()
+    private val peopleViewModel: PeopleViewModel by viewModels()
 
     /** The prompt comes up at the first start, and on a return after the auto-lock: not after "Use password". */
     private var promptOnStart = true
@@ -107,6 +109,8 @@ class PrivateJournalActivity : FragmentActivity() {
                 ) {
                     PrivateVaultScreen(
                         viewModel = viewModel,
+                        peopleViewModel = peopleViewModel,
+                        initialTab = if (intent.getStringExtra(EXTRA_TAB) == TAB_PEOPLE) JournalTab.PEOPLE else JournalTab.NOTES,
                         onAuthenticate = { launchBiometric() },
                         onBack = { finish() }
                     )
@@ -115,6 +119,15 @@ class PrivateJournalActivity : FragmentActivity() {
         }
         
         setupBiometrics()
+
+        // 12.19: the toolkit and a meeting's prep open a person (and a 1:1's entry) once unlocked.
+        // A fresh launch only: a recreation must not reopen what the owner already closed.
+        if (savedInstanceState == null) {
+            intent.getStringExtra(EXTRA_PERSON)?.let { person ->
+                val day = intent.getStringExtra(EXTRA_ONE_ON_ONE)?.let { runCatching { java.time.LocalDate.parse(it) }.getOrNull() }
+                peopleViewModel.openWhenUnlocked(person, day)
+            }
+        }
     }
 
     /** On screen: the session doesn't count down (12.18, V2). */
@@ -185,8 +198,20 @@ class PrivateJournalActivity : FragmentActivity() {
         }
     }
 
-    private companion object {
-        val CHOSEN_EXITS = setOf(
+    companion object {
+        const val EXTRA_TAB = "tab"
+        const val EXTRA_PERSON = "person"
+        const val EXTRA_ONE_ON_ONE = "one_on_one"
+        const val TAB_PEOPLE = "people"
+
+        /** The journal on its People tab (12.19): a [person]'s page, and their 1:1 entry of [oneOnOne] when given. */
+        fun peopleIntent(context: android.content.Context, person: String? = null, oneOnOne: java.time.LocalDate? = null): Intent =
+            Intent(context, PrivateJournalActivity::class.java).putExtra(EXTRA_TAB, TAB_PEOPLE).apply {
+                person?.let { putExtra(EXTRA_PERSON, it) }
+                oneOnOne?.let { putExtra(EXTRA_ONE_ON_ONE, it.toString()) }
+            }
+
+        private val CHOSEN_EXITS = setOf(
             BiometricPrompt.ERROR_NEGATIVE_BUTTON,
             BiometricPrompt.ERROR_USER_CANCELED,
             BiometricPrompt.ERROR_CANCELED
@@ -194,14 +219,30 @@ class PrivateJournalActivity : FragmentActivity() {
     }
 }
 
+/** The journal's two tabs (12.19): its notes, and the People notes. */
+enum class JournalTab { NOTES, PEOPLE }
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PrivateVaultScreen(
     viewModel: PrivateJournalViewModel,
+    peopleViewModel: PeopleViewModel,
+    initialTab: JournalTab,
     onAuthenticate: () -> Unit,
     onBack: () -> Unit
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    var tab by rememberSaveable { mutableStateOf(initialTab) }
+    var addingPerson by rememberSaveable { mutableStateOf(false) }
+    if (addingPerson) {
+        AddPersonDialog(
+            onAdd = { name, kind, role ->
+                peopleViewModel.add(name, kind, role)
+                addingPerson = false
+            },
+            onDismiss = { addingPerson = false }
+        )
+    }
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
     
@@ -348,7 +389,14 @@ fun PrivateVaultScreen(
         exit = fadeOut() + slideOutVertically()
     ) {
         // --- Unlocked Content ---
-        if (state.selectedFile != null) {
+        val openPerson by peopleViewModel.openId.collectAsStateWithLifecycle()
+        val oneOnOne by peopleViewModel.entry.collectAsStateWithLifecycle()
+        val people by peopleViewModel.list.collectAsStateWithLifecycle()
+        val personId = openPerson
+        when {
+            tab == JournalTab.PEOPLE && oneOnOne != null -> OneOnOneEditor(peopleViewModel)
+            tab == JournalTab.PEOPLE && personId != null -> PersonPage(peopleViewModel, personId)
+            tab == JournalTab.NOTES && state.selectedFile != null -> {
              // Editor Mode
              // Handle Back Press to close editor first
              BackHandler {
@@ -379,42 +427,51 @@ fun PrivateVaultScreen(
                      onDismiss = { viewModel.dismissAssist() }
                  )
              }
-        } else {
-             // List Mode
-             Scaffold(
-                 topBar = {
-                     TopAppBar(
-                         title = { 
-                             Column {
-                                 Text("Private Vault", fontWeight = FontWeight.SemiBold)
-                                 Text(
-                                     "${state.files.size} secure notes",
-                                     style = MaterialTheme.typography.bodySmall,
-                                     color = MaterialTheme.colorScheme.onSurfaceVariant
-                                 )
-                             }
-                         },
-                         navigationIcon = {
-                             CortexIconButton(onClick = onBack) {
-                                 Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
-                             }
-                         },
-                         actions = { JournalMenu(viewModel) }
-                     )
-                 },
-                 floatingActionButton = {
-                     if (!VaultWriteGate.readOnly) FloatingActionButton(
-                         onClick = {
-                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                             showCreateDialog = true
-                         },
-                         containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                         contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                     ) {
-                         Icon(Icons.Default.Add, "New Note")
-                     }
-                 }
-             ) { padding ->
+            }
+            else -> Scaffold(
+                topBar = {
+                    Column {
+                        TopAppBar(
+                            title = {
+                                Column {
+                                    Text("Private Vault", fontWeight = FontWeight.SemiBold)
+                                    Text(
+                                        if (tab == JournalTab.NOTES) "${state.files.size} secure notes"
+                                        else if (people.people.size == 1) "1 person" else "${people.people.size} people",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            },
+                            navigationIcon = {
+                                CortexIconButton(onClick = onBack) {
+                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+                                }
+                            },
+                            actions = { JournalMenu(viewModel) }
+                        )
+                        PrimaryTabRow(selectedTabIndex = tab.ordinal) {
+                            Tab(selected = tab == JournalTab.NOTES, onClick = { tab = JournalTab.NOTES }, text = { Text("Notes") })
+                            Tab(selected = tab == JournalTab.PEOPLE, onClick = { tab = JournalTab.PEOPLE }, text = { Text("People") })
+                        }
+                    }
+                },
+                floatingActionButton = {
+                    if (!VaultWriteGate.readOnly) FloatingActionButton(
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            if (tab == JournalTab.NOTES) showCreateDialog = true else addingPerson = true
+                        },
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                    ) {
+                        Icon(Icons.Default.Add, if (tab == JournalTab.NOTES) "New Note" else "Add a person")
+                    }
+                }
+            ) { padding ->
+                if (tab == JournalTab.PEOPLE) {
+                    PeopleList(peopleViewModel, padding)
+                } else {
                 if (state.files.isEmpty()) {
                      Box(
                          modifier = Modifier.padding(padding).fillMaxSize(), 
@@ -450,8 +507,10 @@ fun PrivateVaultScreen(
                          }
                      }
                  }
-             }
+                }
+            }
         }
+        CoachSheet(peopleViewModel)
     }
 }
 
