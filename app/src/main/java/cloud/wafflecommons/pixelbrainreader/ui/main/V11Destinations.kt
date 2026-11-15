@@ -78,6 +78,11 @@ object V11Routes {
 
     /** The sync conflict a pull stopped on, a choice per file (12.15, S1). */
     const val SYNC_CONFLICTS = "sync_conflicts"
+
+    /** A meeting note run as a workshop (12.21, W2). */
+    const val WORKSHOP = "workshop?path={path}"
+
+    fun workshop(path: String) = "workshop?path=" + android.net.Uri.encode(path)
 }
 
 /**
@@ -206,7 +211,17 @@ fun NavGraphBuilder.v11Destinations(navController: NavHostController, openNote: 
         MeetingsScreen(
             onBack = { navController.popBackStack() },
             onOpenNote = openNote,
-            onOpenActions = { navController.navigate(V11Routes.NEXT_ACTIONS) }
+            onOpenActions = { navController.navigate(V11Routes.NEXT_ACTIONS) },
+            onRunWorkshop = { path -> navController.navigate(V11Routes.workshop(path)) }
+        )
+    }
+    composable(
+        V11Routes.WORKSHOP,
+        arguments = listOf(navArgument("path") { type = NavType.StringType; defaultValue = "" })
+    ) {
+        cloud.wafflecommons.pixelbrainreader.ui.work.WorkshopScreen(
+            onBack = { navController.popBackStack() },
+            onOpenNote = openNote
         )
     }
     composable(V11Routes.NEXT_ACTIONS) {

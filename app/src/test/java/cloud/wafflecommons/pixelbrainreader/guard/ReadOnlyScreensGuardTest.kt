@@ -35,6 +35,7 @@ class ReadOnlyScreensGuardTest {
         "ui/work/ObjectivesScreen.kt",
         "ui/work/EvidenceScreen.kt",
         "ui/work/ProjectsScreen.kt",
+        "ui/work/WorkshopScreen.kt",
         // The tabs
         "ui/lifeos/HabitDashboardScreen.kt",
         "ui/homeos/ChoreDashboardScreen.kt",

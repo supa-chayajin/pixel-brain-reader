@@ -129,7 +129,13 @@ private fun LocalDate.medium(): String = format(DateTimeFormatter.ofLocalizedDat
 
 /** Meetings & requests (#6): meeting notes, their decisions and actions, and the weekly load. */
 @Composable
-fun MeetingsScreen(onBack: () -> Unit, onOpenNote: (String) -> Unit, onOpenActions: () -> Unit, viewModel: MeetingsViewModel = hiltViewModel()) {
+fun MeetingsScreen(
+    onBack: () -> Unit,
+    onOpenNote: (String) -> Unit,
+    onOpenActions: () -> Unit,
+    onRunWorkshop: (String) -> Unit = {},
+    viewModel: MeetingsViewModel = hiltViewModel()
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val visibility by viewModel.visibility.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -179,6 +185,10 @@ fun MeetingsScreen(onBack: () -> Unit, onOpenNote: (String) -> Unit, onOpenActio
             ) {
                 if (meeting.decisions.isNotEmpty() && editable) {
                     TextButton(onClick = { viewModel.logDecisions(meeting) }) { Text("Log the decisions") }
+                }
+                // A meeting with an agenda can run as a workshop (W2, 12.21).
+                if (editable && cloud.wafflecommons.pixelbrainreader.data.work.Workshop.agenda(meeting.note.content).isNotEmpty()) {
+                    TextButton(onClick = { onRunWorkshop(meeting.note.path) }) { Text("Run as a workshop") }
                 }
             }
         }

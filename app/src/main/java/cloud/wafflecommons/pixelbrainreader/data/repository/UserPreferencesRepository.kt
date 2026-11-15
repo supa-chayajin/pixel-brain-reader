@@ -296,6 +296,18 @@ class UserPreferencesRepository @Inject constructor(
         }
     }
 
+    // --- The workshop under way (12.21, W2): its draft as JSON, on the phone until the synthesis ---
+    private val KEY_WORKSHOP_DRAFT = stringPreferencesKey("workshop_draft")
+
+    val workshopDraft: Flow<String?> = setting { it[KEY_WORKSHOP_DRAFT] }
+
+    /** Keeps [encoded] as the workshop under way; null ends it. */
+    suspend fun setWorkshopDraft(encoded: String?) {
+        context.dataStore.edit { preferences ->
+            if (encoded == null) preferences.remove(KEY_WORKSHOP_DRAFT) else preferences[KEY_WORKSHOP_DRAFT] = encoded
+        }
+    }
+
     // --- Shutdown ritual (12.14, D8): the last day closed ("2026-11-11"), so its banner stays away ---
     private val KEY_SHUTDOWN_CLOSED_DAY = stringPreferencesKey("shutdown_closed_day")
 
