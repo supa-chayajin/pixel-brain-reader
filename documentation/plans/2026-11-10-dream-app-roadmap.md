@@ -244,8 +244,8 @@ interview the same day and the as-built notes: `2026-11-14-12.17-games.md`.
 
 The owner's interview on 2026-11-15 (six decisions: history kept, auto-lock after 5 minutes, V3
 now, 12+ characters, face → fingerprint → password, built that night) and the design:
-`2026-11-15-12.18-private-vault.md`. Built in 12.18.0 (2026-11-15); the face and fingerprint
-checks on the Fold are the owner's.
+`2026-11-15-12.18-private-vault.md`. Built in 12.18.0 (2026-11-15) and checked on the Fold the
+same morning: its face counts as strong and opens the journal.
 
 - [x] **V1 Change password.** *(12.18.0)* Re-encrypts every `.md.enc` with a new salt: the journal, the
       encrypted mission log and ADRs, People. It must be crash-safe:
