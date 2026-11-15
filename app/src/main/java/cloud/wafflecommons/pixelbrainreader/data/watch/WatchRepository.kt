@@ -38,6 +38,9 @@ class WatchRepository @Inject constructor(
     @Volatile
     private var lastFailure: Long? = null
 
+    /** When each feed last failed: a feed that keeps failing is retried every 10 minutes, not at each read. Guarded by [refreshMutex]. */
+    private val feedFailures = mutableMapOf<String, Long>()
+
     /** The headlines of the feeds [visibility] shows, the cache refreshed first when due (or [force]d). */
     suspend fun headlines(visibility: Visibility, force: Boolean = false): List<FeedHeadlines> = withContext(Dispatchers.IO) {
         val config = feeds.read()
@@ -52,9 +55,16 @@ class WatchRepository @Inject constructor(
 
     private suspend fun refreshIfDue(all: List<Feed>, force: Boolean) = refreshMutex.withLock {
         val now = System.currentTimeMillis()
-        if (!TechWatch.needsRefresh(newsDao.lastFetch(), lastFailure, now, force)) return@withLock
-        val read = coroutineScope { all.map { feed -> async { fetch(feed, now) } }.awaitAll() }
-        lastFailure = if (read.none { it }) now else null
+        val failedRecently = feedFailures.filterValues { now - it < TechWatch.RETRY_AFTER_MS }.keys
+        val toRead = TechWatch.feedsToRead(
+            all, newsDao.sources().toSet(), newsDao.lastFetch(), lastFailure, now, force, failedRecently
+        )
+        if (toRead.isNotEmpty()) {
+            val read = coroutineScope { toRead.map { feed -> async { feed.url to fetch(feed, now) } }.awaitAll() }
+            read.forEach { (url, ok) -> if (ok) feedFailures.remove(url) else feedFailures[url] = now }
+            // A whole refresh that read nothing (offline) waits before the next one.
+            if (toRead.size == all.size) lastFailure = if (read.none { it.second }) now else null
+        }
         // A feed taken out of the list takes its headlines with it.
         newsDao.deleteOtherSources(all.map { it.url })
     }

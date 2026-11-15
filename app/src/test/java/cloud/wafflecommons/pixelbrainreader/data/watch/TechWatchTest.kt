@@ -43,6 +43,31 @@ class TechWatchTest {
     }
 
     @Test
+    fun `a feed a sync just added is read at once, the rest waits for the cache to be due`() {
+        val now = 100 * hour
+        val added = Feed("https://new.example/atom", "New")
+        val cached = setOf(dev.url, local.url)
+
+        // Fresh cache: only the feed with nothing cached is read.
+        assertEquals(listOf(added), TechWatch.feedsToRead(listOf(dev, local, added), cached, lastFetch = now - hour, lastFailure = null, now = now))
+        // Due cache, or forced: all of them.
+        assertEquals(3, TechWatch.feedsToRead(listOf(dev, local, added), cached, lastFetch = now - 2 * hour, lastFailure = null, now = now).size)
+        assertEquals(3, TechWatch.feedsToRead(listOf(dev, local, added), cached, lastFetch = now - hour, lastFailure = null, now = now, force = true).size)
+        // Nothing new and a fresh cache: nothing to read.
+        assertEquals(emptyList<Feed>(), TechWatch.feedsToRead(listOf(dev, local), cached, lastFetch = now - hour, lastFailure = null, now = now))
+    }
+
+    @Test
+    fun `a new feed that just failed waits like the rest`() {
+        val now = 100 * hour
+        val broken = Feed("https://broken.example/rss", "Broken")
+        assertEquals(
+            emptyList<Feed>(),
+            TechWatch.feedsToRead(listOf(dev, broken), setOf(dev.url), lastFetch = now - hour, lastFailure = null, now = now, failedRecently = setOf(broken.url))
+        )
+    }
+
+    @Test
     fun `only http links become headlines, each once, newest first, twenty at most`() {
         val items = listOf(
             FeedItem("Safe", "https://a.example/1", "Wed, 11 Nov 2026 09:00:00 GMT"),

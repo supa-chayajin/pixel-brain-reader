@@ -25,6 +25,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
+import cloud.wafflecommons.pixelbrainreader.data.sync.SyncOrchestrator
+import cloud.wafflecommons.pixelbrainreader.data.sync.SyncState
 import cloud.wafflecommons.pixelbrainreader.data.system.AppClock
 import cloud.wafflecommons.pixelbrainreader.data.watch.FeedHeadlines
 import cloud.wafflecommons.pixelbrainreader.data.watch.Headline
@@ -40,6 +42,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -49,8 +55,9 @@ import java.time.LocalDate
 import javax.inject.Inject
 
 /**
- * The "Tech watch" block (D5): read when the mode changes and each time the app comes back to the
- * foreground; the feeds refresh through their 2-hour cache, never on a timer.
+ * The "Tech watch" block (D5): read when the mode changes, each time the app comes back to the
+ * foreground, and when a sync ends (12.18, D5a: it may bring a changed feeds.json); the feeds refresh
+ * through their 2-hour cache, never on a timer, and a feed with nothing cached yet is read at once.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
@@ -59,7 +66,8 @@ class WatchViewModel @Inject constructor(
     private val shareImport: ShareImportRepository,
     @param:ApplicationContext private val context: Context,
     modesRepository: ModesRepository,
-    appClock: AppClock
+    appClock: AppClock,
+    syncOrchestrator: SyncOrchestrator
 ) : ViewModel() {
 
     private val reads = MutableStateFlow(0)
@@ -80,6 +88,14 @@ class WatchViewModel @Inject constructor(
 
     init {
         viewModelScope.launch { appClock.foregroundEvents.collect { reads.update { it + 1 } } }
+        viewModelScope.launch {
+            syncOrchestrator.syncState
+                .map { it is SyncState.Success }
+                .distinctUntilChanged()
+                .drop(1) // the state the block found: only a sync that ends from now on
+                .filter { it }
+                .collect { reads.update { it + 1 } }
+        }
     }
 
     /** Opens [headline] in the share screen's reader (its Import is there too); the caller shows that screen. */

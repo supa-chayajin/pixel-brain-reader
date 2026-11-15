@@ -52,6 +52,24 @@ object TechWatch {
         return lastFetch == null || now - lastFetch >= FRESH_FOR_MS
     }
 
+    /**
+     * The feeds to read now (12.18, D5a): all of them when the cache is due ([needsRefresh]);
+     * otherwise only the ones with nothing cached yet, such as a feed a sync or the feeds page just
+     * added, which used to wait up to two hours. A feed in [failedRecently] waits [RETRY_AFTER_MS].
+     */
+    fun feedsToRead(
+        all: List<Feed>,
+        cached: Set<String>,
+        lastFetch: Long?,
+        lastFailure: Long?,
+        now: Long,
+        force: Boolean = false,
+        failedRecently: Set<String> = emptySet()
+    ): List<Feed> {
+        if (needsRefresh(lastFetch, lastFailure, now, force)) return all
+        return all.filter { it.url !in cached && it.url !in failedRecently }
+    }
+
     /** A feed's items as cache rows: http(s) links only, each link once, at most [KEPT_PER_FEED]. */
     fun articlesOf(feed: Feed, items: List<FeedItem>, now: Long): List<CachedArticle> =
         items.mapNotNull { item ->

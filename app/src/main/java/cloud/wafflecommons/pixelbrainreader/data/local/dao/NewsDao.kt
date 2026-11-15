@@ -35,4 +35,8 @@ interface NewsDao {
 
     @Query("SELECT MAX(fetchDate) FROM news_articles")
     suspend fun lastFetch(): Long?
+
+    /** The feeds with headlines in the cache (12.18, D5a: a feed with none is read at once). */
+    @Query("SELECT DISTINCT sourceName FROM news_articles")
+    suspend fun sources(): List<String>
 }
