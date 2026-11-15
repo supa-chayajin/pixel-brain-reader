@@ -18,22 +18,43 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * A mood activity tag and the icon picked for it: a key of the picker's catalog
- * (`ui/mood/MoodTagIcons`), or null for the tag's default icon. The key is kept as written, so an
- * icon this version doesn't know survives an edit (and shows the default meanwhile).
+ * A mood activity tag, the icon picked for it and its category: an icon key of the picker's catalog
+ * (`ui/mood/MoodTagIcons`), or null for the tag's default icon; a [MoodTagCategory] key, or null
+ * until one is chosen (the tag then shows the guess from its icon, `ui/mood/MoodTagCategories`).
+ * Both keys are kept as written, so a key this version doesn't know survives an edit.
  */
-data class MoodTag(val name: String, val icon: String? = null)
+data class MoodTag(val name: String, val icon: String? = null, val category: String? = null)
 
 /**
- * On-disk shape of the mood-tag config file. [icons] (tag → icon key, 12.7.0) sits NEXT TO the
- * unchanged [tags] list instead of turning it into objects: an older app version still reads the
- * list (it ignores unknown keys) rather than failing to parse it and seeding the defaults. A tag
- * without an entry shows its default icon; with no icon picked the file is exactly the old one.
+ * The three categories of mood tags (12.19, owner's M1): fixed, and separate from the icon picker's
+ * groups. The keys are stored in the vault: never rename one.
+ */
+enum class MoodTagCategory(val key: String) {
+    ACTIVITIES("activities"),
+    PEOPLE("people"),
+    PLACES("places");
+
+    companion object {
+        /** The category saved under [key], or null when there is none or this version doesn't know it. */
+        fun of(key: String?): MoodTagCategory? {
+            val wanted = key?.trim()?.lowercase() ?: return null
+            return entries.firstOrNull { it.key == wanted }
+        }
+    }
+}
+
+/**
+ * On-disk shape of the mood-tag config file. [icons] (tag → icon key, 12.7.0) and [categories]
+ * (tag → category key, 12.19) sit NEXT TO the unchanged [tags] list instead of turning it into
+ * objects: an older app version still reads the list (it ignores unknown keys) rather than failing
+ * to parse it and seeding the defaults. A tag without an entry shows its default icon and the guess
+ * from it; with nothing picked the file is exactly the old one.
  */
 @Serializable
 private data class MoodTagsDto(
     val tags: List<String> = emptyList(),
-    val icons: Map<String, String> = emptyMap()
+    val icons: Map<String, String> = emptyMap(),
+    val categories: Map<String, String> = emptyMap()
 )
 
 /**
@@ -120,16 +141,16 @@ class MoodTagRepository @Inject constructor(
     }
 
     /**
-     * Appends a new tag (trimmed, case-insensitively de-duplicated), with [icon] if one was picked.
-     * No-op if blank/duplicate.
+     * Appends a new tag (trimmed, case-insensitively de-duplicated), with [icon] if one was picked and
+     * its [category] key (12.19: chosen when it's added). No-op if blank/duplicate.
      */
-    suspend fun addTag(raw: String, icon: String? = null) {
+    suspend fun addTag(raw: String, icon: String? = null, category: String? = null) {
         val name = raw.trim()
         if (name.isBlank()) return
         ensureLoaded()
         update { current ->
             if (current.any { it.name.equals(name, ignoreCase = true) }) current
-            else current + MoodTag(name, icon.orNullIfBlank())
+            else current + MoodTag(name, icon.orNullIfBlank(), category.orNullIfBlank())
         }
     }
 
@@ -162,6 +183,15 @@ class MoodTagRepository @Inject constructor(
         }
     }
 
+    /** Sets the category of the tag [name] (a [MoodTagCategory] key); null brings back the guess from its icon. */
+    suspend fun setCategory(name: String, category: String?) {
+        ensureLoaded()
+        val chosen = category.orNullIfBlank()
+        update { current ->
+            current.map { if (it.name == name) it.copy(category = chosen) else it }
+        }
+    }
+
     /**
      * Atomic read-modify-write: [transform] runs on the current list **inside** the mutex so
      * concurrent edits can't clobber each other (a rapid add/remove/reorder burst is serialized,
@@ -191,12 +221,13 @@ class MoodTagRepository @Inject constructor(
     }
 
     private fun MoodTagsDto.toTags(): List<MoodTag> =
-        tags.distinct().map { name -> MoodTag(name, icons[name].orNullIfBlank()) }
+        tags.distinct().map { name -> MoodTag(name, icons[name].orNullIfBlank(), categories[name].orNullIfBlank()) }
 
-    /** Icons follow the tag order, so a reorder rewrites the file in the same order. */
+    /** Icons and categories follow the tag order, so a reorder rewrites the file in the same order. */
     private fun List<MoodTag>.toDto(): MoodTagsDto = MoodTagsDto(
         tags = map { it.name },
-        icons = mapNotNull { tag -> tag.icon?.let { tag.name to it } }.toMap()
+        icons = mapNotNull { tag -> tag.icon?.let { tag.name to it } }.toMap(),
+        categories = mapNotNull { tag -> tag.category?.let { tag.name to it } }.toMap()
     )
 
     private fun String?.orNullIfBlank(): String? = this?.trim()?.takeIf { it.isNotEmpty() }

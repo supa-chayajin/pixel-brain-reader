@@ -91,12 +91,20 @@ import androidx.compose.material.icons.outlined.Work
 import androidx.compose.material.icons.outlined.WorkHistory
 import androidx.compose.ui.graphics.vector.ImageVector
 import cloud.wafflecommons.pixelbrainreader.data.repository.MoodTag
+import cloud.wafflecommons.pixelbrainreader.data.repository.MoodTagCategory
 
 /** One icon a mood tag can wear. [key] is saved in the vault's `mood_tags.json`: never rename one. */
 class MoodTagIcon(val key: String, val label: String, val image: ImageVector)
 
-/** A titled group of the icon picker. */
-class MoodTagIconGroup(val title: String, val icons: List<MoodTagIcon>)
+/**
+ * A titled group of the icon picker, and the mood tag category its icons suggest for a new tag
+ * (12.19, M3): the picker's groups are not the tag categories, only a guess at them.
+ */
+class MoodTagIconGroup(
+    val title: String,
+    val icons: List<MoodTagIcon>,
+    val suggests: MoodTagCategory = MoodTagCategory.ACTIVITIES
+)
 
 /**
  * The icons a mood tag can carry, and the default each tag shows until one is picked (the seed
@@ -144,7 +152,8 @@ object MoodTagIcons {
                     MoodTagIcon("celebration", "Party", Icons.Outlined.Celebration),
                     MoodTagIcon("cake", "Birthday", Icons.Outlined.Cake),
                     MoodTagIcon("volunteer_activism", "Helping", Icons.Outlined.VolunteerActivism)
-                )
+                ),
+                suggests = MoodTagCategory.PEOPLE
             ),
             MoodTagIconGroup(
                 "Places & travel",
@@ -164,7 +173,8 @@ object MoodTagIcons {
                     MoodTagIcon("train", "Train", Icons.Outlined.Train),
                     MoodTagIcon("flight", "Flight", Icons.Outlined.Flight),
                     MoodTagIcon("luggage", "Trip", Icons.Outlined.Luggage)
-                )
+                ),
+                suggests = MoodTagCategory.PLACES
             ),
             MoodTagIconGroup(
                 "Leisure",
@@ -234,6 +244,13 @@ object MoodTagIcons {
     val ALL: List<MoodTagIcon> by lazy { GROUPS.flatMap { it.icons } }
 
     private val byKey: Map<String, MoodTagIcon> by lazy { ALL.associateBy { it.key } }
+
+    private val groupByKey: Map<String, MoodTagIconGroup> by lazy {
+        GROUPS.flatMap { group -> group.icons.map { it.key to group } }.toMap()
+    }
+
+    /** The picker group holding the icon [key], or null when this version doesn't know it. */
+    fun groupOf(key: String?): MoodTagIconGroup? = key?.let { groupByKey[it] }
 
     /** The generic tag icon ([DEFAULT_KEY]). */
     val GENERIC: MoodTagIcon by lazy { byKey.getValue(DEFAULT_KEY) }

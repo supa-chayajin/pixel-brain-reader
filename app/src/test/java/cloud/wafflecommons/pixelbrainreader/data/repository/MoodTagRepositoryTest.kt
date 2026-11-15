@@ -171,4 +171,50 @@ class MoodTagRepositoryTest {
         assertTrue(repository.tags.value.all { it.icon == null })
         assertNull(stored)
     }
+
+    @Test
+    fun `a chosen category is written next to the unchanged tag list`() = runTest {
+        stored = """{ "tags": [ "Gaming", "Kid" ], "icons": { "Kid": "child_care" } }"""
+
+        repository.setCategory("Kid", MoodTagCategory.PEOPLE.key)
+
+        assertEquals(listOf(MoodTag("Gaming"), MoodTag("Kid", "child_care", "people")), repository.tags.value)
+        val file = json.parseToJsonElement(stored!!).jsonObject
+        assertEquals(setOf("tags", "icons", "categories"), file.keys)
+        assertEquals(mapOf("Kid" to "people"), json.decodeFromString<Map<String, String>>(file.getValue("categories").toString()))
+        // An older version still reads the same list (it ignores the categories).
+        assertEquals(listOf("Gaming", "Kid"), json.decodeFromString<PreIconsDto>(stored!!).tags)
+        verify { pushScheduler.requestPush() }
+    }
+
+    @Test
+    fun `a new tag comes with its category, and leaves with it`() = runTest {
+        stored = """{ "tags": [ "Gaming" ] }"""
+
+        repository.addTag("Beach", "beach_access", MoodTagCategory.PLACES.key)
+        assertEquals(MoodTag("Beach", "beach_access", "places"), repository.tags.value.last())
+
+        repository.removeTag("Beach")
+        assertEquals(setOf("tags"), json.parseToJsonElement(stored!!).jsonObject.keys)
+    }
+
+    @Test
+    fun `a category this version doesn't know survives an edit`() = runTest {
+        stored = """{ "tags": [ "Gaming", "Rain" ], "categories": { "Rain": "weather" } }"""
+
+        repository.setIcon("Gaming", "piano")
+
+        assertEquals(MoodTag("Rain", category = "weather"), repository.tags.value.last())
+        assertTrue(stored!!.contains("\"Rain\": \"weather\""))
+    }
+
+    @Test
+    fun `null brings back the guess, and the file loses the entry`() = runTest {
+        stored = """{ "tags": [ "Chilling" ], "categories": { "Chilling": "activities" } }"""
+
+        repository.setCategory("Chilling", null)
+
+        assertNull(repository.tags.value.single().category)
+        assertEquals(setOf("tags"), json.parseToJsonElement(stored!!).jsonObject.keys)
+    }
 }
