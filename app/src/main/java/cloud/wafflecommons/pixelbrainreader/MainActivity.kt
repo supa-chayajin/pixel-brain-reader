@@ -244,16 +244,17 @@ class MainActivity : FragmentActivity() {
             return
         }
         lifecycleScope.launch {
-            val saved = try {
+            val message = try {
                 val photo = photoReader.prepare(uri)
                 captureRepository.savePhotoNote(java.time.LocalDateTime.now(), photo.text, photo.jpeg, "share")
-                true
+                "Saved to your inbox"
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
+            } catch (e: cloud.wafflecommons.pixelbrainreader.data.repository.CaptureRepository.NoVaultYetException) {
+                "Log in to Pixel Brain first, then share the image again"
             } catch (e: Exception) {
-                false
+                "That image couldn't be read"
             }
-            val message = if (saved) "Saved to your inbox" else "That image couldn't be read"
             android.widget.Toast.makeText(this@MainActivity, message, android.widget.Toast.LENGTH_LONG).show()
             if (launchedForShare) finish()
         }

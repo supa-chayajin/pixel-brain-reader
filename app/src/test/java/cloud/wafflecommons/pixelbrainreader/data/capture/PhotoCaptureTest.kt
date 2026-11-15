@@ -18,6 +18,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import java.io.File
 import java.time.LocalDateTime
 
 class PhotoCaptureTest {
@@ -63,6 +64,7 @@ class PhotoCaptureTest {
     @Test
     fun `a photo capture keeps the photo, then writes the note that shows it`() = runBlocking {
         val filesDir = temp.newFolder("filesDir")
+        File(filesDir, "vault/.git").mkdirs()
         val context = mockk<Context> { every { this@mockk.filesDir } returns filesDir }
         val notes = mockk<NoteRepository>(relaxed = true)
         val assets = mockk<AssetRepository>()
@@ -83,6 +85,7 @@ class PhotoCaptureTest {
     @Test
     fun `no note when the photo couldn't be kept`() = runBlocking {
         val filesDir = temp.newFolder("filesDir2")
+        File(filesDir, "vault/.git").mkdirs()
         val context = mockk<Context> { every { this@mockk.filesDir } returns filesDir }
         val notes = mockk<NoteRepository>(relaxed = true)
         val assets = mockk<AssetRepository> { coEvery { saveDropped(any(), any(), any(), any()) } returns null }
@@ -93,5 +96,25 @@ class PhotoCaptureTest {
 
         assertTrue(failed.isFailure)
         coVerify(exactly = 0) { notes.saveNote(any(), any()) }
+    }
+
+    @Test
+    fun `nothing is saved before the vault's first clone, which would replace the folder`() = runBlocking {
+        val filesDir = temp.newFolder("filesDir3")
+        val context = mockk<Context> { every { this@mockk.filesDir } returns filesDir }
+        val notes = mockk<NoteRepository>(relaxed = true)
+        val assets = mockk<AssetRepository>(relaxed = true)
+        val pushes = mockk<VaultPushScheduler>(relaxed = true)
+        val repository = CaptureRepository(notes, SafeFileProvider(context), pushes, assets)
+        val at = LocalDateTime.of(2026, 11, 15, 21, 30)
+
+        val photo = runCatching { repository.savePhotoNote(at, "x", byteArrayOf(1), "share") }
+        val typed = runCatching { repository.saveQuickNote(at, "x", "notes") }
+
+        assertTrue(photo.exceptionOrNull() is CaptureRepository.NoVaultYetException)
+        assertTrue(typed.exceptionOrNull() is CaptureRepository.NoVaultYetException)
+        coVerify(exactly = 0) { assets.saveDropped(any(), any(), any(), any()) }
+        coVerify(exactly = 0) { notes.saveNote(any(), any()) }
+        coVerify(exactly = 0) { pushes.requestPush() }
     }
 }

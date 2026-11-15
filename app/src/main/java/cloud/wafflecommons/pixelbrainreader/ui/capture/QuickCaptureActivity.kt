@@ -253,7 +253,12 @@ private fun QuickCaptureScreen(
                                     throw e
                                 } catch (e: Exception) {
                                     saving = false
-                                    Toast.makeText(context, "Couldn't save the note", Toast.LENGTH_LONG).show()
+                                    val message = if (e is CaptureRepository.NoVaultYetException) {
+                                        "Log in to Pixel Brain first: there's no vault on this phone yet"
+                                    } else {
+                                        "Couldn't save the note"
+                                    }
+                                    Toast.makeText(context, message, Toast.LENGTH_LONG).show()
                                 }
                             }
                         }

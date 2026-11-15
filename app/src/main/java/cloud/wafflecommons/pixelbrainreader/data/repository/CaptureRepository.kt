@@ -40,6 +40,7 @@ class CaptureRepository @Inject constructor(
      */
     suspend fun saveQuickNote(capturedAt: LocalDateTime, text: String, source: String): String =
         withContext(Dispatchers.IO) {
+            requireVault()
             val path = uniquePath("Capture ${capturedAt.format(NAME_TIME)}")
             noteRepository.saveNote(path, renderQuickNote(capturedAt, text, source))
             pushScheduler.requestPush()
@@ -52,6 +53,7 @@ class CaptureRepository @Inject constructor(
      */
     suspend fun savePhotoNote(capturedAt: LocalDateTime, text: String, jpeg: ByteArray, source: String): String =
         withContext(Dispatchers.IO) {
+            requireVault()
             val path = uniquePath("Capture ${capturedAt.format(NAME_TIME)}")
             val image = assetRepository.saveDropped(path, "image/jpeg", null) { jpeg.inputStream() }
                 ?: throw java.io.IOException("The photo couldn't be kept")
@@ -60,6 +62,17 @@ class CaptureRepository @Inject constructor(
             pushScheduler.requestPush()
             path
         }
+
+    /**
+     * The captures reachable without opening the app (the tile, the lock screen, a share) need the
+     * vault's clone: before the first login, the first clone replaces the folder and its notes.
+     */
+    private fun requireVault() {
+        if (!safeFileProvider.getSafeFile(".git").isDirectory) throw NoVaultYetException()
+    }
+
+    /** No clone of the vault on this phone yet: log in first. */
+    class NoVaultYetException : java.io.IOException("No vault on this phone yet")
 
     private fun uniquePath(baseName: String): String {
         var path = "$INBOX/$baseName.md"
