@@ -110,6 +110,18 @@ object GameDays {
 }
 
 /**
+ * A game's play time (pure): PSN's own total once PSN measures the game, else the time typed from
+ * the console (`played_before`, 13.1) plus the sessions recorded since; null when there is neither.
+ */
+object GameHours {
+    fun of(psnSeconds: Long, playedBefore: Double?, manualMinutes: Int): Double? = when {
+        psnSeconds > 0 -> psnSeconds / 3600.0
+        playedBefore == null && manualMinutes <= 0 -> null
+        else -> (playedBefore ?: 0.0) + manualMinutes.coerceAtLeast(0) / 60.0
+    }
+}
+
+/**
  * The session running on the phone (pure, RFC-009 §4.3): one at a time, kept as
  * `startMillis|page path` so it survives the app being closed.
  */
@@ -143,6 +155,96 @@ data class RunningGame(val startMillis: Long, val page: String) {
             return RunningGame(start, page).takeIf { start > 0 }
         }
     }
+}
+
+/**
+ * A manual session typed or fixed by hand (13.1, pure): the record a started-and-stopped session
+ * would have written, keyed the same way (`manual:<start millis>`), so typing a session that is
+ * already there replaces it instead of counting it twice.
+ */
+object ManualSessions {
+
+    /** Longest session that can be typed: a day. */
+    const val MAX_MINUTES = 24 * 60
+
+    fun record(page: String, date: LocalDate, start: LocalTime, minutes: Int, zone: ZoneId): GameSessionRecord? {
+        if (minutes !in 1..MAX_MINUTES) return null
+        val startMillis = date.atTime(start.withSecond(0).withNano(0)).atZone(zone).toInstant().toEpochMilli()
+        return GameSessionRecord(
+            id = "manual:$startMillis",
+            date = date.toString(),
+            start = start.format(HH_MM),
+            minutes = minutes,
+            source = GameSessionRecord.SOURCE_MANUAL,
+            page = page
+        )
+    }
+
+    /** [old] with a new start and length, same day and page; null when the length is out of range. */
+    fun edited(old: GameSessionRecord, start: LocalTime, minutes: Int, zone: ZoneId): GameSessionRecord? {
+        val page = old.page ?: return null
+        val date = runCatching { LocalDate.parse(old.date) }.getOrNull() ?: return null
+        return record(page, date, start, minutes, zone)
+    }
+}
+
+/**
+ * The running session's "Still playing?" state (13.1), kept on the phone with the session it
+ * belongs to: [nextAskAt] is when the question is due (3 h after the start, or 1 h after Keep
+ * playing), [askedAt] when it was asked and is still unanswered.
+ */
+data class SessionCheck(val sessionStart: Long, val nextAskAt: Long, val askedAt: Long? = null) {
+
+    fun encode(): String = "$sessionStart|$nextAskAt|${askedAt ?: ""}"
+
+    companion object {
+        fun first(session: RunningGame): SessionCheck =
+            SessionCheck(session.startMillis, session.startMillis + GameSessionGuard.ASK_AFTER_MS)
+
+        fun decode(raw: String?): SessionCheck? {
+            val parts = raw?.split('|') ?: return null
+            if (parts.size != 3) return null
+            val start = parts[0].toLongOrNull() ?: return null
+            val next = parts[1].toLongOrNull() ?: return null
+            return SessionCheck(start, next, parts[2].toLongOrNull())
+        }
+    }
+}
+
+/**
+ * A session nobody stopped (the owner's call, 2026-11-16, pure): 3 h after its start the phone asks
+ * "Still playing?"; Keep playing asks again an hour later; with no answer an hour after the
+ * question, the session ends at the time the question was due — not when someone notices.
+ */
+object GameSessionGuard {
+
+    const val ASK_AFTER_MS = 3 * 3_600_000L
+    const val ANSWER_MS = 3_600_000L
+    const val KEEP_MS = 3_600_000L
+
+    sealed interface Step {
+        /** Nothing to do before [at]. */
+        data class Wait(val at: Long) : Step
+
+        /** Ask now; the answer is awaited until [answerBy]. */
+        data class Ask(val answerBy: Long) : Step
+
+        /** End the session, recorded as stopping at [at]. */
+        data class End(val at: Long) : Step
+    }
+
+    fun step(check: SessionCheck, now: Long): Step {
+        val asked = check.askedAt
+        return when {
+            asked != null && now >= asked + ANSWER_MS -> Step.End(minOf(check.nextAskAt, asked).coerceAtLeast(check.sessionStart))
+            asked != null -> Step.Wait(asked + ANSWER_MS)
+            now >= check.nextAskAt -> Step.Ask(now + ANSWER_MS)
+            else -> Step.Wait(check.nextAskAt)
+        }
+    }
+
+    /** The answer "Keep playing": the next question an hour from now. */
+    fun keep(check: SessionCheck, now: Long): SessionCheck = check.copy(nextAskAt = now + KEEP_MS, askedAt = null)
 }
 
 internal val HH_MM: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")

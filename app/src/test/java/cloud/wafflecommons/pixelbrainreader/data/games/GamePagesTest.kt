@@ -130,4 +130,56 @@ class GamePagesTest {
         )
         assertEquals("", GamePages.prose("---\ngame_template: lego\n---\n# Brick Wars\n\n## Episodes\n- [ ] Episode I\n"))
     }
+
+    @Test
+    fun `the 13_1 templates read their keys and the vault's other is Other`() {
+        fun template(key: String) = GamePages.parse("30_Areas/G/G.md", "---\ngame_template: $key\n---\n# G\n")!!.template
+        assertEquals(GameTemplate.PLATFORMER, template("platformer"))
+        assertEquals("Platformer", GameTemplate.PLATFORMER.label)
+        assertEquals(GameTemplate.ACTION_ADVENTURE, template("action-adventure"))
+        assertEquals("Action-adventure", GameTemplate.ACTION_ADVENTURE.label)
+        assertEquals(GameTemplate.OTHER, template("other"))
+        assertEquals(GameTemplate.OTHER, template("fighting"))
+    }
+
+    @Test
+    fun `a template in 99_System is never a game, wherever else the same note would be one`() {
+        val template = "---\ntitle: \"{{title}}\"\ngame_template: souls-like\ngame_state: backlog\n---\n# 🎮 {{title}}\n"
+        assertNull(GamePages.parse("99_System/Templates/T_Game_Souls_Like.md", template))
+        assertEquals(GameTemplate.SOULS_LIKE, GamePages.parse("30_Areas/33_Gaming_Hub/X/X.md", template)!!.template)
+    }
+
+    @Test
+    fun `played_before reads the hours as the owner types them`() {
+        assertEquals(228.0, GamePages.hours("228")!!, 0.0)
+        assertEquals(228.5, GamePages.hours("228.5")!!, 0.0)
+        assertEquals(228.5, GamePages.hours("228,5")!!, 0.0)
+        assertEquals(228.0, GamePages.hours("228 h")!!, 0.0)
+        assertEquals(228.0, GamePages.hours("228H")!!, 0.0)
+        assertEquals(228.5, GamePages.hours("228h30")!!, 0.0)
+        assertEquals(228.25, GamePages.hours("228:15")!!, 0.0)
+        assertEquals(0.0, GamePages.hours("0")!!, 0.0)
+        assertNull(GamePages.hours(""))
+        assertNull(GamePages.hours(null))
+        assertNull(GamePages.hours("-3"))
+        assertNull(GamePages.hours("228:75"))
+        assertNull(GamePages.hours("about 200"))
+        val game = GamePages.parse("30_Areas/G/G.md", "---\ngame_template: lego\nplayed_before: '41h30'\n---\n# G\n")!!
+        assertEquals(41.5, game.playedBefore!!, 0.0)
+        assertNull(GamePages.parse("30_Areas/G/G.md", "---\ngame_template: lego\nplayed_before: ''\n---\n")!!.playedBefore)
+    }
+
+    @Test
+    fun `played_before is one line, dated, and the rest of the page stays as it was`() {
+        val today = LocalDate.of(2026, 11, 16)
+        val written = GamePages.withPlayedBefore(page, 228.0, today)
+        assertTrue(written.contains("\nplayed_before: 228\n---\n"))
+        assertTrue(written.contains("date_updated: '2026-11-16'"))
+        assertEquals(page.replace("date_updated: '2026-11-14'", "date_updated: '2026-11-16'"), written.replace("played_before: 228\n", ""))
+        val decimal = GamePages.withPlayedBefore(written, 41.5, today)
+        assertTrue(decimal.contains("\nplayed_before: 41.5\n"))
+        assertTrue(GamePages.withPlayedBefore(decimal, null, today).contains("\nplayed_before: ''\n"))
+        // Nothing to change: nothing moves, date included.
+        assertEquals(written, GamePages.withPlayedBefore(written, 228.0, LocalDate.of(2026, 12, 1)))
+    }
 }

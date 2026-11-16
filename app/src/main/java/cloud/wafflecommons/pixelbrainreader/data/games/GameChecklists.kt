@@ -1,7 +1,14 @@
 package cloud.wafflecommons.pixelbrainreader.data.games
 
-/** One checklist line of a game page, as the app shows it. [line] is the exact line, for the tick. */
-data class ChecklistItem(val line: String, val text: String, val done: Boolean, val waitsForTrophy: Boolean)
+/**
+ * One checklist line of a game page, as the app shows it. [line] is the exact line, for the tick.
+ * [spoiler]: the line ends with `<!--spoiler-->` (13.1, the owner's call): like a trophy's line, the
+ * app shows it as ??? until tapped or ticked, without waiting for PSN.
+ */
+data class ChecklistItem(val line: String, val text: String, val done: Boolean, val waitsForTrophy: Boolean, val spoiler: Boolean = false) {
+    /** Shown as ??? until revealed: a trophy's line or a spoiler, while unticked. */
+    val masked: Boolean get() = (waitsForTrophy || spoiler) && !done
+}
 
 /** The checklist lines under one heading of a game page. */
 data class ChecklistSection(val heading: String, val items: List<ChecklistItem>)
@@ -14,6 +21,7 @@ object GameChecklists {
 
     private val ITEM = Regex("^\\s*[-*+]\\s+\\[([ xX])\\]\\s+(.*)$")
     private val MARKER = Regex("\\s*<!--\\s*trophy:[^>]*-->\\s*$")
+    private val SPOILER = Regex("\\s*<!--\\s*spoiler\\s*-->\\s*$")
 
     fun sections(content: String): List<ChecklistSection> {
         val lines = bodyLines(content)
@@ -38,9 +46,10 @@ object GameChecklists {
             val text = m.groupValues[2]
             items += ChecklistItem(
                 line = line,
-                text = MARKER.replace(text, "").trim(),
+                text = SPOILER.replace(MARKER.replace(text, ""), "").trim(),
                 done = m.groupValues[1] != " ",
-                waitsForTrophy = MARKER.containsMatchIn(text)
+                waitsForTrophy = MARKER.containsMatchIn(text),
+                spoiler = SPOILER.containsMatchIn(text)
             )
         }
         flush()

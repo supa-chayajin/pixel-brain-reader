@@ -35,14 +35,18 @@ class GameSessionControllerTest {
 
     private val session = MutableStateFlow<String?>(null)
     private val rule = MutableStateFlow<String?>(null)
+    private val check = MutableStateFlow<String?>(null)
     private val preferences: UserPreferencesRepository = mockk(relaxed = true) {
         every { gameSession } returns session
         every { gameNightRule } returns rule
+        every { gameSessionCheck } returns check
         coEvery { setGameSession(any()) } answers { session.value = firstArg() }
         coEvery { setGameNightRule(any()) } answers { rule.value = firstArg() }
+        coEvery { setGameSessionCheck(any()) } answers { check.value = firstArg() }
     }
     private val games: GamesRepository = mockk(relaxed = true) {
         coEvery { addSessions(any()) } answers { firstArg<List<GameSessionRecord>>().map { LocalDate.parse(it.date) }.toSet() }
+        coEvery { page(any()) } returns null
     }
     private val platform: GamePlatform = mockk(relaxed = true) {
         every { canGuard() } returns true
@@ -140,5 +144,122 @@ class GameSessionControllerTest {
 
         coEvery { games.snapshot() } returns null
         assertEquals(page, controller.defaultPage(zone))
+    }
+
+    // --- 13.1 ------------------------------------------------------------------------------
+
+    private val hour = 3_600_000L
+
+    @Test
+    fun `a session started earlier is backdated, its game night follows the tap, and its question is set for 3 hours`() = runTest {
+        controller.start(page, saturdayEvening, zone, startedMinutesAgo = 20)
+        val running = controller.current()!!
+        assertEquals(saturdayEvening - 20 * 60_000L, running.startMillis)
+        assertEquals(SessionCheck(running.startMillis, running.startMillis + 3 * hour), SessionCheck.decode(check.value))
+        verify { platform.scheduleCheck(3 * hour - 20 * 60_000L) }
+        assertEquals("rule-1", rule.value)
+        // Never more than an hour back.
+        controller.start(page, saturdayEvening, zone, startedMinutesAgo = 600)
+        assertEquals(saturdayEvening - 60 * 60_000L, controller.current()!!.startMillis)
+    }
+
+    @Test
+    fun `the question comes at 3 hours, and no answer ends the session at the question`() = runTest {
+        controller.start(page, saturdayEvening, zone)
+        controller.check(saturdayEvening + 3 * hour, zone)
+        verify { platform.postAsk(any(), saturdayEvening, endsAt = saturdayEvening + 3 * hour, answerBy = saturdayEvening + 4 * hour) }
+        verify { platform.scheduleCheck(hour) }
+        assertEquals(saturdayEvening + 3 * hour, SessionCheck.decode(check.value)!!.askedAt)
+
+        // Nobody answered: at 01:00 the session is kept as 21:00–00:00 and goes to Saturday's note.
+        controller.check(saturdayEvening + 4 * hour, zone)
+        assertNull(controller.current())
+        assertNull(check.value)
+        coVerify { games.addSessions(match { it.single().minutes == 180 && it.single().date == "2026-11-14" }) }
+        coVerify { games.applyPastDay(LocalDate.of(2026, 11, 14), LocalDate.of(2026, 11, 15)) }
+        coVerify(exactly = 0) { dashboard.burnToDisk(any()) }
+        verify { platform.cancelAsk() }
+        verify { platform.endGameNight("rule-1") }
+    }
+
+    @Test
+    fun `keep playing takes the question away and asks again an hour later`() = runTest {
+        controller.start(page, saturdayEvening, zone)
+        controller.check(saturdayEvening + 3 * hour, zone)
+        controller.keepPlaying(saturdayEvening + 3 * hour + 5 * 60_000L)
+        val kept = SessionCheck.decode(check.value)!!
+        assertNull(kept.askedAt)
+        assertEquals(saturdayEvening + 4 * hour + 5 * 60_000L, kept.nextAskAt)
+        verify { platform.cancelAsk() }
+        verify { platform.scheduleCheck(hour) }
+        assertEquals(RunningGame(saturdayEvening, page.path), controller.current())
+    }
+
+    @Test
+    fun `a stopped session leaves no check behind, and a check without a session does nothing`() = runTest {
+        controller.start(page, saturdayEvening, zone)
+        controller.stop(saturdayEvening + hour, zone)
+        assertNull(check.value)
+        verify { platform.cancelCheck() }
+        controller.check(saturdayEvening + 3 * hour, zone)
+        verify(exactly = 0) { platform.postAsk(any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `coming back to the app puts the notification back and schedules a session started before 13_1`() = runTest {
+        session.value = RunningGame(saturdayEvening, page.path).encode()
+        controller.restore(saturdayEvening + hour)
+        verify { platform.postRunning(RunningGame(saturdayEvening, page.path), any()) }
+        verify { platform.scheduleCheck(2 * hour) }
+        assertEquals(SessionCheck.first(RunningGame(saturdayEvening, page.path)), SessionCheck.decode(check.value))
+        // An unanswered question isn't posted again: the tab shows it.
+        check.value = SessionCheck(saturdayEvening, saturdayEvening + 3 * hour, saturdayEvening + 3 * hour).encode()
+        controller.restore(saturdayEvening + 3 * hour + 10 * 60_000L)
+        verify(exactly = 0) { platform.postAsk(any(), any(), any(), any()) }
+        verify { platform.scheduleCheck(50 * 60_000L) }
+    }
+
+    @Test
+    fun `a forgotten session lands on its day, today burned, this week edited, older kept in the file`() = runTest {
+        val now = ZonedDateTime.of(2026, 11, 16, 9, 0, 0, 0, zone).toInstant().toEpochMilli()
+        controller.addPastSession(page, LocalDate.of(2026, 11, 16), java.time.LocalTime.of(7, 0), 60, now, zone)
+        coVerify { dashboard.burnToDisk(LocalDate.of(2026, 11, 16)) }
+        controller.addPastSession(page, LocalDate.of(2026, 11, 14), java.time.LocalTime.of(21, 0), 150, now, zone)
+        coVerify { games.applyPastDay(LocalDate.of(2026, 11, 14), LocalDate.of(2026, 11, 16)) }
+        val old = controller.addPastSession(page, LocalDate.of(2026, 10, 1), java.time.LocalTime.of(21, 0), 150, now, zone)!!
+        assertEquals("2026-10-01", old.date)
+        coVerify { games.applyPastDay(LocalDate.of(2026, 10, 1), LocalDate.of(2026, 11, 16)) }
+        coVerify(exactly = 1) { dashboard.burnToDisk(any()) }
+        assertNull(controller.addPastSession(page, LocalDate.of(2026, 11, 14), java.time.LocalTime.of(21, 0), 0, now, zone))
+    }
+
+    @Test
+    fun `a fixed session replaces the old one, a deleted one goes, and PSN's stay as measured`() = runTest {
+        val now = ZonedDateTime.of(2026, 11, 16, 9, 0, 0, 0, zone).toInstant().toEpochMilli()
+        val old = ManualSessions.record(page.path, LocalDate.of(2026, 11, 15), java.time.LocalTime.of(21, 0), 540, zone)!!
+        coEvery { games.replaceSession(any(), any()) } returns true
+        val fixed = controller.editSession(old, java.time.LocalTime.of(21, 0), 150, now, zone)!!
+        assertEquals(150, fixed.minutes)
+        coVerify { games.replaceSession(old, fixed) }
+        coVerify { games.applyPastDay(LocalDate.of(2026, 11, 15), LocalDate.of(2026, 11, 16)) }
+
+        coEvery { games.removeSession(old.id, LocalDate.of(2026, 11, 15)) } returns true
+        assertEquals(true, controller.deleteSession(old, now, zone))
+        coVerify { games.removeSession(old.id, LocalDate.of(2026, 11, 15)) }
+
+        val psn = old.copy(id = "psn:PPSA1:x", source = GameSessionRecord.SOURCE_PSN, page = null, titleId = "PPSA1")
+        assertNull(controller.editSession(psn, java.time.LocalTime.of(20, 0), 60, now, zone))
+    }
+
+    @Test
+    fun `a read-only device fixes nothing`() = runTest {
+        VaultWriteGate.readOnly = true
+        val old = ManualSessions.record(page.path, LocalDate.of(2026, 11, 15), java.time.LocalTime.of(21, 0), 60, zone)!!
+        assertNull(controller.addPastSession(page, LocalDate.of(2026, 11, 15), java.time.LocalTime.of(21, 0), 60))
+        assertNull(controller.editSession(old, java.time.LocalTime.of(21, 0), 30))
+        assertEquals(false, controller.deleteSession(old))
+        coVerify(exactly = 0) { games.addSessions(any()) }
+        coVerify(exactly = 0) { games.replaceSession(any(), any()) }
+        coVerify(exactly = 0) { games.removeSession(any(), any()) }
     }
 }

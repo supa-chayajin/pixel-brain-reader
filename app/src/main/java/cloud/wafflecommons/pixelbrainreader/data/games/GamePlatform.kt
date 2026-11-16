@@ -17,14 +17,19 @@ import android.service.notification.Condition
 import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import cloud.wafflecommons.pixelbrainreader.MainActivity
 import cloud.wafflecommons.pixelbrainreader.R
+import cloud.wafflecommons.pixelbrainreader.data.workers.GameSessionCheckWorker
 import cloud.wafflecommons.pixelbrainreader.widget.ui.WidgetNav
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.time.Instant
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -65,6 +70,54 @@ class GamePlatform @Inject constructor(@param:ApplicationContext private val con
 
     fun cancelRunning() {
         manager()?.cancel(ID_RUNNING)
+    }
+
+    /**
+     * "Still playing?" (13.1): an alerting notification beside the running one, with Keep playing and
+     * Stop. [endsAt] is when the session will be recorded as ending if nobody answers by [answerBy].
+     */
+    fun postAsk(title: String, startMillis: Long, endsAt: Long, answerBy: Long) {
+        if (!notificationsAllowed()) return
+        val manager = manager() ?: return
+        val hhmm = DateTimeFormatter.ofPattern("HH:mm")
+        val zone = ZoneId.systemDefault()
+        val since = LocalTime.ofInstant(Instant.ofEpochMilli(startMillis), zone).format(hhmm)
+        val end = LocalTime.ofInstant(Instant.ofEpochMilli(endsAt), zone).format(hhmm)
+        val by = LocalTime.ofInstant(Instant.ofEpochMilli(answerBy), zone).format(hhmm)
+        val notification = Notification.Builder(context, CHANNEL_CHECK)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("Still playing $title?")
+            .setContentText("Playing since $since. No answer by $by: the session ends at $end.")
+            .setStyle(Notification.BigTextStyle().bigText("Playing since $since. No answer by $by: the session ends at $end."))
+            .setAutoCancel(true)
+            .setOnlyAlertOnce(true)
+            .setCategory(Notification.CATEGORY_REMINDER)
+            .setContentIntent(openGames())
+            .addAction(
+                Notification.Action.Builder(Icon.createWithResource(context, R.drawable.ic_notification), "Keep playing", keepIntent()).build()
+            )
+            .addAction(
+                Notification.Action.Builder(Icon.createWithResource(context, R.drawable.ic_notification), "Stop", stopIntent()).build()
+            )
+            .build()
+        manager.notify(ID_CHECK, notification)
+    }
+
+    fun cancelAsk() {
+        manager()?.cancel(ID_CHECK)
+    }
+
+    /** The next look at the running session in [delayMs]: one unique job, a new one replacing it. */
+    fun scheduleCheck(delayMs: Long) {
+        WorkManager.getInstance(context).enqueueUniqueWork(
+            CHECK_WORK,
+            ExistingWorkPolicy.REPLACE,
+            OneTimeWorkRequestBuilder<GameSessionCheckWorker>().setInitialDelay(delayMs.coerceAtLeast(0L), TimeUnit.MILLISECONDS).build()
+        )
+    }
+
+    fun cancelCheck() {
+        WorkManager.getInstance(context).cancelUniqueWork(CHECK_WORK)
     }
 
     /** True when the owner granted Do Not Disturb access: without it the session runs unguarded. */
@@ -128,6 +181,18 @@ class GamePlatform @Inject constructor(@param:ApplicationContext private val con
                 description = "The running game session and its time"
             }
         )
+        // "Still playing?" vibrates through Game night (the owner's call, 2026-11-16): no sound, and it
+        // passes Do Not Disturb, which Android allows the app because it has Do Not Disturb access
+        // (asked for Game night); re-created at each post so the access, once granted, applies.
+        manager.createNotificationChannel(
+            NotificationChannel(CHANNEL_CHECK, "Still playing?", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                description = "Asks after 3 hours whether a game session is still running. Vibrates, even during Game night."
+                setSound(null, null)
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 250, 150, 250)
+                setBypassDnd(true)
+            }
+        )
         return manager
     }
 
@@ -143,11 +208,21 @@ class GamePlatform @Inject constructor(@param:ApplicationContext private val con
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+    private fun keepIntent(): PendingIntent =
+        PendingIntent.getBroadcast(
+            context, 42, Intent(context, GameReceiver::class.java).setAction(ACTION_KEEP),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
     companion object {
         private const val TAG = "GamePlatform"
         const val CHANNEL_RUNNING = "game_running"
         const val ACTION_STOP = "cloud.wafflecommons.pixelbrainreader.games.STOP"
+        const val ACTION_KEEP = "cloud.wafflecommons.pixelbrainreader.games.KEEP"
+        const val CHANNEL_CHECK = "game_check"
+        private const val CHECK_WORK = "game_session_check"
         private const val ID_RUNNING = 2020
+        private const val ID_CHECK = 2021
         private val CONDITION: Uri = "condition://cloud.wafflecommons.pixelbrainreader/game_night".toUri()
     }
 }

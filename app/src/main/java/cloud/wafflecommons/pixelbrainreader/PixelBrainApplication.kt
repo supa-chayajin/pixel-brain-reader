@@ -47,6 +47,7 @@ class PixelBrainApplication : Application(), Configuration.Provider {
     @Inject lateinit var foregroundRefresher: dagger.Lazy<ForegroundRefresher>
     @Inject lateinit var objectiveRepository: dagger.Lazy<cloud.wafflecommons.pixelbrainreader.data.work.ObjectiveRepository>
     @Inject lateinit var psnAccount: dagger.Lazy<cloud.wafflecommons.pixelbrainreader.data.games.psn.PsnAccount>
+    @Inject lateinit var gameSessionController: dagger.Lazy<cloud.wafflecommons.pixelbrainreader.data.games.GameSessionController>
     @Inject lateinit var vaultPasswordBinding: dagger.Lazy<cloud.wafflecommons.pixelbrainreader.data.privatevault.VaultPasswordBinding>
     @Inject lateinit var privateVaultRekey: dagger.Lazy<cloud.wafflecommons.pixelbrainreader.data.privatevault.PrivateVaultRekey>
 
@@ -141,6 +142,14 @@ class PixelBrainApplication : Application(), Configuration.Provider {
     private fun registerBackgroundObserver() {
         ProcessLifecycleOwner.get().lifecycle.addObserver(
             object : DefaultLifecycleObserver {
+                override fun onStart(owner: LifecycleOwner) {
+                    // A running game session's notification and check come back (13.1): a reboot or
+                    // a swipe removes the notification, and a session started before 13.1 has no check.
+                    if (!VaultWriteGate.readOnly) appScope.launch {
+                        safely("Game session restore (ON_START)") { gameSessionController.get().restore() }
+                    }
+                }
+
                 override fun onStop(owner: LifecycleOwner) {
                     appScope.launch {
                         if (!VaultWriteGate.readOnly) safely("Background burn (ON_STOP)") {

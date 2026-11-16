@@ -53,13 +53,25 @@ class GameSessionController @Inject constructor(
 
     suspend fun current(): RunningGame? = RunningGame.decode(preferences.gameSession.first())
 
-    /** Starts [page]; a running session is stopped (and kept) first. Null on a read-only device. */
-    suspend fun start(page: GamePage, now: Long = System.currentTimeMillis(), zone: ZoneId = ZoneId.systemDefault()): GameNightOutcome? {
+    /**
+     * Starts [page]; a running session is stopped (and kept) first. [startedMinutesAgo] backdates the
+     * start for a session started once already playing (13.1: 10, 20 or 30 minutes); the game night
+     * follows the moment of the tap. Null on a read-only device.
+     */
+    suspend fun start(
+        page: GamePage,
+        now: Long = System.currentTimeMillis(),
+        zone: ZoneId = ZoneId.systemDefault(),
+        startedMinutesAgo: Int = 0
+    ): GameNightOutcome? {
         if (VaultWriteGate.refuses()) return null
         if (current() != null) stop(now, zone)
-        val session = RunningGame(now, page.path)
+        val session = RunningGame(now - startedMinutesAgo.coerceIn(0, MAX_EARLIER_MINUTES) * 60_000L, page.path)
         preferences.setGameSession(session.encode())
         platform.postRunning(session, page.title)
+        val check = SessionCheck.first(session)
+        preferences.setGameSessionCheck(check.encode())
+        platform.scheduleCheck(check.nextAskAt - now)
         val moment = LocalDateTime.ofInstant(Instant.ofEpochMilli(now), zone)
         val config = modesRepository.currentConfig()
         if (!GameNight.guards(modesRepository.currentVisibility().mode, ModeResolver.inWorkHours(config, moment))) return GameNightOutcome.NONE
@@ -70,27 +82,152 @@ class GameSessionController @Inject constructor(
         return if (rule != null) GameNightOutcome.ON else GameNightOutcome.NEEDS_ACCESS
     }
 
-    /** Stops the running session and keeps it; the game night ends with it. */
-    suspend fun stop(now: Long = System.currentTimeMillis(), zone: ZoneId = ZoneId.systemDefault()): GameSessionRecord? {
+    /**
+     * Stops the running session and keeps it, recorded as ending at [endAt] (now, or the time a
+     * "Still playing?" nobody answered was due); the game night ends with it.
+     */
+    suspend fun stop(
+        now: Long = System.currentTimeMillis(),
+        zone: ZoneId = ZoneId.systemDefault(),
+        endAt: Long = now
+    ): GameSessionRecord? {
         val session = current()
         preferences.setGameSession(null)
+        preferences.setGameSessionCheck(null)
         platform.cancelRunning()
+        platform.cancelAsk()
+        platform.cancelCheck()
         platform.endGameNight(preferences.gameNightRule.first())
         if (session == null || VaultWriteGate.readOnly) return null
-        val record = session.record(now, zone) ?: return null
+        val record = session.record(minOf(endAt, now), zone) ?: return null
         games.addSessions(listOf(record)) ?: return null
-        // Today's note gets its line now, even on a day with nothing else on the board; a session
-        // started yesterday evening goes to that day's note (D11), never re-burned.
-        val day = LocalDate.parse(record.date)
-        val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
+        refreshDay(LocalDate.parse(record.date), Instant.ofEpochMilli(now).atZone(zone).toLocalDate())
+        return record
+    }
+
+    /**
+     * The running session's check (13.1, the check worker): asks "Still playing?" once it is due,
+     * ends a session nobody answered for at the time the question was due, and otherwise waits.
+     * Each look also puts the session's notification back (gone after a reboot or a swipe).
+     */
+    suspend fun check(now: Long = System.currentTimeMillis(), zone: ZoneId = ZoneId.systemDefault()) {
+        if (VaultWriteGate.readOnly) return
+        val session = current() ?: run {
+            preferences.setGameSessionCheck(null)
+            platform.cancelAsk()
+            return
+        }
+        val check = checkOf(session)
+        val title = titleOf(session)
+        when (val step = GameSessionGuard.step(check, now)) {
+            is GameSessionGuard.Step.Wait -> {
+                platform.postRunning(session, title)
+                preferences.setGameSessionCheck(check.encode())
+                platform.scheduleCheck(step.at - now)
+            }
+            is GameSessionGuard.Step.Ask -> {
+                platform.postRunning(session, title)
+                preferences.setGameSessionCheck(check.copy(askedAt = now).encode())
+                platform.postAsk(title, session.startMillis, endsAt = check.nextAskAt, answerBy = step.answerBy)
+                platform.scheduleCheck(step.answerBy - now)
+            }
+            is GameSessionGuard.Step.End -> stop(now, zone, endAt = step.at)
+        }
+    }
+
+    /** "Keep playing" (13.1): the question goes away and comes back in an hour. */
+    suspend fun keepPlaying(now: Long = System.currentTimeMillis()) {
+        val session = current() ?: return
+        val next = GameSessionGuard.keep(checkOf(session), now)
+        preferences.setGameSessionCheck(next.encode())
+        platform.cancelAsk()
+        platform.scheduleCheck(next.nextAskAt - now)
+    }
+
+    /**
+     * Puts a running session back when the app comes to the foreground (13.1): its notification
+     * (gone after a reboot or a swipe) and its next check (a session started before 13.1 has none).
+     * An unanswered question isn't posted again: the Games tab shows it. Nothing when no session runs.
+     */
+    suspend fun restore(now: Long = System.currentTimeMillis()) {
+        if (VaultWriteGate.readOnly) return
+        val session = current() ?: return
+        val check = checkOf(session)
+        platform.postRunning(session, titleOf(session))
+        preferences.setGameSessionCheck(check.encode())
+        platform.scheduleCheck((check.askedAt?.plus(GameSessionGuard.ANSWER_MS) ?: check.nextAskAt) - now)
+    }
+
+    /** The running session's check, for the Games tab's "Still playing?" line. */
+    val runningCheck: Flow<SessionCheck?> = preferences.gameSessionCheck.map(SessionCheck::decode)
+
+    // --- Sessions fixed by hand (13.1, the owner's interview of 2026-11-16) ------------------
+
+    /** A session the owner forgot to start; null when it couldn't be saved. */
+    suspend fun addPastSession(
+        page: GamePage,
+        date: LocalDate,
+        start: java.time.LocalTime,
+        minutes: Int,
+        now: Long = System.currentTimeMillis(),
+        zone: ZoneId = ZoneId.systemDefault()
+    ): GameSessionRecord? {
+        if (VaultWriteGate.refuses()) return null
+        val record = ManualSessions.record(page.path, date, start, minutes, zone) ?: return null
+        games.addSessions(listOf(record)) ?: return null
+        refreshDay(date, Instant.ofEpochMilli(now).atZone(zone).toLocalDate())
+        return record
+    }
+
+    /** [old] with a new start and length (same day); null when it couldn't be saved. */
+    suspend fun editSession(
+        old: GameSessionRecord,
+        start: java.time.LocalTime,
+        minutes: Int,
+        now: Long = System.currentTimeMillis(),
+        zone: ZoneId = ZoneId.systemDefault()
+    ): GameSessionRecord? {
+        if (VaultWriteGate.refuses()) return null
+        if (old.source != GameSessionRecord.SOURCE_MANUAL) return null
+        val next = ManualSessions.edited(old, start, minutes, zone) ?: return null
+        if (!games.replaceSession(old, next)) return null
+        refreshDay(LocalDate.parse(next.date), Instant.ofEpochMilli(now).atZone(zone).toLocalDate())
+        return next
+    }
+
+    /** Removes [record]; true when it was there. */
+    suspend fun deleteSession(
+        record: GameSessionRecord,
+        now: Long = System.currentTimeMillis(),
+        zone: ZoneId = ZoneId.systemDefault()
+    ): Boolean {
+        if (VaultWriteGate.refuses()) return false
+        val day = runCatching { LocalDate.parse(record.date) }.getOrNull() ?: return false
+        if (!games.removeSession(record.id, day)) return false
+        refreshDay(day, Instant.ofEpochMilli(now).atZone(zone).toLocalDate())
+        return true
+    }
+
+    /**
+     * The day's Timeline line follows its sessions: today's note is burned (made if the day has no
+     * board yet); an earlier day within a week gets its marked lines edited (D11), never a re-burn;
+     * older days keep their sessions in the data file only.
+     */
+    private suspend fun refreshDay(day: LocalDate, today: LocalDate) {
         if (day.isBefore(today)) {
             games.applyPastDay(day, today)
-        } else {
+        } else if (day == today) {
             dashboardRepository.ensureDay(day)
             dashboardRepository.burnToDisk(day)
         }
-        return record
     }
+
+    private suspend fun checkOf(session: RunningGame): SessionCheck =
+        SessionCheck.decode(preferences.gameSessionCheck.first())?.takeIf { it.sessionStart == session.startMillis }
+            ?: SessionCheck.first(session)
+
+    private suspend fun titleOf(session: RunningGame): String =
+        games.page(session.page)?.title ?: session.page.substringAfterLast('/').removeSuffix(".md").replace('_', ' ')
 
     /**
      * The game played last (RFC-009 §4.3: the session picker's default and the tile's game): the
@@ -115,5 +252,10 @@ class GameSessionController @Inject constructor(
         }
         return (fromSessions + fromPsn).maxByOrNull { it.second }?.first
             ?: pages.firstOrNull { it.state == GameState.PLAYING } ?: pages.first()
+    }
+
+    companion object {
+        /** "Started earlier" goes back at most an hour; longer is a past session. */
+        const val MAX_EARLIER_MINUTES = 60
     }
 }

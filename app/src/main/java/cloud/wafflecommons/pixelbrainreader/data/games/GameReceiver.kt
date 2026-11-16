@@ -12,8 +12,8 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * The game session notification's Stop (12.17). Not exported: only the app's own explicit,
- * immutable PendingIntent reaches it.
+ * The game session notifications' Stop (12.17) and the "Still playing?" question's Keep playing
+ * (13.1). Not exported: only the app's own explicit, immutable PendingIntents reach it.
  */
 @AndroidEntryPoint
 class GameReceiver : BroadcastReceiver() {
@@ -23,11 +23,12 @@ class GameReceiver : BroadcastReceiver() {
     @Inject @ApplicationScope lateinit var scope: CoroutineScope
 
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action != GamePlatform.ACTION_STOP) return
+        val action = intent.action
+        if (action != GamePlatform.ACTION_STOP && action != GamePlatform.ACTION_KEEP) return
         val pending = goAsync()
         scope.launch {
             try {
-                controller.stop()
+                if (action == GamePlatform.ACTION_KEEP) controller.keepPlaying() else controller.stop()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

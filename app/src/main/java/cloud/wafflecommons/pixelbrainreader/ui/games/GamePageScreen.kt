@@ -4,6 +4,8 @@ import android.content.Intent
 import android.provider.Settings
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -11,27 +13,35 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Article
 import androidx.compose.material.icons.rounded.Checklist
 import androidx.compose.material.icons.rounded.EmojiEvents
 import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.MoreTime
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.QuestionAnswer
 import androidx.compose.material.icons.rounded.SportsEsports
 import androidx.compose.material.icons.rounded.Stop
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -40,19 +50,27 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cloud.wafflecommons.pixelbrainreader.data.games.GamePages
+import cloud.wafflecommons.pixelbrainreader.data.games.GameSessionRecord
+import cloud.wafflecommons.pixelbrainreader.data.games.GamesRepository
+import cloud.wafflecommons.pixelbrainreader.data.games.ManualSessions
 import cloud.wafflecommons.pixelbrainreader.data.games.GameState
 import cloud.wafflecommons.pixelbrainreader.data.games.GameTimeline
 import cloud.wafflecommons.pixelbrainreader.data.games.TrophySection
 import cloud.wafflecommons.pixelbrainreader.ui.components.EmptyHint
 import cloud.wafflecommons.pixelbrainreader.ui.components.FormScaffold
+import cloud.wafflecommons.pixelbrainreader.ui.components.PickDateDialog
+import cloud.wafflecommons.pixelbrainreader.ui.components.PickTimeDialog
 import cloud.wafflecommons.pixelbrainreader.ui.components.ReadOnlyNotice
 import cloud.wafflecommons.pixelbrainreader.ui.components.SectionCard
 import cloud.wafflecommons.pixelbrainreader.ui.main.MarkwonContent
 import coil.compose.AsyncImage
+import java.time.LocalDate
+import java.time.LocalTime
 
 /**
  * A game's page (RFC-009 §4.2): its state, hours and trophies, the checklists of its note (a trophy's
@@ -76,6 +94,12 @@ fun GamePageScreen(
         revealedKeys = if (revealedKeys.isEmpty()) key else revealedKeys + "\n" + key
     }
     val page = state.page
+    // 13.1: the session dialogs ("Add" = a forgotten session; a tap on a manual session fixes it),
+    // the console's play time and "Started earlier".
+    var adding by rememberSaveable { mutableStateOf(false) }
+    var editingId by rememberSaveable { mutableStateOf<String?>(null) }
+    var editingPlayedBefore by rememberSaveable { mutableStateOf(false) }
+    var earlierMenu by remember { mutableStateOf(false) }
 
     FormScaffold(title = page?.title ?: "Game", onBack = onBack) {
         if (page == null) {
@@ -112,6 +136,11 @@ fun GamePageScreen(
                     )
                 }
             }
+            if (!state.readOnly) {
+                TextButton(onClick = { editingPlayedBefore = true }) {
+                    Text(page.playedBefore?.let { "Console play time before the app: ${hours(it)}" } ?: "Add the console's play time")
+                }
+            }
         }
 
         if (!state.readOnly) {
@@ -122,9 +151,25 @@ fun GamePageScreen(
                         Text("Stop", modifier = Modifier.padding(start = 6.dp))
                     }
                 } else {
-                    Button(onClick = viewModel::start, modifier = Modifier.weight(1f)) {
+                    Button(onClick = { viewModel.start() }, modifier = Modifier.weight(1f)) {
                         Icon(Icons.Rounded.PlayArrow, contentDescription = null)
                         Text("Start a session", modifier = Modifier.padding(start = 6.dp))
+                    }
+                    Box {
+                        FilledTonalIconButton(onClick = { earlierMenu = true }) {
+                            Icon(Icons.Rounded.MoreTime, contentDescription = "Started earlier")
+                        }
+                        DropdownMenu(expanded = earlierMenu, onDismissRequest = { earlierMenu = false }) {
+                            listOf(10, 20, 30).forEach { minutes ->
+                                DropdownMenuItem(
+                                    text = { Text("Started $minutes min ago") },
+                                    onClick = {
+                                        earlierMenu = false
+                                        viewModel.start(minutes)
+                                    }
+                                )
+                            }
+                        }
                     }
                 }
                 OutlinedButton(onClick = { onAskClaude(state.askProject, GamePages.askText(page)) }, modifier = Modifier.weight(1f)) {
@@ -170,7 +215,7 @@ fun GamePageScreen(
             SectionCard(title = section.heading.ifBlank { "Checklist" }, icon = Icons.Rounded.Checklist) {
                 section.items.forEach { item ->
                     val key = "c:${item.line}"
-                    val hidden = item.waitsForTrophy && !item.done && !shown(key)
+                    val hidden = item.masked && !shown(key)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth().clickable(enabled = hidden) { show(key) }
@@ -182,12 +227,28 @@ fun GamePageScreen(
             }
         }
 
-        SectionCard(title = "Sessions", icon = Icons.Rounded.History) {
-            if (state.days.isEmpty() && state.history.isEmpty()) {
-                EmptyHint("No session yet. PlayStation's play time arrives each night; a session started here counts too.")
+        SectionCard(
+            title = "Sessions",
+            icon = Icons.Rounded.History,
+            subtitle = if (!state.readOnly && state.sessions.any { it.source == GameSessionRecord.SOURCE_MANUAL }) "Tap a session to fix it" else null,
+            trailing = {
+                if (!state.readOnly) TextButton(onClick = { adding = true }) { Text("Add") }
             }
-            state.days.take(30).forEach { (date, line) ->
-                Text("${day(date)} ${line.start} · ${GameTimeline.duration(line.minutes)}", style = MaterialTheme.typography.bodyMedium)
+        ) {
+            if (state.sessions.isEmpty() && state.history.isEmpty()) {
+                EmptyHint("No session yet: start one here, or add one you forgot to start.")
+            }
+            state.sessions.take(SESSIONS_SHOWN).forEach { record ->
+                val manual = record.source == GameSessionRecord.SOURCE_MANUAL
+                val date = runCatching { LocalDate.parse(record.date) }.getOrNull()
+                Text(
+                    listOfNotNull(date?.let { day(it) }, record.start, GameTimeline.duration(record.minutes), if (manual) null else "PlayStation")
+                        .joinToString(" · "),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.fillMaxWidth()
+                        .clickable(enabled = manual && !state.readOnly) { editingId = record.id }
+                        .padding(vertical = 6.dp)
+                )
             }
             if (state.history.isNotEmpty()) {
                 Text("Earlier, from your Timeline", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
@@ -205,6 +266,42 @@ fun GamePageScreen(
         }
     }
 
+    if (adding) {
+        GameSessionDialog(
+            initial = null,
+            onSave = { date, start, minutes ->
+                adding = false
+                viewModel.addSession(date, start, minutes)
+            },
+            onDelete = null,
+            onDismiss = { adding = false }
+        )
+    }
+    state.sessions.firstOrNull { it.id == editingId }?.let { record ->
+        GameSessionDialog(
+            initial = record,
+            onSave = { _, start, minutes ->
+                editingId = null
+                viewModel.editSession(record, start, minutes)
+            },
+            onDelete = {
+                editingId = null
+                viewModel.deleteSession(record)
+            },
+            onDismiss = { editingId = null }
+        )
+    }
+    if (editingPlayedBefore && page != null) {
+        PlayedBeforeDialog(
+            initial = page.playedBefore,
+            onSave = { text ->
+                editingPlayedBefore = false
+                viewModel.setPlayedBefore(text)
+            },
+            onDismiss = { editingPlayedBefore = false }
+        )
+    }
+
     if (state.askAccess) {
         GameNightAccessDialog(
             onGrant = {
@@ -215,3 +312,128 @@ fun GamePageScreen(
         )
     }
 }
+
+/** The sessions the page lists (newest first); the Timeline lines go on below them. */
+private const val SESSIONS_SHOWN = 60
+
+/**
+ * Adds a session the owner forgot to start ([initial] null: day, start, length) or fixes one
+ * (its start and length; the day stays). Delete asks a second tap. 13.1.
+ */
+@Composable
+private fun GameSessionDialog(
+    initial: GameSessionRecord?,
+    onSave: (LocalDate, LocalTime, Int) -> Unit,
+    onDelete: (() -> Unit)?,
+    onDismiss: () -> Unit
+) {
+    val today = LocalDate.now()
+    var date by rememberSaveable { mutableStateOf(initial?.date ?: today.toString()) }
+    var start by rememberSaveable { mutableStateOf(initial?.start ?: LocalTime.now().minusHours(1).withSecond(0).withNano(0).format(HHMM)) }
+    var hoursText by rememberSaveable { mutableStateOf(((initial?.minutes ?: 60) / 60).toString()) }
+    var minutesText by rememberSaveable { mutableStateOf(((initial?.minutes ?: 60) % 60).toString()) }
+    var pickingDate by remember { mutableStateOf(false) }
+    var pickingTime by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
+
+    val picked = runCatching { LocalDate.parse(date) }.getOrNull() ?: today
+    val time = runCatching { LocalTime.parse(start) }.getOrNull() ?: LocalTime.NOON
+    val minutes = (hoursText.toIntOrNull() ?: 0) * 60 + (minutesText.toIntOrNull() ?: 0)
+    val inFuture = picked.isAfter(today) || (picked == today && time.isAfter(LocalTime.now()))
+    val valid = minutes in 1..ManualSessions.MAX_MINUTES && !inFuture &&
+        (hoursText.isEmpty() || hoursText.toIntOrNull() != null) && (minutesText.isEmpty() || minutesText.toIntOrNull() in 0..59)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (initial == null) "Add a session" else "Fix this session") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { pickingDate = true }, enabled = initial == null, modifier = Modifier.fillMaxWidth()) {
+                    Text("Day: ${day(picked)}")
+                }
+                OutlinedButton(onClick = { pickingTime = true }, modifier = Modifier.fillMaxWidth()) {
+                    Text("Started at $start")
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = hoursText,
+                        onValueChange = { hoursText = it.filter(Char::isDigit).take(2) },
+                        label = { Text("Hours") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedTextField(
+                        value = minutesText,
+                        onValueChange = { minutesText = it.filter(Char::isDigit).take(2) },
+                        label = { Text("Minutes") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                when {
+                    inFuture -> Text("That start is still to come.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    minutes !in 1..ManualSessions.MAX_MINUTES -> Text("A session lasts 1 minute to 24 hours.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    picked.isBefore(today.minusDays(GamesRepository.PAST_DAYS)) -> Text(
+                        "More than a week ago: it counts in your hours, but that day's note isn't edited.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = valid, onClick = { onSave(picked, time, minutes) }) { Text("Save") }
+        },
+        dismissButton = {
+            Row {
+                if (onDelete != null) {
+                    TextButton(onClick = { if (confirmDelete) onDelete() else confirmDelete = true }) {
+                        Text(if (confirmDelete) "Tap again to delete" else "Delete", color = MaterialTheme.colorScheme.error)
+                    }
+                }
+                TextButton(onClick = onDismiss) { Text("Cancel") }
+            }
+        }
+    )
+    if (pickingDate) {
+        PickDateDialog(initial = picked, onConfirm = { date = it.toString(); pickingDate = false }, onDismiss = { pickingDate = false })
+    }
+    if (pickingTime) {
+        PickTimeDialog(initial = start, onConfirm = { start = it; pickingTime = false }, onDismiss = { pickingTime = false })
+    }
+}
+
+/** The play time the console shows for the game, typed once (13.1): hours, `228h30` or `228:30`. */
+@Composable
+private fun PlayedBeforeDialog(initial: Double?, onSave: (String) -> Unit, onDismiss: () -> Unit) {
+    var text by rememberSaveable { mutableStateOf(initial?.let { if (it == Math.floor(it)) it.toLong().toString() else it.toString() }.orEmpty()) }
+    val valid = text.isBlank() || GamePages.hours(text) != null
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Console play time") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "The hours your PS5 shows for this game before you used the app. Your sessions add up on top; once PlayStation Network works, its own total replaces both.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it.take(10) },
+                    label = { Text("Hours, e.g. 228 or 228h30") },
+                    singleLine = true,
+                    isError = !valid,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (!valid) Text("Write hours like 228, 228.5, 228h30 or 228:30.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+        },
+        confirmButton = { TextButton(enabled = valid, onClick = { onSave(text.trim()) }) { Text(if (text.isBlank()) "Clear" else "Save") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
+private val HHMM: java.time.format.DateTimeFormatter = java.time.format.DateTimeFormatter.ofPattern("HH:mm")
+

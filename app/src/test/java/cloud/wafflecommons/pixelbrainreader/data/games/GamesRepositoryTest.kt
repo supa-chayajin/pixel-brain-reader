@@ -113,4 +113,31 @@ class GamesRepositoryTest {
         assertFalse(repository.applyPastDay(LocalDate.of(2026, 11, 14), today = LocalDate.of(2026, 11, 14)))
         assertFalse(repository.applyPastDay(LocalDate.of(2026, 11, 1), today = LocalDate.of(2026, 11, 14)))
     }
+
+    @Test
+    fun `a fixed session replaces the old one in one write, and a vanished one is refused`() = runTest {
+        val old = record("manual:1", "2026-11-15", "21:00", 540)
+        val other = record("manual:2", "2026-11-14", "20:00", 60)
+        repository.addSessions(listOf(old, other))
+        val fixed = old.copy(id = "manual:3", start = "21:30", minutes = 150)
+        assertTrue(repository.replaceSession(old, fixed))
+        val month = repository.sessions(java.time.YearMonth.of(2026, 11))
+        assertEquals(listOf("manual:2", "manual:3"), month.map { it.id })
+        assertEquals(150, month.last().minutes)
+        assertFalse(repository.replaceSession(old, fixed.copy(minutes = 10)))
+        assertEquals(150, repository.sessions(java.time.YearMonth.of(2026, 11)).last().minutes)
+
+        assertTrue(repository.removeSession("manual:3", LocalDate.of(2026, 11, 15)))
+        assertEquals(listOf("manual:2"), repository.sessions(java.time.YearMonth.of(2026, 11)).map { it.id })
+    }
+
+    @Test
+    fun `the console's play time is one frontmatter line, read back by the page`() = runTest {
+        assertTrue(repository.setPlayedBefore(pagePath, 228.5, LocalDate.of(2026, 11, 16)))
+        assertTrue(disk.getValue(pagePath).contains("\nplayed_before: 228.5\n---\n"))
+        assertEquals(228.5, repository.page(pagePath)!!.playedBefore!!, 0.0)
+        VaultWriteGate.readOnly = true
+        assertFalse(repository.setPlayedBefore(pagePath, 10.0, LocalDate.of(2026, 11, 16)))
+    }
 }
+

@@ -3,10 +3,15 @@ package cloud.wafflecommons.pixelbrainreader.ui.games
 import android.content.Intent
 import android.provider.Settings
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -14,20 +19,24 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SportsEsports
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -42,7 +51,9 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cloud.wafflecommons.pixelbrainreader.data.games.GameGroup
+import cloud.wafflecommons.pixelbrainreader.data.games.GameNames
 import cloud.wafflecommons.pixelbrainreader.data.games.GamePage
+import cloud.wafflecommons.pixelbrainreader.data.games.GameSessionGuard
 import cloud.wafflecommons.pixelbrainreader.data.games.GameState
 import cloud.wafflecommons.pixelbrainreader.data.games.psn.PsnException
 import cloud.wafflecommons.pixelbrainreader.ui.components.EmptyHint
@@ -77,6 +88,7 @@ fun GamesScreen(
 
         val running = state.running
         if (running != null) {
+            val asked = state.runningCheck?.takeIf { it.sessionStart == running.startMillis }
             SectionCard(
                 title = state.runningTitle ?: "A game",
                 icon = Icons.Rounded.SportsEsports,
@@ -89,7 +101,16 @@ fun GamesScreen(
                         }
                     }
                 }
-            )
+            ) {
+                // "Still playing?" (13.1): unanswered, the session ends at the time it was asked.
+                if (asked?.askedAt != null && !state.readOnly) {
+                    Text(
+                        "Still playing? No answer by ${clock(asked.askedAt + GameSessionGuard.ANSWER_MS)}: the session ends at ${clock(asked.nextAskAt)}.",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    OutlinedButton(onClick = viewModel::keepPlaying) { Text("Keep playing") }
+                }
+            }
         } else if (!state.readOnly && state.pages.isNotEmpty()) {
             Button(onClick = { picking = true }, modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Rounded.PlayArrow, contentDescription = null)
@@ -116,9 +137,10 @@ fun GamesScreen(
         GamePickerDialog(
             pages = state.pages,
             lastPlayed = state.lastPlayedPath,
-            onPick = { page ->
+            offerEarlier = true,
+            onPick = { page, minutesAgo ->
                 picking = false
-                viewModel.start(page)
+                viewModel.start(page, minutesAgo)
             },
             onDismiss = { picking = false }
         )
@@ -127,7 +149,7 @@ fun GamesScreen(
         GamePickerDialog(
             title = "Link \"${title.name}\" to",
             pages = state.pages,
-            onPick = { page ->
+            onPick = { page, _ ->
                 linking = null
                 viewModel.link(title.titleId, page)
             },
@@ -234,29 +256,65 @@ private fun UnlinkedFold(titles: List<UnlinkedTitle>, readOnly: Boolean, onLink:
     }
 }
 
-/** Picks a game page: the one played last first (RFC-009 §4.3), then the ones being played. */
+/**
+ * Picks a game page: the one played last first (RFC-009 §4.3), then the ones being played, then the
+ * next ones, then by title. 13.1: the list scrolls (41 pages overflowed the dialog), a search field
+ * finds a game by its title or an alias, and [offerEarlier] adds "Started 10 / 20 / 30 min ago".
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun GamePickerDialog(
     pages: List<GamePage>,
-    onPick: (GamePage) -> Unit,
+    onPick: (GamePage, Int) -> Unit,
     onDismiss: () -> Unit,
     title: String = "Start a session",
-    lastPlayed: String? = null
+    lastPlayed: String? = null,
+    offerEarlier: Boolean = false
 ) {
-    val ordered = pages.sortedWith(
-        compareBy({ it.path != lastPlayed }, { it.state != GameState.PLAYING }, { it.state != GameState.NEXT }, { it.title.lowercase() })
-    )
+    var query by rememberSaveable { mutableStateOf("") }
+    var minutesAgo by rememberSaveable { mutableIntStateOf(0) }
+    val ordered = remember(pages, lastPlayed) {
+        pages.sortedWith(
+            compareBy({ it.path != lastPlayed }, { it.state != GameState.PLAYING }, { it.state != GameState.NEXT }, { it.title.lowercase() })
+        )
+    }
+    val needle = GameNames.normalize(query)
+    val shown = if (needle.isEmpty()) ordered else ordered.filter { page -> page.names.any { GameNames.normalize(it).contains(needle) } }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                ordered.forEach { page ->
-                    ListItem(
-                        supportingContent = { Text(if (page.path == lastPlayed) "Played last · ${page.state.label}" else page.state.label) },
-                        modifier = Modifier.clickable { onPick(page) }
-                    ) {
-                        Text(page.title)
+            Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (offerEarlier) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        EARLIER_CHOICES.forEach { minutes ->
+                            FilterChip(
+                                selected = minutesAgo == minutes,
+                                onClick = { minutesAgo = minutes },
+                                label = { Text(if (minutes == 0) "Now" else "$minutes min ago") }
+                            )
+                        }
+                    }
+                }
+                if (pages.size > SEARCH_FROM) {
+                    OutlinedTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        label = { Text("Find a game") },
+                        leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                if (shown.isEmpty()) Text("No game matches.", style = MaterialTheme.typography.bodyMedium)
+                LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp)) {
+                    items(shown, key = { it.path }) { page ->
+                        ListItem(
+                            supportingContent = { Text(if (page.path == lastPlayed) "Played last · ${page.state.label}" else page.state.label) },
+                            modifier = Modifier.clickable { onPick(page, minutesAgo) }
+                        ) {
+                            Text(page.title)
+                        }
                     }
                 }
             }
@@ -265,6 +323,12 @@ fun GamePickerDialog(
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }
+
+/** "Started earlier" (13.1): the minutes a session can be backdated by when it starts. */
+private val EARLIER_CHOICES = listOf(0, 10, 20, 30)
+
+/** The search field shows from this many pages on. */
+private const val SEARCH_FROM = 8
 
 /** Shown once a game night would start without Do Not Disturb access (D7). */
 @Composable

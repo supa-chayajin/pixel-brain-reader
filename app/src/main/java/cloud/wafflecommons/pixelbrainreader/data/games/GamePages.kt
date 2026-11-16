@@ -26,7 +26,11 @@ enum class GameState(val key: String, val label: String, val group: GameGroup) {
 /** The Games tab's four groups, in order (RFC-009 §4.1). */
 enum class GameGroup(val label: String) { PLAYING("Playing"), NEXT("Next"), BACKLOG("Backlog"), DONE("Done") }
 
-/** The six templates (D5). The key is the page's `game_template`; an unknown one shows as [OTHER]. */
+/**
+ * The templates: the six of D5, then Platformer and Action-adventure (13.1, the owner's interview of
+ * 2026-11-16). The key is the page's `game_template`; an unknown one (the vault's `other`) shows as
+ * [OTHER]. Keys are persisted in the pages: never rename one.
+ */
 enum class GameTemplate(val key: String, val label: String) {
     SOULS_LIKE("souls-like", "Souls-like"),
     NIGHTREIGN("nightreign", "Nightreign"),
@@ -34,6 +38,8 @@ enum class GameTemplate(val key: String, val label: String) {
     OPEN_WORLD("open-world", "Open world"),
     SURVIVAL_HORROR("survival-horror", "Survival horror"),
     LEGO("lego", "LEGO"),
+    PLATFORMER("platformer", "Platformer"),
+    ACTION_ADVENTURE("action-adventure", "Action-adventure"),
     OTHER("", "Other");
 
     companion object {
@@ -46,8 +52,10 @@ enum class GameTemplate(val key: String, val label: String) {
 
 /**
  * One game's page in the vault: any note whose frontmatter has [GamePages.TEMPLATE_KEY], wherever it
- * lives (the owner's are in their area for games). [key] is the file name without `.md`: what a
- * Timeline line's marker names.
+ * lives (the owner's are in their area for games) except `99_System/`, where the templates are.
+ * [key] is the file name without `.md`: what a Timeline line's marker names. [playedBefore] is the
+ * play time the owner typed from the console (hours), counted under the sessions until PSN measures
+ * the game itself.
  */
 data class GamePage(
     val path: String,
@@ -56,7 +64,8 @@ data class GamePage(
     val template: GameTemplate,
     val state: GameState,
     val started: LocalDate?,
-    val finished: LocalDate?
+    val finished: LocalDate?,
+    val playedBefore: Double? = null
 ) {
     val key: String get() = path.substringAfterLast('/').removeSuffix(".md")
     val folder: String get() = path.substringBeforeLast('/', "")
@@ -70,10 +79,14 @@ object GamePages {
 
     const val TEMPLATE_KEY = "game_template"
     const val STATE_KEY = "game_state"
+    const val PLAYED_BEFORE_KEY = "played_before"
+
+    /** The vault's templates live here and carry [TEMPLATE_KEY] too: a template is never a game. */
+    private const val TEMPLATES_ROOT = "99_System/"
 
     /** The page in [content], or null when it isn't a game page. */
     fun parse(path: String, content: String): GamePage? {
-        if (!path.endsWith(".md")) return null
+        if (!path.endsWith(".md") || path.startsWith(TEMPLATES_ROOT)) return null
         val template = FrontmatterLines.get(content, TEMPLATE_KEY) ?: return null
         return GamePage(
             path = path,
@@ -82,8 +95,43 @@ object GamePages {
             template = GameTemplate.fromKey(template),
             state = GameState.fromKey(FrontmatterLines.get(content, STATE_KEY)),
             started = date(FrontmatterLines.get(content, "started")),
-            finished = date(FrontmatterLines.get(content, "finished"))
+            finished = date(FrontmatterLines.get(content, "finished")),
+            playedBefore = hours(FrontmatterLines.get(content, PLAYED_BEFORE_KEY))
         )
+    }
+
+    /**
+     * Hours as the owner types them: `228`, `228.5`, `228,5`, `228 h`, `228h30` or `228:30`; null
+     * when blank, negative or anything else. Hand-written matching, no regex word boundaries.
+     */
+    fun hours(raw: String?): Double? {
+        val text = raw?.trim()?.lowercase()?.replace(" ", "")?.removeSuffix("h") ?: return null
+        if (text.isEmpty()) return null
+        HOURS_MINUTES.matchEntire(text)?.let { m ->
+            val minutes = m.groupValues[2].toInt()
+            return if (minutes < 60) m.groupValues[1].toInt() + minutes / 60.0 else null
+        }
+        return DECIMAL.matchEntire(text)?.value?.replace(',', '.')?.toDoubleOrNull()?.takeIf { it >= 0 }
+    }
+
+    private val HOURS_MINUTES = Regex("^(\\d{1,5})[h:](\\d{1,2})$")
+    private val DECIMAL = Regex("^\\d{1,5}(?:[.,]\\d{1,2})?$")
+
+    /**
+     * [content] with [hours] written to `played_before` (whole hours without decimals, else one
+     * decimal) and today in `date_updated`; null [hours] empties the key. Every other byte kept.
+     */
+    fun withPlayedBefore(content: String, hours: Double?, today: LocalDate): String {
+        val value = when {
+            hours == null -> "''"
+            hours == Math.floor(hours) -> hours.toLong().toString()
+            else -> String.format(java.util.Locale.ROOT, "%.1f", hours)
+        }
+        var next = FrontmatterLines.set(content, PLAYED_BEFORE_KEY, value)
+        if (next != content && FrontmatterLines.get(next, "date_updated") != null) {
+            next = FrontmatterLines.set(next, "date_updated", VaultSchema.singleQuoted(today.toString()))
+        }
+        return next
     }
 
     /** [content] with [state] written to `game_state` and today in `date_updated`; every other byte kept. */

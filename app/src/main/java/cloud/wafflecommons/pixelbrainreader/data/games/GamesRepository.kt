@@ -143,6 +143,27 @@ class GamesRepository @Inject constructor(
         return changed
     }
 
+    /**
+     * Replaces [old] by [new] in their month (13.1: a session fixed by hand; both on the same day),
+     * in one write; false when [old] isn't there any more or the month couldn't be saved.
+     */
+    suspend fun replaceSession(old: GameSessionRecord, new: GameSessionRecord): Boolean {
+        if (VaultWriteGate.refuses()) return false
+        if (old.date.take(7) != new.date.take(7)) return false
+        var found = false
+        val saved = update(GameFiles.sessions(old.date.take(7)), GameSessionsMonth.serializer(), GameSessionsMonth()) { file ->
+            found = file.sessions.any { it.id == old.id }
+            if (!found) return@update file
+            val kept = file.sessions.filterNot { it.id == old.id || it.id == new.id } + new
+            GameSessionsMonth(kept.sortedWith(compareBy({ it.date }, { it.start ?: "" }, { it.id })))
+        }
+        return found && saved != null
+    }
+
+    /** Writes [hours] to the page's `played_before` (one frontmatter line, disk read first). */
+    suspend fun setPlayedBefore(path: String, hours: Double?, today: LocalDate = LocalDate.now()): Boolean =
+        editPage(path) { GamePages.withPlayedBefore(it, hours, today) }
+
     /** Removes the session [id] of [date]; true when it was there. */
     suspend fun removeSession(id: String, date: LocalDate): Boolean {
         if (VaultWriteGate.refuses()) return false

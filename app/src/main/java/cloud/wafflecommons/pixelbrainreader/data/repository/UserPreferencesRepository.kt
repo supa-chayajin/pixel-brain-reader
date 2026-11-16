@@ -333,6 +333,17 @@ class UserPreferencesRepository @Inject constructor(
         }
     }
 
+    // 13.1: the running session's "Still playing?" state (`SessionCheck`: "start|nextAskAt|askedAt").
+    private val KEY_GAME_SESSION_CHECK = stringPreferencesKey("game_session_check")
+
+    val gameSessionCheck: Flow<String?> = setting { it[KEY_GAME_SESSION_CHECK] }
+
+    suspend fun setGameSessionCheck(encoded: String?) {
+        context.dataStore.edit { preferences ->
+            if (encoded == null) preferences.remove(KEY_GAME_SESSION_CHECK) else preferences[KEY_GAME_SESSION_CHECK] = encoded
+        }
+    }
+
     val gameNightDay: Flow<String?> = setting { it[KEY_GAME_NIGHT_DAY] }
 
     suspend fun setGameNightDay(day: java.time.LocalDate) {

@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.games.GameDays
 import cloud.wafflecommons.pixelbrainreader.data.games.GameGroup
+import cloud.wafflecommons.pixelbrainreader.data.games.GameHours
 import cloud.wafflecommons.pixelbrainreader.data.games.GameNightOutcome
 import cloud.wafflecommons.pixelbrainreader.data.games.GamePage
 import cloud.wafflecommons.pixelbrainreader.data.games.GamePages
@@ -13,6 +14,7 @@ import cloud.wafflecommons.pixelbrainreader.data.games.GamesRepository
 import cloud.wafflecommons.pixelbrainreader.data.games.PsnSnapshot
 import cloud.wafflecommons.pixelbrainreader.data.games.PsnTitleState
 import cloud.wafflecommons.pixelbrainreader.data.games.RunningGame
+import cloud.wafflecommons.pixelbrainreader.data.games.SessionCheck
 import cloud.wafflecommons.pixelbrainreader.data.games.psn.PsnAccount
 import cloud.wafflecommons.pixelbrainreader.data.games.psn.PsnStatus
 import cloud.wafflecommons.pixelbrainreader.data.system.AppClock
@@ -51,6 +53,8 @@ data class GamesUiState(
     val unlinked: List<UnlinkedTitle> = emptyList(),
     val running: RunningGame? = null,
     val runningTitle: String? = null,
+    /** The running session's "Still playing?", while unanswered (13.1). */
+    val runningCheck: SessionCheck? = null,
     /** The game played last: the session picker's default (RFC-009 §4.3). */
     val lastPlayedPath: String? = null,
     val psn: PsnLine = PsnLine(configured = false, connected = false, status = null, expiresInDays = null),
@@ -78,6 +82,9 @@ class GamesViewModel @Inject constructor(
                 .collect { (running, status) -> reload(running, status) }
         }
         viewModelScope.launch { clock.foregroundEvents.collect { refresh() } }
+        viewModelScope.launch {
+            controller.runningCheck.collect { check -> _state.update { it.copy(runningCheck = check?.takeIf { c -> c.askedAt != null }) } }
+        }
     }
 
     fun refresh() {
@@ -99,14 +106,9 @@ class GamesViewModel @Inject constructor(
             val rows = pages.map { page ->
                 val titles = links.titlesOf(page.path).mapNotNull { id -> snapshot?.titles?.firstOrNull { it.titleId == id } }
                 val psnSeconds = titles.sumOf { it.playSeconds }
-                val manualMinutes = totals[page.path]
                 GameRow(
                     page = page,
-                    hours = when {
-                        psnSeconds > 0 -> psnSeconds / 3600.0
-                        manualMinutes != null -> manualMinutes / 60.0
-                        else -> null
-                    },
+                    hours = GameHours.of(psnSeconds, page.playedBefore, totals[page.path] ?: 0),
                     trophyPercent = titles.mapNotNull { it.progress }.maxOrNull(),
                     lastPlayed = (titles.mapNotNull { date(it.lastPlayed, zone) } + playedDays[page.path].orEmpty()).maxOrNull(),
                     iconUrl = titles.firstNotNullOfOrNull { it.imageUrl }
@@ -140,11 +142,17 @@ class GamesViewModel @Inject constructor(
         }
     }
 
-    fun start(page: GamePage) {
+    /** Starts [page], [minutesAgo] earlier when the owner was already playing (13.1). */
+    fun start(page: GamePage, minutesAgo: Int = 0) {
         viewModelScope.launch {
-            val outcome = controller.start(page)
+            val outcome = controller.start(page, startedMinutesAgo = minutesAgo)
             if (outcome == GameNightOutcome.NEEDS_ACCESS) _state.update { it.copy(askAccess = true) }
         }
+    }
+
+    /** "Still playing?" answered from the tab (13.1). */
+    fun keepPlaying() {
+        viewModelScope.launch { controller.keepPlaying() }
     }
 
     fun stop() {

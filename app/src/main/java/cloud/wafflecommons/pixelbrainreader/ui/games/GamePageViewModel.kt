@@ -9,9 +9,12 @@ import cloud.wafflecommons.pixelbrainreader.data.games.GameChecklists
 import cloud.wafflecommons.pixelbrainreader.data.games.GameDays
 import cloud.wafflecommons.pixelbrainreader.data.games.GameDayLine
 import cloud.wafflecommons.pixelbrainreader.data.games.GameHistoryEntry
+import cloud.wafflecommons.pixelbrainreader.data.games.GameHours
 import cloud.wafflecommons.pixelbrainreader.data.games.GameNightOutcome
 import cloud.wafflecommons.pixelbrainreader.data.games.GamePage
+import cloud.wafflecommons.pixelbrainreader.data.games.GamePages
 import cloud.wafflecommons.pixelbrainreader.data.games.GameSessionController
+import cloud.wafflecommons.pixelbrainreader.data.games.GameSessionRecord
 import cloud.wafflecommons.pixelbrainreader.data.games.GameState
 import cloud.wafflecommons.pixelbrainreader.data.games.GamesRepository
 import cloud.wafflecommons.pixelbrainreader.data.games.RunningGame
@@ -27,6 +30,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import java.time.LocalTime
 import javax.inject.Inject
 
 /** One trophy as the page lists it: [earnedOn] null while not earned. */
@@ -46,6 +50,8 @@ data class GamePageUiState(
     val iconUrl: String? = null,
     /** A line per day played, newest first. */
     val days: List<Pair<LocalDate, GameDayLine>> = emptyList(),
+    /** Each session of the last year, newest first: the manual ones can be fixed (13.1). */
+    val sessions: List<GameSessionRecord> = emptyList(),
     val history: List<GameHistoryEntry> = emptyList(),
     val folderNotes: List<String> = emptyList(),
     val running: RunningGame? = null,
@@ -103,11 +109,12 @@ class GamePageViewModel @Inject constructor(
                 .flatMap { day -> GameDays.lines(day, sessions, resolve).map { line -> day to line } }
                 .sortedByDescending { it.first }
             val psnSeconds = titles.sumOf { it.playSeconds }
+            val manualMinutes = days.sumOf { d -> d.second.minutes }
             _state.update {
                 it.copy(
                     loading = false,
                     page = page,
-                    hours = if (psnSeconds > 0) psnSeconds / 3600.0 else days.sumOf { d -> d.second.minutes }.takeIf { m -> m > 0 }?.let { m -> m / 60.0 },
+                    hours = GameHours.of(psnSeconds, page.playedBefore, manualMinutes),
                     trophiesEarned = trophies.count { t -> t.earnedOn != null },
                     trophiesTotal = trophies.size,
                     trophies = trophies,
@@ -115,6 +122,7 @@ class GamePageViewModel @Inject constructor(
                     prose = cloud.wafflecommons.pixelbrainreader.data.games.GamePages.prose(content),
                     iconUrl = titles.firstNotNullOfOrNull { t -> t.imageUrl },
                     days = days,
+                    sessions = sessions.sortedWith(compareByDescending<GameSessionRecord> { s -> s.date }.thenByDescending { s -> s.start ?: "" }),
                     history = history ?: games.history(listOf(page)).also { history = it },
                     folderNotes = games.folderNotes(page),
                     running = running,
@@ -137,11 +145,32 @@ class GamePageViewModel @Inject constructor(
         viewModelScope.launch { games.editPage(path) { content -> GameChecklists.toggle(content, line) ?: content } }
     }
 
-    fun start() {
+    /** Starts a session, [minutesAgo] earlier when the owner was already playing (13.1). */
+    fun start(minutesAgo: Int = 0) {
         val page = _state.value.page ?: return
         viewModelScope.launch {
-            if (controller.start(page) == GameNightOutcome.NEEDS_ACCESS) _state.update { it.copy(askAccess = true) }
+            if (controller.start(page, startedMinutesAgo = minutesAgo) == GameNightOutcome.NEEDS_ACCESS) _state.update { it.copy(askAccess = true) }
         }
+    }
+
+    /** A session the owner forgot to start (13.1). */
+    fun addSession(date: LocalDate, start: LocalTime, minutes: Int) {
+        val page = _state.value.page ?: return
+        viewModelScope.launch { controller.addPastSession(page, date, start, minutes) }
+    }
+
+    fun editSession(record: GameSessionRecord, start: LocalTime, minutes: Int) {
+        viewModelScope.launch { controller.editSession(record, start, minutes) }
+    }
+
+    fun deleteSession(record: GameSessionRecord) {
+        viewModelScope.launch { controller.deleteSession(record) }
+    }
+
+    /** The play time typed from the console, in hours; blank clears it (13.1). */
+    fun setPlayedBefore(text: String) {
+        val hours = if (text.isBlank()) null else GamePages.hours(text) ?: return
+        viewModelScope.launch { games.setPlayedBefore(path, hours, clock.today.value) }
     }
 
     fun stop() {
