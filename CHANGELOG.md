@@ -11,6 +11,43 @@ Planned: `documentation/plans/2026-11-10-dream-app-roadmap.md`. Next: the second
 (a smaller embedder, days like this), the toolkit's last small wins, and the Wear OS companion
 (X1) once it has a plan.
 
+## [13.1.0] — 2026-11-16
+
+A game mode for every evening, built the morning the game pages arrived, from the owner's
+interviews while they played; planned in `documentation/plans/2026-11-16-13.1-game-mode.md`
+(E1–E8). PlayStation Network is still blocked by Sony, so the sessions started on the phone are
+the record of play, and this release makes them hard to lose and easy to fix.
+
+### Added
+
+- **Still playing? (E4, E7):** a session nobody stops asks after 3 hours. *Keep playing* asks again
+  an hour later. With no answer within the hour, the session ends at the time the question was due,
+  not at the time you notice. The question vibrates without a sound, through Game night too once
+  the app has Do Not Disturb access, and the Games tab shows it as well.
+- **Fix your sessions (E5):** a game's page lists each session.
+  - *Add* records one you forgot to start: the day, the start and the length.
+  - Tap one to change its start or length, or to delete it (a second tap confirms).
+  - The day's Timeline line follows: today's note, or an earlier day's within a week. Older days
+    keep the session in your hours only.
+- **Started earlier (E5):** start a session 10, 20 or 30 minutes ago, from the session picker or
+  the clock button beside *Start a session*.
+- **Console play time (E6):** *Add the console's play time* on a game's page (or `played_before`
+  in its note) takes the hours your PS5 shows. Your sessions count on top of it, and PlayStation
+  Network's own total replaces both once it measures the game.
+- **Checklists hidden until tapped (E8):** a checklist line of a game's note that ends with
+  `<!--spoiler-->` shows as ??? until you tap or tick it, like a trophy's line, without waiting for
+  PlayStation Network.
+- **Two templates (E1):** Platformer and Action-adventure.
+
+### Fixed
+
+- **The session picker scrolls:** with many games, the ones below the dialog's edge couldn't be
+  picked. From eight games on, *Find a game* searches their names and aliases.
+- **Template notes aren't games (E2):** a note in `99_System/` with `game_template` (the vault's
+  templates) no longer shows in the Games tab.
+- **The running session comes back:** its notification returns when you open the app after a
+  reboot or a swipe, and a session started before this version gets its 3-hour question.
+
 ## [13.0.0] — 2026-11-15
 
 The platform's lean cut, built the night 12.21 shipped, from the owner's decisions D1–D5; planned
