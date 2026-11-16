@@ -70,7 +70,7 @@ class PeopleRepository @Inject constructor(
     private val session: PrivateVaultSession,
     private val privateNotes: PrivateNoteRepository,
     private val appClock: AppClock,
-    @param:ApplicationScope appScope: CoroutineScope
+    @ApplicationScope appScope: CoroutineScope
 ) {
     private val folder: File get() = File(context.filesDir, "vault/" + VaultSchema.PEOPLE_FOLDER)
 
