@@ -90,6 +90,11 @@ private val BADGE_SHAPES = listOf(
     MaterialShapes.Sunny
 )
 
+/** The expressive shape of [key]'s emblem: a page header's, and its tab's in the navigation (13.2). */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+fun badgeShapeFor(key: String): androidx.graphics.shapes.RoundedPolygon =
+    BADGE_SHAPES[(key.hashCode() / 3).absoluteValue % BADGE_SHAPES.size]
+
 /**
  * An icon on an expressive shape (a cookie, a clover, a sunny burst), in [key]'s tone: the badge of
  * a card's title. The shape and the tone follow [key], so a card always looks the same.
@@ -97,7 +102,7 @@ private val BADGE_SHAPES = listOf(
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun ExpressiveBadge(icon: ImageVector, key: String, modifier: Modifier = Modifier, size: Dp = 40.dp, tone: Tone = toneFor(key)) {
-    val shape = BADGE_SHAPES[(key.hashCode() / 3).absoluteValue % BADGE_SHAPES.size].toShape()
+    val shape = badgeShapeFor(key).toShape()
     Box(
         modifier = modifier.size(size).clip(shape).background(tone.container),
         contentAlignment = Alignment.Center

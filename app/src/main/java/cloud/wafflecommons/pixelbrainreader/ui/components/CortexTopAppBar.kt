@@ -43,6 +43,8 @@ fun CortexTopAppBar(
     modifier: Modifier = Modifier,
     subtitle: String? = null,
     icon: ImageVector? = null,
+    /** The emblem's shape and tone come from this key: the tab's name on a tab's page (13.2). */
+    emblemKey: String = title,
     navigationIcon: @Composable () -> Unit = {},
     actions: @Composable RowScope.() -> Unit = {},
     scrollBehavior: TopAppBarScrollBehavior? = null,
@@ -54,7 +56,7 @@ fun CortexTopAppBar(
     )
     if (large) {
         LargeFlexibleTopAppBar(
-            title = { Heading(title, icon, badgeSize = 40.dp, large = true) },
+            title = { Heading(title, icon, emblemKey, badgeSize = 40.dp, large = true) },
             subtitle = subtitle?.let { line -> { SubtitlePill(line) } },
             navigationIcon = navigationIcon,
             actions = actions,
@@ -68,7 +70,7 @@ fun CortexTopAppBar(
     if (subtitle != null) {
         // The owner's review (13.2): taller and larger, the pill clear of the emblem.
         TopAppBar(
-            title = { Heading(title, icon, badgeSize = 44.dp, large = false) },
+            title = { Heading(title, icon, emblemKey, badgeSize = 44.dp, large = false) },
             subtitle = { SubtitlePill(subtitle, modifier = Modifier.padding(top = 8.dp)) },
             navigationIcon = navigationIcon,
             actions = actions,
@@ -80,7 +82,7 @@ fun CortexTopAppBar(
         )
     } else {
         CenterAlignedTopAppBar(
-            title = { Heading(title, icon, badgeSize = 44.dp, large = false) },
+            title = { Heading(title, icon, emblemKey, badgeSize = 44.dp, large = false) },
             navigationIcon = navigationIcon,
             actions = actions,
             expandedHeight = 80.dp,
@@ -94,10 +96,10 @@ fun CortexTopAppBar(
 /** The emblem on its expressive shape, then the emphasized headline. */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun Heading(title: String, icon: ImageVector?, badgeSize: androidx.compose.ui.unit.Dp, large: Boolean) {
+private fun Heading(title: String, icon: ImageVector?, key: String, badgeSize: androidx.compose.ui.unit.Dp, large: Boolean) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         if (icon != null) {
-            ExpressiveBadge(icon = icon, key = title, size = badgeSize)
+            ExpressiveBadge(icon = icon, key = key, size = badgeSize)
             Spacer(Modifier.width(if (large) 14.dp else 12.dp))
         }
         Text(

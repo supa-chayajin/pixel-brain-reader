@@ -75,6 +75,7 @@ fun LifeStatsScreen(
         topBar = {
             cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
                 title = "Life Stats",
+                emblemKey = "Stats",
                 icon = Icons.Rounded.Star,
                 actions = {
                     // X5 (13.0): first, so Habits and Chores keep their places at the end.

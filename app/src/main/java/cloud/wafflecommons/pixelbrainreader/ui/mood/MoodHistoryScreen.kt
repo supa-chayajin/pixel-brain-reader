@@ -60,6 +60,7 @@ fun MoodHistoryScreen(
         topBar = {
             cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
                 title = "Mood Tracker",
+                emblemKey = "Mood",
                 icon = Icons.Rounded.Mood,
                 scrollBehavior = scrollBehavior
             )

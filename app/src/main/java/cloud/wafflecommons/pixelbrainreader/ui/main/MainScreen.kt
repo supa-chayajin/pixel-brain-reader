@@ -123,6 +123,8 @@ import nl.dionsegijn.konfetti.compose.KonfettiView
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.TimeUnit
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.foundation.layout.navigationBars
 
 object Screen {
     const val Home = "home"
@@ -150,434 +152,6 @@ internal val ExpressiveNavBarHeight = 64.dp
 internal val ExpressiveNavBarClearance: Dp
     @Composable get() = if (LocalNavRail.current) railBottomClearance() else ExpressiveNavBarHeight + 24.dp
 
-/**
- * Material 3 Expressive floating navigation bar modeled on the new Google Finance
- * app: a rounded floating group of regular tabs + a separate, emphasized "Daily"
- * button (Finance's "Ask" equivalent). Folded shows the first four tabs of the user's order;
- * unfolded reveals all. The active tab shows a spring-animated pill behind its icon.
- */
-@Composable
-private fun ExpressiveNavBar(
-    currentRoute: String?,
-    isViewingDailyNote: Boolean,
-    isLargeScreen: Boolean,
-    order: List<String>,
-    onSelect: (String) -> Unit,
-    modifier: Modifier = Modifier,
-    hidden: Set<String> = emptySet()
-) {
-    val navShadowColor = navShadowColor()
-
-    // The first four of the user's order = the folded set (four since 12.17, owner's D9: Games made
-    // eight tabs, and three left too many out of reach). Unfolded reveals the rest.
-    val ordered = navDestinations(currentRoute, isViewingDailyNote, order, hidden)
-    val regular = if (isLargeScreen) ordered else ordered.take(FOLDED_TABS)
-    val dailySelected = currentRoute == Screen.DailyNote
-
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .navigationBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // Shared geometry so the group, the Daily button and the selection pill
-        // are all concentric: outerRadius on the bar, (outerRadius - innerPad) on
-        // the selection pill so it looks like it FILLS the bar's inner area.
-        val barRadius = NavBarRadius
-        val innerPad = NavInnerPad
-        val pillRadius = barRadius - innerPad
-
-        // --- Main floating group of regular tabs ---
-        // SOLID pill (elevated surface) so it reads as a defined floating bar;
-        // the page shows through around it (nav floats over content).
-        Surface(
-            shape = RoundedCornerShape(barRadius),
-            color = MaterialTheme.colorScheme.surfaceContainerHighest,
-            modifier = Modifier
-                .weight(1f)
-                .height(ExpressiveNavBarHeight)
-                // Theme-coloured (primary) elevation shadow. The default BLACK shadow gets
-                // inverted into an ugly white halo under a device force-dark override, so we
-                // set the spot/ambient colours explicitly to the accent.
-                .shadow(
-                    elevation = NavShadowElevation,
-                    shape = RoundedCornerShape(barRadius),
-                    spotColor = navShadowColor,
-                    ambientColor = navShadowColor
-                )
-        ) {
-            val selectedIndex = regular.indexOfFirst { it.selected }
-            val hasSelection = selectedIndex >= 0
-            // Park the sliding pill at the last selected slot; keep it there (faded out)
-            // while a non-group tab (Daily) is active, so it slides back correctly on return.
-            var parkedIndex by remember { mutableIntStateOf(selectedIndex.coerceAtLeast(0)) }
-            LaunchedEffect(selectedIndex) { if (selectedIndex >= 0) parkedIndex = selectedIndex }
-
-            BoxWithConstraints(modifier = Modifier.fillMaxSize().padding(innerPad)) {
-                val count = regular.size
-                val itemWidthPx = constraints.maxWidth.toFloat() / count
-                // The shared selection pill SLIDES to the active slot (spring) instead of
-                // each tab fading its own pill in and out.
-                val indicatorX by animateFloatAsState(
-                    targetValue = parkedIndex * itemWidthPx,
-                    // Snappy but visible glide with a gentle settle. (StiffnessMediumLow=400
-                    // finished in ~250ms and read as a snap; StiffnessLow=200 felt a touch slow.)
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioLowBouncy,
-                        stiffness = 320f
-                    ),
-                    label = "navIndicatorX"
-                )
-                val indicatorAlpha by animateFloatAsState(
-                    targetValue = if (hasSelection) 1f else 0f,
-                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
-                    label = "navIndicatorAlpha"
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(1f / count)
-                        .fillMaxHeight()
-                        .graphicsLayer {
-                            translationX = indicatorX
-                            alpha = indicatorAlpha
-                        }
-                        .clip(RoundedCornerShape(pillRadius))
-                        .background(MaterialTheme.colorScheme.secondaryContainer)
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    regular.forEach { item ->
-                        NavPiece(
-                            icon = item.icon,
-                            label = item.label,
-                            selected = item.selected,
-                            onClick = { if (!item.selected) onSelect(item.route) },
-                            modifier = Modifier.weight(1f).fillMaxHeight()
-                        )
-                    }
-                }
-            }
-        }
-
-        // --- Separate, emphasized "Daily" button (à la Finance's "Ask") ---
-        DailyNavButton(
-            selected = dailySelected,
-            onSelect = { onSelect(Screen.DailyNote) },
-            shadowColor = navShadowColor
-        )
-    }
-}
-
-/** Width of the rail's tab group and Daily button. */
-private val RailWidth = 76.dp
-
-/** Height of one tab in the rail. */
-private val RailItemHeight = 60.dp
-
-/**
- * The navigation of a wide window (a tablet in landscape, an unfolded Fold): the same floating tab
- * group and emphasized Daily button as [ExpressiveNavBar], stood up along the left edge, where the
- * thumbs reach when the screen is held in two hands, and no longer taking height from the content.
- * Every tab shows, in the user's order. The group scrolls when the window is too short for it.
- */
-@Composable
-private fun ExpressiveNavRail(
-    currentRoute: String?,
-    isViewingDailyNote: Boolean,
-    order: List<String>,
-    onSelect: (String) -> Unit,
-    modifier: Modifier = Modifier,
-    hidden: Set<String> = emptySet()
-) {
-    val navShadowColor = navShadowColor()
-    val regular = navDestinations(currentRoute, isViewingDailyNote, order, hidden)
-    val dailySelected = currentRoute == Screen.DailyNote
-
-    Box(
-        modifier = modifier
-            .fillMaxHeight()
-            .background(MaterialTheme.colorScheme.background)
-            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Start + WindowInsetsSides.Vertical)),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            modifier = Modifier
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 10.dp, vertical = 16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            DailyNavButton(
-                selected = dailySelected,
-                onSelect = { onSelect(Screen.DailyNote) },
-                shadowColor = navShadowColor,
-                modifier = Modifier.width(RailWidth),
-                horizontalPadding = 0.dp
-            )
-
-            Surface(
-                shape = RoundedCornerShape(NavBarRadius),
-                color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                modifier = Modifier
-                    .width(RailWidth)
-                    .shadow(
-                        elevation = NavShadowElevation,
-                        shape = RoundedCornerShape(NavBarRadius),
-                        spotColor = navShadowColor,
-                        ambientColor = navShadowColor
-                    )
-            ) {
-                val selectedIndex = regular.indexOfFirst { it.selected }
-                // Same parked, sliding pill as the bar, moving down the rail instead of across.
-                var parkedIndex by remember { mutableIntStateOf(selectedIndex.coerceAtLeast(0)) }
-                LaunchedEffect(selectedIndex) { if (selectedIndex >= 0) parkedIndex = selectedIndex }
-                val itemHeightPx = with(LocalDensity.current) { RailItemHeight.toPx() }
-                val indicatorY by animateFloatAsState(
-                    targetValue = parkedIndex * itemHeightPx,
-                    animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = 320f),
-                    label = "railIndicatorY"
-                )
-                val indicatorAlpha by animateFloatAsState(
-                    targetValue = if (selectedIndex >= 0) 1f else 0f,
-                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
-                    label = "railIndicatorAlpha"
-                )
-                Box(modifier = Modifier.padding(NavInnerPad)) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(RailItemHeight)
-                            .graphicsLayer {
-                                translationY = indicatorY
-                                alpha = indicatorAlpha
-                            }
-                            .clip(RoundedCornerShape(NavBarRadius - NavInnerPad))
-                            .background(MaterialTheme.colorScheme.secondaryContainer)
-                    )
-                    Column {
-                        regular.forEach { item ->
-                            NavPiece(
-                                icon = item.icon,
-                                label = item.label,
-                                selected = item.selected,
-                                onClick = { if (!item.selected) onSelect(item.route) },
-                                modifier = Modifier.fillMaxWidth().height(RailItemHeight)
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-/** One regular tab of the bar or the rail. */
-private data class NavDest(val route: String, val icon: ImageVector, val label: String, val selected: Boolean)
-
-/**
- * The regular tabs (all but Daily) in the user's custom order; a destination absent from the saved
- * order (one added in a later app version) is appended, so nothing ever disappears from the bar.
- */
-private fun navDestinations(currentRoute: String?, isViewingDailyNote: Boolean, order: List<String>, hidden: Set<String> = emptySet()): List<NavDest> =
-    inNavOrder(
-        order,
-        listOfNotNull(
-            NavDest(Screen.Home, Icons.Rounded.Dashboard, "Repo", currentRoute == Screen.Home && !isViewingDailyNote),
-            NavDest("habits", Icons.Rounded.DateRange, "Habits", currentRoute == "habits"),
-            NavDest(Screen.HomeOS, Icons.Rounded.CleaningServices, "Chores", currentRoute == Screen.HomeOS),
-            // No AI on a read-only device (DeviceRole).
-            NavDest(Screen.Chat, Icons.Rounded.Psychology, "Chat", currentRoute == Screen.Chat).takeUnless { VaultWriteGate.readOnly },
-            NavDest(Screen.MoodTracker, Icons.Default.Mood, "Mood", currentRoute == Screen.MoodTracker),
-            NavDest(Screen.Stats, Icons.Default.Star, "Stats", currentRoute == Screen.Stats),
-            // Also lit on a project page opened directly (the Projects widget, a deep link).
-            NavDest(
-                V11Routes.PROJECTS,
-                Icons.Rounded.RocketLaunch,
-                "Projects",
-                currentRoute == V11Routes.PROJECTS || currentRoute == V11Routes.PROJECT
-            ),
-            // 12.17 (RFC-009): lit on a game's page too.
-            NavDest(
-                cloud.wafflecommons.pixelbrainreader.ui.games.GamesRoutes.GAMES,
-                Icons.Rounded.SportsEsports,
-                "Games",
-                currentRoute == cloud.wafflecommons.pixelbrainreader.ui.games.GamesRoutes.GAMES ||
-                    currentRoute == cloud.wafflecommons.pixelbrainreader.ui.games.GamesRoutes.GAME
-            )
-        )
-    ) { it.route }.filterNot { it.route in hidden }
-
-/** How many tabs the floating bar shows below 600 dp (the folded phone). */
-private const val FOLDED_TABS = 4
-
-/** Corner radius of the nav surfaces; the selection pill sits [NavInnerPad] inside it. */
-private val NavBarRadius = 28.dp
-private val NavInnerPad = 6.dp
-private val NavShadowElevation = 6.dp
-
-/**
- * The floating nav surfaces' elevation shadow is tinted with the primary (sage) accent. On a dark
- * surface that bright tint reads as an ugly glowing halo — but a shadow dimmed all the way to
- * black just vanishes against the dark page. So on dark themes we keep the shadow COLOURED and
- * at full elevation, only dialling its brightness partway down toward black: still clearly a
- * shadow, just a subtler, darker green. Derived from the resolved surface luminance so it
- * tracks the ACTUAL theme (not just the system setting).
- */
-@Composable
-private fun navShadowColor(): Color {
-    val isDarkSurface = MaterialTheme.colorScheme.surface.luminance() < 0.5f
-    return if (isDarkSurface) lerp(MaterialTheme.colorScheme.primary, Color.Black, 0.4f)
-        else MaterialTheme.colorScheme.primary
-}
-
-/**
- * The emphasized "Daily" button, apart from the tab group (à la Finance's "Ask"): same radius and
- * dark surface as the group, distinguished only by a green GLOW (colored shadow + accent border).
- * [horizontalPadding] gives it its width in the bar; the rail gives it a width instead.
- */
-@Composable
-private fun DailyNavButton(
-    selected: Boolean,
-    onSelect: () -> Unit,
-    shadowColor: Color,
-    modifier: Modifier = Modifier,
-    horizontalPadding: Dp = 28.dp
-) {
-    val haptic = LocalHapticFeedback.current
-    val accent = MaterialTheme.colorScheme.primary
-    // Smoothly fade the Daily icon/label between active (bright) and idle (dimmed).
-    val dailyContent by animateColorAsState(
-        targetValue = if (selected) accent else accent.copy(alpha = 0.5f),
-        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
-        label = "dailyContent"
-    )
-    val surfaceHi = MaterialTheme.colorScheme.surfaceContainerHighest
-    // Soft spring fade-in of the top-right glow + accent border when Daily is selected,
-    // plus a gentle scale-pop — the "expressive" flourish.
-    val glowAlpha by animateFloatAsState(
-        targetValue = if (selected) 0.45f else 0f,
-        animationSpec = spring(stiffness = Spring.StiffnessLow),
-        label = "dailyGlow"
-    )
-    val borderAlpha by animateFloatAsState(
-        targetValue = if (selected) 0.9f else 0f,
-        animationSpec = spring(stiffness = Spring.StiffnessLow),
-        label = "dailyBorder"
-    )
-    val dailyScale by animateFloatAsState(
-        targetValue = if (selected) 1.06f else 1f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMedium
-        ),
-        label = "dailyScale"
-    )
-    val dailyGlow = remember(glowAlpha, accent) {
-        object : ShaderBrush() {
-            override fun createShader(size: Size): Shader =
-                RadialGradientShader(
-                    center = Offset(size.width, 0f),
-                    radius = size.maxDimension,
-                    colors = listOf(accent.copy(alpha = glowAlpha), Color.Transparent)
-                )
-        }
-    }
-    Box(
-        modifier = modifier
-            .graphicsLayer { scaleX = dailyScale; scaleY = dailyScale }
-            .height(64.dp)
-            // Match the nav group with a theme-coloured (accent) elevation shadow so
-            // the emphasized Daily button doesn't read as flat — and never inverts to
-            // a white halo under force-dark.
-            .shadow(
-                elevation = NavShadowElevation,
-                shape = RoundedCornerShape(NavBarRadius),
-                spotColor = shadowColor,
-                ambientColor = shadowColor
-            )
-            .clip(RoundedCornerShape(NavBarRadius))
-            // Opaque dark base so no content bleeds through the pill...
-            .background(surfaceHi)
-            // ...then a green glow on top, anchored to the top-right corner
-            // (fading to transparent) so it reads as a directional accent.
-            .background(dailyGlow)
-            .border(
-                BorderStroke(1.5.dp, accent.copy(alpha = borderAlpha)),
-                RoundedCornerShape(NavBarRadius)
-            )
-            .clickable {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                if (!selected) onSelect()
-            }
-            .padding(horizontal = horizontalPadding),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(Icons.Rounded.AutoAwesome, contentDescription = "Daily", tint = dailyContent, modifier = Modifier.size(24.dp))
-            Spacer(Modifier.height(3.dp))
-            Text("Daily", style = MaterialTheme.typography.labelMedium, color = dailyContent, maxLines = 1)
-        }
-    }
-}
-
-@Composable
-private fun NavPiece(
-    icon: ImageVector,
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val haptic = LocalHapticFeedback.current
-    // Cross-fade the icon/label colour instead of snapping.
-    val tint by animateColorAsState(
-        targetValue = if (selected) MaterialTheme.colorScheme.onSecondaryContainer
-            else MaterialTheme.colorScheme.onSurfaceVariant,
-        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
-        label = "navTint"
-    )
-    // Springy scale-pop on the icon when a tab becomes active — the "expressive" bounce.
-    val iconScale by animateFloatAsState(
-        targetValue = if (selected) 1.18f else 1f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMedium
-        ),
-        label = "navIconScale"
-    )
-    // No per-tab pill — the shared sliding indicator (in ExpressiveNavBar) draws it.
-    Box(
-        modifier = modifier
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    onClick()
-                }
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(
-                icon,
-                contentDescription = label,
-                tint = tint,
-                modifier = Modifier
-                    .size(20.dp)
-                    .graphicsLayer { scaleX = iconScale; scaleY = iconScale }
-            )
-            Spacer(Modifier.height(2.dp))
-            Text(label, style = MaterialTheme.typography.labelSmall, color = tint, maxLines = 1)
-        }
-    }
-}
-
 @OptIn(
     ExperimentalMaterial3AdaptiveApi::class,
     ExperimentalMaterial3Api::class,
@@ -593,9 +167,13 @@ fun MainScreen(
     moodViewModel: cloud.wafflecommons.pixelbrainreader.ui.mood.MoodViewModel = hiltViewModel(),
     weeklyCoachViewModel: cloud.wafflecommons.pixelbrainreader.ui.review.WeeklyCoachViewModel = hiltViewModel(),
     chatScopeViewModel: cloud.wafflecommons.pixelbrainreader.ui.ai.ChatScopeViewModel = hiltViewModel(),
-    syncMarksViewModel: SyncMarksViewModel = hiltViewModel()
+    syncMarksViewModel: SyncMarksViewModel = hiltViewModel(),
+    navViewModel: NavViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    // 13.2: the navigation's live dot (a game session running) and the rail's names (kept on the device).
+    val gameRunning by navViewModel.gameRunning.collectAsStateWithLifecycle()
+    val railExpanded by navViewModel.railExpanded.collectAsStateWithLifecycle()
     // What the last sync brought (K3, D4): marked in the file list, opened first in a note's history.
     val lastSyncDigest by syncMarksViewModel.lastSync.collectAsStateWithLifecycle()
     val changedBySync = remember(lastSyncDigest) { lastSyncDigest?.brought ?: emptySet() }
@@ -743,6 +321,18 @@ fun MainScreen(
     // the share screen (one focused flow, not a tab) hides it.
     val useRail = isWideLayout()
     val railVisible = useRail && currentRoute != Screen.Import && !GamesRoutes.isMap(currentRoute)
+    // 13.2 (the owner's extra): the phone's floating bar slides away while a page scrolls down and
+    // comes back as it scrolls up, or on a new page. The rail stays.
+    val navDensity = LocalDensity.current
+    val barHide = remember(navDensity) { NavBarHideOnScroll(thresholdPx = with(navDensity) { 24.dp.toPx() }) }
+    LaunchedEffect(currentRoute) { barHide.show() }
+    val barHiddenOffset = with(navDensity) { (ExpressiveNavBarHeight + 40.dp).toPx() } +
+        WindowInsets.navigationBars.getBottom(navDensity)
+    val barOffset by animateFloatAsState(
+        targetValue = if (barHide.hidden && !useRail) barHiddenOffset else 0f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow),
+        label = "navBarHide"
+    )
     val navigateToTab: (String) -> Unit = { route ->
         navController.navigate(route) {
             popUpTo(navController.graph.findStartDestination().id) { saveState = true }
@@ -907,13 +497,17 @@ fun MainScreen(
                 isViewingDailyNote = isViewingDailyNote,
                 order = navBarOrder,
                 onSelect = navigateToTab,
-                hidden = hiddenTabs
+                hidden = hiddenTabs,
+                gameRunning = gameRunning,
+                expanded = railExpanded,
+                onToggleExpanded = { navViewModel.setRailExpanded(!railExpanded) }
             )
         }
         Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxHeight()
+                .nestedScroll(barHide)
                 // The rail already keeps clear of the start inset (a cutout, a side nav bar).
                 .then(if (railVisible) Modifier.consumeWindowInsets(WindowInsets.safeDrawing.only(WindowInsetsSides.Start)) else Modifier)
         ) {
@@ -1602,8 +1196,11 @@ fun MainScreen(
                 isLargeScreen = isLargeScreen,
                 order = navBarOrder,
                 onSelect = navigateToTab,
-                modifier = Modifier.align(Alignment.BottomCenter),
-                hidden = hiddenTabs
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .graphicsLayer { translationY = barOffset },
+                hidden = hiddenTabs,
+                gameRunning = gameRunning
             )
         }
     }

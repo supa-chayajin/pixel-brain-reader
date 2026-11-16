@@ -155,6 +155,7 @@ fun ChatPanel(
             Column(modifier = Modifier.background(MaterialTheme.colorScheme.surface)) {
                 cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
                     title = "Neural Interface",
+                emblemKey = "Chat",
                     icon = Icons.Rounded.Psychology,
                     actions = {
                         CortexIconButton(

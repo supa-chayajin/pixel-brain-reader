@@ -195,6 +195,18 @@ class UserPreferencesRepository @Inject constructor(
         }
     }
 
+    // --- The wide window's rail (13.2, the owner's extra) ---
+    private val KEY_NAV_RAIL_EXPANDED = booleanPreferencesKey("nav_rail_expanded")
+
+    /** Whether a wide window's rail shows the tabs' names beside their icons. Off by default; this device only. */
+    val navRailExpanded: Flow<Boolean> = setting { it[KEY_NAV_RAIL_EXPANDED] ?: false }
+
+    suspend fun setNavRailExpanded(expanded: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_NAV_RAIL_EXPANDED] = expanded
+        }
+    }
+
     // --- Hybrid search (R2, 12.20; the owner's D3, 2026-11-15) ---
     private val KEY_HYBRID_SEARCH = booleanPreferencesKey("hybrid_search")
 
