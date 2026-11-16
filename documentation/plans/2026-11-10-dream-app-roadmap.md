@@ -227,7 +227,7 @@ interview the same day and the as-built notes: `2026-11-14-12.17-games.md`.
 
 - [x] **G1 Library and pages.** *(12.17.0)* Game pages found by their `game_template` key, the Games tab
       (8th; the folded bar shows four tabs), a page per game with its state, trophies and sessions.
-- [x] **G2 PlayStation Network.** *(12.17.0; blocked by Sony since late September 2026: the public client gets 4102, the owner watches for a fix)* The NPSSO pasted once, the tokens in encrypted storage, Sony's
+- [x] **G2 PlayStation Network.** *(12.17.0; blocked by Sony since late September 2026: the public client gets 4102; the owner stopped watching for a fix on 2026-11-16)* The NPSSO pasted once, the tokens in encrypted storage, Sony's
       app credentials from `local.properties`; a read-only sync at 23:40 and 06:00 and on demand;
       "PSN paused" on failure, never a blocked vault sync.
 - [x] **G3 What a sync writes.** *(12.17.0)* `10_Journal/data/games/` (snapshot, links, sessions, trophy
