@@ -11,6 +11,19 @@ Planned: `documentation/plans/2026-11-10-dream-app-roadmap.md`. Next: the second
 (a smaller embedder, days like this), the toolkit's last small wins, and the Wear OS companion
 (X1) once it has a plan.
 
+## [13.2.2] — 2026-11-16
+
+A fix the owner found on the Fold right after 13.2.1's release. Planned in
+`documentation/plans/2026-11-16-13.2.1-after-dogfooding.md`.
+
+### Fixed
+
+- **A block at the top of a scrolled page:** the small centred header (13.2) still used the
+  collapsing behaviour made for the large one. Scrolling shrank it to nothing and left its
+  status-bar strip in the scrolled colour: a block above the Projects list and the project page
+  side by side, and on Settings, Habits and every page built on the same frame. The header now
+  stays put as the page scrolls, like the Daily screen's.
+
 ## [13.2.1] — 2026-11-16
 
 After a day with 13.2 on the Fold: the owner's interview of 16 November, which also closed every
