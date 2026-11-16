@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+13.2.1, in progress: the owner's interview of 16 November, after a day with 13.2 on the Fold. It
+ships with the fixes that day of dogfooding brings. Planned in
+`documentation/plans/2026-11-16-13.2.1-after-dogfooding.md`.
+
+### Changed
+
+- **The open tab's emblem:** its shape is drawn at random each time a tab opens, never the one just
+  shown, so even the same tab changes shape from one visit to the next. Its colour follows the tab's
+  place among the tabs (primary, secondary, tertiary in turn), so any order you set reads as a
+  sequence. The tab's page header shows the same emblem. Daily keeps its turning sun.
+- **Projects, Boards and Runbooks on a big screen:**
+  - A handle on the divider between the list and an open page. A tap hides the list and the page
+    takes the whole width; another tap brings the list back. Dragging it stops at the list's width,
+    half and half (when the window leaves room for it), or the whole page. Closing the page brings
+    the list back.
+  - A page beside its list has no back arrow any more (Back and the list still close it). On a phone
+    or a portrait tablet, where the page covers the list, the arrow stays.
+
+### Fixed
+
+- A redundant annotation target in the people repository, one of the compiler's two warnings.
+
 Planned: `documentation/plans/2026-11-10-dream-app-roadmap.md`. Next: the second brain's part two
 (a smaller embedder, days like this), the toolkit's last small wins, and the Wear OS companion
 (X1) once it has a plan.
