@@ -83,6 +83,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
+import cloud.wafflecommons.pixelbrainreader.ui.components.LocalOpenTabEmblem
+import cloud.wafflecommons.pixelbrainreader.ui.components.OpenTabEmblem
+import cloud.wafflecommons.pixelbrainreader.ui.components.TabShapeDraws
 import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.adaptive.WindowAdaptiveInfo
@@ -359,6 +362,15 @@ fun MainScreen(
     val todayName = remember(today) { "$today.md" }
     val isViewingDailyNote = uiState.selectedFileName == todayName
 
+    // The open tab's emblem (13.2.1): a shape drawn each time a tab opens, never the last one, in
+    // the tone of the tab's place; the bar, the rail and the tab's page header all show it.
+    val shapeDraws = remember { TabShapeDraws() }
+    val openTab = remember(currentRoute, isViewingDailyNote, navBarOrder, hiddenTabs) {
+        openTabOf(navDestinations(currentRoute, isViewingDailyNote, navBarOrder, hiddenTabs))
+    }
+    val drawnShape = remember(openTab?.label) { if (openTab != null) shapeDraws.next() else shapeDraws.last ?: 0 }
+    val openEmblem = openTab?.let { OpenTabEmblem(it.label, it.place, drawnShape) }
+
     // -- NAVIGATION LOGIC --
     // Mobile (Compact): Default to List. Navigate to Detail only if file selected.
     // Tablet (Expanded): Default to List+Detail.
@@ -488,7 +500,7 @@ fun MainScreen(
     // and behind it — no reserved dark strip. (Content behind the bar is accepted.)
     // On a wide window the rail stands beside the content instead, and the screens
     // learn through LocalNavRail that no bar covers their bottom.
-    CompositionLocalProvider(LocalNavRail provides railVisible) {
+    CompositionLocalProvider(LocalNavRail provides railVisible, LocalOpenTabEmblem provides openEmblem) {
     Box(modifier = Modifier.fillMaxSize()) {
       Row(modifier = Modifier.fillMaxSize()) {
         if (railVisible) {
@@ -500,7 +512,8 @@ fun MainScreen(
                 hidden = hiddenTabs,
                 gameRunning = gameRunning,
                 expanded = railExpanded,
-                onToggleExpanded = { navViewModel.setRailExpanded(!railExpanded) }
+                onToggleExpanded = { navViewModel.setRailExpanded(!railExpanded) },
+                emblem = openEmblem
             )
         }
         Box(
@@ -1200,7 +1213,8 @@ fun MainScreen(
                     .align(Alignment.BottomCenter)
                     .graphicsLayer { translationY = barOffset },
                 hidden = hiddenTabs,
-                gameRunning = gameRunning
+                gameRunning = gameRunning,
+                emblem = openEmblem
             )
         }
     }

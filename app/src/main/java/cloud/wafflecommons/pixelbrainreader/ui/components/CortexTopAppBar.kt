@@ -93,13 +93,27 @@ fun CortexTopAppBar(
     }
 }
 
-/** The emblem on its expressive shape, then the emphasized headline. */
+/**
+ * The emblem on its expressive shape, then the emphasized headline. The open tab's page shows its
+ * tab's emblem, drawn for this visit (13.2.1).
+ */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun Heading(title: String, icon: ImageVector?, key: String, badgeSize: androidx.compose.ui.unit.Dp, large: Boolean) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         if (icon != null) {
-            ExpressiveBadge(icon = icon, key = key, size = badgeSize)
+            val openTab = LocalOpenTabEmblem.current?.takeIf { it.label == key }
+            if (openTab != null) {
+                ExpressiveBadge(
+                    icon = icon,
+                    key = key,
+                    size = badgeSize,
+                    tone = placeTone(openTab.place),
+                    polygon = TabEmblems.shapes[openTab.shape]
+                )
+            } else {
+                ExpressiveBadge(icon = icon, key = key, size = badgeSize)
+            }
             Spacer(Modifier.width(if (large) 14.dp else 12.dp))
         }
         Text(

@@ -98,8 +98,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
-import cloud.wafflecommons.pixelbrainreader.ui.components.badgeShapeFor
-import cloud.wafflecommons.pixelbrainreader.ui.components.toneFor
+import cloud.wafflecommons.pixelbrainreader.ui.components.OpenTabEmblem
+import cloud.wafflecommons.pixelbrainreader.ui.components.TabEmblems
+import cloud.wafflecommons.pixelbrainreader.ui.components.placeTone
 import cloud.wafflecommons.pixelbrainreader.ui.games.GamesRoutes
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
@@ -111,10 +112,12 @@ import kotlin.math.abs
  * extras). The floating bar on a phone and a portrait tablet, the rail on a wide window; the tabs,
  * their order and the four-tab fold are unchanged (settled decision #17, the owner's order).
  *
- *  - The open tab sits on its page's emblem: the same expressive shape and tone as the page header's
- *    (`badgeShapeFor` / `toneFor` of the tab's name), its icon filled while the others are outlined.
- *    Between tabs the emblem slides, stretching like jelly with the spring's speed, then pops into
- *    the new tab's shape and colour as it arrives.
+ *  - The open tab sits on an emblem, its icon filled while the others are outlined. Since 13.2.1
+ *    (the owner's picks of 2026-11-16) the emblem's shape is drawn at random each time a tab
+ *    opens, never the one shown just before, and its colour is the tone of the tab's place
+ *    ([OpenTabEmblem], drawn in MainScreen); the tab's page header shows the same emblem. Between
+ *    tabs the emblem slides, stretching like jelly with the spring's speed, then pops into the new
+ *    shape and colour as it arrives.
  *  - Daily is a sun shape that turns while Daily is open.
  *  - A running game session puts a pulsing dot on Games.
  *  - The rail widens to show the names beside the icons (a menu button at its top, kept on the
@@ -176,6 +179,13 @@ internal fun navDestinations(
         )
     ) { it.route }.filterNot { it.route in hidden }
 
+/** The open tab: its name and its place among the tabs as shown (0 for the first). */
+internal data class OpenTab(val label: String, val place: Int)
+
+/** The open tab among [destinations] ([navDestinations], in their order), or null (Daily, a page that isn't a tab). */
+internal fun openTabOf(destinations: List<NavDest>): OpenTab? =
+    destinations.withIndex().firstOrNull { it.value.selected }?.let { OpenTab(it.value.label, it.index) }
+
 /** How many tabs the floating bar shows below 600 dp (the folded phone). */
 private const val FOLDED_TABS = 4
 
@@ -216,11 +226,14 @@ internal fun ExpressiveNavBar(
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier,
     hidden: Set<String> = emptySet(),
-    gameRunning: Boolean = false
+    gameRunning: Boolean = false,
+    /** The open tab's emblem, drawn for this visit (null on Daily). */
+    emblem: OpenTabEmblem? = null
 ) {
     val shadowColor = navShadowColor()
     // The first four of the user's order = the folded set (four since 12.17, owner's D9: Games made
-    // eight tabs, and three left too many out of reach). Unfolded reveals the rest.
+    // eight tabs, and three left too many out of reach). Unfolded reveals the rest. A tab's index
+    // here is its place: the folded set is the first places.
     val ordered = navDestinations(currentRoute, isViewingDailyNote, order, hidden, gameRunning)
     val regular = if (isLargeScreen) ordered else ordered.take(FOLDED_TABS)
 
@@ -253,16 +266,18 @@ internal fun ExpressiveNavBar(
                 val centerY = with(LocalDensity.current) { (BarEmblemTop + BarEmblem / 2).toPx() }
                 SlidingEmblem(
                     selectedIndex = regular.indexOfFirst { it.selected },
-                    keys = regular.map { it.label },
+                    count = regular.size,
+                    emblem = emblem,
                     center = { i -> Offset((i + 0.5f) * itemWidthPx, centerY) },
                     vertical = false,
                     size = BarEmblem,
                     stepPx = itemWidthPx
                 )
                 Row(modifier = Modifier.fillMaxSize()) {
-                    regular.forEach { item ->
+                    regular.forEachIndexed { place, item ->
                         NavPiece(
                             item = item,
+                            place = place,
                             onClick = { if (!item.selected) onSelect(item.route) },
                             emblem = BarEmblem,
                             iconSize = BarIcon,
@@ -298,7 +313,9 @@ internal fun ExpressiveNavRail(
     hidden: Set<String> = emptySet(),
     gameRunning: Boolean = false,
     expanded: Boolean = false,
-    onToggleExpanded: () -> Unit = {}
+    onToggleExpanded: () -> Unit = {},
+    /** The open tab's emblem, drawn for this visit (null on Daily). */
+    emblem: OpenTabEmblem? = null
 ) {
     val shadowColor = navShadowColor()
     val regular = navDestinations(currentRoute, isViewingDailyNote, order, hidden, gameRunning)
@@ -365,16 +382,18 @@ internal fun ExpressiveNavRail(
                 Box(modifier = Modifier.padding(NavInnerPad)) {
                     SlidingEmblem(
                         selectedIndex = regular.indexOfFirst { it.selected },
-                        keys = regular.map { it.label },
+                        count = regular.size,
+                        emblem = emblem,
                         center = { i -> Offset(centerX, i * itemPx + centerInItem) },
                         vertical = true,
                         size = RailEmblem,
                         stepPx = itemPx
                     )
                     Column {
-                        regular.forEach { item ->
+                        regular.forEachIndexed { place, item ->
                             NavPiece(
                                 item = item,
+                                place = place,
                                 onClick = { if (!item.selected) onSelect(item.route) },
                                 emblem = RailEmblem,
                                 iconSize = RailIcon,
@@ -391,24 +410,25 @@ internal fun ExpressiveNavRail(
 }
 
 /**
- * The open tab's emblem: the expressive shape and tone of its page's header emblem, sliding between
- * the tabs. On the way it stretches like jelly with the spring's speed; as it arrives it pops into
- * the new tab's shape and colour. It fades out while Daily (apart from the group) is open, parked
- * where it was so it slides back from there.
+ * The open tab's emblem, sliding between the tabs. On the way it stretches like jelly with the
+ * spring's speed; as it arrives it pops into the shape drawn for this visit and the tone of the
+ * tab's place ([emblem]), so it changes shape at each opening, even back on the same tab. It fades
+ * out while Daily (apart from the group) is open, parked where it was so it slides back from there.
  */
 @Composable
 private fun SlidingEmblem(
     selectedIndex: Int,
-    keys: List<String>,
+    count: Int,
+    emblem: OpenTabEmblem?,
     center: (Int) -> Offset,
     vertical: Boolean,
     size: Dp,
     stepPx: Float
 ) {
-    if (keys.isEmpty()) return
+    if (count <= 0) return
     var parked by remember { mutableIntStateOf(selectedIndex.coerceAtLeast(0)) }
     LaunchedEffect(selectedIndex) { if (selectedIndex >= 0) parked = selectedIndex }
-    val index = parked.coerceIn(0, keys.lastIndex)
+    val index = parked.coerceIn(0, count - 1)
     val target = center(index)
     val along = if (vertical) target.y else target.x
     val across by animateFloatAsState(
@@ -418,15 +438,15 @@ private fun SlidingEmblem(
     )
     val position = remember { Animatable(along) }
     val pop = remember { Animatable(1f) }
-    var shownKey by remember { mutableStateOf(keys[index]) }
-    LaunchedEffect(index, along, keys) {
-        val key = keys[index]
+    // What the emblem shows: the last drawn emblem it reached (kept while Daily is open).
+    var shown by remember { mutableStateOf(emblem) }
+    LaunchedEffect(index, along, emblem) {
         coroutineScope {
             launch { position.animateTo(along, spring(dampingRatio = 0.62f, stiffness = 420f)) }
             // The new shape arrives with the emblem, not when it leaves.
             snapshotFlow { abs(position.value - along) }.first { it < stepPx * 0.3f }
-            if (key != shownKey) {
-                shownKey = key
+            if (emblem != null && emblem != shown) {
+                shown = emblem
                 pop.snapTo(0.7f)
                 pop.animateTo(1f, spring(dampingRatio = 0.4f, stiffness = 520f))
             }
@@ -438,11 +458,11 @@ private fun SlidingEmblem(
         label = "emblemAlpha"
     )
     val color by animateColorAsState(
-        targetValue = toneFor(shownKey).container,
+        targetValue = placeTone(shown?.place ?: index).container,
         animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
         label = "emblemColor"
     )
-    val shape = badgeShapeFor(shownKey).toShape()
+    val shape = TabEmblems.shapes[(shown?.shape ?: 0).coerceIn(0, TabEmblems.shapes.lastIndex)].toShape()
     val half = with(LocalDensity.current) { size.toPx() / 2f }
     Box(
         modifier = Modifier
@@ -466,6 +486,8 @@ private fun SlidingEmblem(
 @Composable
 private fun NavPiece(
     item: NavDest,
+    /** Its place among the tabs as shown: the open tab's icon takes the place's tone. */
+    place: Int,
     onClick: () -> Unit,
     emblem: Dp,
     iconSize: Dp,
@@ -475,7 +497,7 @@ private fun NavPiece(
 ) {
     val haptic = LocalHapticFeedback.current
     val tint by animateColorAsState(
-        targetValue = if (item.selected) toneFor(item.label).content else MaterialTheme.colorScheme.onSurfaceVariant,
+        targetValue = if (item.selected) placeTone(place).content else MaterialTheme.colorScheme.onSurfaceVariant,
         animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
         label = "navTint"
     )
