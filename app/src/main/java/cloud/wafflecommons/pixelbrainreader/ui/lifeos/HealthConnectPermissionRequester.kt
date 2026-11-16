@@ -4,6 +4,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -53,7 +54,7 @@ fun RequestHealthPermissions(onResult: (Boolean) -> Unit) {
             title = { Text("Health Data Access") },
             text = { Text("PixelBrainReader needs access to your Pixel Watch vitals (HRV, Sleep, Exercise), as well as your logged Hydration, and Weight. Access to nutrition data is required to automatically track your calories and validate your nutrition goals.") },
             confirmButton = {
-                Button(onClick = { permissionLauncher.launch(permissions) }) {
+                Button(onClick = { permissionLauncher.launch(permissions) }, shapes = ButtonDefaults.shapes()) {
                     Text("Grant Access")
                 }
             }

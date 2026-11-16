@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package cloud.wafflecommons.pixelbrainreader.ui.guard
 
 import androidx.compose.foundation.layout.Arrangement
@@ -35,6 +37,9 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.LoadingIndicator
+import cloud.wafflecommons.pixelbrainreader.ui.components.switchThumb
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -61,6 +66,7 @@ import cloud.wafflecommons.pixelbrainreader.ui.components.TextPromptDialog
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import androidx.compose.material.icons.rounded.Security
 
 /**
  * The confidentiality guard: what is held back from the git remote and why, the protected names,
@@ -84,7 +90,7 @@ fun ConfidentialityScreen(
     var addingTerm by remember { mutableStateOf(false) }
     var movingPath by remember { mutableStateOf<String?>(null) }
 
-    FormScaffold(title = "Confidentiality", onBack = onBack, snackbarHostState = snackbarHostState) {
+    FormScaffold(title = "Confidentiality", icon = Icons.Rounded.Security, onBack = onBack, snackbarHostState = snackbarHostState) {
         if (settingsWereReset) {
             SectionCard(
                 title = "Settings were reset",
@@ -128,7 +134,7 @@ fun ConfidentialityScreen(
             icon = Icons.Rounded.Key,
             subtitle = "Access tokens and API keys (GitHub, GitLab, AWS, Google, Slack, Stripe, AI providers…), private keys, " +
                 "JSON Web Tokens, passwords in URLs, and password or token values that look generated.",
-            trailing = { Switch(checked = settings.detectSecrets, onCheckedChange = viewModel::setDetectSecrets) }
+            trailing = { Switch(checked = settings.detectSecrets, thumbContent = switchThumb(settings.detectSecrets), onCheckedChange = viewModel::setDetectSecrets) }
         )
 
         SectionCard(
@@ -141,7 +147,7 @@ fun ConfidentialityScreen(
             }
         ) {
             if (settings.allowed.isNotEmpty()) {
-                TextButton(onClick = viewModel::clearAllowed) { Text("Clear all") }
+                TextButton(onClick = viewModel::clearAllowed, shapes = ButtonDefaults.shapes()) { Text("Clear all") }
             }
             Text(
                 "The guard stops what a change adds. Earlier versions of a note stay in the git history.",
@@ -191,9 +197,9 @@ private fun StatusCard(held: List<GuardFinding>, checking: Boolean, lastCheck: L
         },
         trailing = {
             if (checking) {
-                CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                LoadingIndicator(modifier = Modifier.size(24.dp))
             } else {
-                TextButton(onClick = onCheck) { Text("Check again") }
+                TextButton(onClick = onCheck, shapes = ButtonDefaults.shapes()) { Text("Check again") }
             }
         }
     )
@@ -221,13 +227,13 @@ private fun HeldNoteCard(
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (path.endsWith(".md")) {
-                    OutlinedButton(onClick = onOpen) {
+                    OutlinedButton(onClick = onOpen, shapes = ButtonDefaults.shapes()) {
                         Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
                         Text("Open")
                     }
                     if (!path.startsWith("99_Private/")) {
-                        OutlinedButton(onClick = onMoveToPrivate) {
+                        OutlinedButton(onClick = onMoveToPrivate, shapes = ButtonDefaults.shapes()) {
                             Icon(Icons.Rounded.Lock, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
                             Text("Move to private")
@@ -269,7 +275,7 @@ private fun FindingRow(finding: GuardFinding, onAllow: (Boolean) -> Unit) {
             )
         }
         Box {
-            TextButton(onClick = { menuOpen = true }) { Text("Allow") }
+            TextButton(onClick = { menuOpen = true }, shapes = ButtonDefaults.shapes()) { Text("Allow") }
             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                 DropdownMenuItem(
                     text = { Text("In this note") },
@@ -321,11 +327,11 @@ private fun MoveToPrivateDialog(path: String, onConfirm: (String, CharArray) -> 
         },
         confirmButton = {
             TextButton(
-                enabled = title.isNotBlank() && password.isNotEmpty(),
+                enabled = title.isNotBlank() && password.isNotEmpty(), shapes = ButtonDefaults.shapes(),
                 onClick = { onConfirm(title, password.toCharArray()) }
             ) { Text("Move") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = { TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text("Cancel") } }
     )
 }
 

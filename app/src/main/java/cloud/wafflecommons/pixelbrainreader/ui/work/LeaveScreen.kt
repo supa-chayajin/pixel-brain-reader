@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package cloud.wafflecommons.pixelbrainreader.ui.work
 
 import androidx.compose.foundation.layout.Arrangement
@@ -23,6 +25,9 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.LoadingIndicator
+import cloud.wafflecommons.pixelbrainreader.ui.components.switchThumb
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -166,7 +171,7 @@ fun LeaveScreen(
     var scopeMenu by remember { mutableStateOf(false) }
     var pickPeriod by remember { mutableStateOf(false) }
 
-    FormScaffold(title = "Leave & handover", onBack = onBack, snackbarHostState = snackbarHostState) {
+    FormScaffold(title = "Leave & handover", icon = Icons.Rounded.BeachAccess, onBack = onBack, snackbarHostState = snackbarHostState) {
         // Both documents are inbox notes: never written from a read-only device (12.15, S2).
         val readOnly = VaultWriteGate.readOnly
         if (readOnly) ReadOnlyNotice()
@@ -202,19 +207,19 @@ fun LeaveScreen(
                     Text("Add a summary", style = MaterialTheme.typography.bodyLarge)
                     Text("Written on the device by Gemini Nano, marked as such.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                Switch(checked = withSummary, onCheckedChange = { withSummary = it }, enabled = !readOnly)
+                Switch(checked = withSummary, thumbContent = switchThumb(withSummary), onCheckedChange = { withSummary = it }, enabled = !readOnly)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Button(
-                    enabled = !readOnly && !working && scope != null && period != null,
+                    enabled = !readOnly && !working && scope != null && period != null, shapes = ButtonDefaults.shapes(),
                     onClick = {
                         val (start, end) = period ?: return@Button
                         viewModel.createHandover(scope ?: return@Button, start, end, withSummary, onOpenNote)
                     }
                 ) { Text("Write the handover") }
-                if (working) CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                if (working) LoadingIndicator(modifier = Modifier.size(24.dp))
             }
-            TextButton(onClick = onManageLeave) { Text("Manage leave periods") }
+            TextButton(onClick = onManageLeave, shapes = ButtonDefaults.shapes()) { Text("Manage leave periods") }
         }
         SectionCard(
             title = "Back from leave",
@@ -224,7 +229,7 @@ fun LeaveScreen(
             } ?: "In the ${cloud.wafflecommons.pixelbrainreader.data.work.LeaveDocuments.RETURN_WINDOW_DAYS} days after a leave, a briefing of what changed in your work folders shows here and on the Daily screen."
         ) {
             if (returning != null) {
-                FilledTonalButton(enabled = !readOnly && !working, onClick = { viewModel.createBriefing(withSummary, onOpenNote) }) { Text("Brief me") }
+                FilledTonalButton(enabled = !readOnly && !working, shapes = ButtonDefaults.shapes(), onClick = { viewModel.createBriefing(withSummary, onOpenNote) }) { Text("Brief me") }
             }
         }
     }
@@ -258,7 +263,7 @@ fun BackFromLeaveCard(onOpenNote: (String) -> Unit, viewModel: LeaveViewModel = 
                 color = MaterialTheme.colorScheme.onTertiaryContainer
             )
             if (!VaultWriteGate.readOnly) {
-                FilledTonalButton(enabled = !working, onClick = { viewModel.createBriefing(false, onOpenNote) }) { Text("Brief me") }
+                FilledTonalButton(enabled = !working, shapes = ButtonDefaults.shapes(), onClick = { viewModel.createBriefing(false, onOpenNote) }) { Text("Brief me") }
             }
         }
     }

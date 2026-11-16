@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package cloud.wafflecommons.pixelbrainreader.ui.gamification
 
 import androidx.compose.animation.core.animateFloatAsState
@@ -9,6 +11,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material3.*
+import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -84,7 +87,7 @@ fun HeroCard(
                     animationSpec = MaterialTheme.motionScheme.slowSpatialSpec(),
                     label = "xp"
                 )
-                LinearProgressIndicator(
+                LinearWavyProgressIndicator(
                     progress = { animatedXp },
                     modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
                     color = SemanticPalette.XpGold,

@@ -19,6 +19,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import androidx.compose.material3.IconButtonDefaults
+import cloud.wafflecommons.pixelbrainreader.ui.components.connectedShapes
+import cloud.wafflecommons.pixelbrainreader.ui.components.ConnectedButtonRow
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
 import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.sync.SyncState
 import cloud.wafflecommons.pixelbrainreader.ui.components.ReadOnlyNotice
@@ -40,6 +45,7 @@ import cloud.wafflecommons.pixelbrainreader.data.model.HabitConfig
 import cloud.wafflecommons.pixelbrainreader.data.model.HabitStatus
 import cloud.wafflecommons.pixelbrainreader.data.model.HabitType
 import cloud.wafflecommons.pixelbrainreader.ui.theme.SemanticPalette
+import androidx.compose.material.icons.rounded.DateRange
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -65,11 +71,12 @@ fun HabitDashboardScreen(
         topBar = {
             cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
                 title = "Habits",
+                icon = Icons.Rounded.DateRange,
                 subtitle = "${todayHabits.count { it.isCompletedToday }}/${todayHabits.size} done today",
                 scrollBehavior = scrollBehavior,
                 actions = {
                     FilledTonalIconButton(
-                        onClick = onNavigateToStats,
+                        onClick = onNavigateToStats, shapes = IconButtonDefaults.shapes(),
                         colors = IconButtonDefaults.filledTonalIconButtonColors(
                             containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                             contentColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -135,22 +142,28 @@ fun HabitDashboardScreen(
 
                 // View toggle: today's scheduled habits vs. every habit.
                 item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
-                    SingleChoiceSegmentedButtonRow(
+                    ConnectedButtonRow(
                         modifier = Modifier
                             // Two segments read as one control up to this width, centred beyond it.
                             .centeredMaxWidth(480.dp)
                             .padding(horizontal = 16.dp, vertical = 4.dp)
                     ) {
-                        SegmentedButton(
-                            selected = !showAll,
-                            onClick = { showAll = false },
-                            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2)
-                        ) { Text("Today") }
-                        SegmentedButton(
-                            selected = showAll,
-                            onClick = { showAll = true },
-                            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2)
-                        ) { Text("All (${state.habits.size})") }
+                        ToggleButton(
+                            checked = !showAll,
+                            onCheckedChange = { showAll = false },
+                            shapes = connectedShapes(0, 2),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Today")
+                        }
+                        ToggleButton(
+                            checked = showAll,
+                            onCheckedChange = { showAll = true },
+                            shapes = connectedShapes(1, 2),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("All (${state.habits.size})")
+                        }
                     }
                 }
 

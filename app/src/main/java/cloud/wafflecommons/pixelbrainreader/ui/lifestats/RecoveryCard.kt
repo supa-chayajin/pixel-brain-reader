@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package cloud.wafflecommons.pixelbrainreader.ui.lifestats
 
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -21,6 +23,8 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -100,7 +104,7 @@ fun RecoveryCard(viewModel: RecoveryViewModel = hiltViewModel()) {
     StatsCard(title = "Recovery", icon = Icons.Rounded.MonitorHeart, accent = ChartPalette.HeartRate, trailing = "last night") {
         val readout = state.readout
         if (state.loading || readout == null) {
-            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            LinearWavyProgressIndicator(modifier = Modifier.fillMaxWidth())
         } else {
             StatusLine(readout)
             if (readout.status != RecoveryStatus.NO_DATA) {
@@ -146,7 +150,7 @@ fun RecoveryCard(viewModel: RecoveryViewModel = hiltViewModel()) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            FilledTonalButton(onClick = { permissionLauncher.launch(viewModel.permissions()) }) {
+            FilledTonalButton(onClick = { permissionLauncher.launch(viewModel.permissions()) }, shapes = ButtonDefaults.shapes()) {
                 Text("Allow in Health Connect")
             }
         }

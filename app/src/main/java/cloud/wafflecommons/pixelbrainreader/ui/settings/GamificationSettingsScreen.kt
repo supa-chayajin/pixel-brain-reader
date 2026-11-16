@@ -31,6 +31,7 @@ import cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry
 import cloud.wafflecommons.pixelbrainreader.ui.utils.HapticHelper.performHapticClick
 import cloud.wafflecommons.pixelbrainreader.ui.utils.HapticHelper.performHapticSuccess
 import cloud.wafflecommons.pixelbrainreader.ui.utils.HapticHelper.performHapticTick
+import androidx.compose.material.icons.rounded.EmojiEvents
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -52,6 +53,7 @@ fun GamificationSettingsScreen(
         topBar = {
             CortexTopAppBar(
                 title = "RPG Engine Rules",
+                icon = Icons.Rounded.EmojiEvents,
                 navigationIcon = {
                     CortexIconButton(onClick = onNavigateBack) {
                         Icon(Icons.Default.Close, contentDescription = "Close")

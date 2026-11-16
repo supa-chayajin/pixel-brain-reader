@@ -46,6 +46,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberBottomSheetState
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -174,6 +175,7 @@ fun BoardsScreen(onBack: () -> Unit, onOpenBoard: (String) -> Unit, selected: St
 
     FormScaffold(
         title = "Boards",
+        icon = Icons.Rounded.ViewKanban,
         onBack = onBack,
         actions = { if (editable) CortexIconButton(onClick = { adding = true }) { Icon(Icons.Rounded.Add, contentDescription = "Add a board") } }
     ) {
@@ -192,7 +194,7 @@ fun BoardsScreen(onBack: () -> Unit, onOpenBoard: (String) -> Unit, selected: St
                 subtitle = board,
                 selected = board == selected,
                 modifier = Modifier.clickable { onOpenBoard(board) },
-                trailing = { if (editable) TextButton(onClick = { viewModel.removeBoard(board) }) { Text("Remove") } }
+                trailing = { if (editable) TextButton(onClick = { viewModel.removeBoard(board) }, shapes = ButtonDefaults.shapes()) { Text("Remove") } }
             )
         }
     }
@@ -228,8 +230,9 @@ fun BoardScreen(folder: String, onBack: () -> Unit, onOpenNote: (String) -> Unit
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(folder.substringAfterLast('/'), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+            cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
+                title = folder.substringAfterLast('/'),
+                icon = Icons.Rounded.ViewKanban,
                 navigationIcon = { CortexIconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") } },
                 actions = {
                     CortexIconButton(onClick = { showArchived = !showArchived }) {
@@ -321,7 +324,7 @@ private fun ColumnHeader(column: BoardColumn, config: BoardsConfig, board: Strin
             if (over) Text("Over its limit: finish one before starting another.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
         }
         if (editable && status != null && status != StatusColumn.ARCHIVE) {
-            TextButton(onClick = { onSetLimit(status) }) { Text(if (limit == null) "Set a limit" else "Limit") }
+            TextButton(onClick = { onSetLimit(status) }, shapes = ButtonDefaults.shapes()) { Text(if (limit == null) "Set a limit" else "Limit") }
         }
     }
 }
@@ -344,8 +347,8 @@ private fun WipLimitDialog(column: StatusColumn, current: Int?, onSave: (Int) ->
                 )
             }
         },
-        confirmButton = { TextButton(onClick = { onSave(text.toIntOrNull() ?: 0) }) { Text("Save") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        confirmButton = { TextButton(onClick = { onSave(text.toIntOrNull() ?: 0) }, shapes = ButtonDefaults.shapes()) { Text("Save") } },
+        dismissButton = { TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text("Cancel") } }
     )
 }
 
@@ -469,12 +472,12 @@ private fun CardSheet(
                     onClick = { pickTarget = true },
                     label = { Text(target?.let { "Due ${it.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM))}" } ?: "Set a target date") }
                 )
-                if (target != null && editable) TextButton(onClick = { target = null }) { Text("Clear") }
+                if (target != null && editable) TextButton(onClick = { target = null }, shapes = ButtonDefaults.shapes()) { Text("Clear") }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onOpen) { Text("Open note") }
+                OutlinedButton(onClick = onOpen, shapes = ButtonDefaults.shapes()) { Text("Open note") }
                 Box(Modifier.weight(1f))
-                if (editable) Button(onClick = { onSave(nextStep, blockers, target) }) { Text("Save") }
+                if (editable) Button(onClick = { onSave(nextStep, blockers, target) }, shapes = ButtonDefaults.shapes()) { Text("Save") }
             }
         }
     }

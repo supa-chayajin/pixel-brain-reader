@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package cloud.wafflecommons.pixelbrainreader.ui.sync
 
 import androidx.compose.foundation.background
@@ -29,6 +31,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -173,8 +177,8 @@ class SyncConflictViewModel @Inject constructor(
 @Composable
 fun SyncConflictScreen(onBack: () -> Unit, viewModel: SyncConflictViewModel = hiltViewModel()) {
     val ui by viewModel.ui.collectAsStateWithLifecycle()
-    FormScaffold(title = "Sync conflict", onBack = onBack) {
-        if (ui.loading || ui.resolving) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+    FormScaffold(title = "Sync conflict", icon = Icons.Rounded.SyncProblem, onBack = onBack) {
+        if (ui.loading || ui.resolving) LinearWavyProgressIndicator(modifier = Modifier.fillMaxWidth())
         val pushed = ui.pushed
         if (pushed != null) {
             Text(
@@ -182,7 +186,7 @@ fun SyncConflictScreen(onBack: () -> Unit, viewModel: SyncConflictViewModel = hi
                 else "Resolved on this phone. GitHub changed again meanwhile: the sync starting now sends it.",
                 style = MaterialTheme.typography.bodyLarge
             )
-            Button(onClick = onBack) { Text("Done") }
+            Button(onClick = onBack, shapes = ButtonDefaults.shapes()) { Text("Done") }
             return@FormScaffold
         }
         if (ui.loading && ui.files.isEmpty()) return@FormScaffold
@@ -193,13 +197,13 @@ fun SyncConflictScreen(onBack: () -> Unit, viewModel: SyncConflictViewModel = hi
         if (ui.files.isEmpty()) {
             if (ui.error != null) {
                 Text(ui.error.orEmpty(), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
-                TextButton(onClick = { viewModel.load() }) { Text("Try again") }
+                TextButton(onClick = { viewModel.load() }, shapes = ButtonDefaults.shapes()) { Text("Try again") }
             } else {
                 Text(
                     "GitHub's side changed since the sync stopped, and nothing conflicts any more.",
                     style = MaterialTheme.typography.bodyLarge
                 )
-                Button(onClick = viewModel::resolve, enabled = !ui.resolving, modifier = Modifier.fillMaxWidth()) { Text("Resume syncing") }
+                Button(onClick = viewModel::resolve, shapes = ButtonDefaults.shapes(), enabled = !ui.resolving, modifier = Modifier.fillMaxWidth()) { Text("Resume syncing") }
             }
             return@FormScaffold
         }
@@ -218,7 +222,7 @@ fun SyncConflictScreen(onBack: () -> Unit, viewModel: SyncConflictViewModel = hi
         }
         ui.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
         Button(
-            onClick = viewModel::resolve,
+            onClick = viewModel::resolve, shapes = ButtonDefaults.shapes(),
             enabled = ui.files.all { it.path in viewModel.choices } && !ui.resolving && !ui.loading,
             modifier = Modifier.fillMaxWidth()
         ) { Text("Resolve and push") }
@@ -382,8 +386,8 @@ private fun EditConflictDialog(name: String, text: String, onTextChange: (String
                 )
             }
         },
-        confirmButton = { TextButton(onClick = onSave) { Text("Use this text") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        confirmButton = { TextButton(onClick = onSave, shapes = ButtonDefaults.shapes()) { Text("Use this text") } },
+        dismissButton = { TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text("Cancel") } }
     )
 }
 
@@ -435,7 +439,7 @@ fun SyncConflictBanner(pending: PendingConflict, onResolve: () -> Unit, modifier
                 color = MaterialTheme.colorScheme.onErrorContainer,
                 modifier = Modifier.weight(1f)
             )
-            TextButton(onClick = onResolve) { Text("Resolve") }
+            TextButton(onClick = onResolve, shapes = ButtonDefaults.shapes()) { Text("Resolve") }
         }
     }
 }

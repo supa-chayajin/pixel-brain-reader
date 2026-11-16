@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package cloud.wafflecommons.pixelbrainreader.ui.mood
 
 import androidx.compose.animation.animateColorAsState
@@ -17,6 +19,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
+import androidx.compose.material3.LoadingIndicator
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
@@ -187,11 +191,11 @@ fun MoodCheckInSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
-                shape = MaterialTheme.shapes.medium,
+                shapes = ButtonDefaults.shapes(shape = MaterialTheme.shapes.medium),
                 colors = ButtonDefaults.buttonColors(containerColor = moodColor, contentColor = onMoodColor)
             ) {
                 if (uiState.isLoading) {
-                    CircularProgressIndicator(modifier = Modifier.size(24.dp), color = onMoodColor)
+                    LoadingIndicator(modifier = Modifier.size(24.dp), color = onMoodColor)
                 } else {
                     Text("Save Mood", style = MaterialTheme.typography.titleMedium)
                 }

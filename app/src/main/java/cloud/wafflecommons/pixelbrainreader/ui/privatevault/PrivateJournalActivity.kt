@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package cloud.wafflecommons.pixelbrainreader.ui.privatevault
 
 import android.content.Intent
@@ -36,6 +38,9 @@ import androidx.compose.material.icons.filled.Password
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.*
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.LinearWavyProgressIndicator
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.lifecycle.Lifecycle
@@ -77,6 +82,7 @@ import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.concurrent.Executor
 import javax.inject.Inject
+import androidx.compose.material.icons.rounded.Lock
 
 @AndroidEntryPoint
 class PrivateJournalActivity : FragmentActivity() {
@@ -285,10 +291,10 @@ fun PrivateVaultScreen(
                         viewModel.createNote(filename)
                         showCreateDialog = false
                     }
-                }) { Text("Create") }
+                }, shapes = ButtonDefaults.shapes()) { Text("Create") }
             },
             dismissButton = {
-                TextButton(onClick = { showCreateDialog = false }) { Text("Cancel") }
+                TextButton(onClick = { showCreateDialog = false }, shapes = ButtonDefaults.shapes()) { Text("Cancel") }
             }
         )
     }
@@ -341,7 +347,7 @@ fun PrivateVaultScreen(
                             onAuthenticate()
                         },
                         modifier = Modifier.fillMaxWidth().height(56.dp),
-                        shape = MaterialTheme.shapes.large
+                        shapes = ButtonDefaults.shapes(shape = MaterialTheme.shapes.large)
                     ) {
                         Text(unlockLabel)
                     }
@@ -374,7 +380,7 @@ fun PrivateVaultScreen(
                     onClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         viewModel.unlockWithPassword()
-                    },
+                    }, shapes = ButtonDefaults.shapes(),
                     enabled = state.passwordInput.isNotEmpty(),
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -431,18 +437,11 @@ fun PrivateVaultScreen(
             else -> Scaffold(
                 topBar = {
                     Column {
-                        TopAppBar(
-                            title = {
-                                Column {
-                                    Text("Private Vault", fontWeight = FontWeight.SemiBold)
-                                    Text(
-                                        if (tab == JournalTab.NOTES) "${state.files.size} secure notes"
-                                        else if (people.people.size == 1) "1 person" else "${people.people.size} people",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            },
+                        cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
+                            title = "Private Vault",
+                            subtitle = if (tab == JournalTab.NOTES) "${state.files.size} secure notes"
+                                else if (people.people.size == 1) "1 person" else "${people.people.size} people",
+                            icon = Icons.Rounded.Lock,
                             navigationIcon = {
                                 CortexIconButton(onClick = onBack) {
                                     Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
@@ -590,7 +589,7 @@ private fun JournalMenu(viewModel: PrivateJournalViewModel) {
                 }
             },
             confirmButton = {
-                TextButton(onClick = { choosingDelay = false }) { Text("Done") }
+                TextButton(onClick = { choosingDelay = false }, shapes = ButtonDefaults.shapes()) { Text("Done") }
             }
         )
     }
@@ -659,7 +658,7 @@ private fun ChangePasswordDialog(viewModel: PrivateJournalViewModel, onClose: ()
                             modifier = Modifier.fillMaxWidth()
                         )
                         if (state is PrivateJournalViewModel.PasswordChange.Working) {
-                            LinearProgressIndicator(
+                            LinearWavyProgressIndicator(
                                 progress = { if (state.total > 0) state.done.toFloat() / state.total else 0f },
                                 modifier = Modifier.fillMaxWidth()
                             )
@@ -677,17 +676,17 @@ private fun ChangePasswordDialog(viewModel: PrivateJournalViewModel, onClose: ()
         },
         confirmButton = {
             if (change is PrivateJournalViewModel.PasswordChange.Done) {
-                TextButton(onClick = close) { Text("Done") }
+                TextButton(onClick = close, shapes = ButtonDefaults.shapes()) { Text("Done") }
             } else {
                 Button(
-                    onClick = { viewModel.changePassword(current, new, repeat) },
+                    onClick = { viewModel.changePassword(current, new, repeat) }, shapes = ButtonDefaults.shapes(),
                     enabled = !working && current.isNotEmpty() && new.isNotEmpty() && repeat.isNotEmpty()
                 ) { Text("Change") }
             }
         },
         dismissButton = {
             if (change !is PrivateJournalViewModel.PasswordChange.Done) {
-                TextButton(onClick = close, enabled = !working) { Text("Cancel") }
+                TextButton(onClick = close, shapes = ButtonDefaults.shapes(), enabled = !working) { Text("Cancel") }
             }
         }
     )
@@ -782,14 +781,14 @@ fun PrivateEditor(
                     onClick = {
                         showDeleteDialog = false
                         onDelete()
-                    },
+                    }, shapes = ButtonDefaults.shapes(),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) {
                     Text("Delete")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) {
+                TextButton(onClick = { showDeleteDialog = false }, shapes = ButtonDefaults.shapes()) {
                     Text("Cancel")
                 }
             }
@@ -877,14 +876,9 @@ fun PrivateEditor(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { 
-                    Text(
-                        title,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    ) 
-                },
+            cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
+                title = title,
+                icon = Icons.Rounded.Lock,
                 navigationIcon = {
                     CortexIconButton(onClick = onClose) {
                          Icon(Icons.Default.Close, "Close")
@@ -903,10 +897,7 @@ fun PrivateEditor(
                             enabled = hasSelection && !isBeautifying
                         ) {
                             if (isBeautifying) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(20.dp),
-                                    strokeWidth = 2.dp
-                                )
+                                LoadingIndicator(modifier = Modifier.size(20.dp))
                             } else {
                                 Icon(Icons.Default.AutoFixHigh, contentDescription = "Beautify selection as Markdown")
                             }

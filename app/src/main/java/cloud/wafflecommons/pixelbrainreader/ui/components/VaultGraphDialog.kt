@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package cloud.wafflecommons.pixelbrainreader.ui.components
 
 import androidx.compose.foundation.BorderStroke
@@ -9,6 +11,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.LoadingIndicator
+import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,7 +69,7 @@ fun VaultGraphDialog(
                             fontWeight = FontWeight.Bold
                         )
                     }
-                    IconButton(onClick = onRefresh, enabled = !isLoading) {
+                    IconButton(onClick = onRefresh, shapes = IconButtonDefaults.shapes(), enabled = !isLoading) {
                         Icon(Icons.Rounded.Refresh, contentDescription = "Refresh")
                     }
                 }
@@ -78,7 +84,7 @@ fun VaultGraphDialog(
                         contentAlignment = Alignment.Center
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            CircularProgressIndicator()
+                            LoadingIndicator()
                             Spacer(Modifier.height(12.dp))
                             Text("Checking your notes' links…", style = MaterialTheme.typography.bodyMedium)
                         }
@@ -118,12 +124,7 @@ fun VaultGraphDialog(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            CircularProgressIndicator(
-                                progress = { report.healthScore / 100f },
-                                modifier = Modifier.size(44.dp),
-                                color = scoreColor,
-                                strokeWidth = 5.dp
-                            )
+                            CircularWavyProgressIndicator(progress = { report.healthScore / 100f }, modifier = Modifier.size(44.dp), color = scoreColor)
                         }
                     }
 
@@ -193,7 +194,7 @@ fun VaultGraphDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
                 ) {
-                    TextButton(onClick = onDismiss) {
+                    TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) {
                         Text("Close")
                     }
                 }

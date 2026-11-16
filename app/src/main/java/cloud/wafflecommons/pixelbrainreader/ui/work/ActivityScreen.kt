@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package cloud.wafflecommons.pixelbrainreader.ui.work
 
 import androidx.compose.foundation.background
@@ -22,6 +24,8 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -56,6 +60,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import javax.inject.Inject
+import androidx.compose.material.icons.rounded.History
 
 /** The vault's last 30 days, from git: commits per day, the notes that changed most, the new ones. */
 data class VaultActivity(
@@ -126,7 +131,7 @@ fun ActivityScreen(onBack: () -> Unit, onOpenNote: (String) -> Unit, viewModel: 
     val visibility by viewModel.visibility.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { viewModel.loadActivity() }
 
-    FormScaffold(title = "Vault activity", onBack = onBack) {
+    FormScaffold(title = "Vault activity", icon = Icons.Rounded.History, onBack = onBack) {
         val d = digest
         SectionCard(
             title = "Last sync",
@@ -144,7 +149,7 @@ fun ActivityScreen(onBack: () -> Unit, onOpenNote: (String) -> Unit, viewModel: 
         }
         val a = activity
         if (a == null) {
-            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            LinearWavyProgressIndicator(modifier = Modifier.fillMaxWidth())
             return@FormScaffold
         }
         SectionCard(title = "Commits, last 30 days", icon = Icons.Rounded.BarChart, subtitle = "${a.commitsPerDay.sumOf { it.second }} commits") {
@@ -251,8 +256,8 @@ fun SyncDigestCard(onOpen: () -> Unit, viewModel: ActivityViewModel = hiltViewMo
                 )
             }
             Row {
-                TextButton(onClick = onOpen) { Text("See what changed") }
-                TextButton(onClick = viewModel::dismiss) { Text("Dismiss") }
+                TextButton(onClick = onOpen, shapes = ButtonDefaults.shapes()) { Text("See what changed") }
+                TextButton(onClick = viewModel::dismiss, shapes = ButtonDefaults.shapes()) { Text("Dismiss") }
             }
         }
     }

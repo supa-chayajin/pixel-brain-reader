@@ -119,7 +119,7 @@ class CrashActivity : ComponentActivity() {
                     onClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         onRestartClick()
-                    },
+                    }, shapes = ButtonDefaults.shapes(),
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
@@ -135,7 +135,7 @@ class CrashActivity : ComponentActivity() {
                     Spacer(modifier = Modifier.height(16.dp))
 
                     OutlinedButton(
-                        onClick = { showDetails = !showDetails },
+                        onClick = { showDetails = !showDetails }, shapes = ButtonDefaults.shapes(),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(if (showDetails) "Hide technical details" else "Show technical details")

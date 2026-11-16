@@ -38,6 +38,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import cloud.wafflecommons.pixelbrainreader.ui.components.switchThumb
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -121,10 +122,10 @@ fun LoginScreen(
                             ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
                         )
                     }
-                }) { Text("Open GitHub") }
+                }, shapes = ButtonDefaults.shapes()) { Text("Open GitHub") }
             },
             dismissButton = {
-                TextButton(onClick = { viewModel.cancelGitHubDeviceFlow() }) { Text("Cancel") }
+                TextButton(onClick = { viewModel.cancelGitHubDeviceFlow() }, shapes = ButtonDefaults.shapes()) { Text("Cancel") }
             }
         )
     }
@@ -150,12 +151,12 @@ fun LoginScreen(
             },
             confirmButton = {
                 TextButton(
-                    onClick = viewModel::confirmDiscard,
+                    onClick = viewModel::confirmDiscard, shapes = ButtonDefaults.shapes(),
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 ) { Text("Discard and log in") }
             },
             dismissButton = {
-                TextButton(onClick = viewModel::cancelDiscard) { Text("Cancel") }
+                TextButton(onClick = viewModel::cancelDiscard, shapes = ButtonDefaults.shapes()) { Text("Cancel") }
             }
         )
     }
@@ -305,7 +306,7 @@ fun LoginScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    Switch(checked = readOnly, onCheckedChange = null, enabled = !isLoading)
+                    Switch(checked = readOnly, thumbContent = switchThumb(readOnly), onCheckedChange = null, enabled = !isLoading)
                 }
 
                 // Optional one-tap GitHub sign-in (Device Flow). Only shown when a client id is
@@ -321,7 +322,7 @@ fun LoginScreen(
                         },
                         enabled = !isLoading,
                         modifier = Modifier.fillMaxWidth().height(52.dp),
-                        shape = MaterialTheme.shapes.medium
+                        shapes = ButtonDefaults.shapes(shape = MaterialTheme.shapes.medium)
                     ) {
                         Icon(Icons.Outlined.VpnKey, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.size(8.dp))
@@ -356,7 +357,7 @@ fun LoginScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(56.dp),
-                                shape = MaterialTheme.shapes.medium,
+                                shapes = ButtonDefaults.shapes(shape = MaterialTheme.shapes.medium),
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = MaterialTheme.colorScheme.primary,
                                     contentColor = MaterialTheme.colorScheme.onPrimary,

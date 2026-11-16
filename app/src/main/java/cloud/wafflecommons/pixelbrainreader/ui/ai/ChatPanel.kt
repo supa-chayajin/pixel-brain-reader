@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package cloud.wafflecommons.pixelbrainreader.ui.ai
 
 import androidx.compose.animation.animateColorAsState
@@ -30,6 +32,13 @@ import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Psychology
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.*
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.LoadingIndicator
+import cloud.wafflecommons.pixelbrainreader.ui.components.connectedShapes
+import cloud.wafflecommons.pixelbrainreader.ui.components.ConnectedButtonRow
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -146,6 +155,7 @@ fun ChatPanel(
             Column(modifier = Modifier.background(MaterialTheme.colorScheme.surface)) {
                 cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
                     title = "Neural Interface",
+                    icon = Icons.Rounded.Psychology,
                     actions = {
                         CortexIconButton(
                             onClick = { showClearConfirm = true },
@@ -578,7 +588,7 @@ private fun AnswerActions(
         // The answer stopped at the model's output cap: one tap asks for the rest (K2).
         if (onContinue != null) {
             FilledTonalButton(
-                onClick = onContinue,
+                onClick = onContinue, shapes = ButtonDefaults.shapes(),
                 colors = ButtonDefaults.filledTonalButtonColors(containerColor = persona.container, contentColor = persona.onContainer)
             ) {
                 Icon(Icons.Rounded.KeyboardDoubleArrowDown, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
@@ -586,12 +596,12 @@ private fun AnswerActions(
                 Text("Continue")
             }
         }
-        TextButton(onClick = { copy(message.content) }, colors = colors) {
+        TextButton(onClick = { copy(message.content) }, shapes = ButtonDefaults.shapes(), colors = colors) {
             Icon(Icons.Outlined.ContentCopy, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
             Spacer(Modifier.width(ButtonDefaults.IconSpacing))
             Text("Copy")
         }
-        TextButton(onClick = onSave, colors = colors) {
+        TextButton(onClick = onSave, shapes = ButtonDefaults.shapes(), colors = colors) {
             Icon(Icons.Outlined.SaveAlt, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
             Spacer(Modifier.width(ButtonDefaults.IconSpacing))
             Text("Save to Inbox")
@@ -648,7 +658,7 @@ private fun ThenVsNowSheet(view: ThenVsNowView, onDismiss: () -> Unit, onOpenNot
                     modifier = Modifier.weight(1f)
                 )
             }
-            TextButton(onClick = { onOpenNote(view.path) }, modifier = Modifier.align(Alignment.End)) {
+            TextButton(onClick = { onOpenNote(view.path) }, shapes = ButtonDefaults.shapes(), modifier = Modifier.align(Alignment.End)) {
                 Text("Open the note")
             }
         }
@@ -765,16 +775,16 @@ fun BrainModeSwitch(
         Triple(ChatMode.SCRIBE, Icons.Rounded.AutoAwesome, "Spark")
     )
     Box {
-    SingleChoiceSegmentedButtonRow(
+    ConnectedButtonRow(
         modifier = Modifier
             // Three segments read as one control up to this width, centred beyond it.
             .centeredMaxWidth(640.dp)
             .padding(horizontal = 24.dp, vertical = 8.dp)
     ) {
         modes.forEachIndexed { index, (mode, icon, label) ->
-            SegmentedButton(
-                selected = currentMode == mode,
-                onClick = {
+            ToggleButton(
+                checked = currentMode == mode,
+                onCheckedChange = {
                     when {
                         currentMode != mode -> onModeChanged(mode)
                         mode == ChatMode.PRESET -> {
@@ -783,16 +793,17 @@ fun BrainModeSwitch(
                         }
                     }
                 },
-                shape = SegmentedButtonDefaults.itemShape(index = index, count = modes.size),
-                colors = SegmentedButtonDefaults.colors(
-                    activeContainerColor = activeColor,
-                    activeContentColor = activeContentColor
+                shapes = connectedShapes(index, modes.size),
+                colors = ToggleButtonDefaults.toggleButtonColors(
+                    checkedContainerColor = activeColor,
+                    checkedContentColor = activeContentColor
                 ),
-                icon = {
-                    Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
-                },
-                label = { Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-            )
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+                                Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
         }
     }
     DropdownMenu(expanded = presetMenu, onDismissRequest = { presetMenu = false }) {
@@ -895,7 +906,7 @@ fun StealthInputBar(
                         } else {
                             onSend()
                         }
-                    },
+                    }, shapes = IconButtonDefaults.shapes(),
                     enabled = !isLoading,
                     modifier = Modifier.size(48.dp),
                     colors = IconButtonDefaults.filledIconButtonColors(
@@ -906,11 +917,7 @@ fun StealthInputBar(
                     )
                 ) {
                     if (isLoading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            color = accentColor,
-                            strokeWidth = 2.dp
-                        )
+                        LoadingIndicator(modifier = Modifier.size(20.dp), color = accentColor)
                     } else {
                         Icon(
                             if (textState.text.isBlank()) Icons.Rounded.Mic else Icons.AutoMirrored.Rounded.Send,
@@ -1005,12 +1012,12 @@ fun ClearChatDialog(
             TextButton(onClick = {
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 onConfirm()
-            }) {
+            }, shapes = ButtonDefaults.shapes()) {
                 Text("Clear", color = MaterialTheme.colorScheme.error)
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text("Cancel") }
         }
     )
 }

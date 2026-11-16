@@ -35,6 +35,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -210,7 +212,7 @@ private fun QuickCaptureScreen(
             if (readOnly) {
                 Text("Read-only device: capture on your phone.", style = MaterialTheme.typography.bodyLarge)
                 Spacer(Modifier.weight(1f))
-                TextButton(onClick = onDone, modifier = Modifier.align(Alignment.End)) { Text("Close") }
+                TextButton(onClick = onDone, shapes = ButtonDefaults.shapes(), modifier = Modifier.align(Alignment.End)) { Text("Close") }
             } else {
                 Text(
                     "It goes into your inbox as a new note.",
@@ -231,17 +233,17 @@ private fun QuickCaptureScreen(
                 }
                 photos.photo?.let { photo -> AttachedPhoto(photo, onRemove = { photos.photo = null }) }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    FilledTonalIconButton(onClick = { dictation.start() }) { Icon(Icons.Rounded.Mic, contentDescription = "Dictate") }
+                    FilledTonalIconButton(onClick = { dictation.start() }, shapes = IconButtonDefaults.shapes()) { Icon(Icons.Rounded.Mic, contentDescription = "Dictate") }
                     if (!locked) {
                         FilledTonalIconButton(
-                            enabled = !photos.reading,
+                            enabled = !photos.reading, shapes = IconButtonDefaults.shapes(),
                             onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
                         ) { Icon(Icons.Rounded.AddPhotoAlternate, contentDescription = "Add a photo") }
                     }
                     Spacer(Modifier.weight(1f))
-                    TextButton(onClick = onDone) { Text("Cancel") }
+                    TextButton(onClick = onDone, shapes = ButtonDefaults.shapes()) { Text("Cancel") }
                     Button(
-                        enabled = (text.isNotBlank() || photos.photo != null) && !saving && !photos.reading,
+                        enabled = (text.isNotBlank() || photos.photo != null) && !saving && !photos.reading, shapes = ButtonDefaults.shapes(),
                         onClick = {
                             saving = true
                             scope.launch {
@@ -282,6 +284,6 @@ private fun AttachedPhoto(photo: PreparedPhoto, onRemove: () -> Unit) {
             )
         }
         Text("Photo attached", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-        TextButton(onClick = onRemove) { Text("Remove") }
+        TextButton(onClick = onRemove, shapes = ButtonDefaults.shapes()) { Text("Remove") }
     }
 }

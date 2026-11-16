@@ -63,7 +63,7 @@ fun ReadOnlyDriftBanner(changes: List<String>, onReset: () -> Unit, modifier: Mo
                 color = onError,
                 modifier = Modifier.padding(start = 36.dp, end = 8.dp)
             )
-            TextButton(onClick = { confirming = true }, modifier = Modifier.align(Alignment.End)) {
+            TextButton(onClick = { confirming = true }, shapes = ButtonDefaults.shapes(), modifier = Modifier.align(Alignment.End)) {
                 Text("Reset to GitHub")
             }
         }
@@ -83,11 +83,11 @@ fun ReadOnlyDriftBanner(changes: List<String>, onReset: () -> Unit, modifier: Mo
                     onClick = {
                         confirming = false
                         onReset()
-                    },
+                    }, shapes = ButtonDefaults.shapes(),
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 ) { Text("Reset") }
             },
-            dismissButton = { TextButton(onClick = { confirming = false }) { Text("Cancel") } }
+            dismissButton = { TextButton(onClick = { confirming = false }, shapes = ButtonDefaults.shapes()) { Text("Cancel") } }
         )
     }
 }

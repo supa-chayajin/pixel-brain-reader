@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package cloud.wafflecommons.pixelbrainreader.ui.work
 
 import androidx.compose.foundation.clickable
@@ -19,6 +21,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -140,7 +144,7 @@ fun ExplainErrorScreen(onBack: () -> Unit, onOpenNote: (String) -> Unit, viewMod
     var failure by remember { mutableStateOf<String?>(null) }
     val nanoReady = nanoState is NanoState.Ready
 
-    FormScaffold(title = "Explain an error", onBack = onBack, snackbarHostState = snackbarHostState) {
+    FormScaffold(title = "Explain an error", icon = Icons.Rounded.BugReport, onBack = onBack, snackbarHostState = snackbarHostState) {
         SectionCard(title = "The error", icon = Icons.Rounded.BugReport, subtitle = "A stack trace or an error line. Nothing leaves the phone.") {
             OutlinedTextField(
                 value = viewModel.input,
@@ -151,7 +155,7 @@ fun ExplainErrorScreen(onBack: () -> Unit, onOpenNote: (String) -> Unit, viewMod
                 modifier = Modifier.fillMaxWidth()
             )
             Button(
-                onClick = viewModel::lookUp,
+                onClick = viewModel::lookUp, shapes = ButtonDefaults.shapes(),
                 enabled = viewModel.input.isNotBlank() && viewModel.phase != ErrorPhase.Looking,
                 modifier = Modifier.padding(top = 8.dp)
             ) { Text("Look it up") }
@@ -159,7 +163,7 @@ fun ExplainErrorScreen(onBack: () -> Unit, onOpenNote: (String) -> Unit, viewMod
 
         when (val phase = viewModel.phase) {
             ErrorPhase.Idle -> Unit
-            ErrorPhase.Looking -> LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            ErrorPhase.Looking -> LinearWavyProgressIndicator(modifier = Modifier.fillMaxWidth())
             ErrorPhase.NotAnError -> EmptyHint("This doesn't read as an error. Paste a stack trace, or a line with the error's type or code.")
             is ErrorPhase.Found -> FoundResult(
                 result = phase.result,
@@ -217,7 +221,7 @@ private fun FoundResult(
         when (explanation) {
             Explanation.Running -> {
                 Text("Gemini Nano is reading the error…", style = MaterialTheme.typography.bodyMedium)
-                LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(top = 6.dp))
+                LinearWavyProgressIndicator(modifier = Modifier.fillMaxWidth().padding(top = 6.dp))
             }
             is Explanation.Ready -> {
                 Text(explanation.text, style = MaterialTheme.typography.bodyMedium)
@@ -233,15 +237,15 @@ private fun FoundResult(
             is Explanation.Failed -> Text("No explanation: ${explanation.reason}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
             Explanation.None -> when {
                 VaultWriteGate.readOnly || !nanoReady -> Text("No explanation: the on-device AI is not ready.", style = MaterialTheme.typography.bodyMedium)
-                result.occurrences.isEmpty() -> OutlinedButton(onClick = { onExplain(true) }) { Text("Ask Gemini Nano anyway") }
-                else -> OutlinedButton(onClick = { onExplain(false) }) { Text("Explain") }
+                result.occurrences.isEmpty() -> OutlinedButton(onClick = { onExplain(true) }, shapes = ButtonDefaults.shapes()) { Text("Ask Gemini Nano anyway") }
+                else -> OutlinedButton(onClick = { onExplain(false) }, shapes = ButtonDefaults.shapes()) { Text("Explain") }
             }
         }
     }
 
     if (!VaultWriteGate.readOnly) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Button(onClick = onCreateNote, enabled = !isSaving && explanation != Explanation.Running) { Text("Create bug note") }
+            Button(onClick = onCreateNote, shapes = ButtonDefaults.shapes(), enabled = !isSaving && explanation != Explanation.Running) { Text("Create bug note") }
             Spacer(Modifier.width(12.dp))
             Text(
                 "In ${BugNote.folder(result.projectRoot)}",

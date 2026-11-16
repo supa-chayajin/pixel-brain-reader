@@ -23,6 +23,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -79,11 +80,11 @@ fun QuickAddBar(
             keyboardActions = KeyboardActions(onSend = { send() }),
             trailingIcon = {
                 if (text.isBlank()) {
-                    IconButton(onClick = onVoice) {
+                    IconButton(onClick = onVoice, shapes = IconButtonDefaults.shapes()) {
                         Icon(Icons.Rounded.Mic, contentDescription = "Voice note")
                     }
                 } else {
-                    IconButton(onClick = ::send) {
+                    IconButton(onClick = ::send, shapes = IconButtonDefaults.shapes()) {
                         Icon(
                             Icons.AutoMirrored.Rounded.Send,
                             contentDescription = "Add",

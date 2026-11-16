@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package cloud.wafflecommons.pixelbrainreader.ui.work
 
 import androidx.compose.foundation.clickable
@@ -28,6 +30,9 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -69,6 +74,8 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import java.time.LocalDateTime
 import javax.inject.Inject
+import androidx.compose.material.icons.rounded.Book
+import androidx.compose.material.icons.rounded.Code
 
 @HiltViewModel
 class SnippetsViewModel @Inject constructor(private val repository: SnippetRepository) : ViewModel() {
@@ -119,10 +126,10 @@ fun SnippetsScreen(onBack: () -> Unit, onOpenNote: (String) -> Unit, onOpenRunbo
     var language by remember { mutableStateOf<String?>(null) }
     val copy = rememberCopyToClipboard()
 
-    FormScaffold(title = "Snippets", onBack = onBack, actions = { TextButton(onClick = onOpenRunbooks) { Text("Runbooks") } }) {
+    FormScaffold(title = "Snippets", icon = Icons.Rounded.Code, onBack = onBack, actions = { TextButton(onClick = onOpenRunbooks, shapes = ButtonDefaults.shapes()) { Text("Runbooks") } }) {
         val all = blocks
         if (all == null) {
-            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            LinearWavyProgressIndicator(modifier = Modifier.fillMaxWidth())
             return@FormScaffold
         }
         OutlinedTextField(query, { query = it }, label = { Text("Search code") }, singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -157,7 +164,7 @@ internal fun SnippetCard(block: CodeBlock, title: String, onCopy: () -> Unit, on
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f).let { if (onOpen != null) it.clickable(onClick = onOpen) else it }
                 )
-                IconButton(onClick = onCopy) { Icon(Icons.Rounded.ContentCopy, contentDescription = "Copy") }
+                IconButton(onClick = onCopy, shapes = IconButtonDefaults.shapes()) { Icon(Icons.Rounded.ContentCopy, contentDescription = "Copy") }
             }
             Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surfaceContainerHighest) {
                 Text(
@@ -178,10 +185,10 @@ internal fun SnippetCard(block: CodeBlock, title: String, onCopy: () -> Unit, on
 fun RunbooksScreen(onBack: () -> Unit, onPlay: (String) -> Unit, selected: String? = null, viewModel: SnippetsViewModel = hiltViewModel()) {
     val runbooks by viewModel.runbooks.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { viewModel.loadRunbooks() }
-    FormScaffold(title = "Runbooks", onBack = onBack) {
+    FormScaffold(title = "Runbooks", icon = Icons.Rounded.Book, onBack = onBack) {
         val list = runbooks
         when {
-            list == null -> LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            list == null -> LinearWavyProgressIndicator(modifier = Modifier.fillMaxWidth())
             list.isEmpty() -> EmptyHint("No runbook yet. Tag a note #runbook (or put it in a Runbooks folder): its ## sections are the steps.")
             else -> list.forEach { note ->
                 SectionCard(
@@ -226,7 +233,7 @@ fun RunbookPlayerScreen(path: String, onBack: () -> Unit, onOpenNote: (String) -
 
     val stepContent: @Composable () -> Unit = {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            LinearProgressIndicator(progress = { if (steps.isEmpty()) 0f else index.toFloat() / steps.size }, modifier = Modifier.fillMaxWidth())
+            LinearWavyProgressIndicator(progress = { if (steps.isEmpty()) 0f else index.toFloat() / steps.size }, modifier = Modifier.fillMaxWidth())
             val step = steps.getOrNull(index)
             if (step != null) {
                 Text("Step ${index + 1} of ${steps.size}", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
@@ -244,9 +251,9 @@ fun RunbookPlayerScreen(path: String, onBack: () -> Unit, onOpenNote: (String) -
             if (index < steps.size) {
                 OutlinedTextField(stepNote, { stepNote = it }, label = { Text("Note for this step") }, modifier = Modifier.fillMaxWidth())
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { record(StepStatus.DONE) }) { Text("Done") }
-                    OutlinedButton(onClick = { record(StepStatus.FAILED) }) { Text("Failed") }
-                    TextButton(onClick = { record(StepStatus.SKIPPED) }) { Text("Skip") }
+                    Button(onClick = { record(StepStatus.DONE) }, shapes = ButtonDefaults.shapes()) { Text("Done") }
+                    OutlinedButton(onClick = { record(StepStatus.FAILED) }, shapes = ButtonDefaults.shapes()) { Text("Failed") }
+                    TextButton(onClick = { record(StepStatus.SKIPPED) }, shapes = ButtonDefaults.shapes()) { Text("Skip") }
                 }
             }
             OutlinedTextField(runNotes, { runNotes = it }, label = { Text("Incident notes") }, minLines = 2, modifier = Modifier.fillMaxWidth())
@@ -254,7 +261,7 @@ fun RunbookPlayerScreen(path: String, onBack: () -> Unit, onOpenNote: (String) -
             val readOnly = VaultWriteGate.readOnly
             if (readOnly) ReadOnlyNotice()
             Button(
-                enabled = !readOnly && results.isNotEmpty() && note != null,
+                enabled = !readOnly && results.isNotEmpty() && note != null, shapes = ButtonDefaults.shapes(),
                 onClick = { note?.let { viewModel.finish(it, startedAt, results.toList(), runNotes, onOpenNote) } }
             ) { Text(if (index < steps.size) "Stop and write the incident log" else "Write the incident log") }
         }
@@ -271,9 +278,9 @@ fun RunbookPlayerScreen(path: String, onBack: () -> Unit, onOpenNote: (String) -
         return
     }
 
-    FormScaffold(title = note?.title ?: "Runbook", onBack = onBack, snackbarHostState = snackbarHostState) {
+    FormScaffold(title = note?.title ?: "Runbook", icon = Icons.Rounded.Book, onBack = onBack, snackbarHostState = snackbarHostState) {
         if (note == null) {
-            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            LinearWavyProgressIndicator(modifier = Modifier.fillMaxWidth())
             return@FormScaffold
         }
         if (steps.isEmpty()) {

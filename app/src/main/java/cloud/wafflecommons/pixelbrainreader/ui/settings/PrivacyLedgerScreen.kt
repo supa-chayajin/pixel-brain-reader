@@ -32,6 +32,7 @@ import cloud.wafflecommons.pixelbrainreader.ui.components.SectionCard
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import androidx.compose.material.icons.rounded.DataUsage
 
 /** Settings › Integrations › Privacy ledger (13.0, X3). */
 const val PRIVACY_LEDGER_ROUTE = "privacy_ledger"
@@ -44,7 +45,7 @@ const val PRIVACY_LEDGER_ROUTE = "privacy_ledger"
 @Composable
 fun PrivacyLedgerScreen(onNavigateBack: () -> Unit) {
     val days by produceState<List<LedgerDay>?>(initialValue = null) { value = PrivacyLedger.days() }
-    FormScaffold(title = "Privacy ledger", onBack = onNavigateBack) {
+    FormScaffold(title = "Privacy ledger", icon = Icons.Rounded.DataUsage, onBack = onNavigateBack) {
         Text(
             "Each host the app talked to, why, how often and about how much. Only hosts and sizes " +
                 "are kept, never what was sent, on this phone for 30 days.",

@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package cloud.wafflecommons.pixelbrainreader.ui.work
 
 import androidx.compose.animation.animateColorAsState
@@ -28,6 +30,8 @@ import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberSwipeToDismissBoxState
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -73,6 +77,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import androidx.compose.material.icons.rounded.Inbox
 
 /** A message for the inbox's snackbar, with Undo when the step can be taken back. */
 data class InboxMessage(val text: String, val undo: (() -> Unit)? = null)
@@ -215,13 +220,13 @@ fun InboxScreen(onBack: () -> Unit, onOpenNote: (String) -> Unit, viewModel: Inb
         }
     }
 
-    FormScaffold(title = "Inbox", onBack = onBack, snackbarHostState = snackbarHostState) {
+    FormScaffold(title = "Inbox", icon = Icons.Rounded.Inbox, onBack = onBack, snackbarHostState = snackbarHostState) {
         // Filing moves the note: a read-only device lists and opens the inbox only (12.15, S2).
         val readOnly = VaultWriteGate.readOnly
         if (readOnly) ReadOnlyNotice()
         val list = notes
         when {
-            list == null -> LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            list == null -> LinearWavyProgressIndicator(modifier = Modifier.fillMaxWidth())
             list.isEmpty() -> EmptyHint(if (snoozed > 0) "Nothing left for today." else "The inbox is empty.")
             else -> {
                 if (!readOnly) {
@@ -245,7 +250,7 @@ fun InboxScreen(onBack: () -> Unit, onOpenNote: (String) -> Unit, viewModel: Inb
             }
         }
         if (snoozed > 0) {
-            TextButton(onClick = viewModel::wakeAll) { Text("$snoozed snoozed · show them now") }
+            TextButton(onClick = viewModel::wakeAll, shapes = ButtonDefaults.shapes()) { Text("$snoozed snoozed · show them now") }
         }
     }
 }
@@ -316,12 +321,12 @@ private fun InboxCard(note: WorkNote, viewModel: InboxViewModel, readOnly: Boole
         title = note.title,
         icon = Icons.Rounded.MoveToInbox,
         subtitle = listOfNotNull(note.created?.toString(), note.tags.takeIf { it.isNotEmpty() }?.joinToString(" ") { "#$it" }).joinToString(" · "),
-        trailing = { TextButton(onClick = { onOpenNote(note.path) }) { Text("Open") } }
+        trailing = { TextButton(onClick = { onOpenNote(note.path) }, shapes = ButtonDefaults.shapes()) { Text("Open") } }
     ) {
         if (readOnly) {
             // Nothing to file from here.
         } else if (suggestion == null) {
-            OutlinedButton(onClick = { viewModel.suggest(note) }) { Text("Suggest a folder") }
+            OutlinedButton(onClick = { viewModel.suggest(note) }, shapes = ButtonDefaults.shapes()) { Text("Suggest a folder") }
         } else {
             if (suggestion.folders.isEmpty()) {
                 Text("No folder stands out: open the note and move it by hand.", style = MaterialTheme.typography.bodySmall)
@@ -340,11 +345,11 @@ private fun InboxCard(note: WorkNote, viewModel: InboxViewModel, readOnly: Boole
                 }
             }
             Row {
-                Button(enabled = folder != null, onClick = { folder?.let { viewModel.file(note, it, tags.toList()) } }) { Text("File") }
+                Button(enabled = folder != null, shapes = ButtonDefaults.shapes(), onClick = { folder?.let { viewModel.file(note, it, tags.toList()) } }) { Text("File") }
             }
         }
         if (!readOnly) {
-            TextButton(onClick = { viewModel.delete(note) }) {
+            TextButton(onClick = { viewModel.delete(note) }, shapes = ButtonDefaults.shapes()) {
                 Text("Delete", color = MaterialTheme.colorScheme.error)
             }
         }

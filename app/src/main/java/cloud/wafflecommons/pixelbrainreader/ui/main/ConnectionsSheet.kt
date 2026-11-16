@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package cloud.wafflecommons.pixelbrainreader.ui.main
 
 import androidx.compose.foundation.clickable
@@ -16,6 +18,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberBottomSheetState
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -80,7 +84,7 @@ fun ConnectionsSheet(path: String, onOpen: (String) -> Unit, onDismiss: () -> Un
             Text("Connections", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             val c = connections
             if (c == null) {
-                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                LinearWavyProgressIndicator(modifier = Modifier.fillMaxWidth())
                 return@Column
             }
             Section("Backlinks", c.backlinks, empty = "No note links here yet.", onOpen = onOpen)
@@ -123,7 +127,7 @@ private fun Section(
                     Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
             }
-            action?.let { (label, run) -> TextButton(onClick = { run(ref) }) { Text(label) } }
+            action?.let { (label, run) -> TextButton(onClick = { run(ref) }, shapes = ButtonDefaults.shapes()) { Text(label) } }
         }
     }
 }

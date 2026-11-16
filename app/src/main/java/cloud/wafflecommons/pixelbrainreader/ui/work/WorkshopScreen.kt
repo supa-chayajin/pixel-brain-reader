@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package cloud.wafflecommons.pixelbrainreader.ui.work
 
 import androidx.compose.foundation.layout.Arrangement
@@ -24,6 +26,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -69,6 +74,7 @@ import java.util.Locale
 import java.util.UUID
 import javax.inject.Inject
 import kotlin.math.abs
+import androidx.compose.material.icons.rounded.Lightbulb
 
 /** The workshop kit (W2, 12.21): one workshop from a meeting note, kept on the phone until its synthesis. */
 @HiltViewModel
@@ -184,10 +190,11 @@ fun WorkshopScreen(onBack: () -> Unit, onOpenNote: (String) -> Unit, viewModel: 
 
     FormScaffold(
         title = "Workshop",
+        icon = Icons.Rounded.Lightbulb,
         onBack = onBack,
         actions = {
             if (mine != null && !readOnly) {
-                IconButton(onClick = { confirmDiscard = true }) { Icon(Icons.Rounded.DeleteOutline, contentDescription = "Discard the workshop") }
+                IconButton(onClick = { confirmDiscard = true }, shapes = IconButtonDefaults.shapes()) { Icon(Icons.Rounded.DeleteOutline, contentDescription = "Discard the workshop") }
             }
         }
     ) {
@@ -196,7 +203,7 @@ fun WorkshopScreen(onBack: () -> Unit, onOpenNote: (String) -> Unit, viewModel: 
         when {
             other != null -> SectionCard(title = "Another workshop is under way", icon = Icons.Rounded.Groups, subtitle = other.title) {
                 Text("Finish it from its meeting, or discard it to start this one.", style = MaterialTheme.typography.bodyMedium)
-                if (!readOnly) TextButton(onClick = { confirmDiscard = true }) { Text("Discard it") }
+                if (!readOnly) TextButton(onClick = { confirmDiscard = true }, shapes = ButtonDefaults.shapes()) { Text("Discard it") }
             }
             mine != null -> RunningWorkshop(
                 draft = mine,
@@ -228,8 +235,8 @@ fun WorkshopScreen(onBack: () -> Unit, onOpenNote: (String) -> Unit, viewModel: 
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { confirmFinish = false; viewModel.finish(withSummary) }) { Text("Write it") } },
-            dismissButton = { TextButton(onClick = { confirmFinish = false }) { Text("Not yet") } }
+            confirmButton = { TextButton(onClick = { confirmFinish = false; viewModel.finish(withSummary) }, shapes = ButtonDefaults.shapes()) { Text("Write it") } },
+            dismissButton = { TextButton(onClick = { confirmFinish = false }, shapes = ButtonDefaults.shapes()) { Text("Not yet") } }
         )
     }
     if (confirmDiscard) {
@@ -237,8 +244,8 @@ fun WorkshopScreen(onBack: () -> Unit, onOpenNote: (String) -> Unit, viewModel: 
             onDismissRequest = { confirmDiscard = false },
             title = { Text("Discard the workshop?") },
             text = { Text("Its board leaves the phone; nothing was written to the vault.") },
-            confirmButton = { TextButton(onClick = { confirmDiscard = false; viewModel.discard() }) { Text("Discard") } },
-            dismissButton = { TextButton(onClick = { confirmDiscard = false }) { Text("Keep it") } }
+            confirmButton = { TextButton(onClick = { confirmDiscard = false; viewModel.discard() }, shapes = ButtonDefaults.shapes()) { Text("Discard") } },
+            dismissButton = { TextButton(onClick = { confirmDiscard = false }, shapes = ButtonDefaults.shapes()) { Text("Keep it") } }
         )
     }
 }
@@ -258,7 +265,7 @@ private fun WorkshopSetup(prepared: Workshop.Draft, readOnly: Boolean, onTotal: 
             FilterChip(selected = total == minutes, onClick = { onTotal(minutes) }, label = { Text("$minutes min") }, enabled = !readOnly)
         }
     }
-    Button(onClick = onStart, enabled = !readOnly, modifier = Modifier.fillMaxWidth()) {
+    Button(onClick = onStart, shapes = ButtonDefaults.shapes(), enabled = !readOnly, modifier = Modifier.fillMaxWidth()) {
         Icon(Icons.Rounded.Timer, contentDescription = null)
         Text("Start the workshop", modifier = Modifier.padding(start = 8.dp))
     }
@@ -298,14 +305,14 @@ private fun RunningWorkshop(
                 style = MaterialTheme.typography.displaySmall,
                 color = if (left < 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
             )
-            LinearProgressIndicator(
+            LinearWavyProgressIndicator(
                 progress = { (1f - left.toFloat() / (step.minutes * 60f)).coerceIn(0f, 1f) },
                 modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
             )
             draft.steps.getOrNull(draft.current + 1)?.let { upcoming ->
                 Text("Next: ${upcoming.title}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            FilledTonalButton(onClick = onNext, enabled = !readOnly) {
+            FilledTonalButton(onClick = onNext, shapes = ButtonDefaults.shapes(), enabled = !readOnly) {
                 Text(if (draft.current + 1 < draft.steps.size) "Next point" else "End the last point")
             }
         }
@@ -325,7 +332,7 @@ private fun RunningWorkshop(
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Workshop.Column.entries.forEach { column ->
             FilledTonalButton(
-                onClick = { onAdd(column, text); text = "" },
+                onClick = { onAdd(column, text); text = "" }, shapes = ButtonDefaults.shapes(),
                 enabled = !readOnly && text.isNotBlank()
             ) { Text("+ ${singular(column)}") }
         }
@@ -338,7 +345,7 @@ private fun RunningWorkshop(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("• ${card.text}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                     if (!readOnly) {
-                        IconButton(onClick = { onRemove(card.id) }) { Icon(Icons.Rounded.Close, contentDescription = "Remove") }
+                        IconButton(onClick = { onRemove(card.id) }, shapes = IconButtonDefaults.shapes()) { Icon(Icons.Rounded.Close, contentDescription = "Remove") }
                     }
                 }
             }
@@ -346,7 +353,7 @@ private fun RunningWorkshop(
     }
 
     if (failed) Text("The synthesis couldn't be written. The board is still here.", color = MaterialTheme.colorScheme.error)
-    Button(onClick = onFinish, enabled = !readOnly && !writing, modifier = Modifier.fillMaxWidth()) {
+    Button(onClick = onFinish, shapes = ButtonDefaults.shapes(), enabled = !readOnly && !writing, modifier = Modifier.fillMaxWidth()) {
         Text(if (writing) "Writing the synthesis…" else "Write the synthesis")
     }
 }

@@ -18,6 +18,8 @@ import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
 import cloud.wafflecommons.pixelbrainreader.ui.utils.HapticHelper
 
 import androidx.compose.ui.platform.LocalView
+import cloud.wafflecommons.pixelbrainreader.ui.components.DailyBlockHeader
+import androidx.compose.material.icons.rounded.Favorite
 
 @Composable
 fun GratitudeSection(
@@ -41,11 +43,7 @@ fun GratitudeSection(
                 .padding(16.dp)
                 .animateContentSize()
         ) {
-            Text(
-                text = "Gratitude Express ✨",
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.primary
-            )
+            DailyBlockHeader(icon = Icons.Rounded.Favorite, title = "Gratitude Express")
             
             Spacer(modifier = Modifier.height(8.dp))
 

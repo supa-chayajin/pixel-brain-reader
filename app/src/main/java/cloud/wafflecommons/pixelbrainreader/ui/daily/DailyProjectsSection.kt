@@ -17,6 +17,10 @@ import androidx.compose.ui.unit.dp
 import cloud.wafflecommons.pixelbrainreader.data.work.ProjectSummary
 import cloud.wafflecommons.pixelbrainreader.data.work.projectDisplayName
 import cloud.wafflecommons.pixelbrainreader.ui.work.projectLine
+import cloud.wafflecommons.pixelbrainreader.ui.components.DailyBlockHeader
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.RocketLaunch
+import cloud.wafflecommons.pixelbrainreader.ui.components.SegmentedGroup
 
 /**
  * The Daily screen's Projects block: a card per project ([DailyProjects]), each opening its page.
@@ -31,12 +35,7 @@ fun DailyProjectsSection(
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            text = "🗂️ Projects",
-            color = MaterialTheme.colorScheme.secondary,
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(horizontal = 4.dp)
+        DailyBlockHeader(icon = Icons.Rounded.RocketLaunch, title = "Projects", modifier = Modifier.padding(horizontal = 4.dp)
         )
         if (!isPinned) {
             Text(
@@ -46,8 +45,10 @@ fun DailyProjectsSection(
                 modifier = Modifier.padding(horizontal = 4.dp)
             )
         }
-        projects.forEach { project ->
-            DailyProjectCard(project = project, onClick = { onOpenProject(project.root) })
+        SegmentedGroup {
+            projects.forEach { project ->
+                DailyProjectCard(project = project, onClick = { onOpenProject(project.root) })
+            }
         }
     }
 }
@@ -57,7 +58,7 @@ private fun DailyProjectCard(project: ProjectSummary, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = MaterialTheme.shapes.large,
+        shape = MaterialTheme.shapes.extraSmall,
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {

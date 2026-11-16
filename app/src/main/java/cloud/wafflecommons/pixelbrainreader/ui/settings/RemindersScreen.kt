@@ -53,6 +53,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberTimePickerState
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -69,6 +70,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
+import androidx.compose.material.icons.rounded.NotificationsActive
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -93,8 +95,9 @@ fun RemindersScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Reminders") },
+            cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
+                title = "Reminders",
+                icon = Icons.Rounded.NotificationsActive,
                 navigationIcon = {
                     CortexIconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -211,7 +214,7 @@ fun RemindersScreen(
                 FilledTonalButton(onClick = {
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     timePicker = "09:00" to { hhmm -> viewModel.addChoresWindow(hhmm) }
-                }) {
+                }, shapes = ButtonDefaults.shapes()) {
                     Icon(Icons.Default.Add, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
                     Text("Add window")
@@ -354,12 +357,12 @@ private fun TimePickerDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
                 ) {
-                    TextButton(onClick = onDismiss) { Text("Cancel") }
+                    TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text("Cancel") }
                     Spacer(Modifier.width(8.dp))
                     TextButton(onClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         onConfirm("%02d:%02d".format(state.hour, state.minute))
-                    }) { Text("OK") }
+                    }, shapes = ButtonDefaults.shapes()) { Text("OK") }
                 }
             }
         }

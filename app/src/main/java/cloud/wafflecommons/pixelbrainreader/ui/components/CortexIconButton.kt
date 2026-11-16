@@ -22,7 +22,7 @@ fun CortexIconButton(
         onClick = {
             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
             onClick()
-        },
+        }, shapes = IconButtonDefaults.shapes(),
         modifier = modifier,
         enabled = enabled,
         colors = colors,

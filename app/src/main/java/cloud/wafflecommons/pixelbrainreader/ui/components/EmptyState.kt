@@ -8,6 +8,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material3.*
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -58,7 +59,7 @@ fun EmptyState(
             }
         }
         Spacer(Modifier.height(32.dp))
-        Button(onClick = onActionClick) {
+        Button(onClick = onActionClick, shapes = ButtonDefaults.shapes()) {
             Icon(Icons.Default.Create, null)
             Spacer(Modifier.width(8.dp))
             Text("Create New Note")

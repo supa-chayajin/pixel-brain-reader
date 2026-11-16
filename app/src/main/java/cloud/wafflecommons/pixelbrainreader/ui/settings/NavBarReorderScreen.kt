@@ -33,6 +33,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,6 +42,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.unit.dp
 import cloud.wafflecommons.pixelbrainreader.ui.theme.NavBarClearance
+import androidx.compose.material.icons.rounded.SwapVert
 
 /** Route → (icon, label) for the reorderable regular nav destinations. */
 private val NAV_ITEM_META: Map<String, Pair<ImageVector, String>> = mapOf(
@@ -65,10 +67,11 @@ fun NavBarReorderScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Navigation bar order") },
+            cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
+                title = "Navigation bar order",
+                icon = Icons.Rounded.SwapVert,
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
+                    IconButton(onClick = onNavigateBack, shapes = IconButtonDefaults.shapes()) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
@@ -102,7 +105,7 @@ fun NavBarReorderScreen(
                         Text(label, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                         // Move up
                         IconButton(
-                            enabled = index > 0,
+                            enabled = index > 0, shapes = IconButtonDefaults.shapes(),
                             onClick = {
                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 onOrderChange(order.swapped(index, index - 1))
@@ -112,7 +115,7 @@ fun NavBarReorderScreen(
                         }
                         // Move down
                         IconButton(
-                            enabled = index < order.lastIndex,
+                            enabled = index < order.lastIndex, shapes = IconButtonDefaults.shapes(),
                             onClick = {
                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 onOrderChange(order.swapped(index, index + 1))

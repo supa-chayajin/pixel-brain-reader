@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package cloud.wafflecommons.pixelbrainreader.ui.work
 
 import androidx.compose.foundation.clickable
@@ -17,6 +19,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -132,7 +136,7 @@ fun HandoffScreen(
         ProjectFormat.projectFor(projects.map { it.root }, root)?.let { r -> projects.firstOrNull { it.root == r } }
     } ?: list?.firstOrNull()
 
-    FormScaffold(title = "Hand off to desktop", onBack = onBack, snackbarHostState = snackbarHostState) {
+    FormScaffold(title = "Hand off to desktop", icon = Icons.Rounded.Computer, onBack = onBack, snackbarHostState = snackbarHostState) {
         // A hand-off writes the project's Handoff.md: never from a read-only device (12.15, S2).
         val readOnly = VaultWriteGate.readOnly
         if (readOnly) ReadOnlyNotice()
@@ -167,10 +171,10 @@ fun HandoffScreen(
                     minLines = 3
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Button(enabled = !readOnly && !sending && chosen != null && text.isNotBlank(), onClick = { chosen?.let { viewModel.send(it, kind, text, onSent) } }) {
+                    Button(enabled = !readOnly && !sending && chosen != null && text.isNotBlank(), shapes = ButtonDefaults.shapes(), onClick = { chosen?.let { viewModel.send(it, kind, text, onSent) } }) {
                         Text("Hand off")
                     }
-                    if (sending) CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                    if (sending) LoadingIndicator(modifier = Modifier.size(24.dp))
                 }
                 Text(
                     "One line in ${chosen?.name ?: "the project"}'s Handoff.md, pushed with your next batch. " +

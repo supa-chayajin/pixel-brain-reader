@@ -25,6 +25,7 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -50,6 +51,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.YearMonth
 import javax.inject.Inject
+import androidx.compose.material.icons.rounded.Build
 
 /** This month's mission-log figures for the hub; null when the log can't be read. */
 data class LogSummary(val entries: Int, val decisions: Int, val offTicketMinutes: Int)
@@ -140,7 +142,7 @@ fun WorkHubScreen(
         }
     }
 
-    FormScaffold(title = visibility.appearance.toolkitName, onBack = onBack) {
+    FormScaffold(title = visibility.appearance.toolkitName, icon = Icons.Rounded.Build, onBack = onBack) {
         if (visibility.hideWork) {
             Text(
                 "Outside ${visibility.workLabel} mode: figures are hidden. Capture still works.",
@@ -162,8 +164,8 @@ fun WorkHubScreen(
             }
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilledTonalButton(onClick = { onOpenLog(true) }) { Text("Log") }
-                OutlinedButton(onClick = { onOpenLog(false) }) { Text("Open") }
+                FilledTonalButton(onClick = { onOpenLog(true) }, shapes = ButtonDefaults.shapes()) { Text("Log") }
+                OutlinedButton(onClick = { onOpenLog(false) }, shapes = ButtonDefaults.shapes()) { Text("Open") }
             }
         }
         val pinnedTools = HubTool.entries.filter { it.id in pinned }

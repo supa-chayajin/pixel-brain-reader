@@ -13,6 +13,8 @@ import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.HistoryEdu
 import androidx.compose.material3.*
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -62,7 +64,7 @@ fun MemoryEchoSection(
                 modifier = Modifier.weight(1f)
             )
             if (onChooseFolders != null) {
-                TextButton(onClick = onChooseFolders) { Text("Review folders") }
+                TextButton(onClick = onChooseFolders, shapes = ButtonDefaults.shapes()) { Text("Review folders") }
             }
         }
 
@@ -140,7 +142,7 @@ fun MemoryEchoCard(
 
                 // A spaced echo is answered below; a forgotten one is marked reviewed (read-only: neither).
                 if (!echo.spaced && !VaultWriteGate.readOnly) FilledTonalIconButton(
-                    onClick = onReviewed,
+                    onClick = onReviewed, shapes = IconButtonDefaults.shapes(),
                     modifier = Modifier.size(32.dp),
                     colors = IconButtonDefaults.filledTonalIconButtonColors(
                         containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
@@ -202,9 +204,9 @@ fun MemoryEchoCard(
             if (echo.spaced && !VaultWriteGate.readOnly) {
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilledTonalButton(onClick = { onAnswer(SpacedReview.Answer.AGAIN) }) { Text("Again") }
-                    FilledTonalButton(onClick = { onAnswer(SpacedReview.Answer.GOOD) }) { Text("Good") }
-                    FilledTonalButton(onClick = { onAnswer(SpacedReview.Answer.EASY) }) { Text("Easy") }
+                    FilledTonalButton(onClick = { onAnswer(SpacedReview.Answer.AGAIN) }, shapes = ButtonDefaults.shapes()) { Text("Again") }
+                    FilledTonalButton(onClick = { onAnswer(SpacedReview.Answer.GOOD) }, shapes = ButtonDefaults.shapes()) { Text("Good") }
+                    FilledTonalButton(onClick = { onAnswer(SpacedReview.Answer.EASY) }, shapes = ButtonDefaults.shapes()) { Text("Easy") }
                 }
             }
         }
@@ -252,7 +254,7 @@ fun EchoFoldersDialog(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = { onSave(selection) }) { Text("Save") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        confirmButton = { TextButton(onClick = { onSave(selection) }, shapes = ButtonDefaults.shapes()) { Text("Save") } },
+        dismissButton = { TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text("Cancel") } }
     )
 }

@@ -41,6 +41,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.toShape
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -73,6 +74,7 @@ import java.time.format.TextStyle
 import java.util.Locale
 import javax.inject.Inject
 import kotlin.math.roundToInt
+import androidx.compose.material.icons.rounded.Celebration
 
 /** Life Stats › Your year so far (13.0, X5). */
 const val WRAPPED_ROUTE = "wrapped"
@@ -108,10 +110,11 @@ fun WrappedScreen(onNavigateBack: () -> Unit, viewModel: WrappedViewModel = hilt
     val state by viewModel.state.collectAsStateWithLifecycle()
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Your year so far") },
+            cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
+                title = "Your year so far",
+                icon = Icons.Rounded.Celebration,
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
+                    IconButton(onClick = onNavigateBack, shapes = IconButtonDefaults.shapes()) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
                 }
             )
         }

@@ -23,6 +23,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.IconButtonDefaults
+import cloud.wafflecommons.pixelbrainreader.ui.components.switchThumb
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -37,6 +39,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cloud.wafflecommons.pixelbrainreader.data.model.DailySection
 import cloud.wafflecommons.pixelbrainreader.ui.daily.DailyLayoutViewModel
 import cloud.wafflecommons.pixelbrainreader.ui.theme.NavBarClearance
+import androidx.compose.material.icons.rounded.Tune
 
 /**
  * Settings → Daily screen: the order of the Daily blocks and which ones stay on screen. The Daily
@@ -65,10 +68,11 @@ fun DailyLayoutScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Daily screen") },
+            cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
+                title = "Daily screen",
+                icon = Icons.Rounded.Tune,
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
+                    IconButton(onClick = onNavigateBack, shapes = IconButtonDefaults.shapes()) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
@@ -168,14 +172,14 @@ private fun DailyBlockRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            IconButton(enabled = canMoveUp, onClick = { onMove(true) }) {
+            IconButton(enabled = canMoveUp, shapes = IconButtonDefaults.shapes(), onClick = { onMove(true) }) {
                 Icon(Icons.Rounded.KeyboardArrowUp, contentDescription = "Move ${section.label} up")
             }
-            IconButton(enabled = canMoveDown, onClick = { onMove(false) }) {
+            IconButton(enabled = canMoveDown, shapes = IconButtonDefaults.shapes(), onClick = { onMove(false) }) {
                 Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = "Move ${section.label} down")
             }
             Switch(
-                checked = shown,
+                checked = shown, thumbContent = switchThumb(shown),
                 onCheckedChange = onShownChange,
                 modifier = Modifier.semantics { contentDescription = "Keep ${section.label} on screen" }
             )

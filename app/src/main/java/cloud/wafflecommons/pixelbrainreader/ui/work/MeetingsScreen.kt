@@ -27,6 +27,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberBottomSheetState
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -74,6 +75,7 @@ import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import javax.inject.Inject
+import androidx.compose.material.icons.rounded.Checklist
 
 data class MeetingsState(val meetings: List<Meeting>, val load: List<WeekLoad>, val actions: List<ActionItem>, val folder: String)
 
@@ -147,6 +149,7 @@ fun MeetingsScreen(
 
     FormScaffold(
         title = "Meetings",
+        icon = Icons.Rounded.Groups,
         onBack = onBack,
         snackbarHostState = snackbarHostState,
         actions = { if (editable) CortexIconButton(onClick = { creating = true }) { Icon(Icons.Rounded.Add, contentDescription = "New meeting") } }
@@ -184,15 +187,15 @@ fun MeetingsScreen(
                 modifier = Modifier.clickable { onOpenNote(meeting.note.path) }
             ) {
                 if (meeting.decisions.isNotEmpty() && editable) {
-                    TextButton(onClick = { viewModel.logDecisions(meeting) }) { Text("Log the decisions") }
+                    TextButton(onClick = { viewModel.logDecisions(meeting) }, shapes = ButtonDefaults.shapes()) { Text("Log the decisions") }
                 }
                 // A meeting with an agenda can run as a workshop (W2, 12.21).
                 if (editable && cloud.wafflecommons.pixelbrainreader.data.work.Workshop.agenda(meeting.note.content).isNotEmpty()) {
-                    TextButton(onClick = { onRunWorkshop(meeting.note.path) }) { Text("Run as a workshop") }
+                    TextButton(onClick = { onRunWorkshop(meeting.note.path) }, shapes = ButtonDefaults.shapes()) { Text("Run as a workshop") }
                 }
             }
         }
-        TextButton(onClick = { editingFolder = true }, enabled = editable) { Text("New meetings go to ${s.folder}") }
+        TextButton(onClick = { editingFolder = true }, shapes = ButtonDefaults.shapes(), enabled = editable) { Text("New meetings go to ${s.folder}") }
     }
 
     if (creating) {
@@ -278,8 +281,8 @@ private fun NewMeetingSheet(onCreate: (String, LocalDate, LocalTime?, Int?, Stri
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onDismiss) { Text("Cancel") }
-                Button(enabled = title.isNotBlank(), onClick = { onCreate(title.trim(), date, start, minutes.toIntOrNull(), participants) }) { Text("Create") }
+                TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text("Cancel") }
+                Button(enabled = title.isNotBlank(), shapes = ButtonDefaults.shapes(), onClick = { onCreate(title.trim(), date, start, minutes.toIntOrNull(), participants) }) { Text("Create") }
             }
         }
     }
@@ -294,7 +297,7 @@ fun NextActionsScreen(onBack: () -> Unit, onOpenNote: (String) -> Unit, viewMode
     val snackbarHostState = remember { SnackbarHostState() }
     LaunchedEffect(Unit) { viewModel.messages.collect { snackbarHostState.showSnackbar(it) } }
     val today = LocalDate.now()
-    FormScaffold(title = "Next actions", onBack = onBack, snackbarHostState = snackbarHostState) {
+    FormScaffold(title = "Next actions", icon = Icons.Rounded.Checklist, onBack = onBack, snackbarHostState = snackbarHostState) {
         // Ticking an action rewrites its note's line: not from a read-only device (12.15, S2).
         val editable = !VaultWriteGate.readOnly
         if (!editable) ReadOnlyNotice()

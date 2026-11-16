@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package cloud.wafflecommons.pixelbrainreader.ui.components
 
 import androidx.compose.foundation.clickable
@@ -43,6 +45,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.material3.rememberTimePickerState
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -62,14 +65,24 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
+import androidx.compose.material3.LargeFlexibleTopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.Card
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.text.style.TextOverflow
 
 /**
  * Shared building blocks for the v11 screens (settings-like pages, cards and pickers), so every new
  * surface looks the same and none re-implements a dialog.
  */
 
-/** A top bar with a back arrow over a scrolling column that clears the floating nav bar. */
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * A page's frame: the Material 3 Expressive large flexible top app bar (13.2: a big emphasized
+ * title, an optional [subtitle], collapsing as the page scrolls) over a scrolling column that clears
+ * the floating nav bar.
+ */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun FormScaffold(
     title: String,
@@ -77,12 +90,19 @@ fun FormScaffold(
     onBack: (() -> Unit)?,
     snackbarHostState: SnackbarHostState? = null,
     actions: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {},
+    subtitle: String? = null,
+    /** The page's emblem in its header (13.2). */
+    icon: ImageVector? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
-            TopAppBar(
-                title = { Text(title) },
+            CortexTopAppBar(
+                title = title,
+                subtitle = subtitle,
+                icon = icon,
                 navigationIcon = {
                     if (onBack != null) {
                         CortexIconButton(onClick = onBack) {
@@ -90,7 +110,9 @@ fun FormScaffold(
                         }
                     }
                 },
-                actions = actions
+                actions = actions,
+                // The owner's call (13.2): every page wears the Daily screen's centred header.
+                scrollBehavior = scrollBehavior
             )
         },
         snackbarHost = {
@@ -146,26 +168,30 @@ fun SectionCard(
     trailing: @Composable () -> Unit = {},
     content: @Composable ColumnScope.() -> Unit = {}
 ) {
-    ElevatedCard(
+    // 13.2, Material 3 Expressive: a tonal container (no shadow) with the extra-large corners.
+    Card(
         modifier = modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
+        shape = MaterialTheme.shapes.extraLarge,
         // [selected]: the entry whose page is open beside the list (a hub on a wide window).
-        colors = CardDefaults.elevatedCardColors(
+        colors = CardDefaults.cardColors(
             containerColor = if (selected) MaterialTheme.colorScheme.secondaryContainer
                 else MaterialTheme.colorScheme.surfaceContainerHigh
         )
     ) {
-        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(modifier = Modifier.padding(horizontal = 22.dp, vertical = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (icon != null) {
-                    Surface(shape = CircleShape, color = tint.copy(alpha = 0.15f), modifier = Modifier.size(40.dp)) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(22.dp))
-                        }
+                    // 13.2, Material 3 Expressive: the icon on an expressive shape in one of the device's
+                    // accent tones, chosen by the title (a card keeps its colour, neighbours differ). A
+                    // card given its own tint keeps it.
+                    if (tint == MaterialTheme.colorScheme.primary) {
+                        ExpressiveBadge(icon = icon, key = title, size = 46.dp)
+                    } else {
+                        ExpressiveBadge(icon = icon, key = title, size = 46.dp, tone = Tone(tint.copy(alpha = 0.16f), tint))
                     }
-                    Spacer(Modifier.width(14.dp))
+                    Spacer(Modifier.width(16.dp))
                 }
-                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Text(title, style = MaterialTheme.typography.titleLargeEmphasized, modifier = Modifier.weight(1f))
                 trailing()
             }
             if (subtitle != null) {
@@ -222,7 +248,7 @@ fun RemovableRow(title: String, subtitle: String?, onRemove: (() -> Unit)?) {
             }
         }
         // null: nothing to remove here (a read-only device).
-        if (onRemove != null) TextButton(onClick = onRemove) { Text("Remove") }
+        if (onRemove != null) TextButton(onClick = onRemove, shapes = ButtonDefaults.shapes()) { Text("Remove") }
     }
 }
 
@@ -240,7 +266,7 @@ fun FolderPickerDialog(folders: List<String>, onPick: (String) -> Unit, onDismis
             }
         },
         confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = { TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text("Cancel") } }
     )
 }
 
@@ -261,8 +287,8 @@ fun PickTimeDialog(initial: String, onConfirm: (String) -> Unit, onDismiss: () -
                 Spacer(Modifier.height(20.dp))
                 TimePicker(state = state)
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    TextButton(onClick = onDismiss) { Text("Cancel") }
-                    TextButton(onClick = { onConfirm("%02d:%02d".format(state.hour, state.minute)) }) { Text("OK") }
+                    TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text("Cancel") }
+                    TextButton(onClick = { onConfirm("%02d:%02d".format(state.hour, state.minute)) }, shapes = ButtonDefaults.shapes()) { Text("OK") }
                 }
             }
         }
@@ -278,11 +304,11 @@ fun PickDateDialog(initial: LocalDate?, onConfirm: (LocalDate) -> Unit, onDismis
         onDismissRequest = onDismiss,
         confirmButton = {
             TextButton(
-                enabled = state.selectedDateMillis != null,
+                enabled = state.selectedDateMillis != null, shapes = ButtonDefaults.shapes(),
                 onClick = { state.selectedDateMillis?.let { onConfirm(it.utcMillisToLocalDate()) } }
             ) { Text("OK") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = { TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text("Cancel") } }
     ) { DatePicker(state = state) }
 }
 
@@ -295,14 +321,14 @@ fun PickDateRangeDialog(onConfirm: (LocalDate, LocalDate) -> Unit, onDismiss: ()
         onDismissRequest = onDismiss,
         confirmButton = {
             TextButton(
-                enabled = state.selectedStartDateMillis != null,
+                enabled = state.selectedStartDateMillis != null, shapes = ButtonDefaults.shapes(),
                 onClick = {
                     val start = state.selectedStartDateMillis?.utcMillisToLocalDate() ?: return@TextButton
                     onConfirm(start, state.selectedEndDateMillis?.utcMillisToLocalDate() ?: start)
                 }
             ) { Text("OK") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = { TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text("Cancel") } }
     ) { DateRangePicker(state = state, modifier = Modifier.weight(1f)) }
 }
 
@@ -331,9 +357,9 @@ fun TextPromptDialog(
             )
         },
         confirmButton = {
-            TextButton(enabled = text.isNotBlank(), onClick = { onConfirm(text.trim()) }) { Text(confirmLabel) }
+            TextButton(enabled = text.isNotBlank(), shapes = ButtonDefaults.shapes(), onClick = { onConfirm(text.trim()) }) { Text(confirmLabel) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = { TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text("Cancel") } }
     )
 }
 

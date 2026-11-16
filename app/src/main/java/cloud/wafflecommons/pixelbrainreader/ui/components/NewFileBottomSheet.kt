@@ -9,6 +9,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.automirrored.outlined.NoteAdd
 import androidx.compose.material3.*
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -123,7 +124,7 @@ fun NewFileBottomSheet(
                 onClick = {
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     onCreate(filename, selectedTemplate, values.filterKeys { it in variables })
-                },
+                }, shapes = ButtonDefaults.shapes(),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Create Note")

@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package cloud.wafflecommons.pixelbrainreader.ui.components
 
 import androidx.compose.foundation.background
@@ -13,6 +15,9 @@ import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material3.*
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -134,10 +139,10 @@ fun NoteTimeMachineSheet(
                     confirmRestore = false
                     onRestoreContent(restorable)
                     onDismiss()
-                }) { Text("Restore") }
+                }, shapes = ButtonDefaults.shapes()) { Text("Restore") }
             },
             dismissButton = {
-                TextButton(onClick = { confirmRestore = false }) { Text("Cancel") }
+                TextButton(onClick = { confirmRestore = false }, shapes = ButtonDefaults.shapes()) { Text("Cancel") }
             }
         )
     }
@@ -159,7 +164,7 @@ fun NoteTimeMachineSheet(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 if (pick != null) {
-                    IconButton(onClick = { pick = null }) {
+                    IconButton(onClick = { pick = null }, shapes = IconButtonDefaults.shapes()) {
                         Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back to versions")
                     }
                 } else {
@@ -198,7 +203,7 @@ fun NoteTimeMachineSheet(
             val current = pick
             if (current == null && isLoading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
+                    LoadingIndicator()
                 }
             } else if (current == null) {
                 if (commits.isEmpty() && lastSync == null) {
@@ -224,7 +229,7 @@ fun NoteTimeMachineSheet(
             } else {
                 when (val state = revision) {
                     RevisionState.Loading -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
+                        LoadingIndicator()
                     }
                     RevisionState.Unreadable -> CenteredMessage(
                         if (current == Pick.LastSync) "The note's text from that sync can't be read."
@@ -249,7 +254,7 @@ fun NoteTimeMachineSheet(
                             )
                             // A read-only device reads the history and restores nothing (12.15, S2).
                             if (!VaultWriteGate.readOnly && state.restorable != null) Button(
-                                onClick = { confirmRestore = true },
+                                onClick = { confirmRestore = true }, shapes = ButtonDefaults.shapes(),
                                 enabled = state.rows.isNotEmpty(),
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = MaterialTheme.colorScheme.primaryContainer,

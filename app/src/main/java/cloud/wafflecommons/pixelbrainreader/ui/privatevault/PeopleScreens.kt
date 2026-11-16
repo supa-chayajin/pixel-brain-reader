@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package cloud.wafflecommons.pixelbrainreader.ui.privatevault
 
 import androidx.activity.compose.BackHandler
@@ -51,6 +53,9 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -71,6 +76,7 @@ import cloud.wafflecommons.pixelbrainreader.data.people.PersonKind
 import cloud.wafflecommons.pixelbrainreader.data.people.PersonNote
 import cloud.wafflecommons.pixelbrainreader.ui.privatevault.PeopleViewModel.ListKind
 import java.time.format.DateTimeFormatter
+import androidx.compose.material.icons.rounded.Groups
 
 private val DAY: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM yyyy")
 
@@ -102,7 +108,7 @@ fun PeopleList(viewModel: PeopleViewModel, padding: PaddingValues) {
         }
         when {
             !state.loaded -> item(key = "loading") {
-                Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { LoadingIndicator() }
             }
             state.people.isEmpty() -> item(key = "empty") {
                 Text(
@@ -177,8 +183,8 @@ fun AddPersonDialog(onAdd: (String, PersonKind, String) -> Unit, onDismiss: () -
                 )
             }
         },
-        confirmButton = { Button(enabled = name.isNotBlank(), onClick = { onAdd(name, kind, role) }) { Text("Add") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        confirmButton = { Button(enabled = name.isNotBlank(), shapes = ButtonDefaults.shapes(), onClick = { onAdd(name, kind, role) }) { Text("Add") } },
+        dismissButton = { TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text("Cancel") } }
     )
 }
 
@@ -216,15 +222,16 @@ fun PersonPage(viewModel: PeopleViewModel, personId: String) {
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(note?.name ?: if (person == null) "" else "A note that doesn't open", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+            cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
+                title = note?.name ?: if (person == null) "" else "A note that doesn't open",
+                icon = Icons.Rounded.Groups,
                 navigationIcon = {
-                    IconButton(onClick = { viewModel.open(null) }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
+                    IconButton(onClick = { viewModel.open(null) }, shapes = IconButtonDefaults.shapes()) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
                 },
                 actions = {
                     if (note != null && !readOnly) {
                         Box {
-                            IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, "More") }
+                            IconButton(onClick = { menu = true }, shapes = IconButtonDefaults.shapes()) { Icon(Icons.Outlined.MoreVert, "More") }
                             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                                 DropdownMenuItem(
                                     text = { Text("Edit") },
@@ -282,9 +289,9 @@ fun PersonPage(viewModel: PeopleViewModel, personId: String) {
                     )
                     problem?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (!readOnly) Button(onClick = { viewModel.startEntry(personId) }) { Text("New 1:1") }
+                        if (!readOnly) Button(onClick = { viewModel.startEntry(personId) }, shapes = ButtonDefaults.shapes()) { Text("New 1:1") }
                         if (!readOnly) {
-                            FilledTonalButton(onClick = { viewModel.askCoach(personId) }) {
+                            FilledTonalButton(onClick = { viewModel.askCoach(personId) }, shapes = ButtonDefaults.shapes()) {
                                 Icon(Icons.Outlined.Psychology, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.size(8.dp))
                                 Text("Ask Coach")
@@ -356,7 +363,7 @@ fun PersonPage(viewModel: PeopleViewModel, personId: String) {
                                 modifier = Modifier.weight(1f)
                             )
                             if (!readOnly) {
-                                IconButton(onClick = { viewModel.removeFeedback(personId, feedback) }) {
+                                IconButton(onClick = { viewModel.removeFeedback(personId, feedback) }, shapes = IconButtonDefaults.shapes()) {
                                     Icon(Icons.Outlined.Close, contentDescription = "Remove")
                                 }
                             }
@@ -364,8 +371,8 @@ fun PersonPage(viewModel: PeopleViewModel, personId: String) {
                     }
                     if (!readOnly) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            TextButton(onClick = { feedbackGiven = true }) { Text("Feedback given") }
-                            TextButton(onClick = { feedbackGiven = false }) { Text("Feedback received") }
+                            TextButton(onClick = { feedbackGiven = true }, shapes = ButtonDefaults.shapes()) { Text("Feedback given") }
+                            TextButton(onClick = { feedbackGiven = false }, shapes = ButtonDefaults.shapes()) { Text("Feedback received") }
                         }
                     }
                 }
@@ -390,8 +397,8 @@ fun PersonPage(viewModel: PeopleViewModel, personId: String) {
             onDismissRequest = { deleting = false },
             title = { Text("Delete ${note.name}'s note?") },
             text = { Text("The note leaves the vault. Its older versions stay in git history, encrypted.") },
-            confirmButton = { TextButton(onClick = { deleting = false; viewModel.delete(personId) }) { Text("Delete") } },
-            dismissButton = { TextButton(onClick = { deleting = false }) { Text("Cancel") } }
+            confirmButton = { TextButton(onClick = { deleting = false; viewModel.delete(personId) }, shapes = ButtonDefaults.shapes()) { Text("Delete") } },
+            dismissButton = { TextButton(onClick = { deleting = false }, shapes = ButtonDefaults.shapes()) { Text("Cancel") } }
         )
     }
     if (deciding && note != null) {
@@ -457,10 +464,10 @@ private fun CheckSection(
                     item.added?.let { Text(it.format(DAY), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 }
                 if (!readOnly && onToTask != null && !item.done) {
-                    IconButton(onClick = { onToTask(item) }) { Icon(Icons.Outlined.AddTask, contentDescription = "Add to today's tasks") }
+                    IconButton(onClick = { onToTask(item) }, shapes = IconButtonDefaults.shapes()) { Icon(Icons.Outlined.AddTask, contentDescription = "Add to today's tasks") }
                 }
                 if (!readOnly) {
-                    IconButton(onClick = { onRemove(item) }) { Icon(Icons.Outlined.Close, contentDescription = "Remove") }
+                    IconButton(onClick = { onRemove(item) }, shapes = IconButtonDefaults.shapes()) { Icon(Icons.Outlined.Close, contentDescription = "Remove") }
                 }
             }
         }
@@ -473,7 +480,7 @@ private fun CheckSection(
                     singleLine = true,
                     modifier = Modifier.weight(1f)
                 )
-                TextButton(enabled = draft.isNotBlank(), onClick = { onAdd(draft); draft = "" }) { Text("Add") }
+                TextButton(enabled = draft.isNotBlank(), shapes = ButtonDefaults.shapes(), onClick = { onAdd(draft); draft = "" }) { Text("Add") }
             }
         }
     }
@@ -502,8 +509,8 @@ private fun EditPersonDialog(
                 OutlinedTextField(value = personal, onValueChange = { personal = it }, label = { Text("Personal details") }, minLines = 3)
             }
         },
-        confirmButton = { Button(enabled = name.isNotBlank(), onClick = { onSave(name, kind, role, context, personal) }) { Text("Save") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        confirmButton = { Button(enabled = name.isNotBlank(), shapes = ButtonDefaults.shapes(), onClick = { onSave(name, kind, role, context, personal) }) { Text("Save") } },
+        dismissButton = { TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text("Cancel") } }
     )
 }
 
@@ -514,8 +521,8 @@ private fun TextDialog(title: String, label: String, onSave: (String) -> Unit, o
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = { OutlinedTextField(value = text, onValueChange = { text = it }, label = { Text(label) }, minLines = 2) },
-        confirmButton = { Button(enabled = text.isNotBlank(), onClick = { onSave(text) }) { Text("Save") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        confirmButton = { Button(enabled = text.isNotBlank(), shapes = ButtonDefaults.shapes(), onClick = { onSave(text) }) { Text("Save") } },
+        dismissButton = { TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text("Cancel") } }
     )
 }
 
@@ -534,8 +541,8 @@ private fun DecisionDialog(role: String, onLog: (String, String) -> Unit, onDism
                 Hint("It goes to your mission log with this role, never a name.")
             }
         },
-        confirmButton = { Button(enabled = text.isNotBlank(), onClick = { onLog(text, decidedBy) }) { Text("Log it") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        confirmButton = { Button(enabled = text.isNotBlank(), shapes = ButtonDefaults.shapes(), onClick = { onLog(text, decidedBy) }) { Text("Log it") } },
+        dismissButton = { TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text("Cancel") } }
     )
 }
 
@@ -552,8 +559,8 @@ private fun TaskDialog(initial: String, onAdd: (String) -> Unit, onDismiss: () -
                 Hint("The task is plain text on today's board and in the daily note: leave names out.")
             }
         },
-        confirmButton = { Button(enabled = text.isNotBlank(), onClick = { onAdd(text) }) { Text("Add") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        confirmButton = { Button(enabled = text.isNotBlank(), shapes = ButtonDefaults.shapes(), onClick = { onAdd(text) }) { Text("Add") } },
+        dismissButton = { TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text("Cancel") } }
     )
 }
 
@@ -567,15 +574,12 @@ fun OneOnOneEditor(viewModel: PeopleViewModel) {
     BackHandler { viewModel.saveEntry() }
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text("1:1 · ${entry.date.format(DAY)}", fontWeight = FontWeight.SemiBold)
-                        if (name.isNotBlank()) Text(name, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                },
-                navigationIcon = { IconButton(onClick = { viewModel.saveEntry() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Save and close") } },
-                actions = { TextButton(onClick = { viewModel.closeEntry() }) { Text("Discard") } }
+            cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
+                title = "1:1 · ${entry.date.format(DAY)}",
+                subtitle = name.takeIf { it.isNotBlank() },
+                icon = Icons.Rounded.Groups,
+                navigationIcon = { IconButton(onClick = { viewModel.saveEntry() }, shapes = IconButtonDefaults.shapes()) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Save and close") } },
+                actions = { TextButton(onClick = { viewModel.closeEntry() }, shapes = ButtonDefaults.shapes()) { Text("Discard") } }
             )
         }
     ) { padding ->
@@ -600,7 +604,7 @@ fun CoachSheet(viewModel: PeopleViewModel) {
             Hint("From the role, the open points and the actions; the name stays out. Nothing of it is saved.")
             HorizontalDivider()
             when {
-                state.loading -> Box(Modifier.fillMaxWidth().height(96.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                state.loading -> Box(Modifier.fillMaxWidth().height(96.dp), contentAlignment = Alignment.Center) { LoadingIndicator() }
                 state.error != null -> Text(state.error, color = MaterialTheme.colorScheme.error)
                 else -> SelectionContainer { Text(state.answer.orEmpty(), style = MaterialTheme.typography.bodyLarge) }
             }

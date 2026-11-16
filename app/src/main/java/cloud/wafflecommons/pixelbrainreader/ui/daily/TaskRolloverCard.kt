@@ -19,6 +19,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -141,10 +143,10 @@ fun TaskRolloverCard(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
                     )
-                    IconButton(onClick = { onBring(task) }) {
+                    IconButton(onClick = { onBring(task) }, shapes = IconButtonDefaults.shapes()) {
                         Icon(Icons.Rounded.Add, contentDescription = "Bring to today")
                     }
-                    IconButton(onClick = { onDismiss(task) }) {
+                    IconButton(onClick = { onDismiss(task) }, shapes = IconButtonDefaults.shapes()) {
                         Icon(Icons.Rounded.Close, contentDescription = "Dismiss")
                     }
                 }
@@ -164,8 +166,8 @@ fun TaskRolloverCard(
                             modifier = Modifier.weight(1f)
                         )
                     }
-                    TextButton(onClick = onDismissAll) { Text("Dismiss all") }
-                    TextButton(onClick = onBringAll) { Text("Bring all") }
+                    TextButton(onClick = onDismissAll, shapes = ButtonDefaults.shapes()) { Text("Dismiss all") }
+                    TextButton(onClick = onBringAll, shapes = ButtonDefaults.shapes()) { Text("Bring all") }
                 }
             }
         }

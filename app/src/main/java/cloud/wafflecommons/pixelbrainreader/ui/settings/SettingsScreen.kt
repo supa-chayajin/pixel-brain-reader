@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package cloud.wafflecommons.pixelbrainreader.ui.settings
 
 import androidx.compose.foundation.layout.*
@@ -27,6 +29,10 @@ import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.rounded.Hub
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.material3.*
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.LinearWavyProgressIndicator
+import androidx.compose.material3.LoadingIndicator
+import cloud.wafflecommons.pixelbrainreader.ui.components.switchThumb
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -70,6 +76,11 @@ import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import cloud.wafflecommons.pixelbrainreader.ui.components.ExpressiveBadge
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.background
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 
 /** Walk the ContextWrapper chain to the hosting Activity (avoids casting LocalContext directly). */
 private fun Context.findActivity(): Activity? {
@@ -208,7 +219,10 @@ fun SettingsScreen(
     }
     
 
+    // 13.2: the large header collapses as the page scrolls.
+    val settingsBarScroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     Scaffold(
+        modifier = Modifier.nestedScroll(settingsBarScroll.nestedScrollConnection),
         snackbarHost = {
             // Lift the snackbar above the floating ExpressiveNavBar (overlaid by
             // MainScreen), which would otherwise cover the toasts entirely.
@@ -220,6 +234,8 @@ fun SettingsScreen(
         topBar = {
             cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
                 title = "Settings",
+                icon = Icons.Rounded.Settings,
+                scrollBehavior = settingsBarScroll,
                 navigationIcon = {
                     CortexIconButton(onClick = onBack) {
                         Icon(
@@ -293,7 +309,7 @@ fun SettingsScreen(
                                  // left the card stuck on "Connect" and most metrics at 0.
                                  val perms = viewModel.getHealthPermissions()
                                  healthPermissionLauncher.launch(perms)
-                             }) {
+                             }, shapes = ButtonDefaults.shapes()) {
                                  Text("Connect")
                              }
                          } else {
@@ -306,8 +322,8 @@ fun SettingsScreen(
                     modifier = Modifier.clickable {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         onNavigateToFeeds()
-                    },
-                    leadingContent = { Icon(Icons.Rounded.RssFeed, contentDescription = null) },
+                    }, colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                    leadingContent = { ExpressiveBadge(Icons.Rounded.RssFeed, key = "RssFeed", size = 36.dp) },
                     supportingContent = { Text("The feeds behind the Daily screen's Tech watch, kept in your vault") }
                 ) {
                     Text("Tech watch feeds")
@@ -319,8 +335,8 @@ fun SettingsScreen(
                         modifier = Modifier.clickable {
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             onNavigateToPsn()
-                        },
-                        leadingContent = { Icon(Icons.Rounded.SportsEsports, contentDescription = null) },
+                        }, colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                        leadingContent = { ExpressiveBadge(Icons.Rounded.SportsEsports, key = "SportsEsports", size = 36.dp) },
                         supportingContent = { Text("Play time and trophies for Games, synced each night; game nights") }
                     ) {
                         Text("PlayStation Network")
@@ -332,8 +348,8 @@ fun SettingsScreen(
                     modifier = Modifier.clickable {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         onNavigateToPrivacyLedger()
-                    },
-                    leadingContent = { Icon(Icons.Rounded.Policy, contentDescription = null) },
+                    }, colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                    leadingContent = { ExpressiveBadge(Icons.Rounded.Policy, key = "Policy", size = 36.dp) },
                     supportingContent = { Text("Each host the app talked to, why, and about how much: today and the last 30 days") }
                 ) {
                     Text("Privacy ledger")
@@ -380,7 +396,7 @@ fun SettingsScreen(
                             )
                         }
                         Switch(
-                            checked = isEnabled,
+                            checked = isEnabled, thumbContent = switchThumb(isEnabled),
                             onCheckedChange = { checked ->
                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 if (checked) {
@@ -482,7 +498,7 @@ fun SettingsScreen(
                         )
                     }
                     Switch(
-                        checked = uiState.privateNotesInAi,
+                        checked = uiState.privateNotesInAi, thumbContent = switchThumb(uiState.privateNotesInAi),
                         onCheckedChange = { checked ->
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             viewModel.setPrivateNotesInAi(checked)
@@ -508,7 +524,7 @@ fun SettingsScreen(
                         )
                     }
                     Switch(
-                        checked = uiState.hybridSearch,
+                        checked = uiState.hybridSearch, thumbContent = switchThumb(uiState.hybridSearch),
                         onCheckedChange = { checked ->
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             viewModel.setHybridSearch(checked)
@@ -520,16 +536,12 @@ fun SettingsScreen(
                 Spacer(Modifier.height(12.dp))
 
                 Button(
-                    onClick = { viewModel.triggerVaultIndexing() },
+                    onClick = { viewModel.triggerVaultIndexing() }, shapes = ButtonDefaults.shapes(),
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !isRunning && !VaultWriteGate.readOnly
                 ) {
                     if (isRunning) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            strokeWidth = 2.dp
-                        )
+                        LoadingIndicator(modifier = Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary)
                         Spacer(Modifier.width(8.dp))
                         Text(
                             when (val state = indexingState) {
@@ -589,7 +601,7 @@ fun SettingsScreen(
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         showGraphDialog = true
                         viewModel.analyzeVaultGraph()
-                    },
+                    }, shapes = ButtonDefaults.shapes(),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Icon(
@@ -615,7 +627,7 @@ fun SettingsScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        OutlinedButton(onClick = viewModel::runGoldenSet, enabled = !isGoldenRunning) {
+                        OutlinedButton(onClick = viewModel::runGoldenSet, shapes = ButtonDefaults.shapes(), enabled = !isGoldenRunning) {
                             Text(if (isGoldenRunning) "Measuring…" else "Run")
                         }
                     }
@@ -634,8 +646,8 @@ fun SettingsScreen(
                     modifier = Modifier.clickable {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         onNavigateToHabitConfig()
-                    },
-                    leadingContent = { Icon(Icons.Rounded.DateRange, contentDescription = null) },
+                    }, colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                    leadingContent = { ExpressiveBadge(Icons.Rounded.DateRange, key = "DateRange", size = 36.dp) },
                     supportingContent = { Text("Add and edit habits; some tick themselves from Health Connect") }
                 ) {
                     Text("Manage Habits & Automations")
@@ -645,8 +657,8 @@ fun SettingsScreen(
                     modifier = Modifier.clickable {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         onNavigateToHomeConfig()
-                    },
-                    leadingContent = { Icon(Icons.Rounded.CleaningServices, contentDescription = null) },
+                    }, colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                    leadingContent = { ExpressiveBadge(Icons.Rounded.CleaningServices, key = "CleaningServices", size = 36.dp) },
                     supportingContent = { Text("Rooms and chores, and how often each one comes back") }
                 ) {
                     Text("Manage House & Chores")
@@ -656,8 +668,8 @@ fun SettingsScreen(
                     modifier = Modifier.clickable {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         onNavigateToReminders()
-                    },
-                    leadingContent = { Icon(Icons.Filled.Notifications, contentDescription = null) },
+                    }, colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                    leadingContent = { ExpressiveBadge(Icons.Filled.Notifications, key = "Notifications", size = 36.dp) },
                     supportingContent = { Text("Evening check-in, private vault reminder, chores & habits reminders") }
                 ) {
                     Text("Reminders & Notifications")
@@ -667,8 +679,8 @@ fun SettingsScreen(
                     modifier = Modifier.clickable {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         onNavigateToModes()
-                    },
-                    leadingContent = { Icon(Icons.Rounded.Work, contentDescription = null) },
+                    }, colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                    leadingContent = { ExpressiveBadge(Icons.Rounded.Work, key = "Work", size = 36.dp) },
                     supportingContent = { Text("Names and icons, work folders and hours, leave, key dates, screen-share safe") }
                 ) {
                     Text("Modes: work, personal, off")
@@ -678,8 +690,8 @@ fun SettingsScreen(
                     modifier = Modifier.clickable {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         onNavigateToConfidentiality()
-                    },
-                    leadingContent = { Icon(Icons.Rounded.Shield, contentDescription = null) },
+                    }, colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                    leadingContent = { ExpressiveBadge(Icons.Rounded.Shield, key = "Shield", size = 36.dp) },
                     supportingContent = { Text("Protected names and secrets: a commit holding one waits for your review") }
                 ) {
                     Text("Confidentiality guard")
@@ -689,8 +701,8 @@ fun SettingsScreen(
                     modifier = Modifier.clickable {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         onNavigateToMoodTags()
-                    },
-                    leadingContent = { Icon(Icons.Rounded.Mood, contentDescription = null) },
+                    }, colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                    leadingContent = { ExpressiveBadge(Icons.Rounded.Mood, key = "Mood", size = 36.dp) },
                     supportingContent = { Text("The tags you can add when you log a mood, and their icons") }
                 ) {
                     Text("Manage Mood Tags")
@@ -700,8 +712,8 @@ fun SettingsScreen(
                     modifier = Modifier.clickable {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         onNavigateToGamificationSettings()
-                    },
-                    leadingContent = { Icon(Icons.Filled.Tune, contentDescription = null) },
+                    }, colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                    leadingContent = { ExpressiveBadge(Icons.Filled.Tune, key = "Tune", size = 36.dp) },
                     supportingContent = { Text("Health goals, the mood emoji set, and which tags feed which stat") }
                 ) {
                     Text("RPG & Gamification Rules")
@@ -734,12 +746,12 @@ fun SettingsScreen(
                                 )
                             }
                         }
-                    },
+                    }, shapes = ButtonDefaults.shapes(),
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !isSyncingConfigs
                 ) {
                     if (isSyncingConfigs) {
-                        CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary)
+                        LoadingIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary)
                     } else {
                         Icon(Icons.Default.Download, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
@@ -759,7 +771,7 @@ fun SettingsScreen(
                                 )
                             }
                         }
-                    },
+                    }, shapes = ButtonDefaults.shapes(),
                     modifier = Modifier.fillMaxWidth(),
                     // Export writes the vault: a read-only device imports only (12.15, S2).
                     enabled = !isSyncingConfigs && !VaultWriteGate.readOnly
@@ -785,8 +797,8 @@ fun SettingsScreen(
                     modifier = Modifier.clickable {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         onNavigateToDailyLayout()
-                    },
-                    leadingContent = { Icon(Icons.Rounded.ViewAgenda, contentDescription = null) },
+                    }, colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                    leadingContent = { ExpressiveBadge(Icons.Rounded.ViewAgenda, key = "ViewAgenda", size = 36.dp) },
                     supportingContent = { Text("Order the blocks and choose which stay on screen") }
                 ) {
                     Text("Daily screen")
@@ -796,7 +808,7 @@ fun SettingsScreen(
                     modifier = Modifier.clickable {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         onNavigateToNavBarReorder()
-                    },
+                    }, colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
                     leadingContent = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) },
                     supportingContent = { Text("Reorder the tabs at the bottom; the Daily button stays put") }
                 ) {
@@ -804,11 +816,11 @@ fun SettingsScreen(
                 }
 
                 ListItem(
-                    leadingContent = { Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = null) },
+                    leadingContent = { Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = null) }, colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
                     supportingContent = { Text("A short sound when you complete a habit or a task") },
                     trailingContent = {
                         Switch(
-                            checked = uiState.soundEffectsEnabled,
+                            checked = uiState.soundEffectsEnabled, thumbContent = switchThumb(uiState.soundEffectsEnabled),
                             onCheckedChange = {
                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 viewModel.setSoundEffects(it)
@@ -846,7 +858,7 @@ fun SettingsScreen(
                         modifier = Modifier.clickable {
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             onOpenSyncConflicts()
-                        },
+                        }, colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
                         leadingContent = { Icon(Icons.Rounded.SyncProblem, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
                         supportingContent = {
                             Text(
@@ -862,7 +874,7 @@ fun SettingsScreen(
                     modifier = Modifier.clickable {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         confirmLogout = true
-                    },
+                    }, colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
                     leadingContent = { Icon(Icons.AutoMirrored.Outlined.Logout, contentDescription = null) },
                     supportingContent = { Text("Forget this device's token; the next login picks the vault and the role") }
                 ) {
@@ -883,22 +895,25 @@ fun SettingsSection(
     content: @Composable () -> Unit
 ) {
     Column {
+        // 13.2: the section's emblem on an expressive shape, then its emphasized title.
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                imageVector = icon, 
-                contentDescription = null, 
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(24.dp)
-            )
+            cloud.wafflecommons.pixelbrainreader.ui.components.ExpressiveBadge(icon = icon, key = title, size = 34.dp)
             Spacer(modifier = Modifier.width(12.dp))
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                color = MaterialTheme.colorScheme.primary
+                style = MaterialTheme.typography.titleLargeEmphasized,
+                color = MaterialTheme.colorScheme.onSurface
             )
         }
         Spacer(modifier = Modifier.height(16.dp))
-        content()
+        // 13.2, Material 3 Expressive (the Android 16 look): the section's rows as one segmented
+        // group, extra-large outer corners, each row its own tonal surface, 2 dp of the page between.
+        Column(
+            modifier = Modifier.clip(MaterialTheme.shapes.extraLarge),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            content()
+        }
     }
 }
 
@@ -919,8 +934,9 @@ fun IntelligenceOption(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
             .clickable(enabled = enabled, onClick = hapticOnClick)
-            .padding(vertical = 8.dp),
+            .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         RadioButton(
@@ -967,10 +983,7 @@ private fun NanoModelLifecyclePanel(
             when (state) {
                 NanoState.Unknown, NanoState.Checking -> {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(16.dp),
-                            strokeWidth = 2.dp
-                        )
+                        LoadingIndicator(modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(12.dp))
                         Text(
                             text = "Checking model availability…",
@@ -980,7 +993,7 @@ private fun NanoModelLifecyclePanel(
                 }
                 NanoState.NotDownloaded -> {
                     Button(
-                        onClick = onDownload,
+                        onClick = onDownload, shapes = ButtonDefaults.shapes(),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Icon(Icons.Default.Download, contentDescription = null)
@@ -1003,12 +1016,12 @@ private fun NanoModelLifecyclePanel(
                     Text(text = label, style = MaterialTheme.typography.bodyMedium)
                     Spacer(Modifier.height(8.dp))
                     if (state.progress in 0f..1f) {
-                        LinearProgressIndicator(
+                        LinearWavyProgressIndicator(
                             progress = { state.progress },
                             modifier = Modifier.fillMaxWidth()
                         )
                     } else {
-                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        LinearWavyProgressIndicator(modifier = Modifier.fillMaxWidth())
                     }
                 }
                 NanoState.Ready -> {
@@ -1054,7 +1067,7 @@ private fun NanoModelLifecyclePanel(
                     )
                     Spacer(Modifier.height(8.dp))
                     OutlinedButton(
-                        onClick = onDownload,
+                        onClick = onDownload, shapes = ButtonDefaults.shapes(),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("Retry download")

@@ -11,6 +11,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -59,7 +60,7 @@ fun FocusDialog(session: FocusSession?, onStart: (Int) -> Unit, onStop: () -> Un
                         style = MaterialTheme.typography.bodyMedium
                     )
                     FocusSession.DURATIONS.forEach { minutes ->
-                        FilledTonalButton(onClick = { onStart(minutes) }, modifier = Modifier.fillMaxWidth()) {
+                        FilledTonalButton(onClick = { onStart(minutes) }, shapes = ButtonDefaults.shapes(), modifier = Modifier.fillMaxWidth()) {
                             Text(if (minutes == FocusSession.DEFAULT_MINUTES) "$minutes minutes (usual)" else "$minutes minutes")
                         }
                     }
@@ -73,10 +74,10 @@ fun FocusDialog(session: FocusSession?, onStart: (Int) -> Unit, onStop: () -> Un
             }
         },
         confirmButton = {
-            if (running != null) TextButton(onClick = onStop) { Text("Stop") }
+            if (running != null) TextButton(onClick = onStop, shapes = ButtonDefaults.shapes()) { Text("Stop") }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text(if (running == null) "Cancel" else "Keep going") }
+            TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text(if (running == null) "Cancel" else "Keep going") }
         }
     )
 }

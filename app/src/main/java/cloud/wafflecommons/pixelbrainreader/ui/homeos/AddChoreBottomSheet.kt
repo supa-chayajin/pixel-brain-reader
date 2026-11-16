@@ -5,6 +5,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Modifier
@@ -167,7 +168,7 @@ fun AddChoreBottomSheet(
                         minutes = minutes.toIntOrNull() ?: 0
                     )
                     onDismiss()
-                },
+                }, shapes = ButtonDefaults.shapes(),
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !nameError && !frequencyError && selectedRoomId.isNotBlank()
             ) {

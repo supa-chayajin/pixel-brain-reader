@@ -14,6 +14,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ButtonDefaults
+import cloud.wafflecommons.pixelbrainreader.ui.components.switchThumb
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -50,6 +52,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import androidx.compose.material.icons.rounded.Newspaper
 
 /** The tech watch's feeds (D5), kept in the vault's `feeds.json`: every change reads the file first. */
 @HiltViewModel
@@ -136,7 +139,7 @@ fun FeedsScreen(onNavigateBack: () -> Unit, viewModel: FeedsViewModel = hiltView
     var address by rememberSaveable { mutableStateOf("") }
     var name by rememberSaveable { mutableStateOf("") }
 
-    FormScaffold(title = "Tech watch feeds", onBack = onNavigateBack) {
+    FormScaffold(title = "Tech watch feeds", icon = Icons.Rounded.Newspaper, onBack = onNavigateBack) {
         Text(
             text = "The Daily block shows the latest headlines of these feeds. The list lives in your vault, " +
                 "so every device reads the same one. A feed marked $workLabel hides outside $workLabel mode.",
@@ -160,7 +163,7 @@ fun FeedsScreen(onNavigateBack: () -> Unit, viewModel: FeedsViewModel = hiltView
                 )
             }
             if (feeds.isNotEmpty()) {
-                TextButton(onClick = viewModel::checkNow, enabled = !checking) {
+                TextButton(onClick = viewModel::checkNow, shapes = ButtonDefaults.shapes(), enabled = !checking) {
                     Text(if (checking) "Checking…" else "Check now")
                 }
             }
@@ -189,7 +192,7 @@ fun FeedsScreen(onNavigateBack: () -> Unit, viewModel: FeedsViewModel = hiltView
                             address = ""
                             name = ""
                         }
-                    },
+                    }, shapes = ButtonDefaults.shapes(),
                     enabled = address.isNotBlank()
                 ) { Text("Add") }
             }
@@ -214,11 +217,11 @@ private fun FeedRow(
             FeedStatusLine(status)
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Switch(checked = feed.work, onCheckedChange = onWork, enabled = editable)
+            Switch(checked = feed.work, thumbContent = switchThumb(feed.work), onCheckedChange = onWork, enabled = editable)
             Text(workLabel, style = MaterialTheme.typography.labelSmall, maxLines = 1)
         }
         if (editable) {
-            TextButton(onClick = { if (confirming) onRemove() else confirming = true }) {
+            TextButton(onClick = { if (confirming) onRemove() else confirming = true }, shapes = ButtonDefaults.shapes()) {
                 Text(if (confirming) "Sure?" else "Remove")
             }
         }

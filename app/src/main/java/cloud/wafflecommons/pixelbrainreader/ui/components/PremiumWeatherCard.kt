@@ -21,6 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import cloud.wafflecommons.pixelbrainreader.R
 import cloud.wafflecommons.pixelbrainreader.data.repository.WeatherData
+import androidx.compose.material3.Card
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -28,10 +29,11 @@ fun PremiumWeatherCard(
     weather: WeatherData?,
     modifier: Modifier = Modifier
 ) {
-    ElevatedCard(
+    // 13.2, Material 3 Expressive: a tonal hero, the illustration on a turning cookie shape.
+    Card(
         modifier = modifier
             .fillMaxWidth(),
-        colors = CardDefaults.elevatedCardColors(
+        colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.secondaryContainer
         ),
         shape = MaterialTheme.shapes.extraLarge
@@ -86,16 +88,21 @@ fun PremiumWeatherCard(
                     )
                 }
             } else {
-                val (iconRes, condition) = mapWeatherCode(weather.code)
+                val condition = mapWeatherCode(weather.code).second
 
-                // Large, colourful, gently-animated weather illustration
-                AliveWeatherIcon(iconRes, condition)
+                // 13.2: the weather drawn from Material 3 Expressive shapes, right on the card (the
+                // owner's call: no shape around it), in the card's own contrasting colours.
+                ExpressiveWeather(
+                    weatherKindOf(weather.code),
+                    size = 112.dp,
+                    ink = MaterialTheme.colorScheme.onSecondaryContainer,
+                    sun = MaterialTheme.colorScheme.primary
+                )
 
                 Column {
                     Text(
                         text = weather.temperature,
-                        style = MaterialTheme.typography.displayMedium,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.displayMediumEmphasized,
                         color = MaterialTheme.colorScheme.onSecondaryContainer
                     )
                     Text(

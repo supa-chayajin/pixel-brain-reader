@@ -19,6 +19,11 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
+import androidx.compose.material3.ButtonDefaults
+import cloud.wafflecommons.pixelbrainreader.ui.components.connectedShapes
+import cloud.wafflecommons.pixelbrainreader.ui.components.ConnectedButtonRow
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,6 +41,7 @@ import cloud.wafflecommons.pixelbrainreader.ui.components.ReadOnlyNotice
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.util.UUID
+import androidx.compose.material.icons.rounded.DateRange
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -60,8 +66,9 @@ fun HabitConfigScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Manage Habits & Automations") },
+            cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
+                title = "Manage Habits & Automations",
+                icon = Icons.Rounded.DateRange,
                 navigationIcon = {
                     CortexIconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -229,18 +236,20 @@ fun HabitEditorForm(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Type: ", style = MaterialTheme.typography.bodyLarge)
             Spacer(Modifier.width(8.dp))
-            SingleChoiceSegmentedButtonRow {
-                SegmentedButton(
-                    selected = type == HabitType.BOOLEAN,
-                    onClick = { type = HabitType.BOOLEAN },
-                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2)
+            ConnectedButtonRow {
+                ToggleButton(
+                    checked = type == HabitType.BOOLEAN,
+                    onCheckedChange = { type = HabitType.BOOLEAN },
+                    shapes = connectedShapes(0, 2),
+                    modifier = Modifier.weight(1f)
                 ) {
                     Text("Checklist")
                 }
-                SegmentedButton(
-                    selected = type == HabitType.MEASURABLE,
-                    onClick = { type = HabitType.MEASURABLE },
-                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2)
+                ToggleButton(
+                    checked = type == HabitType.MEASURABLE,
+                    onCheckedChange = { type = HabitType.MEASURABLE },
+                    shapes = connectedShapes(1, 2),
+                    modifier = Modifier.weight(1f)
                 ) {
                     Text("Target")
                 }
@@ -270,17 +279,20 @@ fun HabitEditorForm(
         Text("Schedule", style = MaterialTheme.typography.titleMedium)
         val days = listOf("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN")
 
-        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+        ConnectedButtonRow(modifier = Modifier.fillMaxWidth()) {
             val modes = listOf("WEEKLY" to "Weekly", "BIWEEKLY" to "2 wk", "INTERVAL" to "Interval")
             modes.forEachIndexed { index, (mode, lbl) ->
-                SegmentedButton(
-                    selected = scheduleMode == mode,
-                    onClick = {
+                ToggleButton(
+                    checked = scheduleMode == mode,
+                    onCheckedChange = {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         scheduleMode = mode
                     },
-                    shape = SegmentedButtonDefaults.itemShape(index = index, count = modes.size)
-                ) { Text(lbl) }
+                    shapes = connectedShapes(index, modes.size),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(lbl)
+                }
             }
         }
 
@@ -303,14 +315,17 @@ fun HabitEditorForm(
                         modifier = Modifier.width(110.dp),
                         singleLine = true
                     )
-                    SingleChoiceSegmentedButtonRow {
+                    ConnectedButtonRow {
                         val units = listOf("DAY" to "days", "WEEK" to "wk", "MONTH" to "months")
                         units.forEachIndexed { index, (u, lbl) ->
-                            SegmentedButton(
-                                selected = intervalUnit == u,
-                                onClick = { intervalUnit = u },
-                                shape = SegmentedButtonDefaults.itemShape(index = index, count = units.size)
-                            ) { Text(lbl) }
+                            ToggleButton(
+                                checked = intervalUnit == u,
+                                onCheckedChange = { intervalUnit = u },
+                                shapes = connectedShapes(index, units.size),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(lbl)
+                            }
                         }
                     }
                 }
@@ -417,7 +432,7 @@ fun HabitEditorForm(
                 onClick = {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     onDelete()
-                },
+                }, shapes = ButtonDefaults.shapes(),
                 colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
             ) {
                 Icon(Icons.Filled.Delete, contentDescription = "Delete")
@@ -428,7 +443,7 @@ fun HabitEditorForm(
                 TextButton(onClick = {
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     onCancel()
-                }) { Text("Cancel") }
+                }, shapes = ButtonDefaults.shapes()) { Text("Cancel") }
                 Button(onClick = {
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     val finalSource = if (autoSource == "None (Manual)") null else autoSource
@@ -452,7 +467,7 @@ fun HabitEditorForm(
                         custody = custodyChoice
                     )
                     onSave(updated)
-                }) {
+                }, shapes = ButtonDefaults.shapes()) {
                     Text("Save")
                 }
             }

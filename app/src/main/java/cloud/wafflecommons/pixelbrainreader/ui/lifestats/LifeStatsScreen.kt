@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package cloud.wafflecommons.pixelbrainreader.ui.lifestats
 
 import androidx.compose.animation.core.animateFloatAsState
@@ -28,6 +30,7 @@ import androidx.compose.material.icons.rounded.CleaningServices
 import androidx.compose.material.icons.rounded.DateRange
 import androidx.compose.material3.*
 import androidx.compose.material3.LoadingIndicator
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,6 +51,8 @@ import cloud.wafflecommons.pixelbrainreader.ui.components.MoodTrendsCard
 import cloud.wafflecommons.pixelbrainreader.ui.daily.DailyMoodPoint
 import cloud.wafflecommons.pixelbrainreader.ui.theme.ChartPalette
 import cloud.wafflecommons.pixelbrainreader.ui.theme.SemanticPalette
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.material.icons.rounded.Star
 
 @OptIn(ExperimentalMaterial3Api::class, androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -70,10 +75,11 @@ fun LifeStatsScreen(
         topBar = {
             cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
                 title = "Life Stats",
+                icon = Icons.Rounded.Star,
                 actions = {
                     // X5 (13.0): first, so Habits and Chores keep their places at the end.
                     FilledTonalIconButton(
-                        onClick = onOpenWrapped,
+                        onClick = onOpenWrapped, shapes = IconButtonDefaults.shapes(),
                         colors = IconButtonDefaults.filledTonalIconButtonColors(
                             containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                             contentColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -82,7 +88,7 @@ fun LifeStatsScreen(
                         Icon(Icons.Rounded.AutoAwesome, "Your year so far")
                     }
                     FilledTonalIconButton(
-                        onClick = onNavigateToHabits,
+                        onClick = onNavigateToHabits, shapes = IconButtonDefaults.shapes(),
                         colors = IconButtonDefaults.filledTonalIconButtonColors(
                             containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                             contentColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -91,7 +97,7 @@ fun LifeStatsScreen(
                         Icon(Icons.Rounded.DateRange, "Habits")
                     }
                     FilledTonalIconButton(
-                        onClick = onNavigateToChores,
+                        onClick = onNavigateToChores, shapes = IconButtonDefaults.shapes(),
                         colors = IconButtonDefaults.filledTonalIconButtonColors(
                             containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                             contentColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -189,12 +195,16 @@ private fun RpgHeroCard(uiState: LifeStatsUiState) {
                 }
             }
             Spacer(Modifier.height(18.dp))
-            LinearProgressIndicator(
+            // The level's progress, as an expressive wave (13.2).
+            val waveStroke = with(LocalDensity.current) { Stroke(width = 6.dp.toPx(), cap = StrokeCap.Round) }
+            LinearWavyProgressIndicator(
                 progress = { animatedXp },
-                modifier = Modifier.fillMaxWidth().height(10.dp),
-                color = MaterialTheme.colorScheme.primary,
-                trackColor = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.15f),
-                strokeCap = StrokeCap.Round
+                modifier = Modifier.fillMaxWidth().height(14.dp),
+                // On the hero's primary container, its own content colour reads (primary didn't).
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                trackColor = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.2f),
+                stroke = waveStroke,
+                trackStroke = waveStroke
             )
             Spacer(Modifier.height(6.dp))
             Text(

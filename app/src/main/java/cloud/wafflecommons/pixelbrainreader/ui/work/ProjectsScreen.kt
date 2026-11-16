@@ -48,6 +48,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -100,6 +102,8 @@ import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import javax.inject.Inject
 import kotlin.math.roundToInt
+import androidx.compose.material3.Card
+import androidx.compose.material.icons.rounded.RocketLaunch
 
 @HiltViewModel
 class ProjectsViewModel @Inject constructor(
@@ -271,6 +275,7 @@ fun ProjectsScreen(
 
     FormScaffold(
         title = "Projects",
+        icon = Icons.Rounded.RocketLaunch,
         onBack = onBack,
         snackbarHostState = snackbar,
         actions = {
@@ -349,12 +354,13 @@ fun ProjectsScreen(
 @Composable
 private fun ProjectCard(p: ProjectSummary, onOpenProject: (root: String) -> Unit, selected: Boolean = false, pinned: Boolean = false) {
     val colors = MaterialTheme.colorScheme
-    ElevatedCard(
+    // 13.2, Material 3 Expressive: a tonal card with the extra-large corners.
+    Card(
         onClick = { onOpenProject(p.root) },
         modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
+        shape = MaterialTheme.shapes.extraLarge,
         // [selected]: the project whose page is open beside the list (a wide window).
-        colors = CardDefaults.elevatedCardColors(
+        colors = CardDefaults.cardColors(
             containerColor = if (selected) colors.secondaryContainer else colors.surfaceContainerHigh
         )
     ) {
@@ -578,7 +584,7 @@ private fun HiddenProjects(
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f)
                         )
-                        if (onShow != null) TextButton(onClick = { onShow(p.root) }) { Text("Show") }
+                        if (onShow != null) TextButton(onClick = { onShow(p.root) }, shapes = ButtonDefaults.shapes()) { Text("Show") }
                     }
                 }
             }
@@ -642,16 +648,16 @@ internal fun ArrangeProjectsContent(
                 item(key = "p:" + p.root) {
                     val name = projectDisplayName(p.title)
                     ArrangeRow(p) {
-                        IconButton(enabled = index > 0, onClick = { onSwapPinned(p.root, arranged.pinned[index - 1].root) }) {
+                        IconButton(enabled = index > 0, shapes = IconButtonDefaults.shapes(), onClick = { onSwapPinned(p.root, arranged.pinned[index - 1].root) }) {
                             Icon(Icons.Rounded.KeyboardArrowUp, contentDescription = "Move $name up")
                         }
-                        IconButton(enabled = index < arranged.pinned.lastIndex, onClick = { onSwapPinned(p.root, arranged.pinned[index + 1].root) }) {
+                        IconButton(enabled = index < arranged.pinned.lastIndex, shapes = IconButtonDefaults.shapes(), onClick = { onSwapPinned(p.root, arranged.pinned[index + 1].root) }) {
                             Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = "Move $name down")
                         }
-                        IconButton(onClick = { onUnpin(p.root) }) {
+                        IconButton(onClick = { onUnpin(p.root) }, shapes = IconButtonDefaults.shapes()) {
                             Icon(Icons.Rounded.PushPin, contentDescription = "Unpin $name", tint = MaterialTheme.colorScheme.primary)
                         }
-                        IconButton(onClick = { onHide(p.root) }) {
+                        IconButton(onClick = { onHide(p.root) }, shapes = IconButtonDefaults.shapes()) {
                             Icon(Icons.Rounded.VisibilityOff, contentDescription = "Hide $name")
                         }
                     }
@@ -664,10 +670,10 @@ internal fun ArrangeProjectsContent(
                 item(key = "o:" + p.root) {
                     val name = projectDisplayName(p.title)
                     ArrangeRow(p) {
-                        IconButton(onClick = { onPin(p.root) }) {
+                        IconButton(onClick = { onPin(p.root) }, shapes = IconButtonDefaults.shapes()) {
                             Icon(Icons.Outlined.PushPin, contentDescription = "Pin $name")
                         }
-                        IconButton(onClick = { onHide(p.root) }) {
+                        IconButton(onClick = { onHide(p.root) }, shapes = IconButtonDefaults.shapes()) {
                             Icon(Icons.Rounded.VisibilityOff, contentDescription = "Hide $name")
                         }
                     }
@@ -679,7 +685,7 @@ internal fun ArrangeProjectsContent(
             arranged.hidden.forEach { p ->
                 item(key = "x:" + p.root) {
                     ArrangeRow(p, dimmed = true) {
-                        IconButton(onClick = { onShow(p.root) }) {
+                        IconButton(onClick = { onShow(p.root) }, shapes = IconButtonDefaults.shapes()) {
                             Icon(Icons.Rounded.Visibility, contentDescription = "Show ${projectDisplayName(p.title)}")
                         }
                     }
@@ -743,7 +749,7 @@ fun ProjectScreen(
         message?.let { snackbar.showSnackbar(it); viewModel.clearMessage() }
     }
 
-    FormScaffold(title = projectDisplayName(p?.title ?: root.substringAfterLast('/')), onBack = onBack, snackbarHostState = snackbar) {
+    FormScaffold(title = projectDisplayName(p?.title ?: root.substringAfterLast('/')), icon = Icons.Rounded.RocketLaunch, onBack = onBack, snackbarHostState = snackbar) {
         if (p == null) {
             Text(
                 if (state == ProjectsViewModel.ProjectState.Loading || stale) "Loading…" else "This project is hidden or no longer exists.",
@@ -943,7 +949,7 @@ private fun ClaudeQueueCard(queue: List<ProjectAction>, onOpenTodo: () -> Unit, 
             questions.take(QUESTIONS_SHOWN).forEach { q ->
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     Text("❓ ${q.text}", style = MaterialTheme.typography.bodyMedium, maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                    if (onAnswer != null) TextButton(onClick = { answering = q }) { Text("Answer") }
+                    if (onAnswer != null) TextButton(onClick = { answering = q }, shapes = ButtonDefaults.shapes()) { Text("Answer") }
                 }
             }
         }
@@ -971,8 +977,8 @@ private fun AnswerDialog(question: String, onAnswer: (String) -> Unit, onDismiss
                 )
             }
         },
-        confirmButton = { TextButton(enabled = text.isNotBlank(), onClick = { onAnswer(text) }) { Text("Answer") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        confirmButton = { TextButton(enabled = text.isNotBlank(), shapes = ButtonDefaults.shapes(), onClick = { onAnswer(text) }) { Text("Answer") } },
+        dismissButton = { TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text("Cancel") } }
     )
 }
 

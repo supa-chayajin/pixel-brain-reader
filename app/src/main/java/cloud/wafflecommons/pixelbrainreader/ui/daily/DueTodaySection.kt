@@ -43,6 +43,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import javax.inject.Inject
+import cloud.wafflecommons.pixelbrainreader.ui.components.DailyBlockHeader
+import androidx.compose.material.icons.rounded.Alarm
+import cloud.wafflecommons.pixelbrainreader.ui.components.SegmentedGroup
 
 /**
  * The "Due today" block ([cloud.wafflecommons.pixelbrainreader.data.daily.DueToday]): re-read when
@@ -90,30 +93,27 @@ fun DueTodaySection(
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            text = "⏰ Due today",
-            color = MaterialTheme.colorScheme.secondary,
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(horizontal = 4.dp)
+        DailyBlockHeader(icon = Icons.Rounded.Alarm, title = "Due today", modifier = Modifier.padding(horizontal = 4.dp)
         )
-        items.filter { it.kind != DueKind.CHORE }.forEach { item ->
-            DueRow(
-                icon = if (item.kind == DueKind.MILESTONE) Icons.Rounded.Flag else Icons.Rounded.TaskAlt,
-                text = item.text,
-                context = if (item.kind == DueKind.MILESTONE) "Objective · ${item.context}" else item.context,
-                late = item.overdueDays(today),
-                onClick = { item.path?.let(onOpenNote) }
-            )
-        }
-        DueToday.choreSummary(items)?.let { chores ->
-            DueRow(
-                icon = Icons.Rounded.CleaningServices,
-                text = if (chores.count == 1) "1 chore due" else "${chores.count} chores due",
-                context = chores.rooms.joinToString(", "),
-                late = java.time.temporal.ChronoUnit.DAYS.between(chores.oldestDue, today),
-                onClick = onOpenChores
-            )
+        SegmentedGroup {
+            items.filter { it.kind != DueKind.CHORE }.forEach { item ->
+                DueRow(
+                    icon = if (item.kind == DueKind.MILESTONE) Icons.Rounded.Flag else Icons.Rounded.TaskAlt,
+                    text = item.text,
+                    context = if (item.kind == DueKind.MILESTONE) "Objective · ${item.context}" else item.context,
+                    late = item.overdueDays(today),
+                    onClick = { item.path?.let(onOpenNote) }
+                )
+            }
+            DueToday.choreSummary(items)?.let { chores ->
+                DueRow(
+                    icon = Icons.Rounded.CleaningServices,
+                    text = if (chores.count == 1) "1 chore due" else "${chores.count} chores due",
+                    context = chores.rooms.joinToString(", "),
+                    late = java.time.temporal.ChronoUnit.DAYS.between(chores.oldestDue, today),
+                    onClick = onOpenChores
+                )
+            }
         }
     }
 }
@@ -129,7 +129,7 @@ private fun DueRow(
     Surface(
         onClick = onClick,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = MaterialTheme.shapes.large,
+        shape = MaterialTheme.shapes.extraSmall,
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {

@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package cloud.wafflecommons.pixelbrainreader.ui.games
 
 import android.content.Intent
@@ -17,6 +19,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -38,6 +42,7 @@ import cloud.wafflecommons.pixelbrainreader.ui.components.EmptyHint
 import cloud.wafflecommons.pixelbrainreader.ui.components.FormScaffold
 import cloud.wafflecommons.pixelbrainreader.ui.components.ReadOnlyNotice
 import cloud.wafflecommons.pixelbrainreader.ui.components.SectionCard
+import androidx.compose.material.icons.rounded.VideogameAsset
 
 /**
  * PlayStation Network (RFC-009 §7): connect with an NPSSO (used once, never kept), see the last sync
@@ -54,13 +59,13 @@ fun PsnSettingsScreen(onBack: () -> Unit, viewModel: PsnSettingsViewModel = hilt
 
     fun open(url: String) = context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
 
-    FormScaffold(title = "PlayStation Network", onBack = onBack) {
+    FormScaffold(title = "PlayStation Network", icon = Icons.Rounded.VideogameAsset, onBack = onBack) {
         if (state.readOnly) ReadOnlyNotice()
         if (!state.configured) {
             EmptyHint("This build has no PlayStation client: add psnClientId and psnClientSecret to local.properties, then build again. Games works by hand without it.")
             return@FormScaffold
         }
-        if (state.busy) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        if (state.busy) LinearWavyProgressIndicator(modifier = Modifier.fillMaxWidth())
         state.message?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
 
         if (state.connected) {
@@ -76,8 +81,8 @@ fun PsnSettingsScreen(onBack: () -> Unit, viewModel: PsnSettingsViewModel = hilt
             ) {
                 if (!state.readOnly) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = viewModel::syncNow, enabled = !state.busy) { Text("Sync now") }
-                        OutlinedButton(onClick = { confirmDisconnect = true }, enabled = !state.busy) { Text("Disconnect") }
+                        Button(onClick = viewModel::syncNow, shapes = ButtonDefaults.shapes(), enabled = !state.busy) { Text("Sync now") }
+                        OutlinedButton(onClick = { confirmDisconnect = true }, shapes = ButtonDefaults.shapes(), enabled = !state.busy) { Text("Disconnect") }
                     }
                 }
             }
@@ -91,8 +96,8 @@ fun PsnSettingsScreen(onBack: () -> Unit, viewModel: PsnSettingsViewModel = hilt
                     "3. Copy the value and paste it here. It is used once and never saved; the app keeps only the sign-in it gives."
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { open("https://www.playstation.com/") }) { Text("playstation.com") }
-                    OutlinedButton(onClick = { open("https://ca.account.sony.com/api/v1/ssocookie") }) { Text("NPSSO page") }
+                    OutlinedButton(onClick = { open("https://www.playstation.com/") }, shapes = ButtonDefaults.shapes()) { Text("playstation.com") }
+                    OutlinedButton(onClick = { open("https://ca.account.sony.com/api/v1/ssocookie") }, shapes = ButtonDefaults.shapes()) { Text("NPSSO page") }
                 }
                 OutlinedTextField(
                     value = viewModel.pasted,
@@ -103,7 +108,7 @@ fun PsnSettingsScreen(onBack: () -> Unit, viewModel: PsnSettingsViewModel = hilt
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
                     modifier = Modifier.fillMaxWidth()
                 )
-                Button(onClick = viewModel::connect, enabled = !state.busy && viewModel.pasted.isNotBlank()) { Text("Connect") }
+                Button(onClick = viewModel::connect, shapes = ButtonDefaults.shapes(), enabled = !state.busy && viewModel.pasted.isNotBlank()) { Text("Connect") }
             }
         }
 
@@ -119,7 +124,7 @@ fun PsnSettingsScreen(onBack: () -> Unit, viewModel: PsnSettingsViewModel = hilt
             if (!state.dndGranted && !state.readOnly) {
                 OutlinedButton(onClick = {
                     context.startActivity(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                }) { Text("Allow Do Not Disturb access") }
+                }, shapes = ButtonDefaults.shapes()) { Text("Allow Do Not Disturb access") }
             }
         }
     }
@@ -133,9 +138,9 @@ fun PsnSettingsScreen(onBack: () -> Unit, viewModel: PsnSettingsViewModel = hilt
                 TextButton(onClick = {
                     confirmDisconnect = false
                     viewModel.disconnect()
-                }) { Text("Disconnect") }
+                }, shapes = ButtonDefaults.shapes()) { Text("Disconnect") }
             },
-            dismissButton = { TextButton(onClick = { confirmDisconnect = false }) { Text("Cancel") } }
+            dismissButton = { TextButton(onClick = { confirmDisconnect = false }, shapes = ButtonDefaults.shapes()) { Text("Cancel") } }
         )
     }
 }

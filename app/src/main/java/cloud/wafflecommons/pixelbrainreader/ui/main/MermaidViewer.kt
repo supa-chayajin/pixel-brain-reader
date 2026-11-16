@@ -21,6 +21,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -170,8 +172,8 @@ fun MermaidCard(source: String, modifier: Modifier = Modifier) {
                 overflow = TextOverflow.Ellipsis
             )
             Row {
-                TextButton(onClick = { open = true }) { Text("View diagram") }
-                TextButton(onClick = { copy(source) }) { Text("Copy source") }
+                TextButton(onClick = { open = true }, shapes = ButtonDefaults.shapes()) { Text("View diagram") }
+                TextButton(onClick = { copy(source) }, shapes = ButtonDefaults.shapes()) { Text("Copy source") }
             }
         }
     }
@@ -184,9 +186,9 @@ private fun MermaidDialog(source: String, onDismiss: () -> Unit, onCopy: () -> U
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
             Column(modifier = Modifier.fillMaxSize()) {
                 Row(modifier = Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onDismiss) { Icon(Icons.Rounded.Close, contentDescription = "Close") }
+                    IconButton(onClick = onDismiss, shapes = IconButtonDefaults.shapes()) { Icon(Icons.Rounded.Close, contentDescription = "Close") }
                     Text("Diagram · ${MermaidPage.kindOf(source)}", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                    TextButton(onClick = onCopy) { Text("Copy source") }
+                    TextButton(onClick = onCopy, shapes = ButtonDefaults.shapes()) { Text("Copy source") }
                 }
                 Text(
                     "Drawn on the phone, offline. Pinch to zoom.",

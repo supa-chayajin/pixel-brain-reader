@@ -42,7 +42,7 @@ fun BreadcrumbBar(
         verticalAlignment = Alignment.CenterVertically
     ) {
         FilledTonalIconButton(
-            onClick = { onHomeClick() },
+            onClick = { onHomeClick() }, shapes = IconButtonDefaults.shapes(),
             colors = IconButtonDefaults.filledTonalIconButtonColors(
                 containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                 contentColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -65,7 +65,7 @@ fun BreadcrumbBar(
         if (showCompact) {
             val parentPath = pathParts.dropLast(1).joinToString("/")
             FilledTonalButton(
-                onClick = { onPathClick(parentPath) },
+                onClick = { onPathClick(parentPath) }, shapes = ButtonDefaults.shapes(),
                 colors = ButtonDefaults.filledTonalButtonColors(
                     containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                     contentColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -84,7 +84,7 @@ fun BreadcrumbBar(
             val jdCategory = parseJohnnyDecimal(lastPart)?.takeIf { it.isWorthABadge }
 
             FilledTonalButton(
-                onClick = { onPathClick(currentPath) },
+                onClick = { onPathClick(currentPath) }, shapes = ButtonDefaults.shapes(),
                 colors = ButtonDefaults.filledTonalButtonColors(
                     containerColor = if (jdCategory?.isPrivate == true) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)
                                      else MaterialTheme.colorScheme.surfaceContainerHighest,
@@ -117,7 +117,7 @@ fun BreadcrumbBar(
                 val jdCategory = parseJohnnyDecimal(part)?.takeIf { it.isWorthABadge }
 
                 FilledTonalButton(
-                    onClick = { onPathClick(clickPath) },
+                    onClick = { onPathClick(clickPath) }, shapes = ButtonDefaults.shapes(),
                     colors = ButtonDefaults.filledTonalButtonColors(
                         containerColor = if (jdCategory?.isPrivate == true) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)
                                          else MaterialTheme.colorScheme.surfaceContainerHighest,

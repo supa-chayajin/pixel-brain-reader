@@ -15,6 +15,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,6 +54,8 @@ import kotlinx.coroutines.launch
 import java.time.Duration
 import java.time.LocalDate
 import javax.inject.Inject
+import cloud.wafflecommons.pixelbrainreader.ui.components.DailyBlockHeader
+import androidx.compose.material.icons.rounded.Newspaper
 
 /**
  * The "Tech watch" block (D5): read when the mode changes, each time the app comes back to the
@@ -125,12 +128,7 @@ fun WatchSection(
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            text = "📰 Tech watch",
-            color = MaterialTheme.colorScheme.secondary,
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(horizontal = 4.dp)
+        DailyBlockHeader(icon = Icons.Rounded.Newspaper, title = "Tech watch", modifier = Modifier.padding(horizontal = 4.dp)
         )
         feeds.forEach { group ->
             Text(
@@ -139,8 +137,11 @@ fun WatchSection(
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(start = 4.dp, top = 4.dp)
             )
+            // 13.2: each feed's headlines as one segmented group.
+            cloud.wafflecommons.pixelbrainreader.ui.components.SegmentedGroup {
             group.headlines.forEach { headline ->
                 HeadlineRow(headline = headline, age = ageOf(headline.publishedAt, now), onRead = onRead, onImport = onImport)
+            }
             }
         }
     }
@@ -151,7 +152,7 @@ private fun HeadlineRow(headline: Headline, age: String, onRead: (Headline) -> U
     Surface(
         onClick = { onRead(headline) },
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = MaterialTheme.shapes.large,
+        shape = MaterialTheme.shapes.extraSmall,
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(modifier = Modifier.padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -166,7 +167,7 @@ private fun HeadlineRow(headline: Headline, age: String, onRead: (Headline) -> U
                 Text(text = age, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             if (onImport != null) {
-                IconButton(onClick = { onImport(headline) }) {
+                IconButton(onClick = { onImport(headline) }, shapes = IconButtonDefaults.shapes()) {
                     Icon(Icons.Rounded.Inbox, contentDescription = "Import to the inbox", tint = MaterialTheme.colorScheme.primary)
                 }
             } else {

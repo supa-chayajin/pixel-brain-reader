@@ -1,9 +1,14 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package cloud.wafflecommons.pixelbrainreader.ui.lifeos
 
 import cloud.wafflecommons.pixelbrainreader.ui.theme.SemanticPalette
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -157,7 +162,7 @@ fun HabitCard(
     val locked = isAutomatic || !editable
     // Animate Background
     val containerColor by animateColorAsState(
-        if (isDone) themeColor.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceContainer,
+        if (isDone) themeColor.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceContainerHigh,
         animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec()
     )
 
@@ -174,10 +179,12 @@ fun HabitCard(
             }
         },
         colors = CardDefaults.cardColors(containerColor = containerColor),
+        // 13.2, Material 3 Expressive: extra-large corners, a tonal container.
+        shape = MaterialTheme.shapes.extraLarge,
         modifier = Modifier.fillMaxWidth().wrapContentHeight().alpha(alpha) // [MODIFIED] Alpha
     ) {
         Column(
-            modifier = Modifier.padding(12.dp)
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)
         ) {
             // Top Section: Info (Icon + Text)
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -277,7 +284,7 @@ fun HabitCard(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(Modifier.height(4.dp))
-                        LinearProgressIndicator(
+                        LinearWavyProgressIndicator(
                             progress = { progress },
                             modifier = Modifier.width(80.dp).height(8.dp).clip(RoundedCornerShape(4.dp)),
                             color = themeColor,
@@ -327,7 +334,7 @@ fun HabitCard(
                             color = MaterialTheme.colorScheme.tertiary
                         )
                     } else if (habit.isScheduledToday && onSkip != null && !locked && !habit.skipUsedThisWeek) {
-                        TextButton(onClick = onSkip) { Text("Skip today", style = MaterialTheme.typography.labelMedium) }
+                        TextButton(onClick = onSkip, shapes = ButtonDefaults.shapes()) { Text("Skip today", style = MaterialTheme.typography.labelMedium) }
                     } else if (habit.isScheduledToday) {
                          Text(
                             "Tap to Complete",
@@ -384,7 +391,7 @@ fun HabitEditDialog(
                         onClick = {
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             tempValue = (tempValue - step).coerceAtLeast(0.0)
-                        },
+                        }, shapes = IconButtonDefaults.shapes(),
                         colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
                     ) {
                         Icon(Icons.Default.Remove, "-")
@@ -394,7 +401,7 @@ fun HabitEditDialog(
                         onClick = {
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             tempValue = (tempValue + step)
-                        },
+                        }, shapes = IconButtonDefaults.shapes(),
                         colors = IconButtonDefaults.filledIconButtonColors(containerColor = color)
                     ) {
                         Icon(Icons.Default.Add, "+")
@@ -416,14 +423,14 @@ fun HabitEditDialog(
         },
         confirmButton = {
             Button(
-                onClick = { onConfirm(tempValue) },
+                onClick = { onConfirm(tempValue) }, shapes = ButtonDefaults.shapes(),
                 colors = ButtonDefaults.buttonColors(containerColor = color)
             ) {
                 Text("Save")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) {
                 Text("Cancel")
             }
         }

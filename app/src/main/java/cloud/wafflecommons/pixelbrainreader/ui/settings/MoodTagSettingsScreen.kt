@@ -36,6 +36,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -62,6 +63,7 @@ import cloud.wafflecommons.pixelbrainreader.ui.mood.TagIconPickerSheet
 import cloud.wafflecommons.pixelbrainreader.ui.utils.HapticHelper.performHapticClick
 import cloud.wafflecommons.pixelbrainreader.ui.utils.HapticHelper.performHapticSuccess
 import cloud.wafflecommons.pixelbrainreader.ui.utils.HapticHelper.performHapticTick
+import androidx.compose.material.icons.rounded.Sell
 
 /**
  * Curates the canonical mood tag list: add, remove, reorder, icon and, since 12.19, the category
@@ -150,6 +152,7 @@ fun MoodTagSettingsScreen(
         topBar = {
             CortexTopAppBar(
                 title = "Mood Tags",
+                icon = Icons.Rounded.Sell,
                 navigationIcon = {
                     CortexIconButton(onClick = onNavigateBack) {
                         Icon(Icons.Default.Close, contentDescription = "Close")
@@ -190,7 +193,7 @@ fun MoodTagSettingsScreen(
                         FilledTonalIconButton(onClick = {
                             view.performHapticClick()
                             pickingForNewTag = true
-                        }) {
+                        }, shapes = IconButtonDefaults.shapes()) {
                             Icon(newIcon.image, contentDescription = "Choose the new tag's icon")
                         }
                         OutlinedTextField(
@@ -202,7 +205,7 @@ fun MoodTagSettingsScreen(
                             keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { commitNewTag() }),
                             modifier = Modifier.weight(1f)
                         )
-                        FilledIconButton(onClick = { commitNewTag() }) {
+                        FilledIconButton(onClick = { commitNewTag() }, shapes = IconButtonDefaults.shapes()) {
                             Icon(Icons.Default.Add, contentDescription = "Add tag")
                         }
                     }
@@ -327,7 +330,7 @@ private fun TagRow(
                 if (readOnly) {
                     Icon(icon.image, contentDescription = null)
                 } else {
-                    FilledTonalIconButton(onClick = onPickIcon) {
+                    FilledTonalIconButton(onClick = onPickIcon, shapes = IconButtonDefaults.shapes()) {
                         Icon(icon.image, contentDescription = "Change the icon of ${tag.name}")
                     }
                 }
@@ -336,13 +339,13 @@ private fun TagRow(
                 {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         CategoryMenu(tag.name, category, onCategory)
-                        IconButton(enabled = canMoveUp, onClick = { onMove(true) }) {
+                        IconButton(enabled = canMoveUp, shapes = IconButtonDefaults.shapes(), onClick = { onMove(true) }) {
                             Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Move up")
                         }
-                        IconButton(enabled = canMoveDown, onClick = { onMove(false) }) {
+                        IconButton(enabled = canMoveDown, shapes = IconButtonDefaults.shapes(), onClick = { onMove(false) }) {
                             Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Move down")
                         }
-                        IconButton(onClick = onRemove) {
+                        IconButton(onClick = onRemove, shapes = IconButtonDefaults.shapes()) {
                             Icon(Icons.Default.Close, contentDescription = "Remove")
                         }
                     }
@@ -359,7 +362,7 @@ private fun TagRow(
 private fun CategoryMenu(tagName: String, current: MoodTagCategory, onPick: (MoodTagCategory) -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box {
-        IconButton(onClick = { open = true }) {
+        IconButton(onClick = { open = true }, shapes = IconButtonDefaults.shapes()) {
             Icon(
                 MoodTagCategories.icon(current),
                 contentDescription = "Category of $tagName: ${MoodTagCategories.title(current)}",

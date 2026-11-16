@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package cloud.wafflecommons.pixelbrainreader.ui.work
 
 import androidx.compose.foundation.clickable
@@ -21,6 +23,9 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.LinearWavyProgressIndicator
+import cloud.wafflecommons.pixelbrainreader.ui.components.switchThumb
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -138,7 +143,7 @@ fun ObjectivesScreen(
     // The slot settings and the milestones live in the vault (12.15, S2).
     val editable = !VaultWriteGate.readOnly
 
-    FormScaffold(title = "Objectives", onBack = onBack, snackbarHostState = snackbarHostState) {
+    FormScaffold(title = "Objectives", icon = Icons.Rounded.Flag, onBack = onBack, snackbarHostState = snackbarHostState) {
         if (!editable) ReadOnlyNotice()
         SlotCard(settings, visibility.workLabel, editable, viewModel::updateSlot)
         val list = objectives
@@ -176,7 +181,7 @@ private fun SlotCard(settings: ObjectiveSettings, workLabel: String, editable: B
         title = "Weekly slot",
         icon = Icons.Rounded.Schedule,
         subtitle = "Time kept for your objectives. When it starts, a nudge names what is due soon and what stalled — never outside $workLabel mode.",
-        trailing = { Switch(checked = settings.slotEnabled, onCheckedChange = { on -> update { it.copy(slotEnabled = on) } }, enabled = editable) }
+        trailing = { Switch(checked = settings.slotEnabled, thumbContent = switchThumb(settings.slotEnabled), onCheckedChange = { on -> update { it.copy(slotEnabled = on) } }, enabled = editable) }
     ) {
         if (settings.slotEnabled) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -225,10 +230,10 @@ private fun ObjectiveCard(
             if (stale) add("no progress for 3 weeks")
         }.joinToString(" · "),
         modifier = Modifier.clickable { expanded = !expanded },
-        trailing = { TextButton(onClick = onOpen) { Text("Open") } }
+        trailing = { TextButton(onClick = onOpen, shapes = ButtonDefaults.shapes()) { Text("Open") } }
     ) {
         if (objective.milestones.isNotEmpty()) {
-            LinearProgressIndicator(progress = { objective.progress }, modifier = Modifier.fillMaxWidth().height(6.dp))
+            LinearWavyProgressIndicator(progress = { objective.progress }, modifier = Modifier.fillMaxWidth().height(6.dp))
         }
         if (expanded) {
             objective.milestones.forEach { milestone ->
@@ -283,7 +288,7 @@ private fun ObjectiveCard(
                     )
                 }
             }
-            if (!VaultWriteGate.readOnly) TextButton(onClick = onCoach) { Text("Ask Coach") } // no AI on a read-only device
+            if (!VaultWriteGate.readOnly) TextButton(onClick = onCoach, shapes = ButtonDefaults.shapes()) { Text("Ask Coach") } // no AI on a read-only device
         }
     }
 }

@@ -1045,7 +1045,7 @@ fun MainScreen(
                                         onClick = {
                                             isSearching = false
                                             viewModel.onSearchQueryChanged("")
-                                        },
+                                        }, shapes = IconButtonDefaults.shapes(),
                                         colors = IconButtonDefaults.filledTonalIconButtonColors(
                                             containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                                             contentColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -1060,7 +1060,7 @@ fun MainScreen(
                                         // Edit/View Toggle — none on a desktop mirror, a worklog or a read-only device.
                                         if (!uiState.isGeneratedNote && !VaultWriteGate.readOnly) {
                                             FilledTonalIconButton(
-                                                onClick = { viewModel.toggleEditMode() },
+                                                onClick = { viewModel.toggleEditMode() }, shapes = IconButtonDefaults.shapes(),
                                                 colors = IconButtonDefaults.filledTonalIconButtonColors(
                                                     containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                                                     contentColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -1078,7 +1078,7 @@ fun MainScreen(
                                         // Focus Mode (Large Screen Only)
                                         if (isLargeScreen) {
                                             FilledTonalIconButton(
-                                                onClick = { viewModel.toggleFocusMode() },
+                                                onClick = { viewModel.toggleFocusMode() }, shapes = IconButtonDefaults.shapes(),
                                                 colors = IconButtonDefaults.filledTonalIconButtonColors(
                                                     containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                                                     contentColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -1098,7 +1098,7 @@ fun MainScreen(
                                                 if (navigator.canNavigateBack()) {
                                                     scope.launch { navigator.navigateBack() }
                                                 }
-                                            },
+                                            }, shapes = IconButtonDefaults.shapes(),
                                             colors = IconButtonDefaults.filledTonalIconButtonColors(
                                                 containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                                                 contentColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -1110,7 +1110,7 @@ fun MainScreen(
                                     } else {
                                         // Search Trigger
                                         FilledTonalIconButton(
-                                            onClick = { isSearching = true },
+                                            onClick = { isSearching = true }, shapes = IconButtonDefaults.shapes(),
                                             colors = IconButtonDefaults.filledTonalIconButtonColors(
                                                 containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                                                 contentColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -1121,7 +1121,7 @@ fun MainScreen(
 
                                         // Browser Actions
                                         FilledTonalIconButton(
-                                            onClick = { viewModel.openCreateFileDialog() },
+                                            onClick = { viewModel.openCreateFileDialog() }, shapes = IconButtonDefaults.shapes(),
                                             colors = IconButtonDefaults.filledTonalIconButtonColors(
                                                 containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                                                 contentColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -1134,7 +1134,7 @@ fun MainScreen(
                                         FilledTonalIconButton(
                                             onClick = {
                                                 vaultExportLauncher.launch("PixelBrainVault_${java.time.LocalDate.now()}.zip")
-                                            },
+                                            }, shapes = IconButtonDefaults.shapes(),
                                             colors = IconButtonDefaults.filledTonalIconButtonColors(
                                                 containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                                                 contentColor = MaterialTheme.colorScheme.onSurfaceVariant

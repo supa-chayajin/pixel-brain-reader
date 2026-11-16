@@ -62,6 +62,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberBottomSheetState
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.IconButtonDefaults
+import cloud.wafflecommons.pixelbrainreader.ui.components.switchThumb
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -99,6 +102,7 @@ import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.time.format.TextStyle
+import androidx.compose.material.icons.rounded.EditNote
 
 internal fun LogKind.icon(): ImageVector = when (this) {
     LogKind.FACT -> Icons.Rounded.Info
@@ -136,8 +140,9 @@ fun MissionLogScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Mission log") },
+            cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
+                title = "Mission log",
+                icon = Icons.Rounded.EditNote,
                 navigationIcon = {
                     CortexIconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
                 }
@@ -164,7 +169,7 @@ fun MissionLogScreen(
                 if (!editable) item(key = "read-only") { ReadOnlyNotice() }
                 item(key = "month") {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                        IconButton(onClick = viewModel::previousMonth) {
+                        IconButton(onClick = viewModel::previousMonth, shapes = IconButtonDefaults.shapes()) {
                             Icon(Icons.AutoMirrored.Rounded.KeyboardArrowLeft, contentDescription = "Previous month")
                         }
                         Text(
@@ -173,7 +178,7 @@ fun MissionLogScreen(
                             textAlign = TextAlign.Center,
                             modifier = Modifier.weight(1f)
                         )
-                        IconButton(onClick = viewModel::nextMonth) {
+                        IconButton(onClick = viewModel::nextMonth, shapes = IconButtonDefaults.shapes()) {
                             Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = "Next month")
                         }
                     }
@@ -332,16 +337,16 @@ private fun LogSettingsCard(settings: MissionLogSettings, viewModel: MissionLogV
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Encrypt the log", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-            Switch(checked = settings.encrypted, onCheckedChange = viewModel::setEncrypted, enabled = editable)
+            Switch(checked = settings.encrypted, thumbContent = switchThumb(settings.encrypted), onCheckedChange = viewModel::setEncrypted, enabled = editable)
         }
         if (!settings.encrypted && editable) {
-            TextButton(onClick = { editingFolder = true }) { Text("Change folder") }
+            TextButton(onClick = { editingFolder = true }, shapes = ButtonDefaults.shapes()) { Text("Change folder") }
         }
         Text("Earlier months stay where they were written.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Roles", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-            if (editable) TextButton(onClick = { addingRole = true }) { Text("Add") }
+            if (editable) TextButton(onClick = { addingRole = true }, shapes = ButtonDefaults.shapes()) { Text("Add") }
         }
         settings.roles.forEach { role ->
             RemovableRow(title = role, subtitle = null, onRemove = if (editable) {
@@ -459,7 +464,7 @@ internal fun LogEntrySheet(
                 label = { Text("What happened") },
                 minLines = 3,
                 trailingIcon = {
-                    IconButton(onClick = { dictation.start() }) { Icon(Icons.Rounded.Mic, contentDescription = "Dictate") }
+                    IconButton(onClick = { dictation.start() }, shapes = IconButtonDefaults.shapes()) { Icon(Icons.Rounded.Mic, contentDescription = "Dictate") }
                 },
                 modifier = Modifier.fillMaxWidth()
             )
@@ -498,7 +503,7 @@ internal fun LogEntrySheet(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             if (onCreateDecisionNote != null) {
-                OutlinedButton(onClick = onCreateDecisionNote, modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(onClick = onCreateDecisionNote, shapes = ButtonDefaults.shapes(), modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Rounded.Gavel, contentDescription = null, modifier = Modifier.size(18.dp))
                     Text("Create decision note", modifier = Modifier.padding(start = 8.dp))
                 }
@@ -509,17 +514,17 @@ internal fun LogEntrySheet(
                 )
             }
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                if (onDelete != null) TextButton(onClick = onDelete) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+                if (onDelete != null) TextButton(onClick = onDelete, shapes = ButtonDefaults.shapes()) { Text("Delete", color = MaterialTheme.colorScheme.error) }
                 Box(Modifier.weight(1f))
                 if (initial == null && onSaveTemplate != null) {
                     TextButton(
-                        onClick = { onSaveTemplate(cloud.wafflecommons.pixelbrainreader.data.work.LogTemplate(text.trim(), kind.name, role)) },
+                        onClick = { onSaveTemplate(cloud.wafflecommons.pixelbrainreader.data.work.LogTemplate(text.trim(), kind.name, role)) }, shapes = ButtonDefaults.shapes(),
                         enabled = text.isNotBlank()
                     ) { Text("Save as template") }
                 }
-                TextButton(onClick = onDismiss) { Text("Cancel") }
+                TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text("Cancel") }
                 Button(
-                    enabled = text.isNotBlank(),
+                    enabled = text.isNotBlank(), shapes = ButtonDefaults.shapes(),
                     onClick = {
                         onSave(
                             LogEntry(

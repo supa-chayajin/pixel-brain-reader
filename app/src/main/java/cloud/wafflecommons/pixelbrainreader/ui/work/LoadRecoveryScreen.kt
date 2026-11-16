@@ -9,6 +9,7 @@ import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -41,6 +42,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import kotlin.math.roundToInt
+import androidx.compose.material.icons.rounded.BatteryChargingFull
 
 @HiltViewModel
 class LoadRecoveryViewModel @Inject constructor(
@@ -104,7 +106,7 @@ fun LoadRecoveryScreen(
     val visibility by viewModel.visibility.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { viewModel.load() }
 
-    FormScaffold(title = "Load vs recovery", onBack = onBack) {
+    FormScaffold(title = "Load vs recovery", icon = Icons.Rounded.BatteryChargingFull, onBack = onBack) {
         if (visibility.hideWork || visibility.hideHealth) {
             EmptyHint("Hidden outside ${visibility.workLabel} mode and while screen-share safe is on.")
             return@FormScaffold
@@ -143,7 +145,7 @@ fun LoadRecoveryScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                TextButton(onClick = { viewModel.load(force = true) }) { Text("Recompute") }
+                TextButton(onClick = { viewModel.load(force = true) }, shapes = ButtonDefaults.shapes()) { Text("Recompute") }
             }
         }
     }
@@ -188,9 +190,9 @@ private fun LoadSourcesCard(breakdown: LoadBreakdown, onOpenLog: () -> Unit, onO
             Text(openLine(breakdown), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         androidx.compose.foundation.layout.FlowRow {
-            TextButton(onClick = onOpenLog) { Text("Open the log") }
-            TextButton(onClick = onOpenActions) { Text("Your actions") }
-            if (!VaultWriteGate.readOnly) TextButton(onClick = onCoach) { Text("Triage with Coach") } // no AI on a read-only device
+            TextButton(onClick = onOpenLog, shapes = ButtonDefaults.shapes()) { Text("Open the log") }
+            TextButton(onClick = onOpenActions, shapes = ButtonDefaults.shapes()) { Text("Your actions") }
+            if (!VaultWriteGate.readOnly) TextButton(onClick = onCoach, shapes = ButtonDefaults.shapes()) { Text("Triage with Coach") } // no AI on a read-only device
         }
     }
 }

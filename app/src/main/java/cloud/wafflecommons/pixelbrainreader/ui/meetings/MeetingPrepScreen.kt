@@ -20,6 +20,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -75,6 +76,7 @@ import kotlinx.coroutines.withContext
 import java.time.format.DateTimeFormatter
 import javax.crypto.Cipher
 import javax.inject.Inject
+import androidx.compose.material.icons.rounded.Event
 
 /** D4: a calendar entry's prep (route `meeting_prep?entry=`), its minutes in one tap, and (12.19) the person it's with. */
 @HiltViewModel
@@ -306,7 +308,7 @@ fun MeetingPrepScreen(onBack: () -> Unit, onOpenNote: (String) -> Unit, viewMode
         )
     }
 
-    FormScaffold(title = "Meeting prep", onBack = onBack) {
+    FormScaffold(title = "Meeting prep", icon = Icons.Rounded.Event, onBack = onBack) {
         when (val current = state) {
             MeetingPrepViewModel.PrepState.Loading -> EmptyHint("Reading your notes…")
             MeetingPrepViewModel.PrepState.Gone -> EmptyHint("This meeting is no longer on the timeline.")
@@ -373,7 +375,7 @@ fun MeetingPrepScreen(onBack: () -> Unit, onOpenNote: (String) -> Unit, viewMode
 
                 // A meeting with a linked person writes its 1:1 note in their encrypted note (D7).
                 if (!VaultWriteGate.readOnly && person !is MeetingPrepViewModel.PersonState.Linked) {
-                    Button(onClick = { viewModel.writeMinutes(onOpenNote) }) { Text("Write the meeting note") }
+                    Button(onClick = { viewModel.writeMinutes(onOpenNote) }, shapes = ButtonDefaults.shapes()) { Text("Write the meeting note") }
                 }
             }
         }
@@ -396,7 +398,7 @@ private fun PersonCard(
             MeetingPrepViewModel.PersonState.None -> Unit
             MeetingPrepViewModel.PersonState.Locked -> {
                 EmptyHint("Your People notes are in the private journal.")
-                FilledTonalButton(onClick = onUnlock) { Text("Unlock to see who it's with") }
+                FilledTonalButton(onClick = onUnlock, shapes = ButtonDefaults.shapes()) { Text("Unlock to see who it's with") }
             }
             MeetingPrepViewModel.PersonState.Reading -> EmptyHint("Reading your People notes…")
             is MeetingPrepViewModel.PersonState.Choose -> {
@@ -406,7 +408,7 @@ private fun PersonCard(
                     EmptyHint("Who is this meeting with? The phone remembers it for the next ones.")
                     state.people.forEach { person ->
                         val note = person.note ?: return@forEach
-                        TextButton(onClick = { onLink(person) }) {
+                        TextButton(onClick = { onLink(person) }, shapes = ButtonDefaults.shapes()) {
                             Text(if (note.role.isBlank()) note.name else "${note.name} · ${note.role}")
                         }
                     }
@@ -415,7 +417,7 @@ private fun PersonCard(
             is MeetingPrepViewModel.PersonState.Hidden -> EmptyHint("A work person: hidden outside ${state.workLabel} mode.")
             MeetingPrepViewModel.PersonState.Missing -> {
                 EmptyHint("The person this meeting was linked to has no note any more.")
-                if (!VaultWriteGate.readOnly) TextButton(onClick = onUnlink) { Text("Unlink") }
+                if (!VaultWriteGate.readOnly) TextButton(onClick = onUnlink, shapes = ButtonDefaults.shapes()) { Text("Unlink") }
             }
             is MeetingPrepViewModel.PersonState.Linked -> {
                 val note = state.person.note ?: return@SectionCard
@@ -430,10 +432,10 @@ private fun PersonCard(
                 Lines("Your actions", note.myActions.filterNot { it.done }.map { it.text })
                 Lines("Their actions", note.theirActions.filterNot { it.done }.map { it.text })
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (!VaultWriteGate.readOnly) Button(onClick = { onWrite(state.person.id) }) { Text("Write the 1:1 note") }
-                    TextButton(onClick = { onOpen(state.person.id) }) { Text("Open their notes") }
+                    if (!VaultWriteGate.readOnly) Button(onClick = { onWrite(state.person.id) }, shapes = ButtonDefaults.shapes()) { Text("Write the 1:1 note") }
+                    TextButton(onClick = { onOpen(state.person.id) }, shapes = ButtonDefaults.shapes()) { Text("Open their notes") }
                 }
-                if (!VaultWriteGate.readOnly) TextButton(onClick = onUnlink) { Text("Not with them? Unlink") }
+                if (!VaultWriteGate.readOnly) TextButton(onClick = onUnlink, shapes = ButtonDefaults.shapes()) { Text("Not with them? Unlink") }
             }
         }
     }
@@ -467,10 +469,10 @@ private fun PasswordDialog(onUnlock: (CharArray, (Boolean) -> Unit) -> Unit, onD
             }
         },
         confirmButton = {
-            Button(enabled = typed.isNotEmpty(), onClick = {
+            Button(enabled = typed.isNotEmpty(), shapes = ButtonDefaults.shapes(), onClick = {
                 onUnlock(typed.toCharArray()) { ok -> if (ok) onDismiss() else wrong = true }
             }) { Text("Unlock") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = { TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text("Cancel") } }
     )
 }

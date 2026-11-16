@@ -18,6 +18,7 @@ import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material3.*
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
@@ -38,6 +39,7 @@ import cloud.wafflecommons.pixelbrainreader.ui.theme.RoomPalette
 import java.time.LocalDate
 import java.util.UUID
 import kotlin.math.roundToInt
+import androidx.compose.material.icons.rounded.CleaningServices
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -62,8 +64,9 @@ fun HomeConfigScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Home Configuration") },
+            cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
+                title = "Home Configuration",
+                icon = Icons.Rounded.CleaningServices,
                 navigationIcon = {
                     CortexIconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
@@ -258,7 +261,7 @@ fun HomeConfigScreen(
                         }
                         showRoomDialog = null
                         showCreateRoomDialog = false
-                    },
+                    }, shapes = ButtonDefaults.shapes(),
                     enabled = nameInput.isNotBlank()
                 ) {
                     Text("Save")
@@ -268,7 +271,7 @@ fun HomeConfigScreen(
                 TextButton(onClick = { 
                     showRoomDialog = null
                     showCreateRoomDialog = false 
-                }) {
+                }, shapes = ButtonDefaults.shapes()) {
                     Text("Cancel")
                 }
             }
@@ -285,14 +288,14 @@ fun HomeConfigScreen(
                     onClick = {
                         roomToDelete?.let { viewModel.deleteRoom(it) }
                         roomToDelete = null
-                    },
+                    }, shapes = ButtonDefaults.shapes(),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) {
                     Text("Delete")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { roomToDelete = null }) {
+                TextButton(onClick = { roomToDelete = null }, shapes = ButtonDefaults.shapes()) {
                     Text("Cancel")
                 }
             }
@@ -309,14 +312,14 @@ fun HomeConfigScreen(
                     onClick = {
                         choreToDelete?.let { viewModel.deleteChore(it) }
                         choreToDelete = null
-                    },
+                    }, shapes = ButtonDefaults.shapes(),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) {
                     Text("Delete")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { choreToDelete = null }) {
+                TextButton(onClick = { choreToDelete = null }, shapes = ButtonDefaults.shapes()) {
                     Text("Cancel")
                 }
             }
@@ -455,7 +458,7 @@ fun HomeConfigScreen(
                         
                         showChoreSheet = null
                         showCreateChoreSheet = false
-                    },
+                    }, shapes = ButtonDefaults.shapes(),
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !nameError && !frequencyError && selectedRoomId.isNotBlank()
                 ) {

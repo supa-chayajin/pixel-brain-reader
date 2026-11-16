@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package cloud.wafflecommons.pixelbrainreader.ui.games
 
 import android.content.Intent
@@ -36,6 +38,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -59,6 +63,7 @@ import cloud.wafflecommons.pixelbrainreader.data.games.GameSessionGuard
 import cloud.wafflecommons.pixelbrainreader.data.games.GameState
 import cloud.wafflecommons.pixelbrainreader.data.games.psn.PsnException
 import cloud.wafflecommons.pixelbrainreader.ui.components.EmptyHint
+import cloud.wafflecommons.pixelbrainreader.ui.components.ExpressiveBadge
 import cloud.wafflecommons.pixelbrainreader.ui.components.FormScaffold
 import cloud.wafflecommons.pixelbrainreader.ui.components.ReadOnlyNotice
 import cloud.wafflecommons.pixelbrainreader.ui.components.SectionCard
@@ -68,6 +73,20 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import androidx.compose.material3.carousel.HorizontalMultiBrowseCarousel
+import androidx.compose.material3.carousel.rememberCarouselState
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.text.style.TextOverflow
+import cloud.wafflecommons.pixelbrainreader.ui.components.Tone
+import cloud.wafflecommons.pixelbrainreader.ui.components.toneFor
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ListItemDefaults
 
 /**
  * The Games tab (RFC-009 §4.1): the library in four groups, the running session, the PSN line, and
@@ -86,7 +105,7 @@ fun GamesScreen(
     var picking by remember { mutableStateOf(false) }
     var linking by remember { mutableStateOf<UnlinkedTitle?>(null) }
 
-    FormScaffold(title = "Games", onBack = onBack) {
+    FormScaffold(title = "Games", icon = Icons.Rounded.SportsEsports, onBack = onBack) {
         if (state.readOnly) ReadOnlyNotice()
 
         val running = state.running
@@ -98,7 +117,7 @@ fun GamesScreen(
                 subtitle = "Playing since ${clock(running.startMillis)}",
                 trailing = {
                     if (!state.readOnly) {
-                        FilledTonalButton(onClick = viewModel::stop) {
+                        FilledTonalButton(onClick = viewModel::stop, shapes = ButtonDefaults.shapes()) {
                             Icon(Icons.Rounded.Stop, contentDescription = null)
                             Text("Stop", modifier = Modifier.padding(start = 6.dp))
                         }
@@ -111,11 +130,11 @@ fun GamesScreen(
                         "Still playing? No answer by ${clock(asked.askedAt + GameSessionGuard.ANSWER_MS)}: the session ends at ${clock(asked.nextAskAt)}.",
                         style = MaterialTheme.typography.bodyMedium
                     )
-                    OutlinedButton(onClick = viewModel::keepPlaying) { Text("Keep playing") }
+                    OutlinedButton(onClick = viewModel::keepPlaying, shapes = ButtonDefaults.shapes()) { Text("Keep playing") }
                 }
             }
         } else if (!state.readOnly && state.pages.isNotEmpty()) {
-            Button(onClick = { picking = true }, modifier = Modifier.fillMaxWidth()) {
+            Button(onClick = { picking = true }, shapes = ButtonDefaults.shapes(), modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Rounded.PlayArrow, contentDescription = null)
                 Text("Start a session", modifier = Modifier.padding(start = 6.dp))
             }
@@ -129,8 +148,19 @@ fun GamesScreen(
         GameGroup.entries.forEach { group ->
             val rows = state.groups[group].orEmpty()
             if (rows.isEmpty()) return@forEach
-            Text(group.label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            rows.forEach { row -> GameCard(row, onClick = { onOpenGame(row.page.path) }, onOpenMap = { onOpenMap(row.page.path) }) }
+            Text(group.label, style = MaterialTheme.typography.titleLargeEmphasized)
+            // 13.2: the games being played as an expressive carousel; the other groups as cards.
+            if (group == GameGroup.PLAYING) {
+                PlayingCarousel(rows, onOpen = { onOpenGame(it.page.path) })
+            } else {
+                // The Android 16 list: one segmented group, each game its own tonal row.
+                Column(
+                    modifier = Modifier.clip(MaterialTheme.shapes.extraLarge),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    rows.forEach { row -> GameCard(row, onClick = { onOpenGame(row.page.path) }, onOpenMap = { onOpenMap(row.page.path) }) }
+                }
+            }
         }
 
         if (state.unlinked.isNotEmpty()) UnlinkedFold(state.unlinked, state.readOnly, onLink = { linking = it }, onHide = viewModel::hide)
@@ -179,8 +209,13 @@ private fun GameCard(row: GameRow, onClick: () -> Unit, onOpenMap: () -> Unit) {
         row.trophyPercent?.let { "$it % 🏆" },
         row.lastPlayed?.let { "played ${day(it)}" }
     )
-    ElevatedCard(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
+    Card(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        shape = MaterialTheme.shapes.extraSmall,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+    ) {
         ListItem(
+            colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
             supportingContent = { if (facts.isNotEmpty()) Text(facts.joinToString(" · ")) },
             leadingContent = {
                 // PSN's icon for the game when a linked title has one (RFC-009 §8), else the pad.
@@ -192,18 +227,86 @@ private fun GameCard(row: GameRow, onClick: () -> Unit, onOpenMap: () -> Unit) {
                         modifier = Modifier.size(48.dp).clip(RoundedCornerShape(10.dp))
                     )
                 } else {
-                    Icon(Icons.Rounded.SportsEsports, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    // 13.2: an expressive badge in the game's own tone (the device's colours).
+                    ExpressiveBadge(Icons.Rounded.SportsEsports, key = row.page.title, size = 48.dp)
                 }
             },
             // 13.2: the game's map, when its page has one.
             trailingContent = if (row.page.maps.isEmpty()) null else {
-                { IconButton(onClick = onOpenMap) { Icon(Icons.Rounded.Map, contentDescription = "Open the map") } }
+                { IconButton(onClick = onOpenMap, shapes = IconButtonDefaults.shapes()) { Icon(Icons.Rounded.Map, contentDescription = "Open the map") } }
             }
         ) {
             Text(
                 if (row.page.state == GameState.HUNDRED) "${row.page.title}  ·  100%" else row.page.title,
                 fontWeight = FontWeight.SemiBold
             )
+        }
+    }
+}
+
+/**
+ * The games being played (13.2, Material 3 Expressive): a multi-browse carousel of big tiles, each in
+ * the game's own tone of the device's colours, with its expressive shape, title, template and hours.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PlayingCarousel(rows: List<GameRow>, onOpen: (GameRow) -> Unit) {
+    val state = rememberCarouselState { rows.size }
+    HorizontalMultiBrowseCarousel(
+        state = state,
+        preferredItemWidth = 260.dp,
+        itemSpacing = 10.dp,
+        modifier = Modifier.fillMaxWidth().height(230.dp)
+    ) { index ->
+        val row = rows[index]
+        val tone = toneFor(row.page.title)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .maskClip(MaterialTheme.shapes.extraLarge)
+                .background(tone.container)
+                .clickable { onOpen(row) }
+                .padding(20.dp)
+        ) {
+            ExpressiveBadge(
+                Icons.Rounded.SportsEsports,
+                key = row.page.title,
+                size = 76.dp,
+                tone = Tone(tone.content.copy(alpha = 0.14f), tone.content),
+                modifier = Modifier.align(Alignment.TopStart)
+            )
+            // The text fades as the item narrows (M3 carousel): nothing is cut mid-word.
+            val info = carouselItemDrawInfo
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .graphicsLayer {
+                        val span = (info.maxSize - info.minSize).coerceAtLeast(1f)
+                        alpha = ((info.size - info.minSize) / span).coerceIn(0f, 1f)
+                    }
+            ) {
+                Text(
+                    row.page.title,
+                    style = MaterialTheme.typography.titleLargeEmphasized,
+                    color = tone.content,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                val facts = listOfNotNull(
+                    row.page.template.label.takeIf { row.page.template.key.isNotEmpty() },
+                    row.hours?.let { hours(it) },
+                    row.lastPlayed?.let { "played ${day(it)}" }
+                )
+                if (facts.isNotEmpty()) {
+                    Text(
+                        facts.joinToString(" · "),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = tone.content.copy(alpha = 0.8f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
         }
     }
 }
@@ -254,8 +357,8 @@ private fun UnlinkedFold(titles: List<UnlinkedTitle>, readOnly: Boolean, onLink:
                 )
                 if (!readOnly) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { onLink(title) }) { Text("Link to a page") }
-                        TextButton(onClick = { onHide(title.titleId) }) { Text("Hide") }
+                        OutlinedButton(onClick = { onLink(title) }, shapes = ButtonDefaults.shapes()) { Text("Link to a page") }
+                        TextButton(onClick = { onHide(title.titleId) }, shapes = ButtonDefaults.shapes()) { Text("Hide") }
                     }
                 }
             }
@@ -327,7 +430,7 @@ fun GamePickerDialog(
             }
         },
         confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = { TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text("Cancel") } }
     )
 }
 
@@ -349,8 +452,8 @@ fun GameNightAccessDialog(onGrant: () -> Unit, onDismiss: () -> Unit) {
                     "you choose in Settings › Modes. Allow PixelBrain in Do Not Disturb access to use it. The session runs either way."
             )
         },
-        confirmButton = { TextButton(onClick = onGrant) { Text("Open settings") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Not now") } }
+        confirmButton = { TextButton(onClick = onGrant, shapes = ButtonDefaults.shapes()) { Text("Open settings") } },
+        dismissButton = { TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text("Not now") } }
     )
 }
 

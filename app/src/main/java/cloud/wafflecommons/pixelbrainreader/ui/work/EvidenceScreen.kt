@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package cloud.wafflecommons.pixelbrainreader.ui.work
 
 import androidx.compose.foundation.layout.Arrangement
@@ -14,13 +16,19 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.LoadingIndicator
+import androidx.compose.material3.ToggleButton
+import androidx.compose.material3.ToggleButtonDefaults
+import cloud.wafflecommons.pixelbrainreader.ui.components.connectedShapes
+import cloud.wafflecommons.pixelbrainreader.ui.components.ConnectedButtonRow
+import androidx.compose.foundation.layout.Spacer
+import cloud.wafflecommons.pixelbrainreader.ui.components.switchThumb
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -68,6 +76,7 @@ import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import javax.inject.Inject
+import androidx.compose.material.icons.rounded.Assessment
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
@@ -167,36 +176,40 @@ fun EvidenceScreen(
     var withSummary by remember { mutableStateOf(false) }
     val work = scope == EvidenceScope.WORK
 
-    FormScaffold(title = "Evidence report", onBack = onBack, snackbarHostState = snackbarHostState) {
+    FormScaffold(title = "Evidence report", icon = Icons.Rounded.Assessment, onBack = onBack, snackbarHostState = snackbarHostState) {
         // The figures read anywhere; the report is an inbox note (12.15, S2).
         val readOnly = VaultWriteGate.readOnly
         if (readOnly) ReadOnlyNotice()
         // Named after the user's own mode labels: the report follows the same work/personal split.
-        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+        ConnectedButtonRow(modifier = Modifier.fillMaxWidth()) {
             listOf(EvidenceScope.WORK to visibility.label(ContextMode.WORK), EvidenceScope.PERSONAL to visibility.label(ContextMode.PERSONAL))
                 .forEachIndexed { index, (option, label) ->
-                    SegmentedButton(
-                        selected = scope == option,
-                        onClick = { viewModel.setScope(option) },
-                        shape = SegmentedButtonDefaults.itemShape(index, 2),
-                        label = { Text(label) }
-                    )
+                    ToggleButton(
+                        checked = scope == option,
+                        onCheckedChange = { viewModel.setScope(option) },
+                        shapes = connectedShapes(index, 2),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(label)
+                    }
                 }
         }
-        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+        ConnectedButtonRow(modifier = Modifier.fillMaxWidth()) {
             listOf(false to "Month", true to "Quarter").forEachIndexed { index, (quarterly, label) ->
-                SegmentedButton(
-                    selected = (period is ReportPeriod.Quarter) == quarterly,
-                    onClick = { viewModel.setQuarterly(quarterly) },
-                    shape = SegmentedButtonDefaults.itemShape(index, 2),
-                    label = { Text(label) }
-                )
+                ToggleButton(
+                    checked = (period is ReportPeriod.Quarter) == quarterly,
+                    onCheckedChange = { viewModel.setQuarterly(quarterly) },
+                    shapes = connectedShapes(index, 2),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(label)
+                }
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-            IconButton(onClick = viewModel::previous) { Icon(Icons.AutoMirrored.Rounded.KeyboardArrowLeft, contentDescription = "Previous") }
+            IconButton(onClick = viewModel::previous, shapes = IconButtonDefaults.shapes()) { Icon(Icons.AutoMirrored.Rounded.KeyboardArrowLeft, contentDescription = "Previous") }
             Text(period.label(), style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
-            IconButton(onClick = viewModel::next) {
+            IconButton(onClick = viewModel::next, shapes = IconButtonDefaults.shapes()) {
                 Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = "Next")
             }
         }
@@ -230,19 +243,19 @@ fun EvidenceScreen(
                 Text("Add a summary", style = MaterialTheme.typography.bodyLarge)
                 Text("Written on the device by Gemini Nano, marked as such.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Switch(checked = withSummary, onCheckedChange = { withSummary = it }, enabled = !readOnly)
+            Switch(checked = withSummary, thumbContent = switchThumb(withSummary), onCheckedChange = { withSummary = it }, enabled = !readOnly)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Button(
-                enabled = !readOnly && !working && figures != null && !(work && visibility.hideWork),
+                enabled = !readOnly && !working && figures != null && !(work && visibility.hideWork), shapes = ButtonDefaults.shapes(),
                 onClick = { viewModel.write(withSummary, onOpenNote) }
             ) { Text("Write the report") }
             figures?.takeIf { !(work && visibility.hideWork) }?.let { f ->
                 if (!VaultWriteGate.readOnly) { // no AI on a read-only device
-                    TextButton(onClick = { viewModel.coach(f); onOpenChat() }) { Text("Coach on this period") }
+                    TextButton(onClick = { viewModel.coach(f); onOpenChat() }, shapes = ButtonDefaults.shapes()) { Text("Coach on this period") }
                 }
             }
-            if (working) CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+            if (working) LoadingIndicator(modifier = Modifier.size(24.dp))
         }
         Text(
             if (work) {

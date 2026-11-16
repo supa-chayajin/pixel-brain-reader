@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package cloud.wafflecommons.pixelbrainreader.ui.journal
 
 import androidx.compose.animation.AnimatedVisibility
@@ -56,12 +58,15 @@ fun DailyNoteHeader(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Left: Huge Emoji
-                Text(
-                    text = emoji ?: "😐",
-                    fontSize = 48.sp,
+                // Left: the day's mood on a turning sunny shape (13.2, Material 3 Expressive)
+                cloud.wafflecommons.pixelbrainreader.ui.components.ExpressiveHalo(
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    size = 92.dp,
+                    shape = androidx.compose.material3.MaterialShapes.Sunny,
                     modifier = Modifier.padding(end = 20.dp)
-                )
+                ) {
+                    Text(text = emoji ?: "😐", fontSize = 48.sp)
+                }
 
                 // Right: Content
                 Column(modifier = Modifier.weight(1f)) {
@@ -73,9 +78,8 @@ fun DailyNoteHeader(
                         Column {
                             Text(
                                 text = "Daily Summary",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.secondary
+                                style = MaterialTheme.typography.titleLargeEmphasized,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                             
                             if (lastUpdate != null) {

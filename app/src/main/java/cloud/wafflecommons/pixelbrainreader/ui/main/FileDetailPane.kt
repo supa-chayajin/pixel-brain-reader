@@ -65,6 +65,8 @@ import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -271,7 +273,7 @@ fun FileDetailPane(
                         }
                         // Ask reads the note as saved: offered while reading; editing has the bulb.
                         if (onAskNote != null && !isEditing) {
-                            IconButton(onClick = onAskNote, modifier = Modifier.size(36.dp)) {
+                            IconButton(onClick = onAskNote, shapes = IconButtonDefaults.shapes(), modifier = Modifier.size(36.dp)) {
                                 Icon(
                                     imageVector = Icons.Rounded.QuestionAnswer,
                                     contentDescription = "Ask this note",
@@ -280,7 +282,7 @@ fun FileDetailPane(
                             }
                         }
                         if (onAskCoach != null) {
-                            IconButton(onClick = onAskCoach, modifier = Modifier.size(36.dp)) {
+                            IconButton(onClick = onAskCoach, shapes = IconButtonDefaults.shapes(), modifier = Modifier.size(36.dp)) {
                                 Icon(
                                     imageVector = Icons.Rounded.Psychology,
                                     contentDescription = "Ask Coach about this week",
@@ -289,7 +291,7 @@ fun FileDetailPane(
                             }
                         }
                         if (onHandOff != null) {
-                            IconButton(onClick = onHandOff, modifier = Modifier.size(36.dp)) {
+                            IconButton(onClick = onHandOff, shapes = IconButtonDefaults.shapes(), modifier = Modifier.size(36.dp)) {
                                 Icon(
                                     imageVector = Icons.Rounded.Computer,
                                     contentDescription = "Hand off to desktop",
@@ -299,7 +301,7 @@ fun FileDetailPane(
                         }
                         if (filePath != null && filePath.endsWith(".md")) {
                             IconButton(
-                                onClick = { showConnections = true },
+                                onClick = { showConnections = true }, shapes = IconButtonDefaults.shapes(),
                                 modifier = Modifier.size(36.dp)
                             ) {
                                 Icon(
@@ -312,7 +314,7 @@ fun FileDetailPane(
                         // Related while writing (K5): shown or hidden while editing, kept on the device.
                         if (isEditing && !isReadOnly) {
                             IconButton(
-                                onClick = { relatedNotesViewModel.setEnabled(!relatedEnabled) },
+                                onClick = { relatedNotesViewModel.setEnabled(!relatedEnabled) }, shapes = IconButtonDefaults.shapes(),
                                 modifier = Modifier.size(36.dp)
                             ) {
                                 Icon(
@@ -324,7 +326,7 @@ fun FileDetailPane(
                         }
                         if (onFetchHistory != null) {
                             IconButton(
-                                onClick = { showTimeMachine = true },
+                                onClick = { showTimeMachine = true }, shapes = IconButtonDefaults.shapes(),
                                 modifier = Modifier.size(36.dp)
                             ) {
                                 Icon(
@@ -850,7 +852,7 @@ fun WelcomeState(onCreateNew: () -> Unit) {
         Button(onClick = {
             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
             onCreateNew()
-        }) {
+        }, shapes = ButtonDefaults.shapes()) {
             Icon(Icons.Default.Add, null)
             Spacer(Modifier.width(8.dp))
             Text("Create new file")

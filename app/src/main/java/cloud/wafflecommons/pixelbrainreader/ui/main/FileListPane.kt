@@ -26,6 +26,7 @@ import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.QuestionAnswer
 import androidx.compose.material3.*
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,6 +44,12 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import cloud.wafflecommons.pixelbrainreader.data.remote.model.GithubFileDto
 import cloud.wafflecommons.pixelbrainreader.data.utils.parseJohnnyDecimal
+import cloud.wafflecommons.pixelbrainreader.ui.components.ExpressiveBadge
+import cloud.wafflecommons.pixelbrainreader.ui.components.Tone
+import cloud.wafflecommons.pixelbrainreader.ui.components.segmentShape
+import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.Description
+import androidx.compose.foundation.lazy.itemsIndexed
 
 private enum class FileListState { Loading, Error, Empty, Content }
 
@@ -97,7 +104,7 @@ fun FileListPane(
                         onClick = {
                             showRenameDialog = null
                             onMoveFile(file)
-                        },
+                        }, shapes = ButtonDefaults.shapes(),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -112,10 +119,10 @@ fun FileListPane(
                         onRenameFile(newName, file)
                         showRenameDialog = null
                     }
-                }) { Text("Rename") }
+                }, shapes = ButtonDefaults.shapes()) { Text("Rename") }
             },
             dismissButton = {
-                TextButton(onClick = { showRenameDialog = null }) { Text("Cancel") }
+                TextButton(onClick = { showRenameDialog = null }, shapes = ButtonDefaults.shapes()) { Text("Cancel") }
             }
         )
     }
@@ -158,7 +165,7 @@ fun FileListPane(
                 Button(onClick = {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     onRefresh()
-                }, shape = CircleShape) {
+                }, shapes = ButtonDefaults.shapes(shape = CircleShape)) {
                     Text("Retry")
                 }
             }
@@ -222,7 +229,7 @@ fun FileListPane(
                     Button(onClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         onCreateFile()
-                    }, shape = CircleShape) {
+                    }, shapes = ButtonDefaults.shapes(shape = CircleShape)) {
                         Icon(Icons.Default.Add, null)
                         Spacer(Modifier.width(8.dp))
                         Text("Create new file")
@@ -244,9 +251,10 @@ fun FileListPane(
                     files.filter { it.name != "." && it.path != currentPath }
                 }
 
+                // 13.2: the Android 16 list, one segmented group (2 dp between the rows).
                 LazyColumn(
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = NavBarClearance),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
                     // Header: Analyze Folder (no AI on a read-only device)
@@ -256,12 +264,12 @@ fun FileListPane(
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 onAnalyzeFolder()
                             },
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
                             colors = ButtonDefaults.filledTonalButtonColors(
                                 containerColor = MaterialTheme.colorScheme.tertiaryContainer,
                                 contentColor = MaterialTheme.colorScheme.onTertiaryContainer
                             ),
-                            shape = CircleShape
+                            shapes = ButtonDefaults.shapes(shape = CircleShape)
                         ) {
                              Icon(Icons.Rounded.AutoAwesome, null, modifier = Modifier.size(18.dp))
                              Spacer(Modifier.width(8.dp))
@@ -269,7 +277,7 @@ fun FileListPane(
                         }
                     }
 
-                    items(filteredFiles, key = { it.path }) { file ->
+                    itemsIndexed(filteredFiles, key = { _, it -> it.path }) { index, file ->
                         val dismissState = rememberSwipeToDismissBoxState(
                             confirmValueChange = { dismissValue ->
                                 when (dismissValue) {
@@ -350,6 +358,7 @@ fun FileListPane(
                                 FileItemCard(
                                     file = file,
                                     changedBySync = synced,
+                                    shape = segmentShape(index, filteredFiles.size),
                                     onClick = {
                                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                         if (file.type == "dir") onFolderClick(file.path) else onFileClick(file)
@@ -390,29 +399,36 @@ fun FileItemCard(
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
     /** The last sync brought or changed it (K3): a dot after its name. */
-    changedBySync: Boolean = false
+    changedBySync: Boolean = false,
+    /** Its segment's shape in the list (13.2, the Android 16 list). */
+    shape: androidx.compose.ui.graphics.Shape = MaterialTheme.shapes.large
 ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(MaterialTheme.shapes.large)
+            .clip(shape)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick),
-        shape = MaterialTheme.shapes.large,
+        shape = shape,
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
         ),
         elevation = CardDefaults.cardElevation(0.dp)
     ) {
         Row(
-            modifier = Modifier.padding(16.dp).fillMaxWidth(),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp).fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = if (file.type == "dir") Icons.Default.Folder else Icons.Default.Description,
-                contentDescription = null,
-                modifier = Modifier.size(32.dp),
-                tint = if (file.type == "dir") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            // 13.2: a folder wears an expressive shape in its own tone; a note a quieter one.
+            if (file.type == "dir") {
+                ExpressiveBadge(icon = Icons.Rounded.Folder, key = file.name, size = 44.dp)
+            } else {
+                ExpressiveBadge(
+                    icon = Icons.Rounded.Description,
+                    key = file.name,
+                    size = 44.dp,
+                    tone = Tone(MaterialTheme.colorScheme.surfaceContainerHighest, MaterialTheme.colorScheme.onSurfaceVariant)
+                )
+            }
             Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
                 val jdCategory = remember(file.name) { parseJohnnyDecimal(file.name)?.takeIf { it.isWorthABadge } }

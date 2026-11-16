@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package cloud.wafflecommons.pixelbrainreader.ui.settings
 
 import androidx.compose.foundation.layout.Column
@@ -11,6 +13,8 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -30,9 +34,9 @@ fun NanoSelfTestRow(result: NanoSelfTest?, isRunning: Boolean, enabled: Boolean,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            OutlinedButton(onClick = onRun, enabled = enabled && !isRunning) {
+            OutlinedButton(onClick = onRun, shapes = ButtonDefaults.shapes(), enabled = enabled && !isRunning) {
                 if (isRunning) {
-                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    LoadingIndicator(modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(8.dp))
                     Text("Testing…")
                 } else {

@@ -30,6 +30,7 @@ import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import androidx.compose.ui.text.intl.Locale as ComposeLocale
+import androidx.compose.material.icons.rounded.Mood
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -59,6 +60,7 @@ fun MoodHistoryScreen(
         topBar = {
             cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
                 title = "Mood Tracker",
+                icon = Icons.Rounded.Mood,
                 scrollBehavior = scrollBehavior
             )
         }

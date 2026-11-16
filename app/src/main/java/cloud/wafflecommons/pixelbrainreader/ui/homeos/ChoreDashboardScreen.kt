@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package cloud.wafflecommons.pixelbrainreader.ui.homeos
 
 import androidx.compose.animation.core.animateFloatAsState
@@ -14,6 +16,9 @@ import androidx.compose.material.icons.rounded.CleaningServices
 import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material3.*
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -70,11 +75,12 @@ fun ChoreDashboardScreen(
             @OptIn(ExperimentalMaterial3Api::class)
             cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
                 title = "Chores",
+                icon = Icons.Rounded.CleaningServices,
                 subtitle = "Get something done today",
                 actions = {
                     // The 15-minute reset (E16).
                     FilledTonalIconButton(
-                        onClick = { showReset = true },
+                        onClick = { showReset = true }, shapes = IconButtonDefaults.shapes(),
                         colors = IconButtonDefaults.filledTonalIconButtonColors(
                             containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                             contentColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -83,7 +89,7 @@ fun ChoreDashboardScreen(
                         Icon(Icons.Rounded.Timer, "15-minute reset")
                     }
                     FilledTonalIconButton(
-                        onClick = onNavigateToStats,
+                        onClick = onNavigateToStats, shapes = IconButtonDefaults.shapes(),
                         colors = IconButtonDefaults.filledTonalIconButtonColors(
                             containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                             contentColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -238,10 +244,12 @@ fun ChoreCard(chore: ChoreUiModel, roomColor: Color, onDoItClick: () -> Unit, ed
         label = "ProgressAnimation"
     )
 
+    // 13.2, Material 3 Expressive: a tonal card with the extra-large corners.
     Card(
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
         ),
+        shape = MaterialTheme.shapes.extraLarge,
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -303,7 +311,7 @@ fun ChoreCard(chore: ChoreUiModel, roomColor: Color, onDoItClick: () -> Unit, ed
             Spacer(modifier = Modifier.height(12.dp))
 
             // Entropy Visualizer
-            LinearProgressIndicator(
+            LinearWavyProgressIndicator(
                 progress = { animatedProgress },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -395,7 +403,7 @@ private fun ChoreResetSheet(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    if (!readOnly) FilledTonalButton(onClick = { onDone(chore.id) }) { Text("Done") }
+                    if (!readOnly) FilledTonalButton(onClick = { onDone(chore.id) }, shapes = ButtonDefaults.shapes()) { Text("Done") }
                 }
             }
             if (plan.withoutMinutes.isNotEmpty() && !readOnly) {

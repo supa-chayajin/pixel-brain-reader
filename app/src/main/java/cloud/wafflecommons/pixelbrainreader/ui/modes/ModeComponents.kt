@@ -34,6 +34,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberBottomSheetState
+import androidx.compose.material3.ButtonDefaults
+import cloud.wafflecommons.pixelbrainreader.ui.components.switchThumb
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -81,18 +83,24 @@ private fun shortDate(iso: String): String = runCatching {
 @Composable
 fun ModeChip(visibility: Visibility, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val label = visibility.label() + if (visibility.screenShareSafe) " · Safe" else ""
-    AssistChip(
+    // 13.2, Material 3 Expressive: a tonal button in the primary tone, its shape morphing on press.
+    androidx.compose.material3.FilledTonalButton(
         onClick = onClick,
-        label = { Text(label) },
-        leadingIcon = {
-            Icon(
-                if (visibility.screenShareSafe) Icons.Rounded.VisibilityOff else ModeIcons.of(visibility.appearance, visibility.mode),
-                contentDescription = null,
-                modifier = Modifier.size(AssistChipDefaults.IconSize)
-            )
-        },
+        shapes = androidx.compose.material3.ButtonDefaults.shapes(),
+        colors = androidx.compose.material3.ButtonDefaults.filledTonalButtonColors(
+            containerColor = androidx.compose.material3.MaterialTheme.colorScheme.primaryContainer,
+            contentColor = androidx.compose.material3.MaterialTheme.colorScheme.onPrimaryContainer
+        ),
         modifier = modifier
-    )
+    ) {
+        Icon(
+            if (visibility.screenShareSafe) Icons.Rounded.VisibilityOff else ModeIcons.of(visibility.appearance, visibility.mode),
+            contentDescription = null,
+            modifier = Modifier.size(androidx.compose.material3.ButtonDefaults.IconSize)
+        )
+        androidx.compose.foundation.layout.Spacer(Modifier.size(androidx.compose.material3.ButtonDefaults.IconSpacing))
+        Text(label)
+    }
 }
 
 /** Pick a mode, toggle screen-share safe, or open the settings. */
@@ -124,15 +132,15 @@ fun ModeSheet(
                 ) { Text(visibility.label(mode)) }
             }
             if (visibility.source == ModeSource.MANUAL) {
-                TextButton(onClick = onFollowSchedule) { Text("Follow the schedule again") }
+                TextButton(onClick = onFollowSchedule, shapes = ButtonDefaults.shapes()) { Text("Follow the schedule again") }
             }
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
             ListItem(
                 supportingContent = { Text("Hides work, private and health content everywhere — for demos and shared screens.") },
                 leadingContent = { Icon(Icons.Rounded.VisibilityOff, contentDescription = null) },
-                trailingContent = { Switch(checked = visibility.screenShareSafe, onCheckedChange = onScreenShareSafe) }
+                trailingContent = { Switch(checked = visibility.screenShareSafe, thumbContent = switchThumb(visibility.screenShareSafe), onCheckedChange = onScreenShareSafe) }
             ) { Text("Screen-share safe") }
-            OutlinedButton(onClick = onOpenSettings, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+            OutlinedButton(onClick = onOpenSettings, shapes = ButtonDefaults.shapes(), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
                 Icon(Icons.Rounded.Settings, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
                 Text("Modes settings")
@@ -175,7 +183,7 @@ fun ModeStyleDialog(
             }
         },
         confirmButton = {
-            TextButton(enabled = label.isNotBlank(), onClick = {
+            TextButton(enabled = label.isNotBlank(), shapes = ButtonDefaults.shapes(), onClick = {
                 val name = label.trim()
                 onConfirm(
                     ModeStyle(
@@ -187,8 +195,8 @@ fun ModeStyleDialog(
         },
         dismissButton = {
             Row {
-                TextButton(onClick = { onConfirm(ModeStyle()) }) { Text("Reset") }
-                TextButton(onClick = onDismiss) { Text("Cancel") }
+                TextButton(onClick = { onConfirm(ModeStyle()) }, shapes = ButtonDefaults.shapes()) { Text("Reset") }
+                TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text("Cancel") }
             }
         }
     )
@@ -248,6 +256,6 @@ fun HealthPrivacyGate(hidden: Boolean, onReveal: () -> Unit, modifier: Modifier 
             textAlign = TextAlign.Center
         )
         Spacer(Modifier.size(16.dp))
-        OutlinedButton(onClick = onReveal) { Text("Turn off screen-share safe") }
+        OutlinedButton(onClick = onReveal, shapes = ButtonDefaults.shapes()) { Text("Turn off screen-share safe") }
     }
 }

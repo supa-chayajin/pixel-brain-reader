@@ -17,6 +17,8 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberBottomSheetState
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -80,7 +82,7 @@ fun VaultRulesBadge(path: String, content: String, onFix: (String) -> Unit, view
     val issues by viewModel.issues.collectAsStateWithLifecycle()
     var open by remember { mutableStateOf(false) }
     if (issues.isEmpty()) return
-    IconButton(onClick = { open = true }, modifier = Modifier.size(36.dp)) {
+    IconButton(onClick = { open = true }, shapes = IconButtonDefaults.shapes(), modifier = Modifier.size(36.dp)) {
         BadgedBox(badge = { Badge { Text("${issues.size}") } }) {
             Icon(Icons.AutoMirrored.Rounded.Rule, contentDescription = "Vault rules", tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -98,7 +100,7 @@ fun VaultRulesBadge(path: String, content: String, onFix: (String) -> Unit, view
                     Text("${issue.rule} · ${issue.message}" + if (issue.fixable) " (fixable)" else "", style = MaterialTheme.typography.bodyMedium)
                 }
                 if (issues.any { it.fixable }) {
-                    Button(onClick = { onFix(viewModel.fixed(path, content)); open = false }) { Text("Fix what's safe") }
+                    Button(onClick = { onFix(viewModel.fixed(path, content)); open = false }, shapes = ButtonDefaults.shapes()) { Text("Fix what's safe") }
                 }
             }
         }

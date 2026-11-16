@@ -39,6 +39,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -72,6 +74,11 @@ import cloud.wafflecommons.pixelbrainreader.ui.main.MarkwonContent
 import coil.compose.AsyncImage
 import java.time.LocalDate
 import java.time.LocalTime
+import androidx.compose.material3.IconButton
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Spacer
+import cloud.wafflecommons.pixelbrainreader.ui.theme.NavBarClearance
 
 /**
  * A game's page (RFC-009 §4.2): its state, hours and trophies, the checklists of its note (a trophy's
@@ -101,10 +108,9 @@ fun GamePageScreen(
     var adding by rememberSaveable { mutableStateOf(false) }
     var editingId by rememberSaveable { mutableStateOf<String?>(null) }
     var editingPlayedBefore by rememberSaveable { mutableStateOf(false) }
-    var earlierMenu by remember { mutableStateOf(false) }
-    var mapMenu by remember { mutableStateOf(false) }
 
-    FormScaffold(title = page?.title ?: "Game", onBack = onBack) {
+    Box(modifier = Modifier.fillMaxSize()) {
+    FormScaffold(title = page?.title ?: "Game", onBack = onBack, icon = Icons.Rounded.SportsEsports) {
         if (page == null) {
             if (!state.loading) EmptyHint("This game page is gone: it was moved or deleted.")
             return@FormScaffold
@@ -140,71 +146,8 @@ fun GamePageScreen(
                 }
             }
             if (!state.readOnly) {
-                TextButton(onClick = { editingPlayedBefore = true }) {
+                TextButton(onClick = { editingPlayedBefore = true }, shapes = ButtonDefaults.shapes()) {
                     Text(page.playedBefore?.let { "Console play time before the app: ${hours(it)}" } ?: "Add the console's play time")
-                }
-            }
-        }
-
-        if (!state.readOnly) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                if (state.running?.page == page.path) {
-                    FilledTonalButton(onClick = viewModel::stop, modifier = Modifier.weight(1f)) {
-                        Icon(Icons.Rounded.Stop, contentDescription = null)
-                        Text("Stop", modifier = Modifier.padding(start = 6.dp))
-                    }
-                } else {
-                    Button(onClick = { viewModel.start() }, modifier = Modifier.weight(1f)) {
-                        Icon(Icons.Rounded.PlayArrow, contentDescription = null)
-                        Text("Start a session", modifier = Modifier.padding(start = 6.dp))
-                    }
-                    Box {
-                        FilledTonalIconButton(onClick = { earlierMenu = true }) {
-                            Icon(Icons.Rounded.MoreTime, contentDescription = "Started earlier")
-                        }
-                        DropdownMenu(expanded = earlierMenu, onDismissRequest = { earlierMenu = false }) {
-                            listOf(10, 20, 30).forEach { minutes ->
-                                DropdownMenuItem(
-                                    text = { Text("Started $minutes min ago") },
-                                    onClick = {
-                                        earlierMenu = false
-                                        viewModel.start(minutes)
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-                OutlinedButton(onClick = { onAskClaude(state.askProject, GamePages.askText(page)) }, modifier = Modifier.weight(1f)) {
-                    Icon(Icons.Rounded.QuestionAnswer, contentDescription = null)
-                    Text("Ask Claude", modifier = Modifier.padding(start = 6.dp))
-                }
-            }
-        }
-
-        // 13.2: the game's map, in the app (a read-only device reads maps too: nothing is written).
-        if (page.maps.isNotEmpty()) {
-            Box {
-                OutlinedButton(
-                    onClick = { if (page.maps.size == 1) onOpenMap(page.path, 0) else mapMenu = true },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(Icons.Rounded.Map, contentDescription = null)
-                    Text(
-                        if (page.maps.size == 1) "Map · ${page.maps.first().label}" else "Maps (${page.maps.size})",
-                        modifier = Modifier.padding(start = 6.dp)
-                    )
-                }
-                DropdownMenu(expanded = mapMenu, onDismissRequest = { mapMenu = false }) {
-                    page.maps.forEachIndexed { index, map ->
-                        DropdownMenuItem(
-                            text = { Text("${map.label} · ${map.site}") },
-                            onClick = {
-                                mapMenu = false
-                                onOpenMap(page.path, index)
-                            }
-                        )
-                    }
                 }
             }
         }
@@ -224,7 +167,7 @@ fun GamePageScreen(
                 title = "Trophies",
                 icon = Icons.Rounded.EmojiEvents,
                 subtitle = "${state.trophiesEarned} of ${state.trophiesTotal} · the others stay hidden until you reveal them",
-                trailing = { TextButton(onClick = { reveal = !reveal }) { Text(if (reveal) "Hide" else "Reveal") } }
+                trailing = { TextButton(onClick = { reveal = !reveal }, shapes = ButtonDefaults.shapes()) { Text(if (reveal) "Hide" else "Reveal") } }
             ) {
                 state.trophies.forEach { line ->
                     val earned = line.earnedOn
@@ -262,7 +205,7 @@ fun GamePageScreen(
             icon = Icons.Rounded.History,
             subtitle = if (!state.readOnly && state.sessions.any { it.source == GameSessionRecord.SOURCE_MANUAL }) "Tap a session to fix it" else null,
             trailing = {
-                if (!state.readOnly) TextButton(onClick = { adding = true }) { Text("Add") }
+                if (!state.readOnly) TextButton(onClick = { adding = true }, shapes = ButtonDefaults.shapes()) { Text("Add") }
             }
         ) {
             if (state.sessions.isEmpty() && state.history.isEmpty()) {
@@ -289,11 +232,27 @@ fun GamePageScreen(
         }
 
         SectionCard(title = "Notes", icon = Icons.AutoMirrored.Rounded.Article) {
-            TextButton(onClick = { onOpenNote(page.path) }) { Text("Open this game's page") }
+            TextButton(onClick = { onOpenNote(page.path) }, shapes = ButtonDefaults.shapes()) { Text("Open this game's page") }
             state.folderNotes.forEach { note ->
-                TextButton(onClick = { onOpenNote(note) }) { Text(note.substringAfterLast('/').removeSuffix(".md")) }
+                TextButton(onClick = { onOpenNote(note) }, shapes = ButtonDefaults.shapes()) { Text(note.substringAfterLast('/').removeSuffix(".md")) }
             }
         }
+        // Room for the floating toolbar under the last card.
+        Spacer(Modifier.height(88.dp))
+    }
+    // 13.2, Material 3 Expressive: the game's actions in a floating toolbar, play/stop as its FAB.
+    page?.let { game ->
+        GameToolbar(
+            running = state.running?.page == game.path,
+            readOnly = state.readOnly,
+            maps = game.maps,
+            onStart = { minutes -> viewModel.start(minutes) },
+            onStop = viewModel::stop,
+            onOpenMap = { index -> onOpenMap(game.path, index) },
+            onAsk = { onAskClaude(state.askProject, GamePages.askText(game)) },
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = NavBarClearance)
+        )
+    }
     }
 
     if (adding) {
@@ -378,10 +337,10 @@ private fun GameSessionDialog(
         title = { Text(if (initial == null) "Add a session" else "Fix this session") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { pickingDate = true }, enabled = initial == null, modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(onClick = { pickingDate = true }, shapes = ButtonDefaults.shapes(), enabled = initial == null, modifier = Modifier.fillMaxWidth()) {
                     Text("Day: ${day(picked)}")
                 }
-                OutlinedButton(onClick = { pickingTime = true }, modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(onClick = { pickingTime = true }, shapes = ButtonDefaults.shapes(), modifier = Modifier.fillMaxWidth()) {
                     Text("Started at $start")
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -413,16 +372,16 @@ private fun GameSessionDialog(
             }
         },
         confirmButton = {
-            TextButton(enabled = valid, onClick = { onSave(picked, time, minutes) }) { Text("Save") }
+            TextButton(enabled = valid, shapes = ButtonDefaults.shapes(), onClick = { onSave(picked, time, minutes) }) { Text("Save") }
         },
         dismissButton = {
             Row {
                 if (onDelete != null) {
-                    TextButton(onClick = { if (confirmDelete) onDelete() else confirmDelete = true }) {
+                    TextButton(onClick = { if (confirmDelete) onDelete() else confirmDelete = true }, shapes = ButtonDefaults.shapes()) {
                         Text(if (confirmDelete) "Tap again to delete" else "Delete", color = MaterialTheme.colorScheme.error)
                     }
                 }
-                TextButton(onClick = onDismiss) { Text("Cancel") }
+                TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text("Cancel") }
             }
         }
     )
@@ -460,10 +419,97 @@ private fun PlayedBeforeDialog(initial: Double?, onSave: (String) -> Unit, onDis
                 if (!valid) Text("Write hours like 228, 228.5, 228h30 or 228:30.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
         },
-        confirmButton = { TextButton(enabled = valid, onClick = { onSave(text.trim()) }) { Text(if (text.isBlank()) "Clear" else "Save") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        confirmButton = { TextButton(enabled = valid, shapes = ButtonDefaults.shapes(), onClick = { onSave(text.trim()) }) { Text(if (text.isBlank()) "Clear" else "Save") } },
+        dismissButton = { TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text("Cancel") } }
     )
 }
 
 private val HHMM: java.time.format.DateTimeFormatter = java.time.format.DateTimeFormatter.ofPattern("HH:mm")
+
+/**
+ * The game's actions (13.2): Material 3 Expressive's floating toolbar, play or stop as its vibrant
+ * FAB, then "Started earlier", the map and Ask Claude. A read-only device keeps only the map.
+ */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun GameToolbar(
+    running: Boolean,
+    readOnly: Boolean,
+    maps: List<cloud.wafflecommons.pixelbrainreader.data.games.GameMap>,
+    onStart: (Int) -> Unit,
+    onStop: () -> Unit,
+    onOpenMap: (Int) -> Unit,
+    onAsk: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var earlierMenu by remember { mutableStateOf(false) }
+    var mapMenu by remember { mutableStateOf(false) }
+    val actions: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
+        if (!readOnly && !running) {
+            Box {
+                IconButton(onClick = { earlierMenu = true }, shapes = IconButtonDefaults.shapes()) {
+                    Icon(Icons.Rounded.MoreTime, contentDescription = "Started earlier")
+                }
+                DropdownMenu(expanded = earlierMenu, onDismissRequest = { earlierMenu = false }) {
+                    listOf(10, 20, 30).forEach { minutes ->
+                        DropdownMenuItem(
+                            text = { Text("Started $minutes min ago") },
+                            onClick = {
+                                earlierMenu = false
+                                onStart(minutes)
+                            }
+                        )
+                    }
+                }
+            }
+        }
+        if (maps.isNotEmpty()) {
+            Box {
+                IconButton(onClick = { if (maps.size == 1) onOpenMap(0) else mapMenu = true }, shapes = IconButtonDefaults.shapes()) {
+                    Icon(Icons.Rounded.Map, contentDescription = "Open the map")
+                }
+                DropdownMenu(expanded = mapMenu, onDismissRequest = { mapMenu = false }) {
+                    maps.forEachIndexed { index, map ->
+                        DropdownMenuItem(
+                            text = { Text("${map.label} · ${map.site}") },
+                            onClick = {
+                                mapMenu = false
+                                onOpenMap(index)
+                            }
+                        )
+                    }
+                }
+            }
+        }
+        if (!readOnly) {
+            IconButton(onClick = onAsk, shapes = IconButtonDefaults.shapes()) {
+                Icon(Icons.Rounded.QuestionAnswer, contentDescription = "Ask Claude")
+            }
+        }
+    }
+    if (readOnly) {
+        if (maps.isEmpty()) return
+        androidx.compose.material3.HorizontalFloatingToolbar(
+            expanded = true,
+            modifier = modifier,
+            colors = androidx.compose.material3.FloatingToolbarDefaults.vibrantFloatingToolbarColors(),
+            content = actions
+        )
+    } else {
+        androidx.compose.material3.HorizontalFloatingToolbar(
+            expanded = true,
+            floatingActionButton = {
+                androidx.compose.material3.FloatingToolbarDefaults.VibrantFloatingActionButton(onClick = { if (running) onStop() else onStart(0) }) {
+                    Icon(
+                        if (running) Icons.Rounded.Stop else Icons.Rounded.PlayArrow,
+                        contentDescription = if (running) "Stop the session" else "Start a session"
+                    )
+                }
+            },
+            modifier = modifier,
+            colors = androidx.compose.material3.FloatingToolbarDefaults.vibrantFloatingToolbarColors(),
+            content = actions
+        )
+    }
+}
 

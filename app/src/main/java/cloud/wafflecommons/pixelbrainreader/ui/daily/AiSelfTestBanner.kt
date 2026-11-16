@@ -13,6 +13,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,7 +53,7 @@ fun AiSelfTestBanner(result: NanoSelfTest, onDetails: () -> Unit, modifier: Modi
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
             )
-            TextButton(onClick = onDetails) { Text("Details") }
+            TextButton(onClick = onDetails, shapes = ButtonDefaults.shapes()) { Text("Details") }
         }
     }
 }

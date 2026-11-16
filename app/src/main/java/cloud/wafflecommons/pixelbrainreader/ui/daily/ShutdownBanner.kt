@@ -22,6 +22,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -205,13 +207,13 @@ fun ShutdownBanner(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
                     )
-                    IconButton(onClick = { onTomorrow(task) }) {
+                    IconButton(onClick = { onTomorrow(task) }, shapes = IconButtonDefaults.shapes()) {
                         Icon(Icons.AutoMirrored.Rounded.NextPlan, contentDescription = "Tomorrow")
                     }
-                    IconButton(onClick = { onSomeday(task) }) {
+                    IconButton(onClick = { onSomeday(task) }, shapes = IconButtonDefaults.shapes()) {
                         Icon(Icons.Rounded.Inventory2, contentDescription = "Someday")
                     }
-                    IconButton(onClick = { onLetGo(task) }) {
+                    IconButton(onClick = { onLetGo(task) }, shapes = IconButtonDefaults.shapes()) {
                         Icon(Icons.Rounded.Close, contentDescription = "Let it go")
                     }
                 }
@@ -242,7 +244,7 @@ fun ShutdownBanner(
                             modifier = Modifier.weight(1f)
                         )
                         TextButton(
-                            onClick = { onLogWin(win) },
+                            onClick = { onLogWin(win) }, shapes = ButtonDefaults.shapes(),
                             enabled = win.isNotBlank()
                         ) { Text("Log") }
                     }
@@ -261,11 +263,11 @@ fun ShutdownBanner(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 if (state.inboxCount > 0) {
-                    TextButton(onClick = onOpenInbox, modifier = Modifier.weight(1f)) {
+                    TextButton(onClick = onOpenInbox, shapes = ButtonDefaults.shapes(), modifier = Modifier.weight(1f)) {
                         Text(if (state.inboxCount == 1) "1 note in the inbox" else "${state.inboxCount} notes in the inbox")
                     }
                 }
-                Button(onClick = onCloseDay) { Text("Close the day") }
+                Button(onClick = onCloseDay, shapes = ButtonDefaults.shapes()) { Text("Close the day") }
             }
         }
     }
@@ -286,8 +288,8 @@ fun ShutdownOfferCard(offer: ModeOffer, onSwitch: () -> Unit, onDismiss: () -> U
                 color = MaterialTheme.colorScheme.onTertiaryContainer,
                 modifier = Modifier.weight(1f)
             )
-            TextButton(onClick = onDismiss) { Text("Not now") }
-            TextButton(onClick = onSwitch) { Text("Switch") }
+            TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text("Not now") }
+            TextButton(onClick = onSwitch, shapes = ButtonDefaults.shapes()) { Text("Switch") }
         }
     }
 }

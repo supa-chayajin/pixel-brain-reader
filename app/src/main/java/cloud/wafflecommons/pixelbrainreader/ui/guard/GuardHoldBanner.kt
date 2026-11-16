@@ -13,6 +13,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -51,7 +52,7 @@ fun GuardHoldBanner(held: List<GuardFinding>, onReview: () -> Unit, modifier: Mo
                 color = MaterialTheme.colorScheme.onErrorContainer,
                 modifier = Modifier.weight(1f)
             )
-            TextButton(onClick = onReview) { Text("Review") }
+            TextButton(onClick = onReview, shapes = ButtonDefaults.shapes()) { Text("Review") }
         }
     }
 }

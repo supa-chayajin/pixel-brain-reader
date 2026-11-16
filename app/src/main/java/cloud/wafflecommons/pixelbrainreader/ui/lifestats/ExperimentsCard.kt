@@ -34,6 +34,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -156,7 +158,7 @@ fun ExperimentsCard(viewModel: ExperimentsViewModel = hiltViewModel()) {
         icon = Icons.Rounded.Science,
         accent = MaterialTheme.colorScheme.secondary,
         action = if (readOnly) null else {
-            { FilledTonalIconButton(onClick = { creating = true }) { Icon(Icons.Rounded.Add, contentDescription = "New experiment") } }
+            { FilledTonalIconButton(onClick = { creating = true }, shapes = IconButtonDefaults.shapes()) { Icon(Icons.Rounded.Add, contentDescription = "New experiment") } }
         }
     ) {
         when (val list = standings) {
@@ -200,8 +202,8 @@ fun ExperimentsCard(viewModel: ExperimentsViewModel = hiltViewModel()) {
             onDismissRequest = { removing = null },
             title = { Text("Remove this experiment?") },
             text = { Text("\"${experiment.hypothesis}\" leaves the list. Your habit and your days stay as they are.") },
-            confirmButton = { TextButton(onClick = { viewModel.remove(experiment.id); removing = null }) { Text("Remove") } },
-            dismissButton = { TextButton(onClick = { removing = null }) { Text("Cancel") } }
+            confirmButton = { TextButton(onClick = { viewModel.remove(experiment.id); removing = null }, shapes = ButtonDefaults.shapes()) { Text("Remove") } },
+            dismissButton = { TextButton(onClick = { removing = null }, shapes = ButtonDefaults.shapes()) { Text("Cancel") } }
         )
     }
 }
@@ -219,7 +221,7 @@ private fun ExperimentTile(standing: ExperimentRepository.Standing, onRemove: ((
             Row(verticalAlignment = Alignment.Top) {
                 Text(experiment.hypothesis, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                 if (onRemove != null) {
-                    IconButton(onClick = onRemove, modifier = Modifier.size(32.dp)) {
+                    IconButton(onClick = onRemove, shapes = IconButtonDefaults.shapes(), modifier = Modifier.size(32.dp)) {
                         Icon(Icons.Rounded.Close, contentDescription = "Remove", modifier = Modifier.size(18.dp))
                     }
                 }
@@ -406,10 +408,10 @@ private fun NewExperimentDialog(
         },
         confirmButton = {
             TextButton(
-                onClick = { onStart(hypothesis, habitId!!, outcome!!) },
+                onClick = { onStart(hypothesis, habitId!!, outcome!!) }, shapes = ButtonDefaults.shapes(),
                 enabled = hypothesis.isNotBlank() && habitId != null && outcome != null
             ) { Text("Start") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = { TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text("Cancel") } }
     )
 }

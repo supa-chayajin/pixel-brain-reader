@@ -28,12 +28,16 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ToggleButton
+import androidx.compose.material3.ToggleButtonDefaults
+import cloud.wafflecommons.pixelbrainreader.ui.components.connectedShapes
+import cloud.wafflecommons.pixelbrainreader.ui.components.ConnectedButtonRow
+import androidx.compose.foundation.layout.size
+import cloud.wafflecommons.pixelbrainreader.ui.components.switchThumb
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -65,6 +69,7 @@ import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.format.TextStyle
 import java.util.Locale
+import androidx.compose.material.icons.rounded.Layers
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -95,7 +100,7 @@ fun ModesSettingsScreen(onBack: () -> Unit, viewModel: ModesViewModel = hiltView
     // a setting of its own (12.15, S2).
     val editable = !VaultWriteGate.readOnly
 
-    FormScaffold(title = "Modes", onBack = onBack) {
+    FormScaffold(title = "Modes", icon = Icons.Rounded.Layers, onBack = onBack) {
         if (!editable) ReadOnlyNotice()
         SectionCard(
             title = "Names & icons",
@@ -192,7 +197,7 @@ fun ModesSettingsScreen(onBack: () -> Unit, viewModel: ModesViewModel = hiltView
             title = "Schedule",
             icon = Icons.Rounded.Schedule,
             subtitle = "$workLabel mode during work hours; another mode the rest of the time.",
-            trailing = { Switch(checked = config.scheduleEnabled, onCheckedChange = viewModel::setScheduleEnabled, enabled = editable) }
+            trailing = { Switch(checked = config.scheduleEnabled, thumbContent = switchThumb(config.scheduleEnabled), onCheckedChange = viewModel::setScheduleEnabled, enabled = editable) }
         ) {
             if (config.scheduleEnabled) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -206,10 +211,10 @@ fun ModesSettingsScreen(onBack: () -> Unit, viewModel: ModesViewModel = hiltView
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(enabled = editable, onClick = { timePicker = config.workStart to { t -> viewModel.setWorkHours(t, config.workEnd) } }) {
+                    TextButton(enabled = editable, shapes = ButtonDefaults.shapes(), onClick = { timePicker = config.workStart to { t -> viewModel.setWorkHours(t, config.workEnd) } }) {
                         Text("From ${config.workStart}")
                     }
-                    TextButton(enabled = editable, onClick = { timePicker = config.workEnd to { t -> viewModel.setWorkHours(config.workStart, t) } }) {
+                    TextButton(enabled = editable, shapes = ButtonDefaults.shapes(), onClick = { timePicker = config.workEnd to { t -> viewModel.setWorkHours(config.workStart, t) } }) {
                         Text("to ${config.workEnd}")
                     }
                 }
@@ -228,7 +233,7 @@ fun ModesSettingsScreen(onBack: () -> Unit, viewModel: ModesViewModel = hiltView
             title = "Shared custody",
             icon = Icons.Rounded.FamilyRestroom,
             subtitle = "Every other week, from one handover to the next. Outside work hours and on leave the mode follows who is home, and habits can follow it too.",
-            trailing = { Switch(checked = custody.enabled, onCheckedChange = viewModel::setCustodyEnabled, enabled = editable) }
+            trailing = { Switch(checked = custody.enabled, thumbContent = switchThumb(custody.enabled), onCheckedChange = viewModel::setCustodyEnabled, enabled = editable) }
         ) {
             if (custody.enabled) {
                 ListItem(
@@ -250,19 +255,25 @@ fun ModesSettingsScreen(onBack: () -> Unit, viewModel: ModesViewModel = hiltView
                 val dayName = custody.handoverDayOfWeek.getDisplayName(TextStyle.FULL, Locale.ENGLISH)
                 val arrives = custody.arrivesInWeekOf(LocalDate.now())
                 Text("This week, ${custody.label}…", style = MaterialTheme.typography.labelLarge)
-                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                    SegmentedButton(
-                        selected = arrives == true,
-                        onClick = { viewModel.setCustodyThisWeek(arrives = true) },
+                ConnectedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                    ToggleButton(
+                        checked = arrives == true,
+                        onCheckedChange = { viewModel.setCustodyThisWeek(arrives = true) },
                         enabled = editable,
-                        shape = SegmentedButtonDefaults.itemShape(0, 2)
-                    ) { Text("arrives on $dayName") }
-                    SegmentedButton(
-                        selected = arrives == false,
-                        onClick = { viewModel.setCustodyThisWeek(arrives = false) },
+                        shapes = connectedShapes(0, 2),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("arrives on $dayName")
+                    }
+                    ToggleButton(
+                        checked = arrives == false,
+                        onCheckedChange = { viewModel.setCustodyThisWeek(arrives = false) },
                         enabled = editable,
-                        shape = SegmentedButtonDefaults.itemShape(1, 2)
-                    ) { Text("leaves on $dayName") }
+                        shapes = connectedShapes(1, 2),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("leaves on $dayName")
+                    }
                 }
                 if (arrives == null) EmptyHint("Say how this week goes to start the rhythm.")
                 Text("Exceptions", style = MaterialTheme.typography.labelLarge)
@@ -279,7 +290,7 @@ fun ModesSettingsScreen(onBack: () -> Unit, viewModel: ModesViewModel = hiltView
                         }
                     )
                 }
-                if (editable) FilledTonalButton(onClick = { pickException = true }) {
+                if (editable) FilledTonalButton(onClick = { pickException = true }, shapes = ButtonDefaults.shapes()) {
                     Icon(Icons.Default.Add, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
                     Text("Add exception")
@@ -310,7 +321,7 @@ fun ModesSettingsScreen(onBack: () -> Unit, viewModel: ModesViewModel = hiltView
                     }
                 )
             }
-            if (editable) FilledTonalButton(onClick = { pickLeave = true }) {
+            if (editable) FilledTonalButton(onClick = { pickLeave = true }, shapes = ButtonDefaults.shapes()) {
                 Icon(Icons.Default.Add, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
                 Text("Add leave")
@@ -335,11 +346,11 @@ fun ModesSettingsScreen(onBack: () -> Unit, viewModel: ModesViewModel = hiltView
                 )
             }
             if (editable) Row(verticalAlignment = Alignment.CenterVertically) {
-                Switch(checked = pendingKeyDateWork, onCheckedChange = { pendingKeyDateWork = it })
+                Switch(checked = pendingKeyDateWork, thumbContent = switchThumb(pendingKeyDateWork), onCheckedChange = { pendingKeyDateWork = it })
                 Spacer(Modifier.width(8.dp))
                 Text("Next date is a work date", style = MaterialTheme.typography.bodyMedium)
             }
-            if (editable) FilledTonalButton(onClick = { pickKeyDate = true }) {
+            if (editable) FilledTonalButton(onClick = { pickKeyDate = true }, shapes = ButtonDefaults.shapes()) {
                 Icon(Icons.Default.Add, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
                 Text("Add key date")
@@ -350,7 +361,7 @@ fun ModesSettingsScreen(onBack: () -> Unit, viewModel: ModesViewModel = hiltView
             title = "Screen-share safe",
             icon = Icons.Rounded.VisibilityOff,
             subtitle = "Hides work, private and health content everywhere until you turn it off.",
-            trailing = { Switch(checked = visibility.screenShareSafe, onCheckedChange = viewModel::setScreenShareSafe) }
+            trailing = { Switch(checked = visibility.screenShareSafe, thumbContent = switchThumb(visibility.screenShareSafe), onCheckedChange = viewModel::setScreenShareSafe) }
         )
     }
 
@@ -463,14 +474,17 @@ private fun OutsideHoursChoice(
 ) {
     Text(title, style = MaterialTheme.typography.labelLarge)
     val choices = listOf(ContextMode.PERSONAL, ContextMode.OFF)
-    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+    ConnectedButtonRow(modifier = Modifier.fillMaxWidth()) {
         choices.forEachIndexed { index, mode ->
-            SegmentedButton(
-                selected = selected == mode,
-                onClick = { onSelect(mode) },
+            ToggleButton(
+                checked = selected == mode,
+                onCheckedChange = { onSelect(mode) },
                 enabled = editable,
-                shape = SegmentedButtonDefaults.itemShape(index, choices.size)
-            ) { Text(appearance.label(mode)) }
+                shapes = connectedShapes(index, choices.size),
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(appearance.label(mode))
+            }
         }
     }
 }
@@ -492,10 +506,10 @@ private fun CustodyExceptionDialog(childLabel: String, onConfirm: (Boolean, Stri
         },
         confirmButton = {
             Row {
-                TextButton(onClick = { onConfirm(false, label) }) { Text("Without $childLabel") }
-                TextButton(onClick = { onConfirm(true, label) }) { Text("With $childLabel") }
+                TextButton(onClick = { onConfirm(false, label) }, shapes = ButtonDefaults.shapes()) { Text("Without $childLabel") }
+                TextButton(onClick = { onConfirm(true, label) }, shapes = ButtonDefaults.shapes()) { Text("With $childLabel") }
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = { TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text("Cancel") } }
     )
 }

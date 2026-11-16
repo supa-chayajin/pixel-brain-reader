@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package cloud.wafflecommons.pixelbrainreader.ui.daily
 
 import android.annotation.SuppressLint
@@ -25,6 +27,8 @@ import androidx.compose.material.icons.filled.Upgrade
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.*
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.IconButtonDefaults
 import androidx.core.net.toUri
 import androidx.compose.runtime.*
 import kotlinx.coroutines.launch
@@ -74,6 +78,11 @@ import androidx.compose.material.icons.sharp.AddCircle
 import androidx.compose.material.icons.sharp.CheckCircle
 import androidx.compose.material.icons.sharp.Lightbulb
 import androidx.compose.material.icons.sharp.Mood
+import androidx.compose.material.icons.rounded.AutoAwesome
+import cloud.wafflecommons.pixelbrainreader.ui.components.DailyBlockHeader
+import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material3.toShape
+import androidx.compose.ui.draw.clip
 
 @SuppressLint("UnusedBoxWithConstraintsScope")
 @OptIn(ExperimentalMaterial3Api::class)
@@ -249,12 +258,13 @@ fun DailyNoteScreen(
         topBar = {
             CortexTopAppBar(
                 title = "Cortex",
+                icon = Icons.Rounded.AutoAwesome,
                 subtitle = state.date.format(DateTimeFormatter.ofPattern("MMM dd, yyyy")) +
                     if (VaultWriteGate.readOnly) " · Read-only" else "",
                 navigationIcon = {
                     // A read-only device burns nothing.
                     if (!VaultWriteGate.readOnly) FilledTonalIconButton(
-                        onClick = { viewModel.compileDay() },
+                        onClick = { viewModel.compileDay() }, shapes = IconButtonDefaults.shapes(),
                         colors = IconButtonDefaults.filledTonalIconButtonColors(
                             containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                             contentColor = MaterialTheme.colorScheme.primary
@@ -278,7 +288,7 @@ fun DailyNoteScreen(
                         onClick = {
                             val intent = android.content.Intent(context, cloud.wafflecommons.pixelbrainreader.ui.privatevault.PrivateJournalActivity::class.java)
                             context.startActivity(intent)
-                        },
+                        }, shapes = IconButtonDefaults.shapes(),
                         colors = IconButtonDefaults.filledTonalIconButtonColors(
                             containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                             contentColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -292,7 +302,7 @@ fun DailyNoteScreen(
                     }
                     
                     FilledTonalIconButton(
-                        onClick = onNavigateToSettings,
+                        onClick = onNavigateToSettings, shapes = IconButtonDefaults.shapes(),
                         colors = IconButtonDefaults.filledTonalIconButtonColors(
                             containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                             contentColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -374,17 +384,18 @@ fun DailyNoteScreen(
                         // The mode may hide the tools hub's chip (E1, 12.21).
                         if (cloud.wafflecommons.pixelbrainreader.data.modes.ModeTabs.TOOLKIT !in visibility.hiddenTabs) {
                             Spacer(Modifier.width(8.dp))
-                            androidx.compose.material3.AssistChip(
+                            androidx.compose.material3.FilledTonalButton(
                                 onClick = onOpenWork,
-                                label = { Text(visibility.appearance.toolkitName) },
-                                leadingIcon = {
-                                    Icon(
-                                        Icons.Rounded.Apps,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                            )
+                                shapes = androidx.compose.material3.ButtonDefaults.shapes(),
+                                colors = androidx.compose.material3.ButtonDefaults.filledTonalButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                                )
+                            ) {
+                                Icon(Icons.Rounded.Apps, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text(visibility.appearance.toolkitName)
+                            }
                         }
                     }
                 }
@@ -936,12 +947,7 @@ private fun TimelineHeader(modifier: Modifier = Modifier) {
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = "🗓️ Timeline",
-            color = MaterialTheme.colorScheme.secondary,
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.weight(1f) // Fix for Folded Mode
+        DailyBlockHeader(icon = Icons.Rounded.Schedule, title = "Timeline", modifier = Modifier.weight(1f) // Fix for Folded Mode
         )
     }
 }
@@ -953,12 +959,7 @@ private fun JournalHeader(modifier: Modifier = Modifier) {
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = "📝 Tasks",
-            color = MaterialTheme.colorScheme.secondary,
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.weight(1f) // Fix for Folded Mode
+        DailyBlockHeader(icon = Icons.Rounded.Checklist, title = "Tasks", modifier = Modifier.weight(1f) // Fix for Folded Mode
         )
     }
 }
@@ -1002,23 +1003,21 @@ private fun TimelineItem(event: TimelineEntryEntity, isLast: Boolean, onClick: (
             )
             Spacer(modifier = Modifier.height(4.dp))
             
-            // Dot
+            // 13.2: a small expressive cookie instead of the dot
             Box(
                 modifier = Modifier
-                    .size(8.dp)
-                    .background(
-                        MaterialTheme.colorScheme.primary,
-                        androidx.compose.foundation.shape.CircleShape
-                    )
+                    .size(14.dp)
+                    .clip(androidx.compose.material3.MaterialShapes.Cookie4Sided.toShape())
+                    .background(MaterialTheme.colorScheme.primary)
             )
             
             // Line
             if (!isLast) {
                 Box(
                     modifier = Modifier
-                        .width(2.dp)
+                        .width(3.dp)
                         .fillMaxHeight()
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .background(MaterialTheme.colorScheme.outlineVariant, androidx.compose.foundation.shape.CircleShape)
                 )
             }
         }
@@ -1058,7 +1057,8 @@ private fun TaskList(tasks: List<DailyTaskEntity>, onToggle: (String, Boolean) -
             )
         }
 
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        // 13.2: the Android 16 list, one segmented group.
+        cloud.wafflecommons.pixelbrainreader.ui.components.SegmentedGroup {
             sorted.forEach { task ->
                 TaskItem(task, onToggle, onEdit)
             }
@@ -1073,8 +1073,8 @@ private fun TaskItem(task: DailyTaskEntity, onToggle: (String, Boolean) -> Unit,
     Surface(
         onClick = { onEdit(task) },
         enabled = editable,
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainer,
+        shape = MaterialTheme.shapes.extraSmall,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
@@ -1165,12 +1165,12 @@ private fun AddTimelineDialog(onDismiss: () -> Unit, onConfirm: (String, LocalTi
                 if (content.isNotBlank()) {
                     onConfirm(content, LocalTime.of(timePickerState.hour, timePickerState.minute))
                 }
-            }) {
+            }, shapes = ButtonDefaults.shapes()) {
                 Text("Add")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text("Cancel") }
         }
     )
 }
@@ -1261,12 +1261,12 @@ private fun AddTaskDialog(onDismiss: () -> Unit, onConfirm: (String, java.time.L
                      val time = if (useTime) LocalTime.of(timePickerState.hour, timePickerState.minute) else null
                      onConfirm(label, selectedDate, time)
                 } 
-            }) {
+            }, shapes = ButtonDefaults.shapes()) {
                 Text("Add")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text("Cancel") }
         }
     )
 }
@@ -1351,7 +1351,7 @@ private fun QuickCaptureSheet(
 
                 Button(
                     onClick = { if (content.isNotBlank()) onSave(content, selectedColor.toArgb()) },
-                    shape = RoundedCornerShape(12.dp)
+                    shapes = ButtonDefaults.shapes(shape = RoundedCornerShape(12.dp))
                 ) {
                     Text("Save Scrap")
                 }
@@ -1483,19 +1483,19 @@ private fun EditTimelineDialog(
                 if (content.isNotBlank()) {
                     onConfirm(content, LocalTime.of(timePickerState.hour, timePickerState.minute))
                 }
-            }) {
+            }, shapes = ButtonDefaults.shapes()) {
                 Text("Save")
             }
         },
         dismissButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(
-                    onClick = onDelete,
+                    onClick = onDelete, shapes = ButtonDefaults.shapes(),
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 ) {
                     Text("Delete")
                 }
-                TextButton(onClick = onDismiss) { Text("Cancel") }
+                TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text("Cancel") }
             }
         }
     )
@@ -1559,19 +1559,19 @@ private fun EditTaskDialog(
                      val time = if (useTime) LocalTime.of(timePickerState.hour, timePickerState.minute) else null
                      onConfirm(label, time)
                 } 
-            }) {
+            }, shapes = ButtonDefaults.shapes()) {
                 Text("Save")
             }
         },
         dismissButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(
-                    onClick = onDelete,
+                    onClick = onDelete, shapes = ButtonDefaults.shapes(),
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 ) {
                     Text("Delete")
                 }
-                TextButton(onClick = onDismiss) { Text("Cancel") }
+                TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text("Cancel") }
             }
         }
     )

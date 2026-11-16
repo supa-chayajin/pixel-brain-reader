@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package cloud.wafflecommons.pixelbrainreader.ui.share
 
 import android.webkit.CookieManager
@@ -36,15 +38,20 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.ToggleButton
+import androidx.compose.material3.ToggleButtonDefaults
+import cloud.wafflecommons.pixelbrainreader.ui.components.connectedShapes
+import cloud.wafflecommons.pixelbrainreader.ui.components.ConnectedButtonRow
+import androidx.compose.foundation.layout.size
+import cloud.wafflecommons.pixelbrainreader.ui.components.switchThumb
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -104,6 +111,8 @@ import java.net.URI
 import java.time.LocalDate
 import javax.inject.Inject
 import kotlin.math.roundToInt
+import androidx.compose.material.icons.rounded.Public
+import androidx.compose.material.icons.rounded.SaveAlt
 
 @HiltViewModel
 class ShareImportViewModel @Inject constructor(
@@ -229,12 +238,13 @@ fun ShareImportScreen(
 
     FormScaffold(
         title = "Save to vault",
+        icon = Icons.Rounded.SaveAlt,
         onBack = close,
         snackbarHostState = snackbarHostState,
         actions = {
             if (current != null && current !is ShareImport.Loading) {
                 Button(
-                    enabled = !saving && title.isNotBlank(),
+                    enabled = !saving && title.isNotBlank(), shapes = ButtonDefaults.shapes(),
                     onClick = { viewModel.save(title, folder, markdown.takeIf { edited }, summarize && summaryOffered) },
                     modifier = Modifier.padding(end = 8.dp)
                 ) { Text(if (current is ShareImport.LinkOnly) "Save link" else "Save") }
@@ -277,7 +287,7 @@ fun ShareImportScreen(
                     Button(onClick = {
                         viewModel.explainError(current.markdown)
                         onExplainError()
-                    }) { Text("Explain this error") }
+                    }, shapes = ButtonDefaults.shapes()) { Text("Explain this error") }
                 }
                 NoteFields(title, { title = it }, folder, { folder = it }, onPickFolder = { pickingFolder = true })
                 PreviewOrEdit(markdown, editing, onEditingChange = { editing = it }) {
@@ -292,7 +302,7 @@ fun ShareImportScreen(
                 val text = current.handoffText()
                 viewModel.dismiss()
                 onHandOff(text)
-            }) { Text("Hand off to desktop instead") }
+            }, shapes = ButtonDefaults.shapes()) { Text("Hand off to desktop instead") }
         }
     }
     if (pickingFolder) {
@@ -320,7 +330,7 @@ private fun LoadingCard(loading: ShareImport.Loading, onCancel: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        TextButton(onClick = onCancel) { Text("Cancel") }
+        TextButton(onClick = onCancel, shapes = ButtonDefaults.shapes()) { Text("Cancel") }
     }
 }
 
@@ -345,7 +355,7 @@ private fun NoteFields(
         label = { Text("Folder") },
         singleLine = true,
         trailingIcon = {
-            IconButton(onClick = onPickFolder) { Icon(Icons.Rounded.FolderOpen, contentDescription = "Choose a folder") }
+            IconButton(onClick = onPickFolder, shapes = IconButtonDefaults.shapes()) { Icon(Icons.Rounded.FolderOpen, contentDescription = "Choose a folder") }
         },
         modifier = Modifier.fillMaxWidth()
     )
@@ -367,7 +377,7 @@ private fun ArticleCard(article: ShareImport.Article, onOpenHere: () -> Unit) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.tertiary
             )
-            TextButton(onClick = onOpenHere) { Text("Open it here") }
+            TextButton(onClick = onOpenHere, shapes = ButtonDefaults.shapes()) { Text("Open it here") }
         }
     }
 }
@@ -395,9 +405,9 @@ private fun LinkOnlyCard(link: ShareImport.LinkOnly, onRetry: () -> Unit, onOpen
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (openable) Button(onClick = onOpenHere) { Text("Open it here") }
-            if (link.problem.worthABrowser) OutlinedButton(onClick = onRetry) { Text("Try again") }
-            TextButton(onClick = { runCatching { uriHandler.openUri(link.url) } }) { Text("Open in browser") }
+            if (openable) Button(onClick = onOpenHere, shapes = ButtonDefaults.shapes()) { Text("Open it here") }
+            if (link.problem.worthABrowser) OutlinedButton(onClick = onRetry, shapes = ButtonDefaults.shapes()) { Text("Try again") }
+            TextButton(onClick = { runCatching { uriHandler.openUri(link.url) } }, shapes = ButtonDefaults.shapes()) { Text("Open in browser") }
         }
     }
 }
@@ -422,25 +432,33 @@ private fun SummaryRow(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+        Switch(checked = checked, thumbContent = switchThumb(checked), onCheckedChange = onCheckedChange)
     }
 }
 
 @Composable
 private fun PreviewOrEdit(markdown: String, editing: Boolean, onEditingChange: (Boolean) -> Unit, onMarkdownChange: (String) -> Unit) {
-    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-        SegmentedButton(
-            selected = !editing,
-            onClick = { onEditingChange(false) },
-            shape = SegmentedButtonDefaults.itemShape(0, 2),
-            icon = { Icon(Icons.AutoMirrored.Rounded.Article, contentDescription = null) }
-        ) { Text("Preview") }
-        SegmentedButton(
-            selected = editing,
-            onClick = { onEditingChange(true) },
-            shape = SegmentedButtonDefaults.itemShape(1, 2),
-            icon = { Icon(Icons.AutoMirrored.Rounded.Notes, contentDescription = null) }
-        ) { Text("Markdown") }
+    ConnectedButtonRow(modifier = Modifier.fillMaxWidth()) {
+        ToggleButton(
+            checked = !editing,
+            onCheckedChange = { onEditingChange(false) },
+            shapes = connectedShapes(0, 2),
+            modifier = Modifier.weight(1f)
+        ) {
+            Icon(Icons.AutoMirrored.Rounded.Article, contentDescription = null)
+                            Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+                            Text("Preview")
+        }
+        ToggleButton(
+            checked = editing,
+            onCheckedChange = { onEditingChange(true) },
+            shapes = connectedShapes(1, 2),
+            modifier = Modifier.weight(1f)
+        ) {
+            Icon(Icons.AutoMirrored.Rounded.Notes, contentDescription = null)
+                            Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+                            Text("Markdown")
+        }
     }
     if (editing) {
         OutlinedTextField(
@@ -481,19 +499,16 @@ private fun PageBrowser(url: String, onImport: (html: String, url: String) -> Un
     }
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(host(url), style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text("Import the page once it shows", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                },
+            cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
+                title = host(url),
+                subtitle = "Import the page once it shows",
+                icon = androidx.compose.material.icons.Icons.Rounded.Public,
                 navigationIcon = {
                     CortexIconButton(onClick = onClose) { Icon(Icons.Rounded.Close, contentDescription = "Close the page") }
                 },
                 actions = {
                     Button(
-                        enabled = !reading,
+                        enabled = !reading, shapes = ButtonDefaults.shapes(),
                         onClick = {
                             val view = holder.view ?: return@Button
                             reading = true
@@ -533,7 +548,7 @@ private fun PageBrowser(url: String, onImport: (html: String, url: String) -> Un
                 },
                 modifier = Modifier.fillMaxSize()
             )
-            if (progress < 100) LinearProgressIndicator(progress = { progress / 100f }, modifier = Modifier.fillMaxWidth())
+            if (progress < 100) LinearWavyProgressIndicator(progress = { progress / 100f }, modifier = Modifier.fillMaxWidth())
         }
     }
 }

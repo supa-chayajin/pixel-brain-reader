@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package cloud.wafflecommons.pixelbrainreader.ui.games
 
 import android.content.Intent
@@ -28,6 +30,9 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -65,6 +70,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import androidx.compose.material.icons.rounded.Map
 
 data class GameMapUiState(
     val loading: Boolean = true,
@@ -129,13 +135,13 @@ fun GameMapScreen(onBack: () -> Unit, onOpenGames: () -> Unit, viewModel: GameMa
     val state by viewModel.state.collectAsStateWithLifecycle()
     val map = state.maps.getOrNull(state.selected)
     if (map == null) {
-        FormScaffold(title = state.title.ifEmpty { "Map" }, onBack = onBack) {
+        FormScaffold(title = state.title.ifEmpty { "Map" }, icon = Icons.Rounded.Map, onBack = onBack) {
             if (!state.loading) {
                 EmptyHint(
                     if (state.noGame) "No game is running: open a game's page to see its map."
                     else "No map for this game yet: add one to game_maps in its note."
                 )
-                if (state.noGame) TextButton(onClick = onOpenGames) { Text("Open Games") }
+                if (state.noGame) TextButton(onClick = onOpenGames, shapes = ButtonDefaults.shapes()) { Text("Open Games") }
             }
         }
         return
@@ -162,26 +168,17 @@ private fun MapBrowser(title: String, map: GameMap, maps: List<GameMap>, onSelec
     }
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(
-                            "${map.label} · ${map.site}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                },
+            cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
+                title = title,
+                subtitle = "${map.label} · ${map.site}",
+                icon = androidx.compose.material.icons.Icons.Rounded.Map,
                 navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back") }
+                    IconButton(onClick = onBack, shapes = IconButtonDefaults.shapes()) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back") }
                 },
                 actions = {
                     if (maps.size > 1) {
                         Box {
-                            IconButton(onClick = { menu = true }) { Icon(Icons.Rounded.Layers, contentDescription = "Other maps") }
+                            IconButton(onClick = { menu = true }, shapes = IconButtonDefaults.shapes()) { Icon(Icons.Rounded.Layers, contentDescription = "Other maps") }
                             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                                 maps.forEachIndexed { index, other ->
                                     DropdownMenuItem(
@@ -198,13 +195,13 @@ private fun MapBrowser(title: String, map: GameMap, maps: List<GameMap>, onSelec
                     IconButton(onClick = {
                         failed = false
                         holder.view?.reload()
-                    }) { Icon(Icons.Rounded.Refresh, contentDescription = "Reload") }
+                    }, shapes = IconButtonDefaults.shapes()) { Icon(Icons.Rounded.Refresh, contentDescription = "Reload") }
                     IconButton(onClick = {
                         val address = holder.view?.url ?: map.url
                         runCatching {
                             context.startActivity(Intent(Intent.ACTION_VIEW, address.toUri()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                         }
-                    }) { Icon(Icons.Rounded.OpenInBrowser, contentDescription = "Open in the browser") }
+                    }, shapes = IconButtonDefaults.shapes()) { Icon(Icons.Rounded.OpenInBrowser, contentDescription = "Open in the browser") }
                 }
             )
         }
@@ -238,7 +235,7 @@ private fun MapBrowser(title: String, map: GameMap, maps: List<GameMap>, onSelec
                     modifier = Modifier.fillMaxSize()
                 )
             }
-            if (progress < 100) LinearProgressIndicator(progress = { progress / 100f }, modifier = Modifier.fillMaxWidth())
+            if (progress < 100) LinearWavyProgressIndicator(progress = { progress / 100f }, modifier = Modifier.fillMaxWidth())
             if (failed) {
                 ElevatedCard(modifier = Modifier.align(Alignment.Center).padding(24.dp)) {
                     Text(
