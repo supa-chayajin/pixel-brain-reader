@@ -37,4 +37,12 @@ class WidgetNavTest {
         assertNull(WidgetNav.screenToRoute("review_note/../settings"))
         assertNull(WidgetNav.screenToRoute("review_note/weekly"))
     }
+
+    @Test
+    fun `the running session's map opens a fixed route, never a path`() {
+        assertEquals("game_map", WidgetNav.screenToRoute(WidgetNav.SCREEN_GAME_MAP))
+        assertEquals("game_map", WidgetNav.screenToRoute(WidgetNav.SCREEN_GAME_MAP, "3f0c1d2e-4b5a-4c6d-8e7f-901234567890"))
+        assertNull(WidgetNav.screenToRoute("game_map?page=99_Private/x.md"))
+    }
 }
+

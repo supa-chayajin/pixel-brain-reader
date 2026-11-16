@@ -13,8 +13,15 @@ object GamesRoutes {
     const val GAMES = "games"
     const val GAME = "game?page={page}"
     const val PSN = "psn_settings"
+    /** A game's map (13.2); without a page, the running session's game (its notification's action). */
+    const val MAP = "game_map?page={page}&index={index}"
 
     fun game(path: String): String = "game?page=" + Uri.encode(path)
+
+    fun map(path: String, index: Int = 0): String = "game_map?page=" + Uri.encode(path) + "&index=" + index
+
+    /** True on the map screen: the bars give it the whole window. */
+    fun isMap(route: String?): Boolean = route?.startsWith("game_map") == true
 }
 
 /** The Games tab, a game's page and the PlayStation settings; [openNote] opens a vault note in the Repo pane. */
@@ -22,7 +29,8 @@ fun NavGraphBuilder.gamesDestinations(navController: NavHostController, openNote
     composable(GamesRoutes.GAMES) {
         GamesScreen(
             onOpenGame = { navController.navigate(GamesRoutes.game(it)) },
-            onOpenPsn = { navController.navigate(GamesRoutes.PSN) }
+            onOpenPsn = { navController.navigate(GamesRoutes.PSN) },
+            onOpenMap = { navController.navigate(GamesRoutes.map(it)) }
         )
     }
     composable(
@@ -32,7 +40,20 @@ fun NavGraphBuilder.gamesDestinations(navController: NavHostController, openNote
         GamePageScreen(
             onBack = { navController.popBackStack() },
             onOpenNote = openNote,
-            onAskClaude = { root, text -> navController.navigate(V11Routes.handoff(root, text)) }
+            onAskClaude = { root, text -> navController.navigate(V11Routes.handoff(root, text)) },
+            onOpenMap = { path, index -> navController.navigate(GamesRoutes.map(path, index)) }
+        )
+    }
+    composable(
+        GamesRoutes.MAP,
+        arguments = listOf(
+            navArgument("page") { type = NavType.StringType; defaultValue = "" },
+            navArgument("index") { type = NavType.IntType; defaultValue = 0 }
+        )
+    ) {
+        GameMapScreen(
+            onBack = { if (!navController.popBackStack()) navController.navigate(GamesRoutes.GAMES) },
+            onOpenGames = { navController.navigate(GamesRoutes.GAMES) }
         )
     }
     composable(GamesRoutes.PSN) {

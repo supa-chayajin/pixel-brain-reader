@@ -19,6 +19,7 @@ import androidx.compose.material.icons.automirrored.rounded.Article
 import androidx.compose.material.icons.rounded.Checklist
 import androidx.compose.material.icons.rounded.EmojiEvents
 import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Map
 import androidx.compose.material.icons.rounded.MoreTime
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.QuestionAnswer
@@ -82,6 +83,7 @@ fun GamePageScreen(
     onBack: () -> Unit,
     onOpenNote: (String) -> Unit,
     onAskClaude: (root: String?, text: String) -> Unit,
+    onOpenMap: (path: String, index: Int) -> Unit = { _, _ -> },
     viewModel: GamePageViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -100,6 +102,7 @@ fun GamePageScreen(
     var editingId by rememberSaveable { mutableStateOf<String?>(null) }
     var editingPlayedBefore by rememberSaveable { mutableStateOf(false) }
     var earlierMenu by remember { mutableStateOf(false) }
+    var mapMenu by remember { mutableStateOf(false) }
 
     FormScaffold(title = page?.title ?: "Game", onBack = onBack) {
         if (page == null) {
@@ -175,6 +178,33 @@ fun GamePageScreen(
                 OutlinedButton(onClick = { onAskClaude(state.askProject, GamePages.askText(page)) }, modifier = Modifier.weight(1f)) {
                     Icon(Icons.Rounded.QuestionAnswer, contentDescription = null)
                     Text("Ask Claude", modifier = Modifier.padding(start = 6.dp))
+                }
+            }
+        }
+
+        // 13.2: the game's map, in the app (a read-only device reads maps too: nothing is written).
+        if (page.maps.isNotEmpty()) {
+            Box {
+                OutlinedButton(
+                    onClick = { if (page.maps.size == 1) onOpenMap(page.path, 0) else mapMenu = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Rounded.Map, contentDescription = null)
+                    Text(
+                        if (page.maps.size == 1) "Map · ${page.maps.first().label}" else "Maps (${page.maps.size})",
+                        modifier = Modifier.padding(start = 6.dp)
+                    )
+                }
+                DropdownMenu(expanded = mapMenu, onDismissRequest = { mapMenu = false }) {
+                    page.maps.forEachIndexed { index, map ->
+                        DropdownMenuItem(
+                            text = { Text("${map.label} · ${map.site}") },
+                            onClick = {
+                                mapMenu = false
+                                onOpenMap(page.path, index)
+                            }
+                        )
+                    }
                 }
             }
         }

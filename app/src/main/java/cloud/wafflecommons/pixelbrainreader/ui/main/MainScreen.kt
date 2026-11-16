@@ -64,6 +64,7 @@ import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.Psychology
 import androidx.compose.material.icons.rounded.RocketLaunch
 import androidx.compose.material.icons.rounded.SportsEsports
+import cloud.wafflecommons.pixelbrainreader.ui.games.GamesRoutes
 import cloud.wafflecommons.pixelbrainreader.ui.games.gamesDestinations
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.DateRange
@@ -731,7 +732,7 @@ fun MainScreen(
     // height for writing, and the floating bar would otherwise overlay the editor.
     val isEditingFile = uiState.isEditing && uiState.selectedFileName != null
     // Hidden too on the share screen: an import is one focused flow, not a tab.
-    val navLayoutType = if (WindowInsets.isImeVisible || isEditingFile || currentRoute == Screen.Import) {
+    val navLayoutType = if (WindowInsets.isImeVisible || isEditingFile || currentRoute == Screen.Import || GamesRoutes.isMap(currentRoute)) {
         androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType.None
     } else {
         // Custom ExpressiveNavBar: a floating bottom bar (Finance-style) on phones and portrait tablets.
@@ -741,7 +742,7 @@ fun MainScreen(
     // Beside the content, it never covers the keyboard or the editor, so it stays for both; only
     // the share screen (one focused flow, not a tab) hides it.
     val useRail = isWideLayout()
-    val railVisible = useRail && currentRoute != Screen.Import
+    val railVisible = useRail && currentRoute != Screen.Import && !GamesRoutes.isMap(currentRoute)
     val navigateToTab: (String) -> Unit = { route ->
         navController.navigate(route) {
             popUpTo(navController.graph.findStartDestination().id) { saveState = true }

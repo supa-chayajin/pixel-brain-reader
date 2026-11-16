@@ -55,7 +55,7 @@ enum class GameTemplate(val key: String, val label: String) {
  * lives (the owner's are in their area for games) except `99_System/`, where the templates are.
  * [key] is the file name without `.md`: what a Timeline line's marker names. [playedBefore] is the
  * play time the owner typed from the console (hours), counted under the sessions until PSN measures
- * the game itself.
+ * the game itself. [maps]: its `game_maps` (13.2), the first one the main map.
  */
 data class GamePage(
     val path: String,
@@ -65,7 +65,8 @@ data class GamePage(
     val state: GameState,
     val started: LocalDate?,
     val finished: LocalDate?,
-    val playedBefore: Double? = null
+    val playedBefore: Double? = null,
+    val maps: List<GameMap> = emptyList()
 ) {
     val key: String get() = path.substringAfterLast('/').removeSuffix(".md")
     val folder: String get() = path.substringBeforeLast('/', "")
@@ -96,7 +97,8 @@ object GamePages {
             state = GameState.fromKey(FrontmatterLines.get(content, STATE_KEY)),
             started = date(FrontmatterLines.get(content, "started")),
             finished = date(FrontmatterLines.get(content, "finished")),
-            playedBefore = hours(FrontmatterLines.get(content, PLAYED_BEFORE_KEY))
+            playedBefore = hours(FrontmatterLines.get(content, PLAYED_BEFORE_KEY)),
+            maps = GameMaps.parse(FrontmatterLines.getList(content, GameMaps.KEY))
         )
     }
 

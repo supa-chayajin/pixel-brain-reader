@@ -43,6 +43,8 @@ object WidgetNav {
 
     /** The Games tab (12.17): the game session's notification and the Games tile's long-press. */
     const val SCREEN_GAMES = "games"
+    /** The running session's game map (13.2): no parameter, the app opens the game being played. */
+    const val SCREEN_GAME_MAP = "game_map"
     const val SCREEN_HANDOFF = "handoff"
     /** A review notification's note (12.13): the app finds the note itself, no parameter. */
     const val SCREEN_WEEKLY_REVIEW = "weekly_review"
@@ -90,6 +92,7 @@ object WidgetNav {
         SCREEN_OBJECTIVES -> "objectives"
         SCREEN_PROJECTS -> "projects"
         SCREEN_GAMES -> "games"
+        SCREEN_GAME_MAP -> "game_map"
         SCREEN_HANDOFF -> "handoff"
         SCREEN_WEEKLY_REVIEW -> "review_note/weekly"
         SCREEN_MONTHLY_REPORT -> "review_note/monthly"

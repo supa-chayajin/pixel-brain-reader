@@ -73,7 +73,7 @@ class GameSessionControllerTest {
     fun `a Perso evening turns the game night on and remembers the day`() = runTest {
         assertEquals(GameNightOutcome.ON, controller.start(page, saturdayEvening, zone))
         assertEquals(RunningGame(saturdayEvening, page.path), controller.current())
-        verify { platform.postRunning(any(), "Ring of Ash") }
+        verify { platform.postRunning(any(), "Ring of Ash", false) }
         coVerify { preferences.setGameNightDay(LocalDate.of(2026, 11, 14)) }
         assertEquals("rule-1", rule.value)
     }
@@ -124,7 +124,7 @@ class GameSessionControllerTest {
         VaultWriteGate.readOnly = true
         assertNull(controller.start(page, saturdayEvening, zone))
         assertNull(controller.current())
-        verify(exactly = 0) { platform.postRunning(any(), any()) }
+        verify(exactly = 0) { platform.postRunning(any(), any(), any()) }
     }
 
     @Test
@@ -209,7 +209,7 @@ class GameSessionControllerTest {
     fun `coming back to the app puts the notification back and schedules a session started before 13_1`() = runTest {
         session.value = RunningGame(saturdayEvening, page.path).encode()
         controller.restore(saturdayEvening + hour)
-        verify { platform.postRunning(RunningGame(saturdayEvening, page.path), any()) }
+        verify { platform.postRunning(RunningGame(saturdayEvening, page.path), any(), any()) }
         verify { platform.scheduleCheck(2 * hour) }
         assertEquals(SessionCheck.first(RunningGame(saturdayEvening, page.path)), SessionCheck.decode(check.value))
         // An unanswered question isn't posted again: the tab shows it.
@@ -262,4 +262,15 @@ class GameSessionControllerTest {
         coVerify(exactly = 0) { games.replaceSession(any(), any()) }
         coVerify(exactly = 0) { games.removeSession(any(), any()) }
     }
+
+    @Test
+    fun `a game with a map offers it on the running session's notification (13_2)`() = runTest {
+        val withMap = page.copy(maps = GameMaps.parse(listOf("Interactive map | https://ringofash.wiki.example.com/Interactive+Map")))
+        controller.start(withMap, saturdayEvening, zone)
+        verify { platform.postRunning(any(), "Ring of Ash", true) }
+        coEvery { games.page(withMap.path) } returns withMap
+        controller.restore(saturdayEvening + hour)
+        verify(exactly = 2) { platform.postRunning(any(), "Ring of Ash", true) }
+    }
 }
+

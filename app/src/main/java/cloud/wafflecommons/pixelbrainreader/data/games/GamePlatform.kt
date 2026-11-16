@@ -43,7 +43,8 @@ import javax.inject.Singleton
 @Singleton
 class GamePlatform @Inject constructor(@param:ApplicationContext private val context: Context) {
 
-    fun postRunning(session: RunningGame, title: String) {
+    /** The running session's Live Update; [hasMap] adds "Open the map" (13.2: the phone as a second screen). */
+    fun postRunning(session: RunningGame, title: String, hasMap: Boolean = false) {
         if (!notificationsAllowed()) return
         val manager = manager() ?: return
         val since = LocalTime.ofInstant(Instant.ofEpochMilli(session.startMillis), ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("HH:mm"))
@@ -61,6 +62,11 @@ class GamePlatform @Inject constructor(@param:ApplicationContext private val con
             .addAction(
                 Notification.Action.Builder(Icon.createWithResource(context, R.drawable.ic_notification), "Stop", stopIntent()).build()
             )
+        if (hasMap) {
+            builder.addAction(
+                Notification.Action.Builder(Icon.createWithResource(context, R.drawable.ic_notification), "Open the map", openMap()).build()
+            )
+        }
         // Promotion arrived in Android 16 QPR2 (36.1); on 36.0 the session stays an ordinary ongoing notification.
         if (Build.VERSION.SDK_INT_FULL >= Build.VERSION_CODES_FULL.BAKLAVA_1) {
             builder.setRequestPromotedOngoing(true)
@@ -199,6 +205,13 @@ class GamePlatform @Inject constructor(@param:ApplicationContext private val con
     private fun openGames(): PendingIntent =
         PendingIntent.getActivity(
             context, 40, WidgetNav.openIntent(context, WidgetNav.SCREEN_GAMES),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+    /** The running game's map: a fixed screen key, no path (the app opens the game being played). */
+    private fun openMap(): PendingIntent =
+        PendingIntent.getActivity(
+            context, 43, WidgetNav.openIntent(context, WidgetNav.SCREEN_GAME_MAP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 

@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.Map
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SportsEsports
@@ -28,6 +29,7 @@ import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -75,6 +77,7 @@ import java.util.Locale
 fun GamesScreen(
     onOpenGame: (String) -> Unit,
     onOpenPsn: () -> Unit,
+    onOpenMap: (String) -> Unit = {},
     onBack: (() -> Unit)? = null,
     viewModel: GamesViewModel = hiltViewModel()
 ) {
@@ -127,7 +130,7 @@ fun GamesScreen(
             val rows = state.groups[group].orEmpty()
             if (rows.isEmpty()) return@forEach
             Text(group.label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            rows.forEach { row -> GameCard(row, onClick = { onOpenGame(row.page.path) }) }
+            rows.forEach { row -> GameCard(row, onClick = { onOpenGame(row.page.path) }, onOpenMap = { onOpenMap(row.page.path) }) }
         }
 
         if (state.unlinked.isNotEmpty()) UnlinkedFold(state.unlinked, state.readOnly, onLink = { linking = it }, onHide = viewModel::hide)
@@ -168,7 +171,7 @@ fun GamesScreen(
 }
 
 @Composable
-private fun GameCard(row: GameRow, onClick: () -> Unit) {
+private fun GameCard(row: GameRow, onClick: () -> Unit, onOpenMap: () -> Unit) {
     val facts = listOfNotNull(
         row.page.template.label.takeIf { row.page.template.key.isNotEmpty() },
         if (row.page.state == GameState.PAUSED) "Paused" else null,
@@ -191,6 +194,10 @@ private fun GameCard(row: GameRow, onClick: () -> Unit) {
                 } else {
                     Icon(Icons.Rounded.SportsEsports, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 }
+            },
+            // 13.2: the game's map, when its page has one.
+            trailingContent = if (row.page.maps.isEmpty()) null else {
+                { IconButton(onClick = onOpenMap) { Icon(Icons.Rounded.Map, contentDescription = "Open the map") } }
             }
         ) {
             Text(

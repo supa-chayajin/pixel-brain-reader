@@ -68,7 +68,7 @@ class GameSessionController @Inject constructor(
         if (current() != null) stop(now, zone)
         val session = RunningGame(now - startedMinutesAgo.coerceIn(0, MAX_EARLIER_MINUTES) * 60_000L, page.path)
         preferences.setGameSession(session.encode())
-        platform.postRunning(session, page.title)
+        platform.postRunning(session, page.title, hasMap = page.maps.isNotEmpty())
         val check = SessionCheck.first(session)
         preferences.setGameSessionCheck(check.encode())
         platform.scheduleCheck(check.nextAskAt - now)
@@ -118,15 +118,17 @@ class GameSessionController @Inject constructor(
             return
         }
         val check = checkOf(session)
-        val title = titleOf(session)
+        val page = games.page(session.page)
+        val title = page?.title ?: fallbackTitle(session)
+        val hasMap = page?.maps?.isNotEmpty() == true
         when (val step = GameSessionGuard.step(check, now)) {
             is GameSessionGuard.Step.Wait -> {
-                platform.postRunning(session, title)
+                platform.postRunning(session, title, hasMap)
                 preferences.setGameSessionCheck(check.encode())
                 platform.scheduleCheck(step.at - now)
             }
             is GameSessionGuard.Step.Ask -> {
-                platform.postRunning(session, title)
+                platform.postRunning(session, title, hasMap)
                 preferences.setGameSessionCheck(check.copy(askedAt = now).encode())
                 platform.postAsk(title, session.startMillis, endsAt = check.nextAskAt, answerBy = step.answerBy)
                 platform.scheduleCheck(step.answerBy - now)
@@ -153,7 +155,8 @@ class GameSessionController @Inject constructor(
         if (VaultWriteGate.readOnly) return
         val session = current() ?: return
         val check = checkOf(session)
-        platform.postRunning(session, titleOf(session))
+        val page = games.page(session.page)
+        platform.postRunning(session, page?.title ?: fallbackTitle(session), hasMap = page?.maps?.isNotEmpty() == true)
         preferences.setGameSessionCheck(check.encode())
         platform.scheduleCheck((check.askedAt?.plus(GameSessionGuard.ANSWER_MS) ?: check.nextAskAt) - now)
     }
@@ -226,8 +229,8 @@ class GameSessionController @Inject constructor(
         SessionCheck.decode(preferences.gameSessionCheck.first())?.takeIf { it.sessionStart == session.startMillis }
             ?: SessionCheck.first(session)
 
-    private suspend fun titleOf(session: RunningGame): String =
-        games.page(session.page)?.title ?: session.page.substringAfterLast('/').removeSuffix(".md").replace('_', ' ')
+    private fun fallbackTitle(session: RunningGame): String =
+        session.page.substringAfterLast('/').removeSuffix(".md").replace('_', ' ')
 
     /**
      * The game played last (RFC-009 §4.3: the session picker's default and the tile's game): the

@@ -14,6 +14,7 @@ enum class NetPurpose(val key: String, val label: String) {
     IMPORT("import", "Web page import"),
     WATCH("watch", "Tech watch feeds"),
     GAMES("games", "PlayStation sync"),
+    MAPS("maps", "Game maps"),
     OTHER("other", "Other");
 
     companion object {
