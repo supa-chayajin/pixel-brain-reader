@@ -2,6 +2,20 @@ package cloud.wafflecommons.pixelbrainreader.ui.components
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
+import androidx.compose.material3.VerticalDragHandle
+import androidx.compose.material3.adaptive.layout.PaneAdaptedValue
+import androidx.compose.material3.adaptive.layout.PaneExpansionAnchor
+import androidx.compose.material3.adaptive.layout.PaneExpansionState
+import androidx.compose.material3.adaptive.layout.ThreePaneScaffoldScope
+import androidx.compose.material3.adaptive.layout.rememberPaneExpansionState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.Box
@@ -43,6 +57,11 @@ import kotlinx.coroutines.launch
  * [list] gets the open entry's key (null when none) and the function that opens one; [detail] gets
  * the key and the function that closes the page; [emptyDetail] fills the page pane until then.
  * Each entry's page starts from fresh local state.
+ *
+ * Side by side, the divider between the list and an open page has a handle (13.2.1, the owner's
+ * pick): a tap hides the list, so the page takes the whole width, and a tap brings it back; a drag
+ * stops at [HubSplit.anchors]. Closing the page brings the list back; coming back to the hub finds
+ * it as it was left, the open page and the split with it.
  */
 @OptIn(ExperimentalMaterial3AdaptiveApi::class)
 @Composable
@@ -59,38 +78,101 @@ fun HubListDetail(
     val closePage: () -> Unit = { scope.launch { navigator.navigateBack(BackNavigationBehavior.PopUntilContentChange) } }
     BackHandler(enabled = navigator.canNavigateBack(BackNavigationBehavior.PopUntilContentChange)) { closePage() }
 
-    // The plain scaffold follows navigator.scaffoldValue, recomputed from the window on every change.
-    // (NavigableListDetailPaneScaffold follows its own animated state, which only moves on a navigation:
-    // after the window narrowed, it kept both panes squeezed into a phone-width screen.)
-    ListDetailPaneScaffold(
-        directive = navigator.scaffoldDirective,
-        value = navigator.scaffoldValue,
-        listPane = {
-            AnimatedPane {
-                list(open) { key ->
-                    scope.launch {
-                        // Beside an open page, the new one replaces it rather than stacking up
-                        // behind it: back then closes the page instead of walking every entry seen.
-                        if (navigator.currentDestination?.pane == ListDetailPaneScaffoldRole.Detail) {
-                            navigator.navigateBack(BackNavigationBehavior.PopLatest)
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val listWidth = navigator.scaffoldDirective.defaultPanePreferredWidth
+        val anchors = remember(maxWidth, listWidth) { HubSplit.anchors(maxWidth, listWidth) }
+        val expansion = rememberPaneExpansionState(keyProvider = navigator.scaffoldValue, anchors = anchors)
+        val sideBySide = navigator.scaffoldValue[ListDetailPaneScaffoldRole.List] == PaneAdaptedValue.Expanded &&
+            navigator.scaffoldValue[ListDetailPaneScaffoldRole.Detail] == PaneAdaptedValue.Expanded
+        // Closing the page brings the list back.
+        LaunchedEffect(open) { if (open == null) expansion.clear() }
+
+        // The plain scaffold follows navigator.scaffoldValue, recomputed from the window on every change.
+        // (NavigableListDetailPaneScaffold follows its own animated state, which only moves on a navigation:
+        // after the window narrowed, it kept both panes squeezed into a phone-width screen.)
+        ListDetailPaneScaffold(
+            directive = navigator.scaffoldDirective,
+            value = navigator.scaffoldValue,
+            paneExpansionState = expansion,
+            paneExpansionDragHandle = if (open != null && sideBySide) {
+                { state -> HubSplitHandle(state, listWidth) }
+            } else {
+                null
+            },
+            listPane = {
+                AnimatedPane {
+                    list(open) { key ->
+                        scope.launch {
+                            // Beside an open page, the new one replaces it rather than stacking up
+                            // behind it: back then closes the page instead of walking every entry seen.
+                            if (navigator.currentDestination?.pane == ListDetailPaneScaffoldRole.Detail) {
+                                navigator.navigateBack(BackNavigationBehavior.PopLatest)
+                            }
+                            navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, key)
                         }
-                        navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, key)
+                    }
+                }
+            },
+            detailPane = {
+                AnimatedPane {
+                    Box {
+                        PaneFocusSink()
+                        if (open != null) {
+                            key(open) { detail(open, closePage) }
+                        } else {
+                            emptyDetail()
+                        }
                     }
                 }
             }
-        },
-        detailPane = {
-            AnimatedPane {
-                Box {
-                    PaneFocusSink()
-                    if (open != null) {
-                        key(open) { detail(open, closePage) }
-                    } else {
-                        emptyDetail()
-                    }
-                }
-            }
-        }
+        )
+    }
+}
+
+/**
+ * The stops of a hub's divider (13.2.1): the list hidden (the page takes the whole width), the
+ * list's own width, and half and half when the window leaves it room to differ from the list's.
+ */
+@OptIn(ExperimentalMaterial3AdaptiveApi::class)
+internal object HubSplit {
+    /** The list hidden: the page fills the hub. */
+    val HIDDEN: PaneExpansionAnchor = PaneExpansionAnchor.Proportion(0f)
+
+    /** Half and half is a stop of its own only this far from the list's width. */
+    private val MIN_GAP = 96.dp
+
+    /** The list at its own width, where it opens. */
+    fun list(listWidth: Dp): PaneExpansionAnchor = PaneExpansionAnchor.Offset.fromStart(listWidth)
+
+    fun anchors(width: Dp, listWidth: Dp): List<PaneExpansionAnchor> = buildList {
+        add(HIDDEN)
+        add(list(listWidth))
+        if (width / 2 - listWidth >= MIN_GAP) add(PaneExpansionAnchor.Proportion(0.5f))
+    }
+}
+
+/**
+ * The divider's handle (Material 3's drag handle): a tap hides the list or brings it back to its
+ * width, a drag moves the divider between the stops.
+ */
+@OptIn(ExperimentalMaterial3AdaptiveApi::class, ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun ThreePaneScaffoldScope.HubSplitHandle(state: PaneExpansionState, listWidth: Dp) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val scope = rememberCoroutineScope()
+    val listHidden = state.currentAnchor == HubSplit.HIDDEN
+    VerticalDragHandle(
+        modifier = Modifier
+            // The library's own semantics (move between the stops) apply when none are passed.
+            .paneExpansionDraggable(state, LocalMinimumInteractiveComponentSize.current, interactionSource)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClickLabel = if (listHidden) "Show the list" else "Hide the list"
+            ) {
+                scope.launch { state.animateTo(if (listHidden) HubSplit.list(listWidth) else HubSplit.HIDDEN) }
+            },
+        interactionSource = interactionSource
     )
 }
 
