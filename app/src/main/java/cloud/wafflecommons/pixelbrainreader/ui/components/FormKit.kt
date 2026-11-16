@@ -66,10 +66,8 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 import androidx.compose.material3.LargeFlexibleTopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Card
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.style.TextOverflow
 
 /**
@@ -78,9 +76,11 @@ import androidx.compose.ui.text.style.TextOverflow
  */
 
 /**
- * A page's frame: the Material 3 Expressive large flexible top app bar (13.2: a big emphasized
- * title, an optional [subtitle], collapsing as the page scrolls) over a scrolling column that clears
- * the floating nav bar.
+ * A page's frame: the Daily screen's centred header (13.2, the owner's call: an emblem, the
+ * emphasized title, an optional [subtitle] pill) over a scrolling column that clears the floating nav
+ * bar. The header stays put as the page scrolls, like Daily's (13.2.2): the collapsing behavior,
+ * made for the large bar, shrank this small one to nothing and left its status-bar strip in the
+ * scrolled colour, a block over a list scrolled beside an open page.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -95,9 +95,7 @@ fun FormScaffold(
     icon: ImageVector? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             CortexTopAppBar(
                 title = title,
@@ -110,9 +108,8 @@ fun FormScaffold(
                         }
                     }
                 },
-                actions = actions,
                 // The owner's call (13.2): every page wears the Daily screen's centred header.
-                scrollBehavior = scrollBehavior
+                actions = actions
             )
         },
         snackbarHost = {

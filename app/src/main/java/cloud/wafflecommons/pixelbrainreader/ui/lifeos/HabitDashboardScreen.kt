@@ -32,7 +32,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -64,16 +63,14 @@ fun HabitDashboardScreen(
 
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
 
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-
+    // 13.2.2: the header stays put as the page scrolls, like Daily's (collapsing it left its
+    // status-bar strip in the scrolled colour, a block at the top).
     Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
                 title = "Habits",
                 icon = Icons.Rounded.DateRange,
                 subtitle = "${todayHabits.count { it.isCompletedToday }}/${todayHabits.size} done today",
-                scrollBehavior = scrollBehavior,
                 actions = {
                     FilledTonalIconButton(
                         onClick = onNavigateToStats, shapes = IconButtonDefaults.shapes(),

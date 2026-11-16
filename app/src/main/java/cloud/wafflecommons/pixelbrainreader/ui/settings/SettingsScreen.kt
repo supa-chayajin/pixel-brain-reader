@@ -80,7 +80,6 @@ import cloud.wafflecommons.pixelbrainreader.ui.components.ExpressiveBadge
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.background
 import androidx.compose.material.icons.rounded.Settings
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 
 /** Walk the ContextWrapper chain to the hosting Activity (avoids casting LocalContext directly). */
 private fun Context.findActivity(): Activity? {
@@ -219,10 +218,9 @@ fun SettingsScreen(
     }
     
 
-    // 13.2: the large header collapses as the page scrolls.
-    val settingsBarScroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    // 13.2.2: the header stays put as the page scrolls, like Daily's (collapsing it left its
+    // status-bar strip in the scrolled colour, a block at the top).
     Scaffold(
-        modifier = Modifier.nestedScroll(settingsBarScroll.nestedScrollConnection),
         snackbarHost = {
             // Lift the snackbar above the floating ExpressiveNavBar (overlaid by
             // MainScreen), which would otherwise cover the toasts entirely.
@@ -235,7 +233,6 @@ fun SettingsScreen(
             cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
                 title = "Settings",
                 icon = Icons.Rounded.Settings,
-                scrollBehavior = settingsBarScroll,
                 navigationIcon = {
                     CortexIconButton(onClick = onBack) {
                         Icon(
