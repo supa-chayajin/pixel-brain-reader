@@ -14,8 +14,8 @@ Planned: `documentation/plans/2026-11-10-dream-app-roadmap.md`. Next: the second
 ## [13.2.1] — 2026-11-16
 
 After a day with 13.2 on the Fold: the owner's interview of 16 November, which also closed every
-open point on their side. The fixes from that day of dogfooding join this section before the
-release. Planned in `documentation/plans/2026-11-16-13.2.1-after-dogfooding.md`.
+open point on their side, and the three changes they asked for that evening. Planned in
+`documentation/plans/2026-11-16-13.2.1-after-dogfooding.md`.
 
 ### Changed
 
