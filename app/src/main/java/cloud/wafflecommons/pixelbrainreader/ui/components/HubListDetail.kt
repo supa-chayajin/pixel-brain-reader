@@ -55,8 +55,9 @@ import kotlinx.coroutines.launch
  * when the window widens again.
  *
  * [list] gets the open entry's key (null when none) and the function that opens one; [detail] gets
- * the key and the function that closes the page; [emptyDetail] fills the page pane until then.
- * Each entry's page starts from fresh local state.
+ * the key and the function that closes the page, null side by side: there the page shows no back
+ * arrow (13.2.1, the owner's call: useless on a big screen, where Back and the list still close it).
+ * [emptyDetail] fills the page pane until then. Each entry's page starts from fresh local state.
  *
  * Side by side, the divider between the list and an open page has a handle (13.2.1, the owner's
  * pick): a tap hides the list, so the page takes the whole width, and a tap brings it back; a drag
@@ -67,7 +68,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun HubListDetail(
     list: @Composable (open: String?, onOpen: (String) -> Unit) -> Unit,
-    detail: @Composable (key: String, onClose: () -> Unit) -> Unit,
+    detail: @Composable (key: String, onClose: (() -> Unit)?) -> Unit,
     emptyDetail: @Composable () -> Unit
 ) {
     val navigator = rememberListDetailPaneScaffoldNavigator<String>()
@@ -118,7 +119,7 @@ fun HubListDetail(
                     Box {
                         PaneFocusSink()
                         if (open != null) {
-                            key(open) { detail(open, closePage) }
+                            key(open) { detail(open, if (sideBySide) null else closePage) }
                         } else {
                             emptyDetail()
                         }

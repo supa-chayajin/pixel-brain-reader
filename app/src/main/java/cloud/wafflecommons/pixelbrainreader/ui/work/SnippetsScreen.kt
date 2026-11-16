@@ -205,10 +205,11 @@ fun RunbooksScreen(onBack: () -> Unit, onPlay: (String) -> Unit, selected: Strin
 
 /**
  * Plays a runbook step by step; finishing writes an incident log to the inbox. Half-folded on a
- * desk (tabletop, E6), the step stands above the hinge and the buttons lie below it.
+ * desk (tabletop, E6), the step stands above the hinge and the buttons lie below it. [onBack] is null
+ * beside the Runbooks list on a big screen: no back arrow there (13.2.1).
  */
 @Composable
-fun RunbookPlayerScreen(path: String, onBack: () -> Unit, onOpenNote: (String) -> Unit, viewModel: SnippetsViewModel = hiltViewModel()) {
+fun RunbookPlayerScreen(path: String, onBack: (() -> Unit)?, onOpenNote: (String) -> Unit, viewModel: SnippetsViewModel = hiltViewModel()) {
     LaunchedEffect(path) { viewModel.loadRunbook(path) }
     val loaded by viewModel.runbook.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }

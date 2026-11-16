@@ -725,11 +725,14 @@ private fun ArrangeRow(p: ProjectSummary, dimmed: Boolean = false, actions: @Com
     }
 }
 
-/** One project's page: activity, where you left off, next actions, key notes, links. */
+/**
+ * One project's page: activity, where you left off, next actions, key notes, links. [onBack] is null
+ * beside the Projects list on a big screen: no back arrow there (13.2.1).
+ */
 @Composable
 fun ProjectScreen(
     root: String,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)?,
     onOpenNote: (String) -> Unit,
     viewModel: ProjectsViewModel = hiltViewModel()
 ) {

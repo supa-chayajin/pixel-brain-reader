@@ -203,10 +203,13 @@ fun BoardsScreen(onBack: () -> Unit, onOpenBoard: (String) -> Unit, selected: St
     }
 }
 
-/** One board: columns side by side when there is room, one column per tab otherwise. */
+/**
+ * One board: columns side by side when there is room, one column per tab otherwise. [onBack] is null
+ * beside the Boards list on a big screen: no back arrow there (13.2.1).
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BoardScreen(folder: String, onBack: () -> Unit, onOpenNote: (String) -> Unit, viewModel: BoardViewModel = hiltViewModel()) {
+fun BoardScreen(folder: String, onBack: (() -> Unit)?, onOpenNote: (String) -> Unit, viewModel: BoardViewModel = hiltViewModel()) {
     LaunchedEffect(folder) { viewModel.open(folder) }
     val cards by viewModel.cards.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -233,7 +236,11 @@ fun BoardScreen(folder: String, onBack: () -> Unit, onOpenNote: (String) -> Unit
             cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
                 title = folder.substringAfterLast('/'),
                 icon = Icons.Rounded.ViewKanban,
-                navigationIcon = { CortexIconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") } },
+                navigationIcon = {
+                    if (onBack != null) {
+                        CortexIconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
+                    }
+                },
                 actions = {
                     CortexIconButton(onClick = { showArchived = !showArchived }) {
                         Icon(Icons.Rounded.Inventory2, contentDescription = if (showArchived) "Hide archived" else "Show archived")
