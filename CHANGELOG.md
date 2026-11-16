@@ -11,6 +11,61 @@ Planned: `documentation/plans/2026-11-10-dream-app-roadmap.md`. Next: the second
 (a smaller embedder, days like this), the toolkit's last small wins, and the Wear OS companion
 (X1) once it has a plan.
 
+## [13.2.0] — 2026-11-16
+
+A game's map one tap away, and the whole app in Material 3 Expressive: the owner's idea of the same
+morning, designed in an interview (M1–M5), then their call that 13.2 make the app fully Material 3
+Expressive, colourful within the device's own colours. Planned in
+`documentation/plans/2026-11-16-13.2-game-maps.md`. A first set of map links for the souls-like
+games, from the wikis Claude could open and check.
+
+### Changed
+
+- **Material 3 Expressive, everywhere:**
+  - Every button (about 300) and icon button (about 70) changes shape as you press it.
+  - Switches carry a check in their thumb.
+  - The two- and three-way choices are connected button groups: Habits' Today / All, Chat's
+    Cortex · Council · Spark, the evidence report's scope and period, the share screen's Preview /
+    Markdown, and the habit and mode settings.
+  - Progress bars are waves, and spinners are the morphing loading indicator.
+  - Every page has the same header: its emblem on an expressive shape, the emphasized headline and,
+    where the page has one, a tonal pill (the date, a count), centred.
+  - Lists are Android 16 segmented groups: Settings, the file list, the Games tab, and Daily's
+    Projects, Due today, Tasks and Tech watch.
+  - Cards are tonal with extra-large corners: the section cards, habits, chores and projects.
+- **Daily:** each block's title carries its emblem, and the day's mood face sits on a slowly
+  turning sunny shape. The weather is drawn live from expressive shapes instead of an emoji: the
+  sun turns, clouds drift, rain and snow fall, a storm flashes, fog slides. The mode and Toolkit
+  chips are tonal buttons, and the timeline's dots are small cookies.
+- **Games:** the games you're playing sit in a carousel at the top of the tab, and a game's page has
+  a floating toolbar (start or stop, started earlier, the map, Ask Claude).
+- **The navigation:** the open tab sits on its page's emblem (the same shape and colour as the page
+  header), its icon filled while the others are outlined. Switching tabs, the emblem slides,
+  stretching like jelly, and pops into the next tab's shape as it arrives. Daily is a sun shape
+  that turns while Daily is open. The tabs, their order and the folded bar's four tabs are as
+  before.
+  - A running game session puts a pulsing dot on the Games tab, seen from every page.
+  - On a phone, the floating bar slides away while a page scrolls down and comes back as it
+    scrolls up.
+  - On a wide window, the menu button at the top of the rail shows the tabs' names beside their
+    icons, remembered on the device.
+- **Colour from your device:** the page emblems and the icons of the section cards, the Settings
+  rows and the game cards sit on expressive shapes (cookie, clover, burst) in your wallpaper's
+  accent tones. Each card keeps its colour, neighbours differ, and everything follows the system's
+  light or dark theme.
+
+### Added
+
+- **Game maps (M1–M4):** a game page's `game_maps` (an address, or `Label | address`) opens in the
+  app's map browser.
+  - From the game's page (*Map*, or a short list when there are several), from the map icon on
+    its card in the Games tab, and from the running session's notification (*Open the map*: the
+    phone as a second screen while you play).
+  - View-only: no account, what you find goes in the page's checklists. Back walks the map's own
+    pages first, *Reload*, *Open in the browser*, and the screen stays on while a map shows.
+  - Only public https addresses open, guarded like the share screen's browser, and the privacy
+    ledger counts the visit as "Game maps".
+
 ## [13.1.0] — 2026-11-16
 
 A game mode for every evening, built the morning the game pages arrived, from the owner's
