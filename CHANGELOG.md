@@ -7,9 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-13.2.1, in progress: the owner's interview of 16 November, after a day with 13.2 on the Fold. It
-ships with the fixes that day of dogfooding brings. Planned in
-`documentation/plans/2026-11-16-13.2.1-after-dogfooding.md`.
+Planned: `documentation/plans/2026-11-10-dream-app-roadmap.md`. Next: the second brain's part two
+(a smaller embedder, days like this), the toolkit's last small wins, and the Wear OS companion
+(X1) once it has a plan.
+
+## [13.2.1] — 2026-11-16
+
+After a day with 13.2 on the Fold: the owner's interview of 16 November, which also closed every
+open point on their side. The fixes from that day of dogfooding join this section before the
+release. Planned in `documentation/plans/2026-11-16-13.2.1-after-dogfooding.md`.
 
 ### Changed
 
@@ -28,10 +34,6 @@ ships with the fixes that day of dogfooding brings. Planned in
 ### Fixed
 
 - A redundant annotation target in the people repository, one of the compiler's two warnings.
-
-Planned: `documentation/plans/2026-11-10-dream-app-roadmap.md`. Next: the second brain's part two
-(a smaller embedder, days like this), the toolkit's last small wins, and the Wear OS companion
-(X1) once it has a plan.
 
 ## [13.2.0] — 2026-11-16
 
