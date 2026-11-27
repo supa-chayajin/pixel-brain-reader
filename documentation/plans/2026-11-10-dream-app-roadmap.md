@@ -227,7 +227,7 @@ interview the same day and the as-built notes: `2026-11-14-12.17-games.md`.
 
 - [x] **G1 Library and pages.** *(12.17.0)* Game pages found by their `game_template` key, the Games tab
       (8th; the folded bar shows four tabs), a page per game with its state, trophies and sessions.
-- [x] **G2 PlayStation Network.** *(12.17.0; the 4102 of 2026-11-15 was the build's mistyped client secret, not a Sony block: found and fixed on 2026-11-27, 13.2.3)* The NPSSO pasted once, the tokens in encrypted storage, Sony's
+- [x] **G2 PlayStation Network.** *(12.17.0; the 4102 of 2026-11-15 was the build's mistyped client secret, not a Sony block: found on 2026-11-27 and corrected in 13.2.3, the Fold's sign-in to confirm)* The NPSSO pasted once, the tokens in encrypted storage, Sony's
       app credentials from `local.properties`; a read-only sync at 23:40 and 06:00 and on demand;
       "PSN paused" on failure, never a blocked vault sync.
 - [x] **G3 What a sync writes.** *(12.17.0)* `10_Journal/data/games/` (snapshot, links, sessions, trophy
