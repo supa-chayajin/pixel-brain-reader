@@ -39,13 +39,20 @@ object GameMaps {
         return GameMap(url = url, label = given.ifEmpty { pageName(url) ?: site }, site = site, given = given.ifEmpty { null })
     }
 
-    /** True for a public https address the map browser may open (the import guard's check). */
+    /**
+     * True for a public https address the map browser may open (the import guard's check), with no
+     * user name or password before its host: the address is written into the vault and pushed, and
+     * the browser would hand them to the site.
+     */
     fun accepts(url: String): Boolean =
-        url.startsWith("https://", ignoreCase = true) && ImportUrlValidator.isSafe(url) && siteOf(url) != null
+        url.startsWith("https://", ignoreCase = true) && ImportUrlValidator.isSafe(url) && siteOf(url) != null &&
+            runCatching { URI(url).rawUserInfo == null }.getOrDefault(false)
 
     /**
-     * A typed label: whitespace runs one space, control characters dropped, trimmed, at most 80
-     * characters; null when nothing is left. Hand-written, no regex.
+     * A typed label: whitespace runs one space, control characters and bidi controls dropped,
+     * trimmed, at most 80 characters; null when nothing is left. Hand-written, no regex. A label can
+     * be a site's page title (a share, the map browser), and the Maps card shows "<label> · <site>":
+     * a right-to-left override there would turn the site's name around.
      */
     fun cleanLabel(raw: String?): String? {
         if (raw == null) return null
@@ -55,6 +62,8 @@ object GameMaps {
             when {
                 ch.isWhitespace() -> space = true
                 ch.isISOControl() -> Unit
+                // The bidi marks, embeddings, overrides and isolates.
+                ch in '\u202A'..'\u202E' || ch in '\u2066'..'\u2069' || ch == '\u200E' || ch == '\u200F' || ch == '\u061C' -> Unit
                 else -> {
                     if (space && out.isNotEmpty()) out.append(' ')
                     space = false
@@ -93,11 +102,14 @@ object GameMaps {
         return parts[parts.size - 2].replaceFirstChar { it.uppercase() }
     }
 
-    /** The address's last path segment as words: `/Interactive+Map` → "Interactive Map". */
+    /**
+     * The address's last path segment as words: `/Interactive+Map` → "Interactive Map". Cleaned like
+     * a typed label: the site chose the address, and a decoded segment can hold bidi controls too.
+     */
     private fun pageName(url: String): String? {
         val last = runCatching { URI(url).rawPath }.getOrNull().orEmpty().trimEnd('/').substringAfterLast('/')
         if (last.isBlank()) return null
         val decoded = runCatching { URLDecoder.decode(last, "UTF-8") }.getOrDefault(last)
-        return decoded.replace('_', ' ').trim().takeIf { it.isNotEmpty() }
+        return cleanLabel(decoded.replace('_', ' '))
     }
 }

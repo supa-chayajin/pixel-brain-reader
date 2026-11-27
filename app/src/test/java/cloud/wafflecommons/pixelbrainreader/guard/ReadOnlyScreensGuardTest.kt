@@ -58,7 +58,7 @@ class ReadOnlyScreensGuardTest {
         "ui/components/NoteTimeMachineSheet.kt",
         // Life Stats' experiments card (12.21, L2): New and Remove only where the vault can change.
         "ui/lifestats/ExperimentsCard.kt",
-        // 13.3: controls that only hide. The open map's "Change map" (a full-screen browser has no room
+        // 13.3: controls that only hide. The open map's edits in its Maps menu (a full-screen browser has no room
         // for the notice), and the share screen's "Add as a game map" (never reached on a read-only
         // device: MainActivity finishes a share there).
         "ui/games/GameMapScreen.kt",

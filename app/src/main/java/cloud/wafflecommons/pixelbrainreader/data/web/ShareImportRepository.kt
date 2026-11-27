@@ -67,8 +67,8 @@ class ShareImportRepository @Inject constructor(
 
     /**
      * What the current share holds, as it was shared (13.3, ME2: the share screen offers its link as a
-     * game map); set at once by [start], kept while the page loads or fails, cleared by [dismiss] and
-     * by a [save] that went through.
+     * game map); set at once by [start] (null for an article the app opened itself), kept while the
+     * page loads or fails, cleared by [dismiss] and by a [save] that went through.
      */
     val shared: StateFlow<SharedContent?> = _shared.asStateFlow()
 
@@ -76,9 +76,13 @@ class ShareImportRepository @Inject constructor(
     private var lastShare: Pair<SharedContent, String?>? = null
     private var lastPassage: String? = null
 
-    /** Imports what was shared: the page when the text holds a link, the text (or the HTML selection) otherwise. */
-    fun start(shared: SharedContent, html: String?) {
-        _shared.value = shared
+    /**
+     * Imports what was shared: the page when the text holds a link, the text (or the HTML selection)
+     * otherwise. [offerAsMap] false: an article the app opens itself (Daily's Tech watch) offers no
+     * "Add as a game map", which is for a link shared from a browser (13.3).
+     */
+    fun start(shared: SharedContent, html: String?, offerAsMap: Boolean = true) {
+        _shared.value = shared.takeIf { offerAsMap }
         job?.cancel()
         lastShare = shared to html
         val url = shared.url
@@ -136,9 +140,12 @@ class ShareImportRepository @Inject constructor(
         }
     }
 
-    /** Tries the page again (the network came back, the site let us in). */
+    /**
+     * Tries the page again (the network came back, the site let us in). A share that offered no map
+     * still offers none: [shared] is null exactly then.
+     */
     fun retry() {
-        lastShare?.let { (shared, html) -> start(shared, html) }
+        lastShare?.let { (shared, html) -> start(shared, html, offerAsMap = _shared.value != null) }
     }
 
     fun dismiss() {

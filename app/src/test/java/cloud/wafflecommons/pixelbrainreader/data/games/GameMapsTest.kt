@@ -130,4 +130,31 @@ class GameMapsTest {
         val emoji = "🗺"
         assertEquals("A".repeat(79), GameMaps.cleanLabel("A".repeat(79) + emoji))
     }
+
+    @Test
+    fun `a label loses the bidi controls a site's title can carry`() {
+        // A right-to-left override would turn "<label> · <site>" around on the Maps card.
+        assertEquals("Map x", GameMaps.cleanLabel("Map\u202E x"))
+        assertEquals("Map", GameMaps.cleanLabel("\u202AMap\u202C\u2066\u2069\u200E\u200F\u061C"))
+        assertNull(GameMaps.cleanLabel("\u202E\u2067"))
+        // A right-to-left title keeps its letters.
+        assertEquals("\u05DE\u05E4\u05D4", GameMaps.cleanLabel("\u05DE\u05E4\u05D4"))
+        // A shared title, and the page's name a label falls back to, are cleaned the same way.
+        assertEquals("Map", GameMaps.fromShare("https://example.com/map", "\u202EMap")!!.label)
+        assertEquals("paM", GameMaps.parse(listOf("https://ringofash.wiki.example.com/%E2%80%AEpaM")).single().label)
+    }
+
+    @Test
+    fun `an address with a user name or password is no map`() {
+        assertFalse(GameMaps.accepts("https://user:pass@wiki.example.com/map"))
+        assertFalse(GameMaps.accepts("https://user@wiki.example.com/map"))
+        // What reads as the host is a user name here: the address goes to the other one.
+        assertFalse(GameMaps.accepts("https://wiki.example.com@other.example.org/map"))
+        assertNull(GameMaps.fromShare("https://user:pass@wiki.example.com/map", "Map"))
+        assertNull(GameMaps.preview("https://user:pass@wiki.example.com/map", "Map"))
+        // Kept in the note, out of the app, like any address the app can't open.
+        assertTrue(GameMaps.parse(listOf("Map | https://user:pass@wiki.example.com/map")).isEmpty())
+        // An @ further on names no user.
+        assertTrue(GameMaps.accepts("https://wiki.example.com/@someone/map?by=@someone"))
+    }
 }

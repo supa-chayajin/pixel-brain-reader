@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -218,7 +219,7 @@ fun GamePageScreen(
                     val hidden = item.masked && !shown(key)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth().clickable(enabled = hidden) { show(key) }
+                        modifier = Modifier.fillMaxWidth().clickable(enabled = hidden, onClickLabel = "Reveal") { show(key) }
                     ) {
                         Checkbox(checked = item.done, onCheckedChange = { viewModel.toggle(item.line) }, enabled = !state.readOnly)
                         Text(if (hidden) "???" else item.text, style = MaterialTheme.typography.bodyMedium)
@@ -391,7 +392,8 @@ private fun consoleOf(record: GameSessionRecord): String? = when (record.source)
 /**
  * The page's maps (13.3, ME1): label · site, the main one first. Add, and per map Change, Make
  * main and Remove; a tap opens it in the map browser. A read-only device lists them, tappable,
- * with the notice and no controls.
+ * with the notice and no controls, and shows no card for a game without a map (the page has its
+ * notice already).
  */
 @Composable
 private fun MapsCard(
@@ -404,12 +406,18 @@ private fun MapsCard(
     onMakeMain: (GameMap) -> Unit,
     onRemove: (GameMap) -> Unit
 ) {
+    if (readOnly && maps.isEmpty()) return
     SectionCard(
         title = "Maps",
         icon = Icons.Rounded.Map,
         subtitle = listOfNotNull(
             if (maps.isNotEmpty()) "The first one is the main map" else null,
-            if (unreadable > 0) "$unreadable kept in the note that the app can't open" else null
+            when {
+                unreadable == 0 -> null
+                maps.isNotEmpty() -> "plus $unreadable the app can't open, kept in the note"
+                // Nothing for "plus" to add to.
+                else -> "$unreadable ${if (unreadable == 1) "address" else "addresses"} the app can't open, kept in the note"
+            }
         ).joinToString(" · ").ifEmpty { null },
         trailing = {
             if (!readOnly) TextButton(onClick = onAdd, shapes = ButtonDefaults.shapes()) { Text("Add") }
@@ -417,10 +425,7 @@ private fun MapsCard(
     ) {
         if (readOnly) ReadOnlyNotice()
         if (maps.isEmpty()) {
-            EmptyHint(
-                if (readOnly) "No map yet."
-                else "No map yet. Add a map's address here, or share a map page to the app from your browser."
-            )
+            EmptyHint("No map yet. Add a map's address here, or share a map page to the app from your browser.")
         }
         maps.forEachIndexed { index, map ->
             MapRow(
@@ -454,8 +459,9 @@ private fun MapRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier
                 .weight(1f)
+                .heightIn(min = 48.dp)
                 .clip(MaterialTheme.shapes.medium)
-                .clickable(onClick = onOpen)
+                .clickable(onClickLabel = "Open the map", onClick = onOpen)
                 .padding(horizontal = 4.dp, vertical = 10.dp)
         ) {
             Text(
@@ -479,7 +485,7 @@ private fun MapRow(
         if (!readOnly) {
             Box {
                 IconButton(onClick = { menu = true }, shapes = IconButtonDefaults.shapes()) {
-                    Icon(Icons.Rounded.MoreVert, contentDescription = "Map actions")
+                    Icon(Icons.Rounded.MoreVert, contentDescription = "Actions for ${map.label}")
                 }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     DropdownMenuItem(
@@ -569,7 +575,7 @@ private fun TrophiesCard(
                 "${TrophySection.gradeIcon(line.trophy.grade)}  $name" + (earned?.let { "  ·  ${day(it)}" } ?: ""),
                 style = MaterialTheme.typography.bodyMedium,
                 color = if (earned != null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.fillMaxWidth().clickable(enabled = hidden) { onShow(key) }
+                modifier = Modifier.fillMaxWidth().clickable(enabled = hidden, onClickLabel = "Reveal") { onShow(key) }
             )
         }
     }
@@ -603,7 +609,7 @@ private fun AchievementsCard(
                 "${AchievementSection.ICON}  $name  ·  ${line.record.gamerscore} G" + (earned?.let { "  ·  ${day(it)}" } ?: "") + set,
                 style = MaterialTheme.typography.bodyMedium,
                 color = if (earned != null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.fillMaxWidth().clickable(enabled = hidden) { onShow(key) }
+                modifier = Modifier.fillMaxWidth().clickable(enabled = hidden, onClickLabel = "Reveal") { onShow(key) }
             )
         }
     }

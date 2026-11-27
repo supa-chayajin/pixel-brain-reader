@@ -94,6 +94,30 @@ class ShareImportRepositoryTest {
     }
 
     @Test
+    fun `a Tech watch article offers no map, even after a retry`() = runTest {
+        coEvery { loader.load(link, any()) } throws PageUnavailableException(PageProblem.BLOCKED, 403)
+        val repository = ShareImportRepository(loader, draftWriter, summarizer, this)
+
+        // Daily's Tech watch opens its articles in the share screen's reader itself.
+        repository.start(SharedContent(url = link, titleHint = "Interactive Map", passage = null), null, offerAsMap = false)
+        assertTrue(repository.state.value is ShareImport.Loading)
+        assertNull(repository.shared.value)
+        advanceUntilIdle()
+        assertTrue(repository.state.value is ShareImport.LinkOnly)
+
+        repository.retry()
+        advanceUntilIdle()
+        assertTrue(repository.state.value is ShareImport.LinkOnly)
+        assertNull(repository.shared.value)
+
+        // A link shared from a browser still offers it, and so does its retry.
+        repository.start(shared, null)
+        repository.retry()
+        advanceUntilIdle()
+        assertEquals(shared, repository.shared.value)
+    }
+
+    @Test
     fun `saving clears it`() = runTest {
         coEvery { loader.load(link, any()) } returns article()
         coEvery { draftWriter.write(any(), any()) } answers { firstArg() }

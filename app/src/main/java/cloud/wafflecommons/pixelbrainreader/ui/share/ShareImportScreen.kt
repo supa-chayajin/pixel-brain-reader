@@ -356,6 +356,11 @@ fun ShareImportScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+        // 13.3 (ME2): the link kept as a game's map instead of a note, offered while the page still
+        // loads too, and above the rest so the button stays in place when the page arrives.
+        if (mapOffer != null && gamePages.isNotEmpty() && !saving && !addingMap) {
+            OutlinedButton(onClick = { pickingGame = true }, shapes = ButtonDefaults.shapes()) { Text("Add as a game map") }
+        }
         when (current) {
             null -> EmptyHint("Nothing to import.")
             is ShareImport.Loading -> LoadingCard(current, onCancel = close)
@@ -392,10 +397,6 @@ fun ShareImportScreen(
                     edited = true
                 }
             }
-        }
-        // 13.3 (ME2): or keep the link as a game's map, even while the page still loads.
-        if (mapOffer != null && gamePages.isNotEmpty() && !saving && !addingMap) {
-            OutlinedButton(onClick = { pickingGame = true }, shapes = ButtonDefaults.shapes()) { Text("Add as a game map") }
         }
         // Or hand it to a desktop session instead of keeping it as a note (C13).
         if (current != null && current !is ShareImport.Loading && !saving && !addingMap) {

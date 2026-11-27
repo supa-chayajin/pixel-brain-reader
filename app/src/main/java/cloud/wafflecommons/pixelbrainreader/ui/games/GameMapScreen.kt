@@ -23,6 +23,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -218,8 +219,9 @@ class GameMapViewModel @Inject constructor(
  * The map browser (13.2): the game's map in the app, view-only (no account; what the owner finds
  * goes in the page's checklists), guarded like the share screen's view (public addresses only),
  * counted in the privacy ledger, the screen kept on while it shows (a second screen during play).
- * Back walks the page's history before leaving. 13.3: Change map (this map's address or label,
- * the page shown now, or another map), except on a read-only device.
+ * Back walks the page's history before leaving. 13.3: one Maps menu, the other maps then the edits
+ * (this map's address or label, the page shown now, or another map); a read-only device keeps the
+ * other maps alone.
  */
 @Composable
 fun GameMapScreen(onBack: () -> Unit, onOpenGames: () -> Unit, viewModel: GameMapViewModel = hiltViewModel()) {
@@ -288,11 +290,23 @@ private fun MapBrowser(
 ) {
     val holder = remember { MapViewHolder() }
     val context = LocalContext.current
-    var progress by remember(map.url) { mutableIntStateOf(0) }
-    var failed by remember(map.url) { mutableStateOf(false) }
+    // 13.3 (ME3): a new view only for a real switch of map. A map given the address the view is at
+    // ("Use this page", "Add as another map…" of the page shown) keeps it, with its pan, zoom and
+    // Back history. A count, not the address, keys the view: a map changed back to the address the
+    // view was built for still loads it.
+    var viewFor by remember { mutableStateOf(map.url) }
+    var viewGeneration by remember { mutableIntStateOf(0) }
+    LaunchedEffect(map.url) {
+        if (map.url != viewFor) {
+            if (holder.view?.url != map.url) viewGeneration++
+            viewFor = map.url
+        }
+    }
+    var progress by remember(viewGeneration) { mutableIntStateOf(0) }
+    var failed by remember(viewGeneration) { mutableStateOf(false) }
+    // 13.3 (ME3): the top bar's one menu (Maps; on a read-only device, Other maps alone), the
+    // browser's address and title read as it opens.
     var menu by remember { mutableStateOf(false) }
-    // 13.3 (ME3): the Change map menu, the browser's address and title read as it opens.
-    var editMenu by remember { mutableStateOf(false) }
     var pageUrl by remember { mutableStateOf<String?>(null) }
     var pageTitle by remember { mutableStateOf<String?>(null) }
     var changing by rememberSaveable { mutableStateOf(false) }
@@ -317,34 +331,40 @@ private fun MapBrowser(
                     IconButton(onClick = onBack, shapes = IconButtonDefaults.shapes()) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back") }
                 },
                 actions = {
-                    if (maps.size > 1) {
-                        Box {
-                            IconButton(onClick = { menu = true }, shapes = IconButtonDefaults.shapes()) { Icon(Icons.Rounded.Layers, contentDescription = "Other maps") }
-                            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                                maps.forEachIndexed { index, other ->
-                                    DropdownMenuItem(
-                                        text = { Text("${other.label} · ${other.site}") },
-                                        onClick = {
-                                            menu = false
-                                            onSelect(index)
-                                        }
-                                    )
+                    if (readOnly) {
+                        // No map edits here: the other maps alone, as in 13.2.
+                        if (maps.size > 1) {
+                            Box {
+                                IconButton(onClick = { menu = true }, shapes = IconButtonDefaults.shapes()) { Icon(Icons.Rounded.Layers, contentDescription = "Other maps") }
+                                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                                    MapChoices(maps) { index ->
+                                        menu = false
+                                        onSelect(index)
+                                    }
                                 }
                             }
                         }
-                    }
-                    if (!readOnly) {
+                    } else {
+                        // One menu, so a phone's bar keeps room for the game's name: the other maps,
+                        // then this map's edits.
                         Box {
                             IconButton(onClick = {
                                 pageUrl = holder.view?.url
                                 pageTitle = holder.view?.title
-                                editMenu = true
-                            }, shapes = IconButtonDefaults.shapes()) { Icon(Icons.Rounded.EditLocationAlt, contentDescription = "Change map") }
-                            DropdownMenu(expanded = editMenu, onDismissRequest = { editMenu = false }) {
+                                menu = true
+                            }, shapes = IconButtonDefaults.shapes()) { Icon(Icons.Rounded.EditLocationAlt, contentDescription = "Maps") }
+                            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                                if (maps.size > 1) {
+                                    MapChoices(maps) { index ->
+                                        menu = false
+                                        onSelect(index)
+                                    }
+                                    HorizontalDivider()
+                                }
                                 DropdownMenuItem(
                                     text = { Text("Change this map…") },
                                     onClick = {
-                                        editMenu = false
+                                        menu = false
                                         changing = true
                                     }
                                 )
@@ -352,14 +372,14 @@ private fun MapBrowser(
                                     text = { Text("Use this page") },
                                     enabled = pageUrl != null && pageUrl != map.url,
                                     onClick = {
-                                        editMenu = false
+                                        menu = false
                                         onUseCurrentPage(pageUrl)
                                     }
                                 )
                                 DropdownMenuItem(
                                     text = { Text("Add as another map…") },
                                     onClick = {
-                                        editMenu = false
+                                        menu = false
                                         addUrl = pageUrl ?: map.url
                                         addLabel = GameMaps.cleanLabel(pageTitle)
                                     }
@@ -383,7 +403,7 @@ private fun MapBrowser(
         snackbarHost = { SnackbarHost(snackbar) }
     ) { padding ->
         Box(modifier = Modifier.padding(padding).fillMaxSize()) {
-            key(map.url) {
+            key(viewGeneration) {
                 AndroidView(
                     factory = { ctx ->
                         WebView(ctx).apply {
@@ -456,7 +476,15 @@ private fun MapBrowser(
     }
 }
 
-/** The map's WebView, outside snapshot state: only the callbacks read it. */
+/** The game's maps as menu items, "<label> · <site>" each; a pick gives the map's place. */
+@Composable
+private fun MapChoices(maps: List<GameMap>, onPick: (Int) -> Unit) {
+    maps.forEachIndexed { index, other ->
+        DropdownMenuItem(text = { Text("${other.label} · ${other.site}") }, onClick = { onPick(index) })
+    }
+}
+
+/** The map's WebView, outside snapshot state: only callbacks and effects read it. */
 private class MapViewHolder {
     var view: WebView? = null
 }

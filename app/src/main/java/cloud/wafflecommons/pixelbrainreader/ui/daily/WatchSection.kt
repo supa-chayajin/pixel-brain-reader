@@ -101,9 +101,12 @@ class WatchViewModel @Inject constructor(
         }
     }
 
-    /** Opens [headline] in the share screen's reader (its Import is there too); the caller shows that screen. */
+    /**
+     * Opens [headline] in the share screen's reader (its Import is there too; "Add as a game map" is
+     * not, being for a link shared from a browser, 13.3); the caller shows that screen.
+     */
     fun read(headline: Headline) {
-        shareImport.start(SharedContent(url = headline.url, titleHint = headline.title, passage = null), html = null)
+        shareImport.start(SharedContent(url = headline.url, titleHint = headline.title, passage = null), html = null, offerAsMap = false)
     }
 
     /** Imports [headline] straight to the inbox, in the background. False on a read-only device. */
