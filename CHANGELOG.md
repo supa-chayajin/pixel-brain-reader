@@ -76,6 +76,9 @@ A game's maps, changed from the app, and the Xbox beside the PlayStation: the ow
 - An older version shows the 🎖️ section as plain text and leaves the Xbox links and sessions out.
 - A PlayStation trophy name with extra spaces is rewritten once, on one line, at the first sync
   after the update.
+- Checked on the Fold on 2026-11-27: the signed APK installed in place over 13.2.3 and started
+  cleanly; maps were added from a game page, a browser share and the open map; the Xbox signed
+  in, and its first sync linked 92 titles to 74 pages, 49 of them created.
 
 ## [13.2.3] — 2026-11-27
 
