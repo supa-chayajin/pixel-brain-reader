@@ -11,6 +11,35 @@ Planned: `documentation/plans/2026-11-10-dream-app-roadmap.md`. Next: the second
 (a smaller embedder, days like this), the toolkit's last small wins, and the Wear OS companion
 (X1) once it has a plan.
 
+## [13.2.3] — 2026-11-27
+
+The PlayStation Network sign-in: the refusal came from this build, not from Sony. Planned in
+`documentation/plans/2026-11-27-13.2.3-psn-client.md`.
+
+### Fixed
+
+- **PSN's "4102 Bad client credentials" came from this build, not from Sony.** The client secret
+  copied into `local.properties` for 12.17.0 had one character too many. PlayStation accepts the
+  NPSSO without the secret, so the sign-in failed only at the token step, and the one public
+  report of the same error read like a block on Sony's side. The public client kept working in
+  November for Home Assistant's PlayStation Network integration and other projects. The release
+  APK is built from a corrected `local.properties`.
+- **A 4102 now says what it means:** "PlayStation refused this build's client id or secret" on the
+  PlayStation page, and "PSN paused: PlayStation refused this build's client" on the Games tab,
+  instead of "PlayStation changed its sign-in". The page no longer offers a new NPSSO for it: a
+  corrected build and Sync now fix a refused client.
+
+### Changed
+
+- **The build warns** when `psnClientId` isn't a lowercase 36-character client id,
+  `psnClientSecret` isn't 16 letters and digits, or only one of the two is set. It gives the
+  lengths, never the values.
+
+### Notes
+
+- 12.17.0's and 13.1.0's notes that PSN was blocked by Sony were wrong. The roadmap and the plans
+  that recorded it now say so.
+
 ## [13.2.2] — 2026-11-16
 
 A fix the owner found on the Fold right after 13.2.1's release. Planned in
