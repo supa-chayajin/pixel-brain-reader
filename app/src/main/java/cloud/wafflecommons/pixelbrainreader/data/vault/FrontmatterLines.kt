@@ -11,6 +11,9 @@ package cloud.wafflecommons.pixelbrainreader.data.vault
  */
 object FrontmatterLines {
 
+    /** One item of a list key: [line] as written (without `\r`), [value] as [getList] reads it. */
+    data class ListItem(val line: String, val value: String)
+
     private val KEY_LINE = Regex("""^([A-Za-z0-9_-]+)\s*:(.*)$""")
     private val INLINE_LIST = Regex("""^\[(.*)]$""")
 
@@ -102,6 +105,44 @@ object FrontmatterLines {
         if (values.isEmpty()) return set(content, key, "[]")
         val marker = "\u0000list"
         return set(content, key, marker).replace("$key: $marker", "$key:\n" + values.joinToString("\n") { "  - $it" })
+    }
+
+    /**
+     * [key]'s list items in order: a block list's item lines kept as written; an inline list's or a
+     * scalar's values as new lines `"  - " + VaultSchema.doubleQuoted(value)`. Blank values left out;
+     * empty when the key is absent or empty (`key:`, `key: []`, `key: ''`).
+     */
+    fun listItems(content: String, key: String): List<ListItem> {
+        val lines = content.split("\n")
+        val block = locate(lines) ?: return emptyList()
+        val idx = keyLine(lines, block, key) ?: return emptyList()
+        val inline = KEY_LINE.find(lines[idx].trimEnd('\r'))!!.groupValues[2].trim()
+        INLINE_LIST.find(inline)?.let { match ->
+            return match.groupValues[1].split(',').map { unquote(it.trim()) }.filter { it.isNotEmpty() }.map(::newItem)
+        }
+        if (inline.isNotEmpty()) return listOfNotNull(unquote(inline).takeIf { it.isNotEmpty() }?.let(::newItem))
+        return continuation(lines, block, idx)
+            .map { lines[it].trimEnd('\r') }
+            .filter { line -> line.trim().let { it.startsWith("- ") || it == "-" } }
+            .map { line -> ListItem(line, unquote(line.trim().removePrefix("-").trim())) }
+            .filter { it.value.isNotEmpty() }
+    }
+
+    private fun newItem(value: String): ListItem = ListItem("  - " + VaultSchema.doubleQuoted(value), value)
+
+    /**
+     * [key] as a block list of [lines] written verbatim (`key: []` when empty), in the key's place
+     * (a missing key goes where [set] puts it). A key line ending in `\r` gives `\r\n` between the
+     * written lines.
+     */
+    fun setListLines(content: String, key: String, lines: List<String>): String {
+        if (lines.isEmpty()) return set(content, key, "[]")
+        val marker = "\u0000list"
+        val keyed = set(content, key, marker)
+        val written = "$key: $marker"
+        // The `\r` that followed the key's line stays after the marker and ends the last item's line.
+        val sep = if (keyed.contains(written + "\r")) "\r\n" else "\n"
+        return keyed.replace(written, "$key:" + sep + lines.joinToString(sep))
     }
 
     /** Removes [key] (and its continuation lines); unchanged when absent. */

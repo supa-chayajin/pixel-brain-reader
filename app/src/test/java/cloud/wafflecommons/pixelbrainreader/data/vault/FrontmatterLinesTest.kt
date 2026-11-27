@@ -101,4 +101,84 @@ class FrontmatterLinesTest {
             FrontmatterLines.keys(note)
         )
     }
+
+    // --- 13.3: a list's items as written, and a list written line by line ----------------------
+
+    @Test
+    fun `list items keep a block list's lines as written`() {
+        val content = "---\ngame_maps:\n  - \"Map | https://a.example.com/x\"\n  -   'https://b.example.com/y'\n    - plain words\n---\nBody\n"
+        val items = FrontmatterLines.listItems(content, "game_maps")
+        assertEquals(
+            listOf("  - \"Map | https://a.example.com/x\"", "  -   'https://b.example.com/y'", "    - plain words"),
+            items.map { it.line }
+        )
+        assertEquals(listOf("Map | https://a.example.com/x", "https://b.example.com/y", "plain words"), items.map { it.value })
+        // The values are the ones getList reads.
+        assertEquals(FrontmatterLines.getList(content, "game_maps"), items.map { it.value })
+    }
+
+    @Test
+    fun `an inline list or a scalar becomes new quoted lines`() {
+        assertEquals(
+            listOf(FrontmatterLines.ListItem("  - \"a\"", "a"), FrontmatterLines.ListItem("  - \"b c\"", "b c")),
+            FrontmatterLines.listItems("---\nk: [a, 'b c']\n---\n", "k")
+        )
+        assertEquals(listOf(FrontmatterLines.ListItem("  - \"one\"", "one")), FrontmatterLines.listItems("---\nk: 'one'\n---\n", "k"))
+        assertEquals(
+            listOf(FrontmatterLines.ListItem("  - \"say \\\"hi\\\"\"", "say \"hi\"")),
+            FrontmatterLines.listItems("---\nk: [say \"hi\"]\n---\n", "k")
+        )
+    }
+
+    @Test
+    fun `empty forms read as no item`() {
+        listOf("k:", "k: []", "k: ''", "k: \"\"").forEach { line ->
+            assertTrue(line, FrontmatterLines.listItems("---\n$line\nnext: x\n---\n", "k").isEmpty())
+        }
+        assertTrue(FrontmatterLines.listItems("---\nother: x\n---\n", "k").isEmpty())
+        assertTrue(FrontmatterLines.listItems("---\nk:\n  - \"\"\n  -\n---\n", "k").isEmpty())
+        assertTrue(FrontmatterLines.listItems("No frontmatter\n", "k").isEmpty())
+    }
+
+    @Test
+    fun `setListLines writes the lines verbatim in the key's place`() {
+        val content = "---\na: 1\nk:\n  - old\n  - older\nb: 2\n---\nBody\n"
+        assertEquals(
+            "---\na: 1\nk:\n  - 'x'\n  -   y\nb: 2\n---\nBody\n",
+            FrontmatterLines.setListLines(content, "k", listOf("  - 'x'", "  -   y"))
+        )
+        // An inline list becomes a block list in its place.
+        assertEquals("---\na: 1\nk:\n  - \"x\"\nb: 2\n---\n", FrontmatterLines.setListLines("---\na: 1\nk: [old]\nb: 2\n---\n", "k", listOf("  - \"x\"")))
+    }
+
+    @Test
+    fun `an empty list is written as an empty inline list`() {
+        assertEquals("---\na: 1\nk: []\nb: 2\n---\n", FrontmatterLines.setListLines("---\na: 1\nk:\n  - old\nb: 2\n---\n", "k", emptyList()))
+    }
+
+    @Test
+    fun `CRLF lines survive`() {
+        val crlf = "---\r\na: 1\r\nk:\r\n  - old\r\nb: 2\r\n---\r\nBody\r\n"
+        assertEquals(
+            "---\r\na: 1\r\nk:\r\n  - x\r\n  - y\r\nb: 2\r\n---\r\nBody\r\n",
+            FrontmatterLines.setListLines(crlf, "k", listOf("  - x", "  - y"))
+        )
+        assertEquals(listOf("  - old"), FrontmatterLines.listItems(crlf, "k").map { it.line })
+        assertEquals("---\r\na: 1\r\nk: []\r\nb: 2\r\n---\r\nBody\r\n", FrontmatterLines.setListLines(crlf, "k", emptyList()))
+    }
+
+    @Test
+    fun `a missing key goes where set puts it`() {
+        assertEquals("---\na: 1\nk:\n  - x\n---\nBody\n", FrontmatterLines.setListLines("---\na: 1\n---\nBody\n", "k", listOf("  - x")))
+        // A standard key keeps its R1 place.
+        assertEquals(
+            "---\ntitle: \"T\"\naliases:\n  - \"A\"\ngame_template: lego\n---\n",
+            FrontmatterLines.setListLines("---\ntitle: \"T\"\ngame_template: lego\n---\n", "aliases", listOf("  - \"A\""))
+        )
+        // In a Windows note whose key was missing, the new lines come out like set's line.
+        assertEquals(
+            "---\r\na: 1\r\nk:\n  - x\n---\r\n",
+            FrontmatterLines.setListLines("---\r\na: 1\r\n---\r\n", "k", listOf("  - x"))
+        )
+    }
 }

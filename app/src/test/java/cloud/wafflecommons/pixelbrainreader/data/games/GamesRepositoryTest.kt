@@ -5,6 +5,7 @@ import cloud.wafflecommons.pixelbrainreader.data.local.dao.FileContentDao
 import cloud.wafflecommons.pixelbrainreader.data.repository.FileRepository
 import cloud.wafflecommons.pixelbrainreader.data.sync.VaultPushScheduler
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -139,5 +140,74 @@ class GamesRepositoryTest {
         VaultWriteGate.readOnly = true
         assertFalse(repository.setPlayedBefore(pagePath, 10.0, LocalDate.of(2026, 11, 16)))
     }
+
+    // --- 13.3: maps (ME4) ------------------------------------------------------------------
+
+    private val today = LocalDate.of(2026, 11, 27)
+    private val mapPage = "---\ntitle: \"Ring of Ash\"\ndate_updated: '2026-11-01'\ngame_template: souls-like\n" +
+        "game_maps:\n  - \"https://ringofash.wiki.example.com/Maps\"\n---\n# Ring of Ash\n"
+
+    @Test
+    fun `a map edit reads the page from disk first`() = runTest {
+        disk[pagePath] = mapPage
+        val seen = repository.page(pagePath)!!
+        // Meanwhile the desktop adds a map and a line to the page.
+        disk[pagePath] = mapPage
+            .replace("game_maps:\n", "game_maps:\n  - \"Desk | https://desk.example.com/Map\"\n")
+            .replace("# Ring of Ash\n", "# Ring of Ash\n\nFrom the desktop.\n")
+        assertEquals(MapEditResult.SAVED, repository.addMap(seen.path, "https://two.example.org/Maps", "Maps (images)", today))
+        val written = disk.getValue(pagePath)
+        assertTrue(
+            written.contains(
+                "game_maps:\n  - \"Desk | https://desk.example.com/Map\"\n  - \"https://ringofash.wiki.example.com/Maps\"\n" +
+                    "  - \"Maps (images) | https://two.example.org/Maps\"\n---\n"
+            )
+        )
+        assertTrue(written.contains("From the desktop."))
+        assertTrue(written.contains("date_updated: '2026-11-27'"))
+        verify { push.requestPush() }
+
+        assertEquals(MapEditResult.SAVED, repository.makeMainMap(pagePath, "https://two.example.org/Maps", today))
+        assertEquals("https://two.example.org/Maps", repository.page(pagePath)!!.maps.first().url)
+        assertEquals(MapEditResult.SAVED, repository.changeMap(pagePath, "https://two.example.org/Maps", "https://two.example.org/World", "World", today))
+        assertEquals(MapEditResult.SAVED, repository.removeMap(pagePath, "https://desk.example.com/Map", today))
+        assertEquals(
+            listOf("https://two.example.org/World", "https://ringofash.wiki.example.com/Maps"),
+            repository.page(pagePath)!!.maps.map { it.url }
+        )
+        assertEquals("World", repository.page(pagePath)!!.maps.first().given)
+        // What the edit refuses, it doesn't write.
+        val before = disk.getValue(pagePath)
+        assertEquals(MapEditResult.ALREADY_THERE, repository.addMap(pagePath, "https://two.example.org/World", null, today))
+        assertEquals(MapEditResult.NOT_PUBLIC_HTTPS, repository.addMap(pagePath, "http://two.example.org/World", null, today))
+        assertEquals(before, disk.getValue(pagePath))
+    }
+
+    @Test
+    fun `map edits refuse on a read-only device and write nothing`() = runTest {
+        disk[pagePath] = mapPage
+        VaultWriteGate.readOnly = true
+        assertEquals(MapEditResult.READ_ONLY, repository.addMap(pagePath, "https://two.example.org/Maps", null, today))
+        assertEquals(MapEditResult.READ_ONLY, repository.changeMap(pagePath, "https://ringofash.wiki.example.com/Maps", "https://two.example.org/Maps", null, today))
+        assertEquals(MapEditResult.READ_ONLY, repository.removeMap(pagePath, "https://ringofash.wiki.example.com/Maps", today))
+        assertEquals(MapEditResult.READ_ONLY, repository.makeMainMap(pagePath, "https://ringofash.wiki.example.com/Maps", today))
+        assertEquals(mapPage, disk.getValue(pagePath))
+        coVerify(exactly = 0) { files.saveFileLocally(any(), any()) }
+    }
+
+    @Test
+    fun `a vanished page is gone`() = runTest {
+        disk[pagePath] = mapPage
+        assertEquals(MapEditResult.GONE, repository.addMap("30_Areas/Games/Gone/Gone.md", "https://two.example.org/Maps", null, today))
+        // A map no longer on the page is gone too, and nothing is written.
+        assertEquals(MapEditResult.GONE, repository.removeMap(pagePath, "https://not.there.example.com/x", today))
+        assertEquals(MapEditResult.GONE, repository.changeMap(pagePath, "https://not.there.example.com/x", "https://two.example.org/Maps", null, today))
+        assertEquals(mapPage, disk.getValue(pagePath))
+        // A save that fails says so.
+        coEvery { files.saveFileLocally(any(), any()) } throws java.io.IOException("disk full")
+        assertEquals(MapEditResult.FAILED, repository.addMap(pagePath, "https://two.example.org/Maps", null, today))
+        assertEquals(mapPage, disk.getValue(pagePath))
+    }
+
 }
 

@@ -95,6 +95,41 @@ class GamesRepository @Inject constructor(
         }
     }
 
+    // --- Maps (13.3, ME1–ME3) --------------------------------------------------------------
+
+    /** Adds [url] to the page's maps; the page is read from disk at write time and only `game_maps` (and `date_updated`) move. */
+    suspend fun addMap(path: String, url: String, label: String?, today: LocalDate = LocalDate.now()): MapEditResult =
+        editMaps(path) { GameMapEdits.add(it, url, label, today) }
+
+    /** Gives the map at [oldUrl] the address [url] and the label [label], in its place. */
+    suspend fun changeMap(path: String, oldUrl: String, url: String, label: String?, today: LocalDate = LocalDate.now()): MapEditResult =
+        editMaps(path) { GameMapEdits.change(it, oldUrl, url, label, today) }
+
+    suspend fun removeMap(path: String, url: String, today: LocalDate = LocalDate.now()): MapEditResult =
+        editMaps(path) { GameMapEdits.remove(it, url, today) }
+
+    /** Makes [url]'s map the page's main one. */
+    suspend fun makeMainMap(path: String, url: String, today: LocalDate = LocalDate.now()): MapEditResult =
+        editMaps(path) { GameMapEdits.makeMain(it, url, today) }
+
+    private suspend fun editMaps(path: String, edit: (String) -> MapEdit): MapEditResult {
+        if (VaultWriteGate.refuses()) return MapEditResult.READ_ONLY
+        var result = MapEditResult.GONE
+        val saved = editPage(path) { content ->
+            when (val e = edit(content)) {
+                is MapEdit.Saved -> {
+                    result = MapEditResult.SAVED
+                    e.content
+                }
+                is MapEdit.Refused -> {
+                    result = e.reason
+                    content
+                }
+            }
+        }
+        return if (saved) result else if (result == MapEditResult.SAVED) MapEditResult.FAILED else MapEditResult.GONE
+    }
+
     // --- Data files ------------------------------------------------------------------------
 
     suspend fun snapshot(): PsnSnapshot? = load(GameFiles.SNAPSHOT, PsnSnapshot.serializer()).value

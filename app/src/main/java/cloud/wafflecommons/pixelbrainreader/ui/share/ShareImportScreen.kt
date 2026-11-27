@@ -5,6 +5,7 @@ package cloud.wafflecommons.pixelbrainreader.ui.share
 import android.webkit.CookieManager
 import android.webkit.WebChromeClient
 import android.webkit.WebView
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -65,6 +66,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
@@ -74,6 +76,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import cloud.wafflecommons.pixelbrainreader.data.ai.LocalAiManager
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
+import cloud.wafflecommons.pixelbrainreader.data.games.GameMaps
+import cloud.wafflecommons.pixelbrainreader.data.games.GamePage
+import cloud.wafflecommons.pixelbrainreader.data.games.GamesRepository
+import cloud.wafflecommons.pixelbrainreader.data.games.MapEditResult
+import cloud.wafflecommons.pixelbrainreader.data.games.MapOffer
 import cloud.wafflecommons.pixelbrainreader.data.privacy.NetPurpose
 import cloud.wafflecommons.pixelbrainreader.data.privacy.PrivacyLedger
 import cloud.wafflecommons.pixelbrainreader.data.ai.NanoState
@@ -94,13 +102,18 @@ import cloud.wafflecommons.pixelbrainreader.ui.components.EmptyHint
 import cloud.wafflecommons.pixelbrainreader.ui.components.FolderPickerDialog
 import cloud.wafflecommons.pixelbrainreader.ui.components.FormScaffold
 import cloud.wafflecommons.pixelbrainreader.ui.components.SectionCard
+import cloud.wafflecommons.pixelbrainreader.ui.games.GamePickerDialog
+import cloud.wafflecommons.pixelbrainreader.ui.games.MapEditDialog
+import cloud.wafflecommons.pixelbrainreader.ui.games.message
 import cloud.wafflecommons.pixelbrainreader.ui.main.MarkwonContent
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
@@ -119,6 +132,7 @@ class ShareImportViewModel @Inject constructor(
     private val repository: ShareImportRepository,
     private val vaultDiscoveryRepository: VaultDiscoveryRepository,
     private val errorExplainRepository: cloud.wafflecommons.pixelbrainreader.data.work.ErrorExplainRepository,
+    private val games: GamesRepository,
     localAiManager: LocalAiManager
 ) : ViewModel() {
 
@@ -165,7 +179,7 @@ class ShareImportViewModel @Inject constructor(
     fun dismiss() = repository.dismiss()
 
     fun save(title: String, folder: String, editedMarkdown: String?, summarize: Boolean) {
-        if (_saving.value) return
+        if (_saving.value || _addingMap.value) return
         _saving.value = true
         viewModelScope.launch {
             try {
@@ -178,6 +192,68 @@ class ShareImportViewModel @Inject constructor(
                 _saving.value = false
             }
         }
+    }
+
+    // --- A shared link as a game's map (13.3, ME2) --------------------------------------------
+
+    /**
+     * The shared link as a map, when it can be one: a public https address (the same check as the
+     * page's Maps card), the shared title as its label. Nothing else of the shared text is read; a
+     * read-only device is offered nothing.
+     */
+    val mapOffer: StateFlow<MapOffer?> = repository.shared
+        .map { if (VaultWriteGate.readOnly) null else GameMaps.fromShare(it?.url, it?.titleHint) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    private val _gamePages = MutableStateFlow<List<GamePage>>(emptyList())
+
+    /** The game pages the map can go to (the session picker's list). */
+    val gamePages: StateFlow<List<GamePage>> = _gamePages.asStateFlow()
+
+    private val _addingMap = MutableStateFlow(false)
+
+    /** A map is being written to a game's page. */
+    val addingMap: StateFlow<Boolean> = _addingMap.asStateFlow()
+
+    // No replay: an add that ends after the screen left must not close the next share's screen.
+    private val _mapAdded = MutableSharedFlow<String>(extraBufferCapacity = 1)
+
+    /** The game's title, each time the shared link was added to its maps (the screen shows it, then leaves). */
+    val mapAdded: Flow<String> = _mapAdded.asSharedFlow()
+
+    fun loadGamePages() {
+        if (VaultWriteGate.readOnly) return
+        viewModelScope.launch {
+            _gamePages.value = try {
+                games.pages()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                emptyList()
+            }
+        }
+    }
+
+    /** Adds [url] to [page]'s maps (its page read from disk, the address checked again). */
+    fun addAsMap(page: GamePage, url: String, label: String?) {
+        if (_addingMap.value || _saving.value) return
+        _addingMap.value = true
+        viewModelScope.launch {
+            try {
+                val result = games.addMap(page.path, url, label)
+                if (result == MapEditResult.SAVED) _mapAdded.emit(page.title) else _messages.send(result.message(saved = MAP_ADDED))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _messages.send(MapEditResult.FAILED.message(saved = MAP_ADDED))
+            } finally {
+                _addingMap.value = false
+            }
+        }
+    }
+
+    private companion object {
+        const val MAP_ADDED = "Map added"
     }
 }
 
@@ -198,16 +274,30 @@ fun ShareImportScreen(
     val saving by viewModel.saving.collectAsStateWithLifecycle()
     val canSummarize by viewModel.canSummarize.collectAsStateWithLifecycle()
     val folders by viewModel.folders.collectAsStateWithLifecycle()
+    // 13.3 (ME2): the shared link as a game's map.
+    val mapOffer by viewModel.mapOffer.collectAsStateWithLifecycle()
+    val gamePages by viewModel.gamePages.collectAsStateWithLifecycle()
+    val addingMap by viewModel.addingMap.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     val currentOnSaved by rememberUpdatedState(onSaved)
-    LaunchedEffect(Unit) {
-        viewModel.loadFolders()
-        launch { viewModel.saved.collect { currentOnSaved(it) } }
-        viewModel.messages.collect { snackbarHostState.showSnackbar(it) }
-    }
     val close = {
         viewModel.dismiss()
         onClose()
+    }
+    val currentClose by rememberUpdatedState(close)
+    LaunchedEffect(Unit) {
+        viewModel.loadFolders()
+        viewModel.loadGamePages()
+        launch { viewModel.saved.collect { currentOnSaved(it) } }
+        // A map added: said once, then the screen leaves (a share-launched one finishes).
+        launch {
+            viewModel.mapAdded.collect { game ->
+                Toast.makeText(context, "Map added to $game", Toast.LENGTH_SHORT).show()
+                currentClose()
+            }
+        }
+        viewModel.messages.collect { snackbarHostState.showSnackbar(it) }
     }
     BackHandler(onBack = close)
 
@@ -222,6 +312,9 @@ fun ShareImportScreen(
     var summarize by remember(current) { mutableStateOf(true) }
     var pickingFolder by remember { mutableStateOf(false) }
     var browsing by rememberSaveable { mutableStateOf<String?>(null) }
+    // 13.3 (ME2): "Add as a game map" picks the game, then checks the address and the label.
+    var pickingGame by rememberSaveable { mutableStateOf(false) }
+    var mapTarget by rememberSaveable { mutableStateOf<String?>(null) }
     val summaryOffered = canSummarize && current is ShareImport.Article && markdown.length >= ClipSummarizer.MIN_CHARS
 
     browsing?.let { url ->
@@ -244,17 +337,21 @@ fun ShareImportScreen(
         actions = {
             if (current != null && current !is ShareImport.Loading) {
                 Button(
-                    enabled = !saving && title.isNotBlank(), shapes = ButtonDefaults.shapes(),
+                    enabled = !saving && !addingMap && title.isNotBlank(), shapes = ButtonDefaults.shapes(),
                     onClick = { viewModel.save(title, folder, markdown.takeIf { edited }, summarize && summaryOffered) },
                     modifier = Modifier.padding(end = 8.dp)
                 ) { Text(if (current is ShareImport.LinkOnly) "Save link" else "Save") }
             }
         }
     ) {
-        if (saving) {
+        if (saving || addingMap) {
             LinearWavyProgressIndicator(modifier = Modifier.fillMaxWidth())
             Text(
-                if (summarize && summaryOffered) "Summarizing on the device, then saving…" else "Saving…",
+                when {
+                    addingMap -> "Adding the map…"
+                    summarize && summaryOffered -> "Summarizing on the device, then saving…"
+                    else -> "Saving…"
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -296,8 +393,12 @@ fun ShareImportScreen(
                 }
             }
         }
+        // 13.3 (ME2): or keep the link as a game's map, even while the page still loads.
+        if (mapOffer != null && gamePages.isNotEmpty() && !saving && !addingMap) {
+            OutlinedButton(onClick = { pickingGame = true }, shapes = ButtonDefaults.shapes()) { Text("Add as a game map") }
+        }
         // Or hand it to a desktop session instead of keeping it as a note (C13).
-        if (current != null && current !is ShareImport.Loading && !saving) {
+        if (current != null && current !is ShareImport.Loading && !saving && !addingMap) {
             OutlinedButton(onClick = {
                 val text = current.handoffText()
                 viewModel.dismiss()
@@ -307,6 +408,32 @@ fun ShareImportScreen(
     }
     if (pickingFolder) {
         FolderPickerDialog(folders = folders, onPick = { folder = it; pickingFolder = false }, onDismiss = { pickingFolder = false })
+    }
+    val offer = mapOffer
+    if (pickingGame && offer != null) {
+        GamePickerDialog(
+            pages = gamePages,
+            title = "Add the map to",
+            onPick = { page, _ ->
+                pickingGame = false
+                mapTarget = page.path
+            },
+            onDismiss = { pickingGame = false }
+        )
+    }
+    val target = mapTarget?.let { path -> gamePages.firstOrNull { it.path == path } }
+    if (offer != null && target != null) {
+        MapEditDialog(
+            title = "Add the map to ${target.title}",
+            initialUrl = offer.url,
+            initialLabel = offer.label,
+            confirmLabel = "Add",
+            onSave = { url, label ->
+                mapTarget = null
+                viewModel.addAsMap(target, url, label)
+            },
+            onDismiss = { mapTarget = null }
+        )
     }
 }
 

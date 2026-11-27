@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.EditLocationAlt
 import androidx.compose.material.icons.rounded.Layers
 import androidx.compose.material.icons.rounded.OpenInBrowser
 import androidx.compose.material.icons.rounded.Refresh
@@ -27,6 +28,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -35,11 +38,13 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,9 +58,12 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.games.GameMap
+import cloud.wafflecommons.pixelbrainreader.data.games.GameMaps
 import cloud.wafflecommons.pixelbrainreader.data.games.GameSessionController
 import cloud.wafflecommons.pixelbrainreader.data.games.GamesRepository
+import cloud.wafflecommons.pixelbrainreader.data.games.MapEditResult
 import cloud.wafflecommons.pixelbrainreader.data.privacy.NetPurpose
 import cloud.wafflecommons.pixelbrainreader.data.privacy.PrivacyLedger
 import cloud.wafflecommons.pixelbrainreader.data.web.GuardedWebViewClient
@@ -64,9 +72,12 @@ import cloud.wafflecommons.pixelbrainreader.ui.components.EmptyHint
 import cloud.wafflecommons.pixelbrainreader.ui.components.FormScaffold
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -78,12 +89,21 @@ data class GameMapUiState(
     val maps: List<GameMap> = emptyList(),
     val selected: Int = 0,
     /** Opened from the session's notification with no game running any more. */
-    val noGame: Boolean = false
+    val noGame: Boolean = false,
+    /** The game's page (13.3): where a map edit goes; empty without a game. */
+    val path: String = "",
+    /**
+     * A read-only device changes no map (13.3, ME3): the browser's controls only hide, a full-screen
+     * browser having no room for the notice.
+     */
+    val readOnly: Boolean = VaultWriteGate.readOnly
 )
 
 /**
  * A game's map (13.2, route `game_map?page=&index=`): the page's `game_maps`, or, without a page,
  * the running session's game (the Live Update's "Open the map" carries a fixed key, no path).
+ * 13.3 (ME3): the map shown can be changed from here, given the page the browser is at, or kept
+ * beside as another map; each edit reads the page from disk and names the map by its address.
  */
 @HiltViewModel
 class GameMapViewModel @Inject constructor(
@@ -98,6 +118,11 @@ class GameMapViewModel @Inject constructor(
     private val _state = MutableStateFlow(GameMapUiState())
     val state: StateFlow<GameMapUiState> = _state.asStateFlow()
 
+    private val _messages = Channel<String>(Channel.BUFFERED)
+
+    /** What each map edit did (13.3), for the browser's snackbar. */
+    val messages: Flow<String> = _messages.receiveAsFlow()
+
     init {
         viewModelScope.launch {
             try {
@@ -110,7 +135,8 @@ class GameMapViewModel @Inject constructor(
                         loading = false,
                         title = page.title,
                         maps = page.maps,
-                        selected = indexArg.coerceIn(0, (page.maps.size - 1).coerceAtLeast(0))
+                        selected = indexArg.coerceIn(0, (page.maps.size - 1).coerceAtLeast(0)),
+                        path = path
                     )
                 }
             } catch (e: CancellationException) {
@@ -122,41 +148,156 @@ class GameMapViewModel @Inject constructor(
     }
 
     fun select(index: Int) = _state.update { it.copy(selected = index.coerceIn(0, (it.maps.size - 1).coerceAtLeast(0))) }
+
+    /** The map shown given the address [url] and the label [label], in its place. */
+    fun change(url: String, label: String?) {
+        val selected = selectedMap() ?: return
+        edit(saved = "Map saved", select = url) { path -> games.changeMap(path, selected.url, url, label) }
+    }
+
+    /**
+     * The map shown takes the address the browser is at now ([currentUrl], after moving inside the
+     * site); its typed label stays.
+     */
+    fun useCurrentPage(currentUrl: String?) {
+        val selected = selectedMap() ?: return
+        val address = currentUrl?.trim().orEmpty()
+        if (!GameMaps.accepts(address)) {
+            viewModelScope.launch { _messages.send("This page's address can't be a map: only public https addresses.") }
+            return
+        }
+        edit(saved = "Map saved", select = address) { path -> games.changeMap(path, selected.url, address, selected.given) }
+    }
+
+    /** [url] added to the game's maps, then shown. */
+    fun addMap(url: String, label: String?) {
+        edit(saved = "Map added", select = url) { path -> games.addMap(path, url, label) }
+    }
+
+    private fun selectedMap(): GameMap? = _state.value.let { it.maps.getOrNull(it.selected) }
+
+    /** Runs one edit on the game's page and says how it went; once saved, the page is read again and [select] shown. */
+    private fun edit(saved: String, select: String, call: suspend (path: String) -> MapEditResult) {
+        val path = _state.value.path
+        if (path.isEmpty()) return
+        viewModelScope.launch {
+            val result = try {
+                call(path)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                MapEditResult.FAILED
+            }
+            if (result == MapEditResult.SAVED) reload(path, select.trim())
+            _messages.send(result.message(saved))
+        }
+    }
+
+    /** The page's maps read again, the map at [url] selected (its place may have moved). */
+    private suspend fun reload(path: String, url: String) {
+        val page = try {
+            games.page(path)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        }
+        if (page == null) return
+        val index = page.maps.indexOfFirst { it.url == url }
+        _state.update {
+            it.copy(
+                title = page.title,
+                maps = page.maps,
+                selected = if (index >= 0) index else it.selected.coerceIn(0, (page.maps.size - 1).coerceAtLeast(0))
+            )
+        }
+    }
 }
 
 /**
  * The map browser (13.2): the game's map in the app, view-only (no account; what the owner finds
  * goes in the page's checklists), guarded like the share screen's view (public addresses only),
  * counted in the privacy ledger, the screen kept on while it shows (a second screen during play).
- * Back walks the page's history before leaving.
+ * Back walks the page's history before leaving. 13.3: Change map (this map's address or label,
+ * the page shown now, or another map), except on a read-only device.
  */
 @Composable
 fun GameMapScreen(onBack: () -> Unit, onOpenGames: () -> Unit, viewModel: GameMapViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val snackbar = remember { SnackbarHostState() }
+    LaunchedEffect(Unit) { viewModel.messages.collect { snackbar.showSnackbar(it) } }
+    var adding by rememberSaveable { mutableStateOf(false) }
     val map = state.maps.getOrNull(state.selected)
     if (map == null) {
-        FormScaffold(title = state.title.ifEmpty { "Map" }, icon = Icons.Rounded.Map, onBack = onBack) {
+        val canAdd = !state.readOnly && state.path.isNotEmpty()
+        FormScaffold(title = state.title.ifEmpty { "Map" }, icon = Icons.Rounded.Map, onBack = onBack, snackbarHostState = snackbar) {
             if (!state.loading) {
                 EmptyHint(
-                    if (state.noGame) "No game is running: open a game's page to see its map."
-                    else "No map for this game yet: add one to game_maps in its note."
+                    when {
+                        state.noGame -> "No game is running: open a game's page to see its map."
+                        canAdd -> "No map for this game yet: add one here or on the game's page, or share a map page to the app from your browser."
+                        else -> "No map for this game yet."
+                    }
                 )
                 if (state.noGame) TextButton(onClick = onOpenGames, shapes = ButtonDefaults.shapes()) { Text("Open Games") }
+                if (canAdd) TextButton(onClick = { adding = true }, shapes = ButtonDefaults.shapes()) { Text("Add a map") }
             }
+        }
+        if (adding && canAdd) {
+            MapEditDialog(
+                title = "Add a map",
+                initialUrl = "",
+                initialLabel = null,
+                confirmLabel = "Add",
+                onSave = { url, label ->
+                    adding = false
+                    viewModel.addMap(url, label)
+                },
+                onDismiss = { adding = false }
+            )
         }
         return
     }
-    MapBrowser(title = state.title, map = map, maps = state.maps, onSelect = viewModel::select, onBack = onBack)
+    MapBrowser(
+        title = state.title,
+        map = map,
+        maps = state.maps,
+        readOnly = state.readOnly,
+        snackbar = snackbar,
+        onSelect = viewModel::select,
+        onChange = viewModel::change,
+        onUseCurrentPage = viewModel::useCurrentPage,
+        onAddMap = viewModel::addMap,
+        onBack = onBack
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MapBrowser(title: String, map: GameMap, maps: List<GameMap>, onSelect: (Int) -> Unit, onBack: () -> Unit) {
+private fun MapBrowser(
+    title: String,
+    map: GameMap,
+    maps: List<GameMap>,
+    readOnly: Boolean,
+    snackbar: SnackbarHostState,
+    onSelect: (Int) -> Unit,
+    onChange: (url: String, label: String?) -> Unit,
+    onUseCurrentPage: (currentUrl: String?) -> Unit,
+    onAddMap: (url: String, label: String?) -> Unit,
+    onBack: () -> Unit
+) {
     val holder = remember { MapViewHolder() }
     val context = LocalContext.current
     var progress by remember(map.url) { mutableIntStateOf(0) }
     var failed by remember(map.url) { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
+    // 13.3 (ME3): the Change map menu, the browser's address and title read as it opens.
+    var editMenu by remember { mutableStateOf(false) }
+    var pageUrl by remember { mutableStateOf<String?>(null) }
+    var pageTitle by remember { mutableStateOf<String?>(null) }
+    var changing by rememberSaveable { mutableStateOf(false) }
+    var addUrl by rememberSaveable { mutableStateOf<String?>(null) }
+    var addLabel by rememberSaveable { mutableStateOf<String?>(null) }
     // The privacy ledger (13.0, X3): the map shown here is one call, from open to close.
     DisposableEffect(map.url) {
         val token = PrivacyLedger.begin(PrivacyLedger.hostOf(map.url), NetPurpose.MAPS)
@@ -192,6 +333,40 @@ private fun MapBrowser(title: String, map: GameMap, maps: List<GameMap>, onSelec
                             }
                         }
                     }
+                    if (!readOnly) {
+                        Box {
+                            IconButton(onClick = {
+                                pageUrl = holder.view?.url
+                                pageTitle = holder.view?.title
+                                editMenu = true
+                            }, shapes = IconButtonDefaults.shapes()) { Icon(Icons.Rounded.EditLocationAlt, contentDescription = "Change map") }
+                            DropdownMenu(expanded = editMenu, onDismissRequest = { editMenu = false }) {
+                                DropdownMenuItem(
+                                    text = { Text("Change this map…") },
+                                    onClick = {
+                                        editMenu = false
+                                        changing = true
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Use this page") },
+                                    enabled = pageUrl != null && pageUrl != map.url,
+                                    onClick = {
+                                        editMenu = false
+                                        onUseCurrentPage(pageUrl)
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Add as another map…") },
+                                    onClick = {
+                                        editMenu = false
+                                        addUrl = pageUrl ?: map.url
+                                        addLabel = GameMaps.cleanLabel(pageTitle)
+                                    }
+                                )
+                            }
+                        }
+                    }
                     IconButton(onClick = {
                         failed = false
                         holder.view?.reload()
@@ -204,7 +379,8 @@ private fun MapBrowser(title: String, map: GameMap, maps: List<GameMap>, onSelec
                     }, shapes = IconButtonDefaults.shapes()) { Icon(Icons.Rounded.OpenInBrowser, contentDescription = "Open in the browser") }
                 }
             )
-        }
+        },
+        snackbarHost = { SnackbarHost(snackbar) }
     ) { padding ->
         Box(modifier = Modifier.padding(padding).fillMaxSize()) {
             key(map.url) {
@@ -228,7 +404,8 @@ private fun MapBrowser(title: String, map: GameMap, maps: List<GameMap>, onSelec
                         }
                     },
                     onRelease = { view ->
-                        holder.view = null
+                        // A new map's view may already be in the holder: only this one leaves it.
+                        if (holder.view === view) holder.view = null
                         view.stopLoading()
                         view.destroy()
                     },
@@ -246,6 +423,36 @@ private fun MapBrowser(title: String, map: GameMap, maps: List<GameMap>, onSelec
                 }
             }
         }
+    }
+
+    if (changing && !readOnly) {
+        MapEditDialog(
+            title = "Change this map",
+            initialUrl = map.url,
+            initialLabel = map.given,
+            onSave = { url, label ->
+                changing = false
+                onChange(url, label)
+            },
+            onDismiss = { changing = false }
+        )
+    }
+    addUrl?.takeIf { !readOnly }?.let { url ->
+        MapEditDialog(
+            title = "Add another map",
+            initialUrl = url,
+            initialLabel = addLabel,
+            confirmLabel = "Add",
+            onSave = { address, label ->
+                addUrl = null
+                addLabel = null
+                onAddMap(address, label)
+            },
+            onDismiss = {
+                addUrl = null
+                addLabel = null
+            }
+        )
     }
 }
 

@@ -63,12 +63,22 @@ class ShareImportRepository @Inject constructor(
     /** Bumped by every share: the screen opens on it, even while an older import is still parked. */
     val generation: StateFlow<Int> = _generation.asStateFlow()
 
+    private val _shared = MutableStateFlow<SharedContent?>(null)
+
+    /**
+     * What the current share holds, as it was shared (13.3, ME2: the share screen offers its link as a
+     * game map); set at once by [start], kept while the page loads or fails, cleared by [dismiss] and
+     * by a [save] that went through.
+     */
+    val shared: StateFlow<SharedContent?> = _shared.asStateFlow()
+
     private var job: Job? = null
     private var lastShare: Pair<SharedContent, String?>? = null
     private var lastPassage: String? = null
 
     /** Imports what was shared: the page when the text holds a link, the text (or the HTML selection) otherwise. */
     fun start(shared: SharedContent, html: String?) {
+        _shared.value = shared
         job?.cancel()
         lastShare = shared to html
         val url = shared.url
@@ -135,6 +145,7 @@ class ShareImportRepository @Inject constructor(
         job?.cancel()
         lastShare = null
         lastPassage = null
+        _shared.value = null
         _state.value = null
     }
 
@@ -165,6 +176,7 @@ class ShareImportRepository @Inject constructor(
         if (_state.value === current) {
             lastShare = null
             lastPassage = null
+            _shared.value = null
             _state.value = null
         }
         return path

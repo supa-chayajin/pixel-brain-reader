@@ -10,6 +10,7 @@ import cloud.wafflecommons.pixelbrainreader.data.games.GameDays
 import cloud.wafflecommons.pixelbrainreader.data.games.GameDayLine
 import cloud.wafflecommons.pixelbrainreader.data.games.GameHistoryEntry
 import cloud.wafflecommons.pixelbrainreader.data.games.GameHours
+import cloud.wafflecommons.pixelbrainreader.data.games.GameMapEdits
 import cloud.wafflecommons.pixelbrainreader.data.games.GameNightOutcome
 import cloud.wafflecommons.pixelbrainreader.data.games.GamePage
 import cloud.wafflecommons.pixelbrainreader.data.games.GamePages
@@ -17,16 +18,20 @@ import cloud.wafflecommons.pixelbrainreader.data.games.GameSessionController
 import cloud.wafflecommons.pixelbrainreader.data.games.GameSessionRecord
 import cloud.wafflecommons.pixelbrainreader.data.games.GameState
 import cloud.wafflecommons.pixelbrainreader.data.games.GamesRepository
+import cloud.wafflecommons.pixelbrainreader.data.games.MapEditResult
 import cloud.wafflecommons.pixelbrainreader.data.games.RunningGame
 import cloud.wafflecommons.pixelbrainreader.data.games.TrophyRecord
 import cloud.wafflecommons.pixelbrainreader.data.games.TrophySetFile
 import cloud.wafflecommons.pixelbrainreader.data.system.AppClock
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -43,6 +48,8 @@ data class GamePageUiState(
     val trophiesEarned: Int = 0,
     val trophiesTotal: Int = 0,
     val trophies: List<TrophyLine> = emptyList(),
+    /** `game_maps` entries the app can't open, kept in the note as typed (13.3, ME1). */
+    val unreadableMaps: Int = 0,
     val checklists: List<ChecklistSection> = emptyList(),
     /** The page's own text, without its checklists and 🏆 section (shown as cards). */
     val prose: String = "",
@@ -76,6 +83,11 @@ class GamePageViewModel @Inject constructor(
 
     private val _state = MutableStateFlow(GamePageUiState())
     val state: StateFlow<GamePageUiState> = _state.asStateFlow()
+
+    private val _messages = Channel<String>(Channel.BUFFERED)
+
+    /** What each map edit did (13.3, ME1), for the page's snackbar. */
+    val messages: Flow<String> = _messages.receiveAsFlow()
 
     init {
         viewModelScope.launch {
@@ -118,6 +130,7 @@ class GamePageViewModel @Inject constructor(
                     trophiesEarned = trophies.count { t -> t.earnedOn != null },
                     trophiesTotal = trophies.size,
                     trophies = trophies,
+                    unreadableMaps = GameMapEdits.unreadable(content),
                     checklists = GameChecklists.sections(content),
                     prose = cloud.wafflecommons.pixelbrainreader.data.games.GamePages.prose(content),
                     iconUrl = titles.firstNotNullOfOrNull { t -> t.imageUrl },
@@ -143,6 +156,36 @@ class GamePageViewModel @Inject constructor(
 
     fun toggle(line: String) {
         viewModelScope.launch { games.editPage(path) { content -> GameChecklists.toggle(content, line) ?: content } }
+    }
+
+    // --- Maps (13.3, ME1): each edit reads the page from disk and names the map by its address ---
+
+    fun addMap(url: String, label: String?) =
+        editMaps(saved = "Map added") { games.addMap(path, url, label, clock.today.value) }
+
+    /** The map at [oldUrl] given the address [url] and the label [label], in its place. */
+    fun changeMap(oldUrl: String, url: String, label: String?) =
+        editMaps(saved = "Map saved") { games.changeMap(path, oldUrl, url, label, clock.today.value) }
+
+    fun removeMap(url: String) =
+        editMaps(saved = "Map removed") { games.removeMap(path, url, clock.today.value) }
+
+    /** [url]'s map moved first: the game's main map. */
+    fun makeMainMap(url: String) =
+        editMaps(saved = "Main map set") { games.makeMainMap(path, url, clock.today.value) }
+
+    /** Runs one map edit and says how it went; a saved edit reloads the page through [GamesRepository.changes]. */
+    private fun editMaps(saved: String, edit: suspend () -> MapEditResult) {
+        viewModelScope.launch {
+            val result = try {
+                edit()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                MapEditResult.FAILED
+            }
+            _messages.send(result.message(saved))
+        }
     }
 
     /** Starts a session, [minutesAgo] earlier when the owner was already playing (13.1). */

@@ -21,6 +21,7 @@ import androidx.compose.material.icons.rounded.EmojiEvents
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Map
 import androidx.compose.material.icons.rounded.MoreTime
+import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.QuestionAnswer
 import androidx.compose.material.icons.rounded.SportsEsports
@@ -37,11 +38,15 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -54,9 +59,11 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import cloud.wafflecommons.pixelbrainreader.data.games.GameMap
 import cloud.wafflecommons.pixelbrainreader.data.games.GamePages
 import cloud.wafflecommons.pixelbrainreader.data.games.GameSessionRecord
 import cloud.wafflecommons.pixelbrainreader.data.games.GamesRepository
@@ -95,6 +102,8 @@ fun GamePageScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val snackbar = remember { SnackbarHostState() }
+    LaunchedEffect(Unit) { viewModel.messages.collect { snackbar.showSnackbar(it) } }
     var reveal by rememberSaveable { mutableStateOf(false) }
     // One hidden item revealed at a time (RFC-009 §4.2: "??? until reached or tapped"); Reveal shows them all.
     var revealedKeys by rememberSaveable { mutableStateOf("") }
@@ -108,6 +117,18 @@ fun GamePageScreen(
     var adding by rememberSaveable { mutableStateOf(false) }
     var editingId by rememberSaveable { mutableStateOf<String?>(null) }
     var editingPlayedBefore by rememberSaveable { mutableStateOf(false) }
+    // 13.3 (ME1): the maps card's dialogs. A map is named by its address, never by its place.
+    var addingMap by rememberSaveable { mutableStateOf(false) }
+    var changingMap by rememberSaveable { mutableStateOf<String?>(null) }
+    var removingMap by rememberSaveable { mutableStateOf<String?>(null) }
+    // A map that left the page meanwhile (a sync, a desktop edit) takes its dialog along.
+    LaunchedEffect(page?.maps) {
+        val urls = page?.maps?.map { it.url } ?: return@LaunchedEffect
+        val changing = changingMap
+        if (changing != null && changing !in urls) changingMap = null
+        val removing = removingMap
+        if (removing != null && removing !in urls) removingMap = null
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
     FormScaffold(title = page?.title ?: "Game", onBack = onBack, icon = Icons.Rounded.SportsEsports) {
@@ -161,6 +182,17 @@ fun GamePageScreen(
                 )
             }
         }
+
+        MapsCard(
+            maps = page.maps,
+            unreadable = state.unreadableMaps,
+            readOnly = state.readOnly,
+            onOpen = { index -> onOpenMap(page.path, index) },
+            onAdd = { addingMap = true },
+            onChange = { map -> changingMap = map.url },
+            onMakeMain = { map -> viewModel.makeMainMap(map.url) },
+            onRemove = { map -> removingMap = map.url }
+        )
 
         if (state.trophies.isNotEmpty()) {
             SectionCard(
@@ -238,7 +270,7 @@ fun GamePageScreen(
             }
         }
         // Room for the floating toolbar under the last card.
-        Spacer(Modifier.height(88.dp))
+        Spacer(Modifier.height(TOOLBAR_ROOM))
     }
     // 13.2, Material 3 Expressive: the game's actions in a floating toolbar, play/stop as its FAB.
     page?.let { game ->
@@ -253,6 +285,8 @@ fun GamePageScreen(
             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = NavBarClearance)
         )
     }
+    // 13.3: what a map edit did, above the floating toolbar (the scaffold's own host sits under it).
+    SnackbarHost(snackbar, modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = NavBarClearance + TOOLBAR_ROOM))
     }
 
     if (adding) {
@@ -291,6 +325,50 @@ fun GamePageScreen(
         )
     }
 
+    // 13.3 (ME1): the maps card's dialogs; the repository reads the page from disk and checks again.
+    if (addingMap && page != null && !state.readOnly) {
+        MapEditDialog(
+            title = "Add a map",
+            initialUrl = "",
+            initialLabel = null,
+            confirmLabel = "Add",
+            onSave = { url, label ->
+                addingMap = false
+                viewModel.addMap(url, label)
+            },
+            onDismiss = { addingMap = false }
+        )
+    }
+    changingMap?.let { url -> page?.maps?.firstOrNull { it.url == url } }?.takeIf { !state.readOnly }?.let { map ->
+        MapEditDialog(
+            title = "Change this map",
+            initialUrl = map.url,
+            initialLabel = map.given,
+            onSave = { url, label ->
+                changingMap = null
+                viewModel.changeMap(map.url, url, label)
+            },
+            onDismiss = { changingMap = null }
+        )
+    }
+    removingMap?.let { url -> page?.maps?.firstOrNull { it.url == url } }?.takeIf { !state.readOnly }?.let { map ->
+        AlertDialog(
+            onDismissRequest = { removingMap = null },
+            title = { Text("Remove this map?") },
+            text = { Text("${map.label} · ${map.site} leaves this game's maps. The site itself isn't touched.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        removingMap = null
+                        viewModel.removeMap(map.url)
+                    },
+                    shapes = ButtonDefaults.shapes()
+                ) { Text("Remove", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { removingMap = null }, shapes = ButtonDefaults.shapes()) { Text("Cancel") } }
+        )
+    }
+
     if (state.askAccess) {
         GameNightAccessDialog(
             onGrant = {
@@ -304,6 +382,132 @@ fun GamePageScreen(
 
 /** The sessions the page lists (newest first); the Timeline lines go on below them. */
 private const val SESSIONS_SHOWN = 60
+
+/** The floating toolbar's room under the last card, and the snackbar's lift above it. */
+private val TOOLBAR_ROOM = 88.dp
+
+/**
+ * The page's maps (13.3, ME1): label · site, the main one first. Add, and per map Change, Make
+ * main and Remove; a tap opens it in the map browser. A read-only device lists them, tappable,
+ * with the notice and no controls.
+ */
+@Composable
+private fun MapsCard(
+    maps: List<GameMap>,
+    unreadable: Int,
+    readOnly: Boolean,
+    onOpen: (Int) -> Unit,
+    onAdd: () -> Unit,
+    onChange: (GameMap) -> Unit,
+    onMakeMain: (GameMap) -> Unit,
+    onRemove: (GameMap) -> Unit
+) {
+    SectionCard(
+        title = "Maps",
+        icon = Icons.Rounded.Map,
+        subtitle = listOfNotNull(
+            if (maps.isNotEmpty()) "The first one is the main map" else null,
+            if (unreadable > 0) "$unreadable kept in the note that the app can't open" else null
+        ).joinToString(" · ").ifEmpty { null },
+        trailing = {
+            if (!readOnly) TextButton(onClick = onAdd, shapes = ButtonDefaults.shapes()) { Text("Add") }
+        }
+    ) {
+        if (readOnly) ReadOnlyNotice()
+        if (maps.isEmpty()) {
+            EmptyHint(
+                if (readOnly) "No map yet."
+                else "No map yet. Add a map's address here, or share a map page to the app from your browser."
+            )
+        }
+        maps.forEachIndexed { index, map ->
+            MapRow(
+                map = map,
+                main = index == 0,
+                readOnly = readOnly,
+                onOpen = { onOpen(index) },
+                onChange = { onChange(map) },
+                onMakeMain = if (index > 0) ({ onMakeMain(map) }) else null,
+                onRemove = { onRemove(map) }
+            )
+        }
+    }
+}
+
+/** One map of the card: a tap opens it; the menu changes it ([onMakeMain] null for the main one). */
+@Composable
+private fun MapRow(
+    map: GameMap,
+    main: Boolean,
+    readOnly: Boolean,
+    onOpen: () -> Unit,
+    onChange: () -> Unit,
+    onMakeMain: (() -> Unit)?,
+    onRemove: () -> Unit
+) {
+    var menu by remember { mutableStateOf(false) }
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier
+                .weight(1f)
+                .clip(MaterialTheme.shapes.medium)
+                .clickable(onClick = onOpen)
+                .padding(horizontal = 4.dp, vertical = 10.dp)
+        ) {
+            Text(
+                "${map.label} · ${map.site}",
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false)
+            )
+            if (main) {
+                Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = MaterialTheme.shapes.small) {
+                    Text(
+                        "Main",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                    )
+                }
+            }
+        }
+        if (!readOnly) {
+            Box {
+                IconButton(onClick = { menu = true }, shapes = IconButtonDefaults.shapes()) {
+                    Icon(Icons.Rounded.MoreVert, contentDescription = "Map actions")
+                }
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    DropdownMenuItem(
+                        text = { Text("Change") },
+                        onClick = {
+                            menu = false
+                            onChange()
+                        }
+                    )
+                    if (onMakeMain != null) {
+                        DropdownMenuItem(
+                            text = { Text("Make main") },
+                            onClick = {
+                                menu = false
+                                onMakeMain()
+                            }
+                        )
+                    }
+                    DropdownMenuItem(
+                        text = { Text("Remove") },
+                        onClick = {
+                            menu = false
+                            onRemove()
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
 
 /**
  * Adds a session the owner forgot to start ([initial] null: day, start, length) or fixes one
@@ -435,7 +639,7 @@ private val HHMM: java.time.format.DateTimeFormatter = java.time.format.DateTime
 private fun GameToolbar(
     running: Boolean,
     readOnly: Boolean,
-    maps: List<cloud.wafflecommons.pixelbrainreader.data.games.GameMap>,
+    maps: List<GameMap>,
     onStart: (Int) -> Unit,
     onStop: () -> Unit,
     onOpenMap: (Int) -> Unit,
