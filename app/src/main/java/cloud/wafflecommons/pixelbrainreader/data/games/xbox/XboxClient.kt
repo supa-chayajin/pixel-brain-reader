@@ -226,17 +226,23 @@ class XboxClient(private val transport: XboxTransport, private val clientId: Str
 
     /**
      * MinutesPlayed per title id, ≤ 50 stats a call; a failed call drops only its titles. A title
-     * asks its own id and its modern id (a 360 game's minutes may sit under the latter); the
-     * answer is read by title id, else by service config id.
+     * asks its own id and its modern id (a 360 game's minutes may sit under the latter) in the same
+     * call, so a failed call never makes it switch counters for a sync; the answer is read by title
+     * id, else by service config id. A modern id's counter goes to a title only when the history
+     * lists no title of that id, and to one title only (the smallest id when several name it): one
+     * game's minutes are never counted twice.
      */
     suspend fun minutesPlayed(session: XboxSession, titles: List<XboxTitle>): Map<String, Long> {
-        val ids = titles.flatMap { t ->
+        // Each title's ids together, every id asked once.
+        val asked = HashSet<String>()
+        val groups = titles.map { t ->
             listOfNotNull(t.titleId.takeIf { it.isNotBlank() }, t.modernTitleId?.takeIf { it.isNotBlank() && it != t.titleId })
-        }.distinct()
-        if (ids.isEmpty()) return emptyMap()
+                .filter { asked.add(it) }
+        }.filter { it.isNotEmpty() }
+        if (groups.isEmpty()) return emptyMap()
         val byScid = titles.mapNotNull { t -> t.serviceConfigId?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }?.let { it to t.titleId } }.toMap()
         val values = HashMap<String, Long>()
-        for (chunk in ids.chunked(STATS_BATCH)) {
+        for (chunk in batches(groups)) {
             val body = buildJsonObject {
                 put("arrangebyfield", "xuid")
                 putJsonArray("xuids") { add(session.xuid) }
@@ -276,7 +282,33 @@ class XboxClient(private val transport: XboxTransport, private val clientId: Str
                     values[id] = minutes
                 }
         }
-        return titles.mapNotNull { t -> (values[t.titleId] ?: t.modernTitleId?.let(values::get))?.let { t.titleId to it } }.toMap()
+        val listed = titles.mapTo(HashSet()) { it.titleId }
+        // A modern id several titles name goes to one of them, the same at every sync: the smallest
+        // id, never the history's order, which moves with play (a counter that changed hands would
+        // leave its old count frozen on the title it left).
+        val holder = HashMap<String, String>()
+        titles.forEach { t ->
+            val modern = t.modernTitleId?.takeIf { it.isNotBlank() && it != t.titleId } ?: return@forEach
+            val held = holder[modern]
+            if (held == null || t.titleId < held) holder[modern] = t.titleId
+        }
+        return titles.mapNotNull { t ->
+            val own = values[t.titleId]
+            // The modern id's counter only when no title of the history is that id (the counter is
+            // that title's) and this title holds it.
+            val modern = t.modernTitleId?.takeIf { it != t.titleId && it !in listed && holder[it] == t.titleId }?.let(values::get)
+            (own ?: modern)?.let { t.titleId to it }
+        }.toMap()
+    }
+
+    /** [groups] (a title's ids) packed in calls of at most [STATS_BATCH] stats, a group never split between two. */
+    private fun batches(groups: List<List<String>>): List<List<String>> {
+        val out = mutableListOf<MutableList<String>>()
+        for (group in groups) {
+            val last = out.lastOrNull()
+            if (last != null && last.size + group.size <= STATS_BATCH) last.addAll(group) else out.add(group.toMutableList())
+        }
+        return out
     }
 
     /** [sourceVersion] 2: contract 2, paged; 1: the 360 pair merged; 0: nothing, no call. */

@@ -14,6 +14,7 @@ import cloud.wafflecommons.pixelbrainreader.data.games.PsnTitleState
 import cloud.wafflecommons.pixelbrainreader.data.sync.GitSyncCoordinator
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.coVerifyOrder
 import io.mockk.mockk
 import io.mockk.slot
 import kotlinx.coroutines.test.runTest
@@ -38,6 +39,7 @@ class PsnSyncTest {
         coEvery { configured } returns true
         coEvery { isConnected() } returns true
         coEvery { accessToken(any(), any()) } returns "ACCESS"
+        coEvery { baselinePending() } returns false
     }
     private val client: PsnClient = mockk {
         coEvery { playedGames("ACCESS") } returns listOf(
@@ -101,6 +103,70 @@ class PsnSyncTest {
         // Today's line waits for the burn, on a board that now exists: only a past day's note is edited here.
         coVerify(exactly = 0) { games.applyPastDay(any(), any()) }
         coVerify { dashboard.ensureDay(LocalDate.of(2026, 11, 14)) }
+    }
+
+    @Test
+    fun `a baseline whose first sync didn't finish makes the next run one, until a snapshot is saved`() = runTest {
+        // Connect's first sync stopped (no network, or the page left): the sign-in's mark is still there.
+        coEvery { account.baselinePending() } returns true
+        coEvery { games.snapshot() } returns PsnSnapshot(
+            "2026-10-01T22:40:00Z",
+            listOf(PsnTitleState("PPSA1", "RING OF ASH", playSeconds = 2 * 3600L, trophyLookedUp = true))
+        )
+        coEvery { client.playedGames("ACCESS") } throws PsnException(PsnException.Kind.NETWORK, "No network.")
+
+        assertTrue(sync.sync(now, zone).isFailure)
+        coVerify(exactly = 0) { games.saveSnapshot(any()) }
+        coVerify(exactly = 0) { account.baselineSaved() }
+
+        // The nightly run (no baseline passed) is the baseline: the weeks since the Disconnect are no session.
+        coEvery { client.playedGames("ACCESS") } returns listOf(
+            PsnPlayedTitle(titleId = "PPSA1", name = "RING OF ASH", category = "ps5_native_game", playDuration = "PT12H", lastPlayedDateTime = "2026-11-14T22:30:00Z")
+        )
+        coEvery { games.saveSnapshot(any()) } returns false
+        assertTrue(sync.sync(now, zone).isSuccess)
+        coVerify { games.addSessions(emptyList()) }
+        // A snapshot that couldn't be written ends nothing: the next run is a baseline again.
+        coVerify(exactly = 0) { account.baselineSaved() }
+
+        coEvery { games.saveSnapshot(any()) } returns true
+        assertTrue(sync.sync(now, zone).isSuccess)
+        coVerify(exactly = 0) { games.addSessions(match { it.isNotEmpty() }) }
+        coVerifyOrder {
+            games.saveSnapshot(any())
+            account.baselineSaved()
+        }
+    }
+
+    @Test
+    fun `a new sign-in's first sync is a baseline, whatever snapshot it finds`() = runTest {
+        // The snapshot from before a Disconnect: the play since is not one session per title.
+        coEvery { games.snapshot() } returns PsnSnapshot(
+            "2026-10-01T22:40:00Z",
+            listOf(PsnTitleState("PPSA1", "RING OF ASH", playSeconds = 2 * 3600L, trophyLookedUp = true))
+        )
+
+        val result = sync.sync(now, zone, baseline = true)
+
+        assertTrue(result.isSuccess)
+        assertEquals(0, result.getOrThrow().sessions)
+        coVerify { games.addSessions(emptyList()) }
+        // Everything else is saved as usual, the snapshot (where the count starts) last.
+        coVerifyOrder {
+            games.createPages(any())
+            games.updateLinks(any())
+            games.saveSnapshot(match { it.syncedAt == "2026-11-14T22:40:00Z" && it.titles.single().playSeconds == 12 * 3600L })
+            // The baseline ends once its snapshot is on disk.
+            account.baselineSaved()
+        }
+        coVerify(exactly = 0) { dashboard.ensureDay(any()) }
+        coVerify { account.setStatus(PsnStatus(true, now)) }
+
+        // The nightly runs and Sync now pass no baseline: the same snapshot gives the play since as a session.
+        val added = slot<List<GameSessionRecord>>()
+        coEvery { games.addSessions(capture(added)) } returns setOf(LocalDate.of(2026, 11, 14))
+        assertTrue(sync.sync(now, zone).isSuccess)
+        assertEquals(600, added.captured.single().minutes)
     }
 
     @Test

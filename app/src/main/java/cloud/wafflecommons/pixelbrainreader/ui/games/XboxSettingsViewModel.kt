@@ -40,8 +40,8 @@ data class XboxSettingsUiState(
 
 /**
  * Settings › Integrations › Xbox (13.3, XB-E): Connect by device code (the owner's own Microsoft app,
- * XB1), the first sync as the baseline, Sync now, Disconnect, and the last sync's line. Nothing Xbox
- * runs on a read-only device.
+ * XB1), a new sign-in's first sync as the baseline, Sync now, Disconnect, and the last sync's line.
+ * Nothing Xbox runs on a read-only device.
  */
 @HiltViewModel
 class XboxSettingsViewModel @Inject constructor(
@@ -83,7 +83,11 @@ class XboxSettingsViewModel @Inject constructor(
         }
     }
 
-    /** Step 1, the code; step 2, the wait while the owner types it at microsoft.com/link; then the baseline. */
+    /**
+     * Step 1, the code; step 2, the wait while the owner types it at microsoft.com/link; then the first
+     * sync: a baseline for a new sign-in (play counts from now on), while Sign in again, over an expired
+     * sign-in still kept, keeps the play since the last sync.
+     */
     fun connect() {
         if (connecting?.isActive == true || _state.value.busy) return
         if (VaultWriteGate.refuses()) {
@@ -92,6 +96,8 @@ class XboxSettingsViewModel @Inject constructor(
         }
         connecting = launchAction {
             _state.update { it.copy(busy = true, message = null, code = null) }
+            // Read before the sign-in saves its tokens: none kept means a first Connect, or one after Disconnect.
+            val baseline = !account.isConnected()
             val code = account.startSignIn().getOrElse { e ->
                 _state.update { it.copy(busy = false, message = e.message) }
                 return@launchAction
@@ -104,20 +110,26 @@ class XboxSettingsViewModel @Inject constructor(
                 withContext(NonCancellable) { if (account.isConnected()) scheduler.update() }
                 throw e
             }
-            _state.update { it.copy(code = null) }
             signedIn.onFailure { e ->
-                _state.update { it.copy(busy = false, message = e.message) }
+                _state.update { it.copy(code = null, busy = false, message = e.message) }
                 refresh()
                 return@launchAction
             }
+            // Signed in: the page says so at once, while the first sync reads the games (tens of seconds).
+            _state.update { it.copy(code = null, connected = true, message = SIGNED_IN_MESSAGE) }
             scheduler.update()
-            // The first sync records the baseline: sessions start from the next one.
-            val first = xboxSync.sync()
+            val first = xboxSync.sync(baseline = baseline)
             _state.update {
                 it.copy(
                     busy = false,
                     message = first.fold(
-                        { s -> "Connected: ${s.titles} games found. Play time counts from now on." + createdPagesNote(s.pagesCreated) },
+                        { s ->
+                            if (baseline) {
+                                "Connected: ${s.titles} games found. Play time counts from now on." + createdPagesNote(s.pagesCreated)
+                            } else {
+                                "Signed in again. " + syncedLine(s)
+                            }
+                        },
                         { e -> "Connected, but the first sync failed: ${e.message}" }
                     )
                 )
@@ -151,7 +163,7 @@ class XboxSettingsViewModel @Inject constructor(
         launchAction {
             account.disconnect()
             scheduler.update()
-            _state.update { it.copy(message = "Disconnected. Games works by hand.") }
+            _state.update { it.copy(message = "Disconnected: Xbox no longer syncs.") }
             refresh()
         }
     }
@@ -179,6 +191,9 @@ class XboxSettingsViewModel @Inject constructor(
         const val REFRESH_LIFETIME_MS = 90L * 86_400_000L
 
         const val READ_ONLY_MESSAGE = "Read-only device: connect Xbox on your phone."
+
+        /** Once Microsoft answered, while the first sync runs. */
+        const val SIGNED_IN_MESSAGE = "Signed in. The first sync is reading your Xbox games…"
     }
 }
 

@@ -74,7 +74,8 @@ fun PsnSettingsScreen(onBack: () -> Unit, viewModel: PsnSettingsViewModel = hilt
                 title = "Connected",
                 icon = Icons.Rounded.SportsEsports,
                 subtitle = listOfNotNull(
-                    status?.let { if (it.ok) "Last sync ${clock(it.atMillis)}" else "Paused: ${it.message}" },
+                    // While a sync runs (the first one included), not the time of the one before.
+                    if (state.busy) "Syncing…" else status?.let { if (it.ok) "Last sync ${clock(it.atMillis)}" else "Paused: ${it.message}" },
                     state.expiresInDays?.let { "the sign-in expires in $it days" },
                     "syncs at 23:40 and 06:00"
                 ).joinToString(" · ")

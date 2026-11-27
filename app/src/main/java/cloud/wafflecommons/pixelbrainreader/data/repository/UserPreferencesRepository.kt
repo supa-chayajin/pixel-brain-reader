@@ -390,6 +390,28 @@ class UserPreferencesRepository @Inject constructor(
         }
     }
 
+    // 13.3: a new sign-in's syncs are baselines (no session) until one saves its snapshot, so a first
+    // sync that fails or is cancelled hands it to the next run (`XboxAccount`/`PsnAccount.baselinePending`).
+    // Device-only; absent = no baseline pending.
+    private val KEY_XBOX_BASELINE = booleanPreferencesKey("xbox_baseline_pending")
+    private val KEY_PSN_BASELINE = booleanPreferencesKey("psn_baseline_pending")
+
+    val xboxBaselinePending: Flow<Boolean> = setting { it[KEY_XBOX_BASELINE] == true }
+
+    suspend fun setXboxBaselinePending(pending: Boolean) {
+        context.dataStore.edit { preferences ->
+            if (pending) preferences[KEY_XBOX_BASELINE] = true else preferences.remove(KEY_XBOX_BASELINE)
+        }
+    }
+
+    val psnBaselinePending: Flow<Boolean> = setting { it[KEY_PSN_BASELINE] == true }
+
+    suspend fun setPsnBaselinePending(pending: Boolean) {
+        context.dataStore.edit { preferences ->
+            if (pending) preferences[KEY_PSN_BASELINE] = true else preferences.remove(KEY_PSN_BASELINE)
+        }
+    }
+
     // --- Review notifications (12.13): off by default, nothing notifies unless switched on ---
     private val KEY_REVIEW_NOTIFICATIONS = booleanPreferencesKey("review_notifications")
 

@@ -310,6 +310,50 @@ class GameNotesTest {
         assertEquals(base + "\n$heading\n\n" + achievementLines.joinToString("\n") + "\n", TrophySection.apply(both, emptyList()))
     }
 
+    @Test
+    fun `a name from the console servers stays one line, so the section never breaks`() {
+        val odd = achievements(
+            AchievementRecord("1", "Foo\n## Notes", gamerscore = 10, earnedAt = "2026-11-02T20:10:00Z"),
+            AchievementRecord("2", " Tab\tand\u0007 bell ", gamerscore = 5, earnedAt = "2026-11-03T20:10:00Z")
+        )
+        val legacy = achievements(
+            AchievementRecord("7", "Posse", gamerscore = 20, earnedAt = "2026-11-05T10:00:00Z"),
+            titleId = "1234567890",
+            title = "Ring of Ash\r\n## 360"
+        )
+        val lines = AchievementSection.lines(listOf(odd, legacy), zone)
+        assertEquals(
+            listOf(
+                "*3 of 3 achievements · 35 of 35 G · 100 %*",
+                "",
+                "- $icon Foo ## Notes — 2026-11-02 · 10 G · Ring of Ash",
+                "- $icon Tab and bell — 2026-11-03 · 5 G · Ring of Ash",
+                "- $icon Posse — 2026-11-05 · 20 G · Ring of Ash ## 360"
+            ),
+            lines
+        )
+        // Applied twice, the page is the same: no name opened a section of its own.
+        val page = "# G\n\n## Bosses\n\n- [ ] One\n"
+        val once = AchievementSection.apply(page, lines)
+        assertEquals(once, AchievementSection.apply(once, lines))
+        assertEquals(listOf("## Bosses", heading), once.lines().filter { it.startsWith("## ") })
+        // A trophy's name and a set's title too.
+        val online = TrophySetFile(
+            "NPWR00002_00", "trophy", title = "Ring of Ash\n## Online", trophies = listOf(TrophyRecord(7, "Posse", earnedAt = "2026-11-05T10:00:00Z"))
+        )
+        val trophies = TrophySection.lines(listOf(set(TrophyRecord(1, "First\nSteps", grade = "bronze", earnedAt = "2026-11-02T20:10:00Z")), online), zone)
+        assertEquals(
+            listOf("*2 of 2 trophies · 100 %*", "", "- 🥉 First Steps — 2026-11-02 · Ring of Ash", "- 🥉 Posse — 2026-11-05 · Ring of Ash ## Online"),
+            trophies
+        )
+        // ™, ® and © stay; a name of control characters only falls back to its number.
+        assertEquals("Brick™ Wars® ©", oneLine("Brick™\u0000 Wars®\u001B ©"))
+        assertEquals(
+            "- $icon Achievement 3 — 2026-11-02 · 1 G",
+            AchievementSection.lines(listOf(achievements(AchievementRecord("3", "\u0007", gamerscore = 1, earnedAt = "2026-11-02T20:10:00Z"))), zone).last()
+        )
+    }
+
     private val achievementChecklist = """
         ## Bosses
         - [ ] Beat the first knight <!--achievement:1915865634#12-->

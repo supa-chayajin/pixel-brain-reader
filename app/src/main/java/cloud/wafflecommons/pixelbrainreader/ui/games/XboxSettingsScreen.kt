@@ -85,7 +85,8 @@ fun XboxSettingsScreen(onBack: () -> Unit, viewModel: XboxSettingsViewModel = hi
                 title = "Connected",
                 icon = Icons.Rounded.SportsEsports,
                 subtitle = listOfNotNull(
-                    status?.let { if (it.ok) "Last sync ${clock(it.atMillis)}" else "Paused: ${it.message}" },
+                    // While a sync runs (the first one included), not the time of the one before.
+                    if (state.busy) "Syncing…" else status?.let { if (it.ok) "Last sync ${clock(it.atMillis)}" else "Paused: ${it.message}" },
                     state.validUntil?.let { "renewed at each sync, good until ${shortDate(it)} without one" },
                     "syncs at 23:40 and 06:00"
                 ).joinToString(" · ")

@@ -57,24 +57,11 @@ object GamePageCreation {
         return GamePageLayout(root, ownFolder, separator)
     }
 
-    /** A console's name as a page title: ™ ® © dropped, whitespace runs one space, trimmed. */
-    fun pageTitle(consoleName: String): String {
-        val out = StringBuilder()
-        var space = false
-        for (ch in consoleName) {
-            when {
-                ch == '™' || ch == '®' || ch == '©' -> Unit
-                ch.isWhitespace() -> space = true
-                ch.isISOControl() -> Unit
-                else -> {
-                    if (space && out.isNotEmpty()) out.append(' ')
-                    space = false
-                    out.append(ch)
-                }
-            }
-        }
-        return out.toString()
-    }
+    /**
+     * A console's name as a page title: ™ ® © dropped, then made [oneLine] (whitespace runs one
+     * space, trimmed, no control character).
+     */
+    fun pageTitle(consoleName: String): String = oneLine(consoleName.filterNot { it == '™' || it == '®' || it == '©' })
 
     /**
      * A title as a file name every clone of the vault takes: the characters a file system or a link
@@ -134,7 +121,8 @@ object GamePageCreation {
             if (lower in taken || lower in planned) continue
             if (layout.ownFolder && folderTakenWithAnotherCase(path.substringBeforeLast('/') + "/", takenPaths)) continue
             planned += lower
-            val aliases = group.map { it.name.trim() }.filter { it.isNotEmpty() }.distinct().filter { it != title }
+            // The console's own names as they read (™ ® © kept), one line each: YAML refuses a control character.
+            val aliases = group.map { oneLine(it.name) }.filter { it.isNotEmpty() }.distinct().filter { it != title }
             out += PagePlan(path, title, aliases, group.map { it.titleId }.distinct(), console)
         }
         return out

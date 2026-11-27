@@ -48,7 +48,19 @@ class PsnSync @Inject constructor(
 ) {
     private val running = Mutex()
 
-    suspend fun sync(now: Long = System.currentTimeMillis(), zone: ZoneId = ZoneId.systemDefault()): Result<PsnSyncSummary> {
+    /**
+     * [baseline]: the first sync of a new sign-in (Connect with no sign-in kept: the first one, or one
+     * after Disconnect) reads and saves everything as usual but writes no session, so play counts from
+     * now on (13.3). The sign-in also marks it ([PsnAccount.baselinePending]) until a sync saves its
+     * snapshot: a first sync that fails or is cancelled hands it to the next run, the nightly ones
+     * included. A new NPSSO for an expired sign-in (its tokens still kept) starts none: the play since
+     * the last snapshot is kept.
+     */
+    suspend fun sync(
+        now: Long = System.currentTimeMillis(),
+        zone: ZoneId = ZoneId.systemDefault(),
+        baseline: Boolean = false
+    ): Result<PsnSyncSummary> {
         if (VaultWriteGate.readOnly) {
             return Result.failure(PsnException(PsnException.Kind.NOT_CONFIGURED, "Read-only device: PlayStation syncs on your phone."))
         }
@@ -57,7 +69,7 @@ class PsnSync @Inject constructor(
         }
         return running.withLock {
             try {
-                val summary = run(now, zone)
+                val summary = run(now, zone, baseline || account.baselinePending())
                 account.setStatus(PsnStatus(true, now))
                 Result.success(summary)
             } catch (e: CancellationException) {
@@ -75,7 +87,7 @@ class PsnSync @Inject constructor(
         }
     }
 
-    private suspend fun run(now: Long, zone: ZoneId): PsnSyncSummary {
+    private suspend fun run(now: Long, zone: ZoneId, baseline: Boolean): PsnSyncSummary {
         // --- 1. Read (network) -------------------------------------------------------------
         var access = account.accessToken(now)
         val played = try {
@@ -123,7 +135,8 @@ class PsnSync @Inject constructor(
             }
         )
 
-        val sessions = SessionDiff.sessions(previous, current, zone, LAST_PLAYED_IS_START)
+        // A new sign-in's baseline writes no session: the snapshot saved below is where the count starts.
+        val sessions = if (baseline) emptyList() else SessionDiff.sessions(previous, current, zone, LAST_PLAYED_IS_START)
         val pages = games.pages()
         val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
         val claimed = autoLinked(games.links(), current, pages)
@@ -198,7 +211,8 @@ class PsnSync @Inject constructor(
             // Today's line comes with the next burn (23:50 after the evening run), even on a day with
             // nothing else on the board.
             if (today in days) dashboardRepository.ensureDay(today)
-            games.saveSnapshot(current)
+            // The baseline ends with its snapshot on disk, not before: the count starts from this one.
+            if (games.saveSnapshot(current) && baseline) account.baselineSaved()
         }
         return PsnSyncSummary(current.titles.size, sessions.size, setFiles.size, pagesTouched, created.size)
     }

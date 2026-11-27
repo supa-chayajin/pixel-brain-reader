@@ -6,6 +6,7 @@ import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
 import cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -86,6 +87,10 @@ class PsnAccount @Inject constructor(
         }
         return try {
             val tokens = client.signIn(npsso, now)
+            // No sign-in kept (the first Connect, or one after Disconnect or a log-out): play counts
+            // from now on, so the syncs are baselines until one is saved (13.3). Marked before the
+            // tokens are kept: no sync ever sees the new sign-in without it.
+            if (!isConnected()) preferences.setPsnBaselinePending(true)
             withContext(Dispatchers.IO) { secrets.savePsnTokens(tokens) }
             preferences.setPsnStatus(PsnStatus(true, now).encode())
             Log.i(TAG, "PSN connect: signed in")
@@ -96,21 +101,47 @@ class PsnAccount @Inject constructor(
         }
     }
 
+    /** Forgets the sign-in and the status line. */
     suspend fun disconnect() {
-        withContext(Dispatchers.IO) { secrets.clearPsnTokens() }
+        // Under the tokens' lock: a refresh in flight saves its tokens first, then the clear wins.
+        lock.withLock { withContext(Dispatchers.IO) { secrets.clearPsnTokens() } }
         preferences.setPsnStatus(null)
     }
 
-    /** A valid access token, refreshed when it expires within a minute (or when [force]d after a 401). */
+    /**
+     * A valid access token, refreshed when it expires within a minute (or when [force]d after a 401).
+     * The refreshed tokens are saved only while the stored sign-in is still the one refreshed:
+     * forgotten while PlayStation answered (a log-out clears the phone's secrets outside this lock),
+     * nothing is saved and PlayStation isn't connected.
+     */
     suspend fun accessToken(now: Long = System.currentTimeMillis(), force: Boolean = false): String = lock.withLock {
-        val tokens = tokens() ?: throw PsnException(PsnException.Kind.NOT_CONFIGURED, "PlayStation isn't connected.")
+        val tokens = tokens() ?: throw notConnected()
         if (!force && tokens.accessExpiresAt - now > 60_000L) return@withLock tokens.access
         val fresh = client.refresh(tokens, now)
-        withContext(Dispatchers.IO) { secrets.savePsnTokens(fresh) }
+        val saved = withContext(Dispatchers.IO) {
+            if (secrets.getPsnTokens()?.refresh != tokens.refresh) {
+                false
+            } else {
+                secrets.savePsnTokens(fresh)
+                true
+            }
+        }
+        if (!saved) {
+            Log.i(TAG, "PSN token: the sign-in was forgotten during its refresh")
+            throw notConnected()
+        }
         fresh.access
     }
 
     suspend fun setStatus(status: PsnStatus) = preferences.setPsnStatus(status.encode())
+
+    /** A new sign-in whose first sync isn't saved yet: every sync until then is a baseline (13.3). */
+    suspend fun baselinePending(): Boolean = preferences.psnBaselinePending.first()
+
+    /** The baseline's snapshot is saved: from the next sync on, the play since counts. */
+    suspend fun baselineSaved() = preferences.setPsnBaselinePending(false)
+
+    private fun notConnected() = PsnException(PsnException.Kind.NOT_CONFIGURED, "PlayStation isn't connected.")
 
     private companion object {
         const val TAG = "PsnAccount"

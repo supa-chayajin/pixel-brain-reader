@@ -5,6 +5,27 @@ import java.time.LocalDate
 import java.time.ZoneId
 
 /**
+ * Text from the console servers (a trophy's or an achievement's name, a set's or a game's title) as
+ * one line of a note (pure, 13.3): whitespace runs, line breaks included, made one space and trimmed,
+ * control characters dropped, everything else kept (™, ® and © too). A line break in a name would
+ * end a derived section early (the next `## ` line closes it) or break a page's frontmatter.
+ */
+internal fun oneLine(text: String): String = buildString {
+    var space = false
+    for (ch in text) {
+        when {
+            ch.isWhitespace() -> space = true
+            ch.isISOControl() -> Unit
+            else -> {
+                if (space && isNotEmpty()) append(' ')
+                space = false
+                append(ch)
+            }
+        }
+    }
+}
+
+/**
  * The derived sections' shared edit (pure): one heading matched whole, its lines replaced in place;
  * everything above it, and any section after it, stays as written. A section that isn't there yet
  * goes right after the section [apply]'s `after` finds, when another section follows that one;
@@ -61,7 +82,7 @@ object TrophySection {
 
     const val HEADING = "## 🏆 Trophies"
 
-    /** The section's lines for the page's sets; empty when the page has no set. */
+    /** The section's lines for the page's sets, names and titles made [oneLine]; empty when the page has no set. */
     fun lines(sets: List<TrophySetFile>, zone: ZoneId): List<String> {
         if (sets.isEmpty()) return emptyList()
         val total = sets.sumOf { it.trophies.size }
@@ -70,8 +91,9 @@ object TrophySection {
         val summary = "*${earned.size} of $total trophies · $percent %*"
         val named = sets.size > 1
         return listOf(summary, "") + earned.sortedWith(compareBy({ it.third }, { it.second.id })).map { (set, trophy, day) ->
-            val where = if (named && set.title.isNotBlank()) " · ${set.title}" else ""
-            "- ${gradeIcon(trophy.grade)} ${trophy.name.ifBlank { "Trophy ${trophy.id}" }} — $day$where"
+            val title = if (named) oneLine(set.title) else ""
+            val where = if (title.isNotEmpty()) " · $title" else ""
+            "- ${gradeIcon(trophy.grade)} ${oneLine(trophy.name).ifBlank { "Trophy ${trophy.id}" }} — $day$where"
         }
     }
 
@@ -143,8 +165,8 @@ object AchievementSection {
 
     /**
      * The section's lines for the page's titles: `*N of M achievements · G of T G · P %*`, then one
-     * line per earned achievement by date (the title named when the page holds more than one); empty
-     * when no file holds an achievement.
+     * line per earned achievement by date (the title named when the page holds more than one), names
+     * and titles made [oneLine]; empty when no file holds an achievement.
      */
     fun lines(files: List<AchievementSetFile>, zone: ZoneId): List<String> {
         val sets = files.filter { it.achievements.isNotEmpty() }
@@ -160,8 +182,10 @@ object AchievementSection {
             compareBy({ it.third }, { it.second.id.toIntOrNull() ?: Int.MAX_VALUE }, { it.second.id })
         )
         return listOf(summary, "") + sorted.map { (set, achievement, day) ->
-            val where = if (named && set.title.isNotBlank()) " · ${set.title}" else ""
-            "- $ICON ${achievement.name.ifBlank { "Achievement ${achievement.id}" }} — $day · ${achievement.gamerscore} G$where"
+            val title = if (named) oneLine(set.title) else ""
+            val where = if (title.isNotEmpty()) " · $title" else ""
+            val name = oneLine(achievement.name).ifBlank { "Achievement ${oneLine(achievement.id)}" }
+            "- $ICON $name — $day · ${achievement.gamerscore} G$where"
         }
     }
 

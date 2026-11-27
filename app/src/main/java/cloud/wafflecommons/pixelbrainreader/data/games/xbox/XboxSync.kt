@@ -46,7 +46,19 @@ class XboxSync @Inject constructor(
 ) {
     private val running = Mutex()
 
-    suspend fun sync(now: Long = System.currentTimeMillis(), zone: ZoneId = ZoneId.systemDefault()): Result<XboxSyncSummary> {
+    /**
+     * [baseline]: the first sync of a new sign-in (Connect with no sign-in kept: the first one, or one
+     * after Disconnect) reads and saves everything as usual but writes no session, and keeps no minutes
+     * from before it, so play counts from now on. The sign-in also marks it ([XboxAccount.baselinePending])
+     * until a sync saves its snapshot: a first sync that fails or is cancelled hands it to the next run,
+     * the nightly ones included. Signing in again after the sign-in expired (its tokens still kept)
+     * starts none: the play since the last snapshot is kept.
+     */
+    suspend fun sync(
+        now: Long = System.currentTimeMillis(),
+        zone: ZoneId = ZoneId.systemDefault(),
+        baseline: Boolean = false
+    ): Result<XboxSyncSummary> {
         if (VaultWriteGate.readOnly) {
             return Result.failure(XboxException(XboxException.Kind.NOT_CONFIGURED, "Read-only device: Xbox syncs on your phone."))
         }
@@ -55,7 +67,7 @@ class XboxSync @Inject constructor(
         }
         return running.withLock {
             try {
-                val summary = run(now, zone)
+                val summary = run(now, zone, baseline || account.baselinePending())
                 account.setStatus(XboxStatus(true, now))
                 Result.success(summary)
             } catch (e: CancellationException) {
@@ -74,7 +86,7 @@ class XboxSync @Inject constructor(
         }
     }
 
-    private suspend fun run(now: Long, zone: ZoneId): XboxSyncSummary {
+    private suspend fun run(now: Long, zone: ZoneId, baseline: Boolean): XboxSyncSummary {
         val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
 
         // --- 1. Read (network; nothing written) ---------------------------------------------
@@ -82,7 +94,7 @@ class XboxSync @Inject constructor(
         val previous = games.xboxSnapshot()
         val before = previous?.titles?.associateBy { it.titleId }.orEmpty()
         val minutes = withSession(now) { client.minutesPlayed(it, list.titles) }
-        val listed = list.titles.map { title -> stateOf(title, before[title.titleId], minutes[title.titleId]) }
+        val listed = list.titles.map { title -> stateOf(title, before[title.titleId], minutes[title.titleId], baseline) }
         val listedIds = listed.mapTo(HashSet()) { it.titleId }
         val seen = XboxSnapshot(
             syncedAt = Instant.ofEpochMilli(now).toString(),
@@ -90,7 +102,8 @@ class XboxSync @Inject constructor(
             // A title pushed off the history (past 1,000) is kept as it was: a sync never removes one.
             titles = listed + previous?.titles.orEmpty().filter { it.titleId !in listedIds }
         )
-        val sessions = XboxSessionDiff.sessions(previous, seen, zone, LAST_PLAYED_IS_START)
+        // A new sign-in's baseline writes no session: the snapshot saved below is where the count starts.
+        val sessions = if (baseline) emptyList() else XboxSessionDiff.sessions(previous, seen, zone, LAST_PLAYED_IS_START)
 
         // A played title no page claims gets one (XB4): where the owner's game pages already are.
         val pages = games.pages()
@@ -132,6 +145,12 @@ class XboxSync @Inject constructor(
                         continue
                     }
                 }
+            }
+            // An empty answer never replaces a file that holds achievements: the earned dates kept in
+            // it (an offline 360 unlock's first-seen date among them) would be lost for good.
+            if (fetched.isEmpty() && saved?.achievements?.isNotEmpty() == true) {
+                Log.i(TAG, "Xbox achievements: an empty answer, the file kept")
+                continue
             }
             files += XboxAchievements.merge(title.titleId, title.name, title.achievementSource, fetched, saved, Instant.ofEpochMilli(now))
         }
@@ -177,13 +196,18 @@ class XboxSync @Inject constructor(
             // Today's line comes with the next burn (23:50 after the evening run), even on a day with
             // nothing else on the board.
             if (today in days) dashboardRepository.ensureDay(today)
-            games.saveXboxSnapshot(current)
+            // The baseline ends with its snapshot on disk, not before: the count starts from this one.
+            if (games.saveXboxSnapshot(current) && baseline) account.baselineSaved()
         }
         return XboxSyncSummary(current.titles.size, sessions.size, files.size, pagesTouched, created.size)
     }
 
-    /** A title as this sync saw it; what the answer leaves out is kept from the last sync. */
-    private fun stateOf(title: XboxTitle, old: XboxTitleState?, minutes: Long?): XboxTitleState {
+    /**
+     * A title as this sync saw it; what the answer leaves out is kept from the last sync, except a
+     * baseline's minutes: a title whose minutes weren't read (a 429 on its batch) starts at its next
+     * reading instead of from the count before the new sign-in.
+     */
+    private fun stateOf(title: XboxTitle, old: XboxTitleState?, minutes: Long?, baseline: Boolean): XboxTitleState {
         val summary = title.achievement
         val source = summary?.sourceVersion ?: 0
         // A 360 title's totals are right in titlehub; a One title's read 0 there, its file has them.
@@ -194,7 +218,7 @@ class XboxSync @Inject constructor(
             mediaItemType = title.mediaItemType,
             achievementSource = source,
             modernTitleId = title.modernTitleId?.takeIf { it.isNotBlank() },
-            minutesPlayed = minutes ?: old?.minutesPlayed,
+            minutesPlayed = if (baseline) minutes else minutes ?: old?.minutesPlayed,
             lastPlayed = XboxTimes.instant(title.titleHistory?.lastTimePlayed)?.toString() ?: old?.lastPlayed,
             // 360 icons are cleartext http: only an https icon is kept.
             imageUrl = title.displayImage?.trim()?.takeIf { it.startsWith("https://", ignoreCase = true) } ?: old?.imageUrl,

@@ -7,6 +7,7 @@ import cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepos
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -109,6 +110,10 @@ class XboxAccount @Inject constructor(
                 DevicePoll.Pending -> Unit
                 DevicePoll.SlowDown -> interval += SLOW_DOWN_SECONDS
                 is DevicePoll.Done -> {
+                    // No sign-in kept (the first Connect, or one after Disconnect or a log-out): play
+                    // counts from now on, so the syncs are baselines until one is saved. Marked before
+                    // the tokens are kept: no sync ever sees the new sign-in without it.
+                    if (!isConnected()) preferences.setXboxBaselinePending(true)
                     withContext(Dispatchers.IO) { secrets.saveXboxTokens(poll.tokens) }
                     lock.withLock { cached = null }
                     preferences.setXboxStatus(XboxStatus(true, clock()).encode())
@@ -126,8 +131,11 @@ class XboxAccount @Inject constructor(
 
     /** Forgets the sign-in: the tokens, the session in memory and the status line. */
     suspend fun disconnect() {
-        withContext(Dispatchers.IO) { secrets.clearXboxTokens() }
-        lock.withLock { cached = null }
+        // Under the session's lock: a renewal in flight saves its tokens first, then the clear wins.
+        lock.withLock {
+            withContext(Dispatchers.IO) { secrets.clearXboxTokens() }
+            cached = null
+        }
         preferences.setXboxStatus(null)
     }
 
@@ -160,10 +168,31 @@ class XboxAccount @Inject constructor(
 
     suspend fun setStatus(status: XboxStatus) = preferences.setXboxStatus(status.encode())
 
-    /** A new access token, and the rotated refresh token saved before any other call. */
+    /** A new sign-in whose first sync isn't saved yet: every sync until then is a baseline (13.3). */
+    suspend fun baselinePending(): Boolean = preferences.xboxBaselinePending.first()
+
+    /** The baseline's snapshot is saved: from the next sync on, the play since counts. */
+    suspend fun baselineSaved() = preferences.setXboxBaselinePending(false)
+
+    /**
+     * A new access token, and the rotated refresh token saved before any other call; saved only while
+     * the stored sign-in is still the one renewed. Forgotten while Microsoft answered (a log-out
+     * clears the phone's secrets outside this lock), nothing is saved and Xbox isn't connected.
+     */
     private suspend fun renew(tokens: XboxTokens, now: Long): XboxTokens {
         val fresh = client.refresh(tokens, now)
-        withContext(Dispatchers.IO) { secrets.saveXboxTokens(fresh) }
+        val saved = withContext(Dispatchers.IO) {
+            if (secrets.getXboxTokens()?.refresh != tokens.refresh) {
+                false
+            } else {
+                secrets.saveXboxTokens(fresh)
+                true
+            }
+        }
+        if (!saved) {
+            Log.i(TAG, "Xbox session: the sign-in was forgotten during its renewal")
+            throw XboxException(XboxException.Kind.NOT_CONFIGURED, "Xbox isn't connected.")
+        }
         return fresh
     }
 

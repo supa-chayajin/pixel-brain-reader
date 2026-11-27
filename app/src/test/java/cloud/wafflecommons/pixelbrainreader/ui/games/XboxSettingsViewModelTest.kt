@@ -77,7 +77,8 @@ class XboxSettingsViewModelTest {
         coEvery { account.startSignIn(any()) } returns Result.success(code)
         coEvery { account.awaitSignIn(any(), any()) } coAnswers { signedIn.await() }
         val firstSync = XboxSyncSummary(titles = 12, sessions = 0, achievementSets = 3, pages = 3, pagesCreated = 2)
-        coEvery { xboxSync.sync(any(), any()) } returns Result.success(firstSync)
+        val synced = CompletableDeferred<Result<XboxSyncSummary>>()
+        coEvery { xboxSync.sync(any(), any(), any()) } coAnswers { synced.await() }
         val vm = viewModel()
         advanceUntilIdle()
 
@@ -88,10 +89,22 @@ class XboxSettingsViewModelTest {
         assertEquals(PendingCode("ABCD1234", code.expiresAt), vm.state.value.code)
         assertTrue(vm.state.value.busy)
         coVerify(exactly = 0) { scheduler.update() }
-        coVerify(exactly = 0) { xboxSync.sync(any(), any()) }
+        coVerify(exactly = 0) { xboxSync.sync(any(), any(), any()) }
 
         coEvery { account.tokens() } returns tokens
         signedIn.complete(Result.success(Unit))
+        advanceUntilIdle()
+
+        // Microsoft answered: Connected at once, while the first sync reads the games (no Connect card meanwhile).
+        val reading = vm.state.value
+        assertNull(reading.code)
+        assertTrue(reading.connected)
+        assertTrue(reading.busy)
+        assertEquals("Signed in. The first sync is reading your Xbox games…", reading.message)
+        // No sign-in was kept before this Connect: the first sync is a baseline.
+        coVerify(exactly = 1) { xboxSync.sync(any(), any(), true) }
+
+        synced.complete(Result.success(firstSync))
         advanceUntilIdle()
 
         val state = vm.state.value
@@ -102,11 +115,35 @@ class XboxSettingsViewModelTest {
         // The sign-in lasts 90 days from its last renewal.
         assertEquals(tokens.refreshIssuedAt + 90L * 86_400_000L, state.validUntil)
         coVerifyOrder {
+            account.isConnected()
             account.startSignIn(any())
             account.awaitSignIn(code, any())
             scheduler.update()
-            xboxSync.sync(any(), any())
+            xboxSync.sync(any(), any(), true)
         }
+    }
+
+    @Test
+    fun `signing in again over an expired sign-in keeps the play since the last sync`() = runTest(testDispatcher) {
+        // The sign-in expired, its tokens still kept: Sign in again renews it, it is no new account.
+        coEvery { account.tokens() } returns tokens
+        coEvery { account.isConnected() } returns true
+        statuses.value = XboxStatus(ok = false, atMillis = 1L, kind = XboxException.Kind.SIGN_IN_EXPIRED, message = "The Xbox sign-in has expired: Connect again.")
+        coEvery { account.startSignIn(any()) } returns Result.success(code)
+        coEvery { account.awaitSignIn(any(), any()) } returns Result.success(Unit)
+        val summary = XboxSyncSummary(titles = 12, sessions = 2, achievementSets = 3, pages = 3, pagesCreated = 0)
+        coEvery { xboxSync.sync(any(), any(), any()) } returns Result.success(summary)
+        val vm = viewModel()
+        advanceUntilIdle()
+
+        vm.connect()
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { xboxSync.sync(any(), any(), false) }
+        coVerify(exactly = 0) { xboxSync.sync(any(), any(), true) }
+        assertEquals("Signed in again. Synced 12 games: 2 new sessions, 3 achievement lists updated.", vm.state.value.message)
+        assertTrue(vm.state.value.connected)
+        assertFalse(vm.state.value.busy)
     }
 
     @Test
@@ -125,7 +162,7 @@ class XboxSettingsViewModelTest {
         assertFalse(vm.state.value.busy)
         assertFalse(vm.state.value.connected)
         coVerify(exactly = 0) { scheduler.update() }
-        coVerify(exactly = 0) { xboxSync.sync(any(), any()) }
+        coVerify(exactly = 0) { xboxSync.sync(any(), any(), any()) }
     }
 
     @Test
@@ -161,7 +198,7 @@ class XboxSettingsViewModelTest {
         assertNull(vm.state.value.code)
         assertFalse(vm.state.value.busy)
         assertFalse(vm.state.value.connected)
-        coVerify(exactly = 0) { xboxSync.sync(any(), any()) }
+        coVerify(exactly = 0) { xboxSync.sync(any(), any(), any()) }
         // Nothing was saved before the cancel: nothing to schedule.
         coVerify(exactly = 0) { scheduler.update() }
 
@@ -176,7 +213,7 @@ class XboxSettingsViewModelTest {
     fun `sync now says what it read`() = runTest(testDispatcher) {
         coEvery { account.tokens() } returns tokens
         val summary = XboxSyncSummary(titles = 12, sessions = 2, achievementSets = 3, pages = 4, pagesCreated = 1)
-        coEvery { xboxSync.sync(any(), any()) } returns Result.success(summary)
+        coEvery { xboxSync.sync(any(), any(), any()) } returns Result.success(summary)
         val vm = viewModel()
         advanceUntilIdle()
 
@@ -187,7 +224,7 @@ class XboxSettingsViewModelTest {
         assertFalse(vm.state.value.busy)
 
         val expired = XboxException(XboxException.Kind.SIGN_IN_EXPIRED, "The Xbox sign-in has expired: Connect again.")
-        coEvery { xboxSync.sync(any(), any()) } returns Result.failure(expired)
+        coEvery { xboxSync.sync(any(), any(), any()) } returns Result.failure(expired)
         vm.syncNow()
         advanceUntilIdle()
 
@@ -212,7 +249,7 @@ class XboxSettingsViewModelTest {
         }
         assertFalse(vm.state.value.connected)
         assertNull(vm.state.value.validUntil)
-        assertEquals("Disconnected. Games works by hand.", vm.state.value.message)
+        assertEquals("Disconnected: Xbox no longer syncs.", vm.state.value.message)
     }
 
     @Test

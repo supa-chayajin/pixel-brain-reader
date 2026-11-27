@@ -69,6 +69,7 @@ class XboxSyncTest {
         every { configured } returns true
         coEvery { isConnected() } returns true
         coEvery { session(any(), any()) } returns xbl
+        coEvery { baselinePending() } returns false
     }
     private val client: XboxClient = mockk {
         coEvery { titleHistory(any()) } returns XboxTitleList(listOf(title(ring, "RING OF ASH")), full = false)
@@ -145,6 +146,88 @@ class XboxSyncTest {
         // Today's line waits for the burn, on a board that now exists: only a past day's note is edited here.
         coVerify(exactly = 0) { games.applyPastDay(any(), any()) }
         coVerify { dashboard.ensureDay(LocalDate.of(2026, 11, 27)) }
+    }
+
+    @Test
+    fun `a new sign-in's first sync is a baseline, whatever snapshot it finds`() = runTest {
+        // The snapshot from before a Disconnect: the play since is not one session per title.
+        coEvery { games.xboxSnapshot() } returns XboxSnapshot(
+            "2026-10-01T22:40:00Z",
+            titles = listOf(XboxTitleState(ring, "RING OF ASH", achievementSource = 2, minutesPlayed = 100))
+        )
+
+        val result = sync.sync(now, zone, baseline = true)
+
+        assertTrue(result.isSuccess)
+        assertEquals(0, result.getOrThrow().sessions)
+        coVerify { games.addSessions(emptyList()) }
+        // Everything else is saved as usual, the snapshot (where the count starts) last.
+        coVerifyOrder {
+            games.createPages(any())
+            games.updateLinks(any())
+            games.saveXboxSnapshot(match { s -> s.syncedAt == "2026-11-27T22:40:00Z" && s.titles.single().minutesPlayed == 1220L })
+            // The baseline ends once its snapshot is on disk.
+            account.baselineSaved()
+        }
+        coVerify(exactly = 0) { dashboard.ensureDay(any()) }
+        coVerify { account.setStatus(XboxStatus(true, now)) }
+
+        // The nightly runs and Sync now pass no baseline: the same snapshot gives the play since as a session.
+        val added = slot<List<GameSessionRecord>>()
+        coEvery { games.addSessions(capture(added)) } returns setOf(LocalDate.of(2026, 11, 27))
+        assertTrue(sync.sync(now, zone).isSuccess)
+        assertEquals(1120, added.captured.single().minutes)
+        coVerify(exactly = 1) { account.baselineSaved() }
+    }
+
+    @Test
+    fun `a baseline whose first sync didn't finish makes the next run one, until a snapshot is saved`() = runTest {
+        // Connect's first sync stopped (a 429, or the page left): the sign-in's mark is still there.
+        coEvery { account.baselinePending() } returns true
+        coEvery { games.xboxSnapshot() } returns XboxSnapshot(
+            "2026-10-01T22:40:00Z",
+            titles = listOf(XboxTitleState(ring, "RING OF ASH", achievementSource = 2, minutesPlayed = 100))
+        )
+        coEvery { client.titleHistory(any()) } throws XboxException(XboxException.Kind.RATE_LIMITED, "Xbox asked to wait.")
+
+        assertTrue(sync.sync(now, zone).isFailure)
+        coVerify(exactly = 0) { games.saveXboxSnapshot(any()) }
+        coVerify(exactly = 0) { account.baselineSaved() }
+
+        // The nightly run (no baseline passed) is the baseline: the month since the Disconnect is no session.
+        coEvery { client.titleHistory(any()) } returns XboxTitleList(listOf(title(ring, "RING OF ASH")), full = false)
+        coEvery { games.saveXboxSnapshot(any()) } returns false
+        assertTrue(sync.sync(now, zone).isSuccess)
+        coVerify { games.addSessions(emptyList()) }
+        // A snapshot that couldn't be written ends nothing: the next run is a baseline again.
+        coVerify(exactly = 0) { account.baselineSaved() }
+
+        coEvery { games.saveXboxSnapshot(any()) } returns true
+        assertTrue(sync.sync(now, zone).isSuccess)
+        coVerify(exactly = 0) { games.addSessions(match { it.isNotEmpty() }) }
+        coVerifyOrder {
+            games.saveXboxSnapshot(any())
+            account.baselineSaved()
+        }
+    }
+
+    @Test
+    fun `a baseline keeps no minutes from before it`() = runTest {
+        // The minutes batch met a 429: the title's count before the new sign-in isn't carried into the baseline.
+        coEvery { games.xboxSnapshot() } returns XboxSnapshot(
+            "2026-10-01T22:40:00Z",
+            titles = listOf(XboxTitleState(ring, "RING OF ASH", achievementSource = 2, minutesPlayed = 100))
+        )
+        coEvery { client.minutesPlayed(any(), any()) } returns emptyMap()
+        val saved = mutableListOf<XboxSnapshot>()
+        coEvery { games.saveXboxSnapshot(capture(saved)) } returns true
+
+        assertTrue(sync.sync(now, zone, baseline = true).isSuccess)
+        assertNull(saved.last().titles.single().minutesPlayed)
+
+        // An ordinary run keeps the last count for a title it couldn't read: no play is lost or made up.
+        assertTrue(sync.sync(now, zone).isSuccess)
+        assertEquals(100L, saved.last().titles.single().minutesPlayed)
     }
 
     @Test
@@ -276,6 +359,35 @@ class XboxSyncTest {
         assertEquals(1, result.getOrThrow().achievementSets)
         coVerify { games.saveAchievementSet(match { it.titleId == bricks }) }
         coVerify(exactly = 0) { games.saveAchievementSet(match { it.titleId == ring }) }
+        coVerify { games.saveXboxSnapshot(any()) }
+        coVerify { account.setStatus(XboxStatus(true, now)) }
+    }
+
+    @Test
+    fun `an empty achievements answer keeps the file it would replace`() = runTest {
+        // A 360 title's file: an unlock made offline was dated by the sync that first saw it, a date Xbox never gives again.
+        val file = AchievementSetFile(
+            ring, "Ring of Ash", 1,
+            listOf(
+                AchievementRecord("1", "Old Hero", "Beat chapter one.", 20, earnedAt = "2026-11-02T20:10:00Z"),
+                AchievementRecord("2", "Secret Ending", "", 50, secret = true)
+            )
+        )
+        coEvery { games.links() } returns GameLinks(xbox = ConsoleLinks(links = mapOf(ring to page.path)))
+        coEvery { games.achievementSet(ring) } returns file
+        // titlehub counts one more earned: the title moved, its achievements are asked again, and both lists come back empty.
+        coEvery { client.titleHistory(any()) } returns
+            XboxTitleList(listOf(title(ring, "RING OF ASH", earned = 2, score = 70, source = 1)), full = false)
+        coEvery { client.achievements(any(), ring, 1) } returns emptyList()
+
+        val result = sync.sync(now, zone)
+
+        assertTrue(result.isSuccess)
+        assertEquals(0, result.getOrThrow().achievementSets)
+        coVerify { client.achievements(any(), ring, 1) }
+        coVerify(exactly = 0) { games.saveAchievementSet(any()) }
+        // The page keeps its section, from the file kept, and the rest of the sync goes on.
+        coVerify { games.editPage(page.path, any()) }
         coVerify { games.saveXboxSnapshot(any()) }
         coVerify { account.setStatus(XboxStatus(true, now)) }
     }

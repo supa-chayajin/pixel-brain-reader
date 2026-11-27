@@ -104,6 +104,19 @@ class GamePageCreationTest {
     }
 
     @Test
+    fun `a console name's line breaks and control characters never reach the page`() {
+        // A bell and a line break in the name the console sent.
+        val plan = GamePageCreation.plan(listOf(PageCandidate("1", "Glass\u0007 Tower™\n## Notes")), library, emptyList(), GameConsole.XBOX).single()
+        assertEquals("Glass Tower ## Notes", plan.title)
+        assertEquals(listOf("Glass Tower™ ## Notes"), plan.aliases)
+        val content = GamePageCreation.render(plan, template = null, started = null, today = today).content
+        assertFalse(content.any { it.isISOControl() && it != '\n' })
+        assertTrue(content.contains("\naliases:\n  - \"Glass Tower™ ## Notes\"\n"))
+        assertTrue(content.endsWith("\n# Glass Tower ## Notes\n"))
+        assertEquals(listOf("Glass Tower™ ## Notes"), GamePages.parse(plan.path, content)!!.aliases)
+    }
+
+    @Test
     fun `siblings and equal names make one page`() {
         val plans = GamePageCreation.plan(
             listOf(

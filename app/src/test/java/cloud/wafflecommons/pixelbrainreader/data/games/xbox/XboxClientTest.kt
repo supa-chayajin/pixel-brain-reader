@@ -70,6 +70,9 @@ class XboxClientTest {
 
     private fun JsonObject.text(key: String): String = getValue(key).jsonPrimitive.content
 
+    /** The title ids a stats batch asked, in order. */
+    private fun askedIds(call: Call): List<String> = body(call).getValue("stats").jsonArray.map { it.jsonObject.text("titleId") }
+
     @Test
     fun `the device code asks the consumers endpoint with the Xbox scopes`() = runTest {
         val (transport, xbox) = client(
@@ -353,6 +356,36 @@ class XboxClientTest {
         assertTrue(asked.all { it.text("name") == "MinutesPlayed" })
         assertEquals(listOf("1915865634", "1234567890", "1480000001", "1915865635", "987654321"), asked.map { it.text("titleId") })
         assertEquals("2", call.headers["x-xbl-contract-version"])
+    }
+
+    @Test
+    fun `a 360 game's minutes count once, its ids asked in one call`() = runTest {
+        // The 360 version names its modern id, which the history lists as a title too: the counter is the modern title's alone.
+        val legacy = XboxTitle(titleId = "1480000001", name = "Outlaw Trail II", type = "Game", mediaItemType = "Xbox360Game", modernTitleId = "1915865635")
+        val modern = XboxTitle(titleId = "1915865635", name = "Outlaw Trail II", type = "Game", mediaItemType = "Application")
+        val onlyModern = """{"statlistscollection":[{"stats":[{"titleid":"1915865635","name":"MinutesPlayed","value":"40"}]}]}"""
+        val (transport, xbox) = client(stats to { _ -> XboxHttpResponse(200, onlyModern) })
+
+        assertEquals(mapOf("1915865635" to 40L), xbox.minutesPlayed(session, listOf(legacy, modern)))
+        // Each id asked once.
+        assertEquals(listOf("1480000001", "1915865635"), askedIds(transport.calls.single()))
+        // Listed the other way round: the same.
+        val (_, reversed) = client(stats to { _ -> XboxHttpResponse(200, onlyModern) })
+        assertEquals(mapOf("1915865635" to 40L), reversed.minutesPlayed(session, listOf(modern, legacy)))
+        // Two 360 titles naming one modern id the history doesn't list: the smallest id holds the
+        // counter, whatever the order (it moves with play), and the other gets none.
+        val twin = XboxTitle(titleId = "1480000002", name = "Outlaw Trail II Classic", type = "Game", mediaItemType = "Xbox360Game", modernTitleId = "1915865635")
+        val (_, shared) = client(stats to { _ -> XboxHttpResponse(200, onlyModern) })
+        assertEquals(mapOf("1480000001" to 40L), shared.minutesPlayed(session, listOf(twin, legacy)))
+        val (_, sharedAgain) = client(stats to { _ -> XboxHttpResponse(200, onlyModern) })
+        assertEquals(mapOf("1480000001" to 40L), sharedAgain.minutesPlayed(session, listOf(legacy, twin)))
+
+        // 49 titles leave one place in the first call: the 360 game and its modern id go into the next one together.
+        val filler = (1..49).map { XboxTitle(titleId = (1_000_000_000L + it).toString(), name = "Game $it", type = "Game") }
+        val (batched, packed) = client(stats to { _ -> XboxHttpResponse(200, """{"statlistscollection":[]}""") })
+        packed.minutesPlayed(session, filler + legacy)
+        assertEquals(listOf(49, 2), batched.calls.map { askedIds(it).size })
+        assertEquals(listOf("1480000001", "1915865635"), askedIds(batched.calls[1]))
     }
 
     @Test

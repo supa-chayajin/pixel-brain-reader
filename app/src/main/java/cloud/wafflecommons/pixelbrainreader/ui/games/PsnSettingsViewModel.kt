@@ -10,6 +10,7 @@ import cloud.wafflecommons.pixelbrainreader.data.games.GamePlatform
 import cloud.wafflecommons.pixelbrainreader.data.games.psn.PsnAccount
 import cloud.wafflecommons.pixelbrainreader.data.games.psn.PsnStatus
 import cloud.wafflecommons.pixelbrainreader.data.games.psn.PsnSync
+import cloud.wafflecommons.pixelbrainreader.data.games.psn.PsnSyncSummary
 import cloud.wafflecommons.pixelbrainreader.data.workers.GamesSyncScheduler
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -68,22 +69,36 @@ class PsnSettingsViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Signs in with the pasted NPSSO, then the first sync: a baseline for a new sign-in (play counts
+     * from now on), while a new NPSSO over an expired sign-in still kept keeps the play since the
+     * last sync.
+     */
     fun connect() {
         val input = pasted
         if (input.isBlank()) return
         viewModelScope.launch {
             _state.update { it.copy(busy = true, message = null) }
+            // Read before the sign-in saves its tokens: none kept means a first Connect, or one after Disconnect.
+            val baseline = !account.isConnected()
             val result = account.connect(input)
             pasted = ""
             result.onSuccess {
+                // Signed in: the page says so at once, while the first sync reads the games.
+                _state.update { it.copy(connected = true, message = "Signed in. The first sync is reading your PlayStation games…") }
                 scheduler.update()
-                // The first sync records the baseline: sessions start from the next one.
-                val first = psnSync.sync()
+                val first = psnSync.sync(baseline = baseline)
                 _state.update {
                     it.copy(
                         busy = false,
                         message = first.fold(
-                            { s -> "Connected: ${s.titles} games found. Play time counts from now on." + createdPagesNote(s.pagesCreated) },
+                            { s ->
+                                if (baseline) {
+                                    "Connected: ${s.titles} games found. Play time counts from now on." + createdPagesNote(s.pagesCreated)
+                                } else {
+                                    "Signed in again. " + syncedLine(s)
+                                }
+                            },
                             { e -> "Connected, but the first sync failed: ${e.message}" }
                         )
                     )
@@ -97,18 +112,7 @@ class PsnSettingsViewModel @Inject constructor(
         viewModelScope.launch {
             _state.update { it.copy(busy = true, message = null) }
             val result = psnSync.sync()
-            _state.update {
-                it.copy(
-                    busy = false,
-                    message = result.fold(
-                        { s ->
-                            "Synced ${s.titles} games: ${s.sessions} new sessions, ${s.trophySets} trophy lists updated." +
-                                createdPagesNote(s.pagesCreated)
-                        },
-                        { e -> e.message }
-                    )
-                )
-            }
+            _state.update { it.copy(busy = false, message = result.fold({ s -> syncedLine(s) }, { e -> e.message })) }
             refresh()
         }
     }
@@ -118,8 +122,11 @@ class PsnSettingsViewModel @Inject constructor(
             account.disconnect()
             // The slots stay while Xbox is connected; they go once neither console is.
             scheduler.update()
-            _state.update { it.copy(message = "Disconnected. Games works by hand.") }
+            _state.update { it.copy(message = "Disconnected: PlayStation no longer syncs.") }
             refresh()
         }
     }
+
+    private fun syncedLine(s: PsnSyncSummary): String =
+        "Synced ${s.titles} games: ${s.sessions} new sessions, ${s.trophySets} trophy lists updated." + createdPagesNote(s.pagesCreated)
 }

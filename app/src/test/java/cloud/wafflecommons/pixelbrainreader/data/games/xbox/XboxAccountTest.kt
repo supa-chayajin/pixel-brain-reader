@@ -9,8 +9,12 @@ import io.mockk.coVerifyOrder
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -98,6 +102,8 @@ class XboxAccountTest {
 
     @Test
     fun `the wait polls at the interval, slows down when told, and saves the tokens`() = runTest {
+        // No sign-in kept: a first Connect.
+        every { secrets.getXboxTokens() } returns null
         val times = mutableListOf<Long>()
         coEvery { client.pollDeviceCode(code, capture(times)) } returnsMany
             listOf(DevicePoll.Pending, DevicePoll.SlowDown, DevicePoll.Pending, DevicePoll.Done(tokens))
@@ -107,8 +113,24 @@ class XboxAccountTest {
         assertTrue(result.isSuccess)
         // Every 5 s, then every 10 s once Microsoft asked to slow down.
         assertEquals(listOf(5_000L, 10_000L, 20_000L, 30_000L), times)
-        verify { secrets.saveXboxTokens(tokens) }
+        // A new sign-in: its syncs are baselines until one is saved, marked before the tokens are kept.
+        coVerifyOrder {
+            preferences.setXboxBaselinePending(true)
+            secrets.saveXboxTokens(tokens)
+        }
         coVerify { preferences.setXboxStatus("ok|30000") }
+    }
+
+    @Test
+    fun `signing in again over a sign-in still kept starts no baseline`() = runTest {
+        // The sign-in expired but its tokens are kept: the play since the last sync still counts.
+        every { secrets.getXboxTokens() } returns tokens
+        coEvery { client.pollDeviceCode(code, any()) } returns DevicePoll.Done(renewed)
+
+        assertTrue(account.awaitSignIn(code, clock = { testScheduler.currentTime }).isSuccess)
+
+        verify { secrets.saveXboxTokens(renewed) }
+        coVerify(exactly = 0) { preferences.setXboxBaselinePending(any()) }
     }
 
     @Test
@@ -201,6 +223,69 @@ class XboxAccountTest {
         val error = runCatching { other.session(now) }.exceptionOrNull() as XboxException
         assertEquals(XboxException.Kind.SIGN_IN_EXPIRED, error.kind)
         coVerify(exactly = 2) { client.refresh(any(), any()) }
+    }
+
+    /** The phone's encrypted storage as a store, starting with [tokens]: what is saved is read back, a log-out clears it. */
+    private fun storedTokens(): () -> XboxTokens? {
+        var stored: XboxTokens? = tokens
+        every { secrets.getXboxTokens() } answers { stored }
+        every { secrets.saveXboxTokens(any()) } answers { stored = firstArg() }
+        every { secrets.clearXboxTokens() } answers { stored = null }
+        every { secrets.clear() } answers { stored = null }
+        return { stored }
+    }
+
+    @Test
+    fun `a disconnect during a renewal keeps the sign-in forgotten`() = runTest {
+        val stored = storedTokens()
+        val asked = CompletableDeferred<Unit>()
+        val answer = CompletableDeferred<XboxTokens>()
+        coEvery { client.refresh(tokens, now) } coAnswers {
+            asked.complete(Unit)
+            answer.await()
+        }
+        coEvery { client.session("ACCESS-2") } returns session("XSTS", now + 8 * 3_600_000L)
+
+        // The 23:40 sync renews the sign-in while Microsoft takes its time…
+        val renewal = async { runCatching { account.session(now, force = true) } }
+        asked.await()
+        // …and the owner taps Disconnect meanwhile.
+        val disconnecting = launch { account.disconnect() }
+        runCurrent()
+        answer.complete(renewed)
+        renewal.await()
+        disconnecting.join()
+
+        assertNull(stored())
+        assertFalse(account.isConnected())
+        coVerify { preferences.setXboxStatus(null) }
+        // Nor does the session derived before the clear stay in memory.
+        val error = runCatching { account.session(now) }.exceptionOrNull() as XboxException
+        assertEquals(XboxException.Kind.NOT_CONFIGURED, error.kind)
+    }
+
+    @Test
+    fun `a log-out during a renewal saves nothing`() = runTest {
+        val stored = storedTokens()
+        val asked = CompletableDeferred<Unit>()
+        val answer = CompletableDeferred<XboxTokens>()
+        coEvery { client.refresh(tokens, now) } coAnswers {
+            asked.complete(Unit)
+            answer.await()
+        }
+
+        val renewal = async { runCatching { account.session(now, force = true) } }
+        asked.await()
+        // A log-out clears the phone's secrets without going through the account.
+        secrets.clear()
+        answer.complete(renewed)
+
+        val error = renewal.await().exceptionOrNull() as XboxException
+        assertEquals(XboxException.Kind.NOT_CONFIGURED, error.kind)
+        assertEquals("Xbox isn't connected.", error.message)
+        assertNull(stored())
+        verify(exactly = 0) { secrets.saveXboxTokens(any()) }
+        coVerify(exactly = 0) { client.session(any()) }
     }
 
     @Test
