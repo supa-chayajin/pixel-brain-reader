@@ -11,6 +11,72 @@ Planned: `documentation/plans/2026-11-10-dream-app-roadmap.md`. Next: the second
 (a smaller embedder, days like this), the toolkit's last small wins, and the Wear OS companion
 (X1) once it has a plan.
 
+## [13.3.0] — 2026-11-27
+
+A game's maps, changed from the app, and the Xbox beside the PlayStation: the owner's interview of
+27 November (M6–M8, XB1–XB6). Planned in `documentation/plans/2026-11-27-13.3-game-maps-editing.md`.
+
+### Added
+
+- **A game's maps, changed from the app (ME1–ME3):**
+  - The game page's Maps card lists the page's maps (label · site, the main one first): Add,
+    Change, Make main and Remove. Each edit changes the note's `game_maps` (and its
+    `date_updated`) and leaves the rest of the page as it was.
+  - Sharing a map page from the browser offers *Add as a game map*: pick the game, then check the
+    address and the label (taken from the page's title).
+  - The open map's *Maps* menu changes this map, keeps the page the map browser shows now (*Use
+    this page*, after moving inside the site), or adds it as another map.
+  - An entry the app can't open stays in the note as it is. A read-only device shows the maps
+    without these controls.
+- **Xbox (XB-A–XB-G),** in Settings › Integrations › Xbox:
+  - The sign-in uses the owner's own Microsoft app (`xboxClientId` in `local.properties`; see
+    `documentation/how-to/xbox-app-registration.md`) and a code entered at microsoft.com/link.
+    Only Microsoft's tokens are kept, in the phone's encrypted storage.
+  - Each sync reads the games, the minutes played and the achievements that moved (25 games a
+    sync at most, the most recently played first). The minutes' differences become sessions, and
+    each linked page gets an `## 🎖️ Achievements` section (earned only, dated, with the
+    gamerscore). Achievement lines in a checklist are ticked like trophies.
+  - Xbox syncs with the PlayStation at 23:40 and 06:00, and every call shows in the privacy
+    ledger as "Xbox sync".
+- **Both consoles on one page:** the hours add both consoles' measured totals (`played_before`
+  counts only until one measures), a day's Timeline line totals both, and on a wide window the
+  Trophies and Achievements cards sit side by side.
+- **A page for each played game (XB4):** a played game of either console that no page claims gets
+  one, from the vault's Other game template and in the folder the game pages already use. At most
+  50 a console and sync, the most recently played first. A created page is matched by its exact
+  title only, so a sequel or a DLC never lands on it.
+
+### Fixed
+
+- After switching maps in the map browser, Reload, Back and Open in the browser work again.
+- **From the review, on both consoles:**
+  - A new sign-in (a first Connect, or one after Disconnect or a log-out) counts play from that
+    moment, even when its first sync fails or the page is left before it ends. Signing in again
+    over an expired sign-in keeps the play since the last sync.
+  - A Disconnect or a log-out during a token renewal stays final.
+  - Game, trophy and achievement names from the consoles are kept to one line before they enter a
+    note.
+  - The PlayStation and Xbox pages show *Connected* as soon as the sign-in ends, and "Syncing…"
+    while a sync runs.
+- **From the review, Xbox:** a 360 game's minutes are never counted twice, and an empty
+  achievements answer keeps the list already saved.
+- **From the review, the maps:**
+  - Map labels lose the invisible text-direction characters a site's title can carry, and an
+    address with a user name or password is not a map.
+  - Tech watch articles no longer offer *Add as a game map*, and on the share screen the button
+    stays in place while the page loads.
+  - *Use this page* keeps the map browser's position and history.
+  - A read-only page without maps shows no Maps card.
+  - Screen readers hear "Open the map", "Actions for" a map, and "Reveal" on hidden lines.
+
+### Notes
+
+- The Xbox side is built to Xbox's recorded answers (Claude has no Xbox account): the Fold gives
+  its first live check.
+- An older version shows the 🎖️ section as plain text and leaves the Xbox links and sessions out.
+- A PlayStation trophy name with extra spaces is rewritten once, on one line, at the first sync
+  after the update.
+
 ## [13.2.3] — 2026-11-27
 
 The PlayStation Network sign-in: the refusal came from this build, not from Sony. Planned in
