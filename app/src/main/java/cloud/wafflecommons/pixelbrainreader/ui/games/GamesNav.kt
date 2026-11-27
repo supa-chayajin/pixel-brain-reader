@@ -13,6 +13,10 @@ object GamesRoutes {
     const val GAMES = "games"
     const val GAME = "game?page={page}"
     const val PSN = "psn_settings"
+
+    /** Settings › Integrations › Xbox (13.3, XB-E): shown only in a build with the Xbox app. */
+    const val XBOX = "xbox_settings"
+
     /** A game's map (13.2); without a page, the running session's game (its notification's action). */
     const val MAP = "game_map?page={page}&index={index}"
 
@@ -24,12 +28,16 @@ object GamesRoutes {
     fun isMap(route: String?): Boolean = route?.startsWith("game_map") == true
 }
 
-/** The Games tab, a game's page and the PlayStation settings; [openNote] opens a vault note in the Repo pane. */
+/**
+ * The Games tab, a game's page, its map, and the PlayStation and Xbox settings; [openNote] opens a
+ * vault note in the Repo pane.
+ */
 fun NavGraphBuilder.gamesDestinations(navController: NavHostController, openNote: (String) -> Unit) {
     composable(GamesRoutes.GAMES) {
         GamesScreen(
             onOpenGame = { navController.navigate(GamesRoutes.game(it)) },
             onOpenPsn = { navController.navigate(GamesRoutes.PSN) },
+            onOpenXbox = { navController.navigate(GamesRoutes.XBOX) },
             onOpenMap = { navController.navigate(GamesRoutes.map(it)) }
         )
     }
@@ -58,5 +66,8 @@ fun NavGraphBuilder.gamesDestinations(navController: NavHostController, openNote
     }
     composable(GamesRoutes.PSN) {
         PsnSettingsScreen(onBack = { navController.popBackStack() })
+    }
+    composable(GamesRoutes.XBOX) {
+        XboxSettingsScreen(onBack = { navController.popBackStack() })
     }
 }

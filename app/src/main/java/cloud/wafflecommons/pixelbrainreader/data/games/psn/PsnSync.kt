@@ -2,10 +2,13 @@ package cloud.wafflecommons.pixelbrainreader.data.games.psn
 
 import android.util.Log
 import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
+import cloud.wafflecommons.pixelbrainreader.data.games.GameConsole
 import cloud.wafflecommons.pixelbrainreader.data.games.GameLinks
 import cloud.wafflecommons.pixelbrainreader.data.games.GameNames
 import cloud.wafflecommons.pixelbrainreader.data.games.GamePage
+import cloud.wafflecommons.pixelbrainreader.data.games.GamePageCreation
 import cloud.wafflecommons.pixelbrainreader.data.games.GamesRepository
+import cloud.wafflecommons.pixelbrainreader.data.games.PageCandidate
 import cloud.wafflecommons.pixelbrainreader.data.games.PsnDuration
 import cloud.wafflecommons.pixelbrainreader.data.games.PsnSnapshot
 import cloud.wafflecommons.pixelbrainreader.data.games.PsnTitleState
@@ -25,14 +28,15 @@ import java.time.ZoneId
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** What one sync did, for the settings page's line. */
-data class PsnSyncSummary(val titles: Int, val sessions: Int, val trophySets: Int, val pages: Int)
+/** What one sync did, for the settings page's line. [pagesCreated]: pages made for played games (13.3, XB4). */
+data class PsnSyncSummary(val titles: Int, val sessions: Int, val trophySets: Int, val pages: Int, val pagesCreated: Int = 0)
 
 /**
  * One PSN sync (RFC-009 §7, D3): read the played games and the trophies, then write what changed to
  * the vault. Every network call comes first; the writes run in one block under the git lock, like
  * the other background writers, so none lands in the middle of a pull. A failure writes nothing but
- * the status line ("PSN paused: …"), and never touches the vault sync.
+ * the status line ("PSN paused: …"), and never touches the vault sync. Since 13.3 (XB4) a played
+ * title that no page claims gets a page, linked and given its trophies in the same sync.
  */
 @Singleton
 class PsnSync @Inject constructor(
@@ -121,7 +125,21 @@ class PsnSync @Inject constructor(
 
         val sessions = SessionDiff.sessions(previous, current, zone, LAST_PLAYED_IS_START)
         val pages = games.pages()
-        val links = autoLinked(games.links(), current, pages)
+        val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
+        val claimed = autoLinked(games.links(), current, pages)
+
+        // A played title no page claims gets one (XB4): where the owner's game pages already are.
+        val layout = GamePageCreation.layout(pages)
+        val plans = GamePageCreation.plan(
+            candidates = current.titles
+                .filter { claimed.pageOf(it.titleId) == null && it.titleId !in claimed.hidden && it.playSeconds > 0 }
+                .map { PageCandidate(it.titleId, it.name, it.conceptTitleIds - it.titleId, instantOrNull(it.lastPlayed)) },
+            pages = pages,
+            takenPaths = layout?.let { games.notePathsUnder(it.root) }.orEmpty(),
+            console = GameConsole.PSN
+        )
+        // The trophies of the titles about to get a page come with this sync.
+        val links = plans.fold(claimed) { acc, plan -> plan.titleIds.fold(acc) { a, id -> a.link(id, plan.path) } }
 
         // Trophy sets of the linked titles that moved since the last sync (or were never saved).
         val setFiles = mutableListOf<TrophySetFile>()
@@ -146,26 +164,43 @@ class PsnSync @Inject constructor(
             setFiles += TrophySetFile(set, service, title.trophySetVersion, trophyTitles[set]?.trophyTitleName ?: title.name, records)
         }
 
+        val template = if (plans.isEmpty()) null else games.otherTemplate()
+        val newPages = plans.map { plan ->
+            val started = plan.titleIds.mapNotNull { id -> current.titles.firstOrNull { it.titleId == id }?.firstPlayed }
+                .mapNotNull { runCatching { Instant.parse(it).atZone(zone).toLocalDate() }.getOrNull() }
+                .minOrNull()
+            GamePageCreation.render(plan, template, started, today)
+        }
+
         // --- 2. Write (the vault, under the git lock) --------------------------------------
         var pagesTouched = 0
+        var created = emptyList<GamePage>()
         gitSyncCoordinator.mutex.withLock {
-            // Linked again from the file on disk: a link the owner made during the sync is kept.
-            games.updateLinks { onDisk -> autoLinked(onDisk, current, pages) }
+            created = games.createPages(newPages)
+            // Read again: the pages just created, and any made meanwhile.
+            val pagesNow = games.pages()
+            val createdPaths = created.map { it.path }.toSet()
+            // Linked again from the file on disk: a link the owner made during the sync is kept, and a
+            // created page takes its titles unless one was linked or hidden meanwhile.
+            games.updateLinks { onDisk ->
+                newPages.filter { it.plan.path in createdPaths }.fold(autoLinked(onDisk, current, pagesNow)) { acc, page ->
+                    page.plan.titleIds.fold(acc) { a, id -> if (a.pageOf(id) == null && id !in a.hidden) a.link(id, page.plan.path) else a }
+                }
+            }
             setFiles.forEach { games.saveTrophySet(it) }
             // Every run: a page linked by hand since gets its section without waiting for a new trophy.
-            pagesTouched = refreshPages(pages, games.links(), current, zone)
+            pagesTouched = refreshPages(pagesNow, games.links(), current, zone)
             // Without its sessions saved, the snapshot isn't either: the next run replays from the same
             // baseline (the sessions are keyed on it), so no play is lost or counted twice.
             val days = games.addSessions(sessions)
                 ?: throw PsnException(PsnException.Kind.API, "The sessions couldn't be saved; the next sync tries again.")
-            val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
             days.filter { it.isBefore(today) }.forEach { games.applyPastDay(it, today) }
             // Today's line comes with the next burn (23:50 after the evening run), even on a day with
             // nothing else on the board.
             if (today in days) dashboardRepository.ensureDay(today)
             games.saveSnapshot(current)
         }
-        return PsnSyncSummary(current.titles.size, sessions.size, setFiles.size, pagesTouched)
+        return PsnSyncSummary(current.titles.size, sessions.size, setFiles.size, pagesTouched, created.size)
     }
 
     /** Each linked page's 🏆 section and trophy markers, from its sets' files. */
@@ -199,6 +234,8 @@ class PsnSync @Inject constructor(
         }
         return next
     }
+
+    private fun instantOrNull(raw: String?): Instant? = raw?.let { runCatching { Instant.parse(it) }.getOrNull() }
 
     companion object {
         private const val TAG = "PsnSync"

@@ -15,6 +15,8 @@ enum class NetPurpose(val key: String, val label: String) {
     WATCH("watch", "Tech watch feeds"),
     GAMES("games", "PlayStation sync"),
     MAPS("maps", "Game maps"),
+    /** 13.3: the Xbox sign-in and its reads (Microsoft's sign-in, the Xbox network). */
+    XBOX("xbox", "Xbox sync"),
     OTHER("other", "Other");
 
     companion object {

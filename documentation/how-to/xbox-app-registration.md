@@ -91,8 +91,9 @@ and you approve it then.
    call the app "unverified": publisher verification is for business accounts, and a personal
    registration shows that.
 4. Back in the app, the page turns to **Connected** and runs the first sync: a baseline of your
-   games and minutes, an `## 🎖️ Achievements` section on each game's page, and a page for each
-   played game that has none (13.3's XB4).
+   games and minutes, a page for each played game that has none (13.3's XB4, at most 50 a sync),
+   and an `## 🎖️ Achievements` section on the pages of up to 25 titles, the most recently played
+   first. A long library fills in over a few syncs.
 
 Only enter a code the app showed you a moment ago: a code typed at `microsoft.com/link` signs in
 whoever asked for it.

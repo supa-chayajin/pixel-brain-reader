@@ -50,4 +50,20 @@ class GameNamesTest {
         val twin = page("Ring of Ash", "RoA")
         assertNull(GameNames.pageForTitle("Ring of Ash", listOf(ring, twin.copy(path = "other.md"))))
     }
+
+    @Test
+    fun `an exact-name page never takes a longer title by its first words`() {
+        // 13.3: a page the sync created for a short name answers to that name only.
+        val tower = page("Glass Tower", "GT").copy(exactName = true)
+        assertEquals(tower, GameNames.pageForTitle("GLASS TOWER™", listOf(tower)))
+        assertEquals(tower, GameNames.pageForTitle("gt", listOf(tower)))
+        assertNull(GameNames.pageForTitle("Glass Tower Dungeons", listOf(tower)))
+        // Without the mark, the first words still match.
+        assertEquals(page("Glass Tower"), GameNames.pageForTitle("Glass Tower Dungeons", listOf(page("Glass Tower"))))
+        // Beside an owner's page, the longer title finds that page only.
+        val dungeons = page("Glass Tower Dungeons")
+        assertEquals(dungeons, GameNames.pageForTitle("Glass Tower Dungeons: Deluxe", listOf(tower, dungeons)))
+        // A Timeline line still names it anywhere, as whole words.
+        assertEquals(tower, GameNames.pageInLine("Glass Tower with friends", listOf(tower)))
+    }
 }

@@ -64,5 +64,25 @@ class GameChecklistsTest {
         assertTrue(ticked.contains("- [x] The hidden knight <!--spoiler-->\n"))
         assertEquals(content, GameChecklists.toggle(ticked, "- [x] The hidden knight <!--spoiler-->"))
     }
+
+    @Test
+    fun `achievement-marked lines wait and are masked, the achievements section left out`() {
+        val content = "---\ngame_template: souls-like\n---\n# Ring of Ash\n\n## Bosses\n" +
+            "- [ ] Beat the first knight <!--achievement:1915865634#12-->\n" +
+            "- [x] The gatekeeper ✅ 2026-11-01 <!-- achievement:1915865634#2 -->\n" +
+            "- [ ] My own line\n\n" +
+            "${AchievementSection.HEADING}\n\n" +
+            "*1 of 2 achievements · 10 of 60 G · 50 %*\n\n" +
+            "- [ ] Not a line of mine\n"
+        val sections = GameChecklists.sections(content)
+        assertEquals(listOf("Bosses"), sections.map { it.heading })
+        val items = sections.single().items
+        assertEquals(listOf("Beat the first knight", "The gatekeeper ✅ 2026-11-01", "My own line"), items.map { it.text })
+        assertEquals(listOf(true, true, false), items.map { it.waitsForTrophy })
+        assertEquals(listOf(true, false, false), items.map { it.masked })
+        // The same without the variation selector in the heading.
+        val bare = content.replace(AchievementSection.HEADING, "## 🎖 Achievements")
+        assertEquals(listOf("Bosses"), GameChecklists.sections(bare).map { it.heading })
+    }
 }
 

@@ -1,20 +1,17 @@
 package cloud.wafflecommons.pixelbrainreader.ui.games
 
-import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.work.WorkManager
 import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.games.GamePlatform
 import cloud.wafflecommons.pixelbrainreader.data.games.psn.PsnAccount
 import cloud.wafflecommons.pixelbrainreader.data.games.psn.PsnStatus
 import cloud.wafflecommons.pixelbrainreader.data.games.psn.PsnSync
-import cloud.wafflecommons.pixelbrainreader.data.workers.GamesSyncWorker
+import cloud.wafflecommons.pixelbrainreader.data.workers.GamesSyncScheduler
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -34,16 +31,17 @@ data class PsnSettingsUiState(
     val readOnly: Boolean = VaultWriteGate.readOnly
 )
 
-/** Settings → Integrations → PlayStation Network (RFC-009 §7). */
+/**
+ * Settings → Integrations → PlayStation Network (RFC-009 §7). The nightly slots are the Games sync's
+ * (13.3): kept while PlayStation or Xbox is connected, so a PSN disconnect leaves Xbox's in place.
+ */
 @HiltViewModel
 class PsnSettingsViewModel @Inject constructor(
     private val account: PsnAccount,
     private val psnSync: PsnSync,
     private val platform: GamePlatform,
-    @param:ApplicationContext private val context: Context
+    private val scheduler: GamesSyncScheduler
 ) : ViewModel() {
-
-    private val workManager: WorkManager get() = WorkManager.getInstance(context)
 
     private val _state = MutableStateFlow(PsnSettingsUiState(configured = account.configured))
     val state: StateFlow<PsnSettingsUiState> = _state.asStateFlow()
@@ -78,14 +76,14 @@ class PsnSettingsViewModel @Inject constructor(
             val result = account.connect(input)
             pasted = ""
             result.onSuccess {
-                GamesSyncWorker.ensureScheduled(workManager)
+                scheduler.update()
                 // The first sync records the baseline: sessions start from the next one.
                 val first = psnSync.sync()
                 _state.update {
                     it.copy(
                         busy = false,
                         message = first.fold(
-                            { s -> "Connected: ${s.titles} games found. Play time counts from now on." },
+                            { s -> "Connected: ${s.titles} games found. Play time counts from now on." + createdPagesNote(s.pagesCreated) },
                             { e -> "Connected, but the first sync failed: ${e.message}" }
                         )
                     )
@@ -103,7 +101,10 @@ class PsnSettingsViewModel @Inject constructor(
                 it.copy(
                     busy = false,
                     message = result.fold(
-                        { s -> "Synced ${s.titles} games: ${s.sessions} new sessions, ${s.trophySets} trophy lists updated." },
+                        { s ->
+                            "Synced ${s.titles} games: ${s.sessions} new sessions, ${s.trophySets} trophy lists updated." +
+                                createdPagesNote(s.pagesCreated)
+                        },
                         { e -> e.message }
                     )
                 )
@@ -115,7 +116,8 @@ class PsnSettingsViewModel @Inject constructor(
     fun disconnect() {
         viewModelScope.launch {
             account.disconnect()
-            GamesSyncWorker.cancel(workManager)
+            // The slots stay while Xbox is connected; they go once neither console is.
+            scheduler.update()
             _state.update { it.copy(message = "Disconnected. Games works by hand.") }
             refresh()
         }

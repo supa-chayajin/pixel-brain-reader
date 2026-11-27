@@ -234,7 +234,8 @@ class GameSessionController @Inject constructor(
 
     /**
      * The game played last (RFC-009 §4.3: the session picker's default and the tile's game): the
-     * latest of the sessions kept here and PSN's last-played times, else the first game being played.
+     * latest of the sessions kept here and the consoles' last-played times (PSN's, and Xbox's since
+     * 13.3), else the first game being played.
      */
     suspend fun defaultPage(zone: ZoneId = ZoneId.systemDefault()): GamePage? {
         val pages = games.pages()
@@ -253,7 +254,12 @@ class GameSessionController @Inject constructor(
             val at = title.lastPlayed?.let { runCatching { Instant.parse(it).atZone(zone).toLocalDateTime() }.getOrNull() } ?: return@mapNotNull null
             page to at
         }
-        return (fromSessions + fromPsn).maxByOrNull { it.second }?.first
+        val fromXbox = games.xboxSnapshot()?.titles.orEmpty().mapNotNull { title ->
+            val page = links.consolePage(GameConsole.XBOX, title.titleId)?.let(byPath::get) ?: return@mapNotNull null
+            val at = title.lastPlayed?.let { runCatching { Instant.parse(it).atZone(zone).toLocalDateTime() }.getOrNull() } ?: return@mapNotNull null
+            page to at
+        }
+        return (fromSessions + fromPsn + fromXbox).maxByOrNull { it.second }?.first
             ?: pages.firstOrNull { it.state == GameState.PLAYING } ?: pages.first()
     }
 

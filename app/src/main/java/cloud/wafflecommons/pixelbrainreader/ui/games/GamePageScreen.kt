@@ -20,6 +20,7 @@ import androidx.compose.material.icons.rounded.Checklist
 import androidx.compose.material.icons.rounded.EmojiEvents
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Map
+import androidx.compose.material.icons.rounded.MilitaryTech
 import androidx.compose.material.icons.rounded.MoreTime
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -27,12 +28,9 @@ import androidx.compose.material.icons.rounded.QuestionAnswer
 import androidx.compose.material.icons.rounded.SportsEsports
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -63,6 +61,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import cloud.wafflecommons.pixelbrainreader.data.games.AchievementSection
+import cloud.wafflecommons.pixelbrainreader.data.games.GameConsole
 import cloud.wafflecommons.pixelbrainreader.data.games.GameMap
 import cloud.wafflecommons.pixelbrainreader.data.games.GamePages
 import cloud.wafflecommons.pixelbrainreader.data.games.GameSessionRecord
@@ -71,6 +71,7 @@ import cloud.wafflecommons.pixelbrainreader.data.games.ManualSessions
 import cloud.wafflecommons.pixelbrainreader.data.games.GameState
 import cloud.wafflecommons.pixelbrainreader.data.games.GameTimeline
 import cloud.wafflecommons.pixelbrainreader.data.games.TrophySection
+import cloud.wafflecommons.pixelbrainreader.ui.components.CardGrid
 import cloud.wafflecommons.pixelbrainreader.ui.components.EmptyHint
 import cloud.wafflecommons.pixelbrainreader.ui.components.FormScaffold
 import cloud.wafflecommons.pixelbrainreader.ui.components.PickDateDialog
@@ -90,6 +91,8 @@ import cloud.wafflecommons.pixelbrainreader.ui.theme.NavBarClearance
 /**
  * A game's page (RFC-009 §4.2): its state, hours and trophies, the checklists of its note (a trophy's
  * line stays ??? until reached or revealed), its sessions, the notes of its folder, and Ask Claude.
+ * 13.3: its maps, changed here (ME1), and Xbox's achievements beside the trophies (XB2: side by side
+ * on a wide window, stacked on the phone).
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -144,6 +147,7 @@ fun GamePageScreen(
             subtitle = listOfNotNull(
                 state.hours?.let { hours(it) },
                 if (state.trophiesTotal > 0) "${state.trophiesEarned} of ${state.trophiesTotal} trophies" else null,
+                if (state.achievementsTotal > 0) "${state.achievementsEarned} of ${state.achievementsTotal} achievements" else null,
                 page.started?.let { "started ${day(it)}" },
                 page.finished?.let { "finished ${day(it)}" }
             ).joinToString(" · ").ifEmpty { null }
@@ -168,7 +172,12 @@ fun GamePageScreen(
             }
             if (!state.readOnly) {
                 TextButton(onClick = { editingPlayedBefore = true }, shapes = ButtonDefaults.shapes()) {
-                    Text(page.playedBefore?.let { "Console play time before the app: ${hours(it)}" } ?: "Add the console's play time")
+                    Text(
+                        page.playedBefore?.let { typed ->
+                            "Console play time before the app: ${hours(typed)}" +
+                                if (state.measured) " (a console's own total replaces it)" else ""
+                        } ?: "Add the console's play time"
+                    )
                 }
             }
         }
@@ -194,27 +203,13 @@ fun GamePageScreen(
             onRemove = { map -> removingMap = map.url }
         )
 
-        if (state.trophies.isNotEmpty()) {
-            SectionCard(
-                title = "Trophies",
-                icon = Icons.Rounded.EmojiEvents,
-                subtitle = "${state.trophiesEarned} of ${state.trophiesTotal} · the others stay hidden until you reveal them",
-                trailing = { TextButton(onClick = { reveal = !reveal }, shapes = ButtonDefaults.shapes()) { Text(if (reveal) "Hide" else "Reveal") } }
-            ) {
-                state.trophies.forEach { line ->
-                    val earned = line.earnedOn
-                    val key = "t:${line.set}#${line.trophy.id}"
-                    val hidden = earned == null && !shown(key)
-                    val name = if (hidden) "???" else line.trophy.name.ifBlank { "Trophy ${line.trophy.id}" }
-                    Text(
-                        "${TrophySection.gradeIcon(line.trophy.grade)}  $name" + (earned?.let { "  ·  ${day(it)}" } ?: ""),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = if (earned != null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.fillMaxWidth().clickable(enabled = hidden) { show(key) }
-                    )
-                }
-            }
-        }
+        AwardCards(
+            state = state,
+            reveal = reveal,
+            onToggleReveal = { reveal = !reveal },
+            shown = { key -> shown(key) },
+            onShow = { key -> show(key) }
+        )
 
         state.checklists.forEach { section ->
             SectionCard(title = section.heading.ifBlank { "Checklist" }, icon = Icons.Rounded.Checklist) {
@@ -247,7 +242,7 @@ fun GamePageScreen(
                 val manual = record.source == GameSessionRecord.SOURCE_MANUAL
                 val date = runCatching { LocalDate.parse(record.date) }.getOrNull()
                 Text(
-                    listOfNotNull(date?.let { day(it) }, record.start, GameTimeline.duration(record.minutes), if (manual) null else "PlayStation")
+                    listOfNotNull(date?.let { day(it) }, record.start, GameTimeline.duration(record.minutes), consoleOf(record))
                         .joinToString(" · "),
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.fillMaxWidth()
@@ -386,6 +381,13 @@ private const val SESSIONS_SHOWN = 60
 /** The floating toolbar's room under the last card, and the snackbar's lift above it. */
 private val TOOLBAR_ROOM = 88.dp
 
+/** Which console measured a session (13.3): none for a manual one. */
+private fun consoleOf(record: GameSessionRecord): String? = when (record.source) {
+    GameSessionRecord.SOURCE_MANUAL -> null
+    GameSessionRecord.SOURCE_XBOX -> GameConsole.XBOX.label
+    else -> GameConsole.PSN.label
+}
+
 /**
  * The page's maps (13.3, ME1): label · site, the main one first. Add, and per map Change, Make
  * main and Remove; a tap opens it in the map browser. A read-only device lists them, tappable,
@@ -509,6 +511,104 @@ private fun MapRow(
     }
 }
 
+/** The console awards' cards (13.3, XB2). */
+private enum class AwardCard { TROPHIES, ACHIEVEMENTS }
+
+/**
+ * The Trophies and Achievements cards: side by side on a wide window and stacked on the phone
+ * ([CardGrid]) when the page has both, the one alone full width otherwise. One Reveal for both.
+ */
+@Composable
+private fun AwardCards(
+    state: GamePageUiState,
+    reveal: Boolean,
+    onToggleReveal: () -> Unit,
+    shown: (String) -> Boolean,
+    onShow: (String) -> Unit
+) {
+    val cards = listOfNotNull(
+        AwardCard.TROPHIES.takeIf { state.trophies.isNotEmpty() },
+        AwardCard.ACHIEVEMENTS.takeIf { state.achievements.isNotEmpty() }
+    )
+    val card: @Composable (AwardCard, Modifier) -> Unit = { which, modifier ->
+        when (which) {
+            AwardCard.TROPHIES -> TrophiesCard(state, reveal, onToggleReveal, shown, onShow, modifier)
+            AwardCard.ACHIEVEMENTS -> AchievementsCard(state, reveal, onToggleReveal, shown, onShow, modifier)
+        }
+    }
+    if (cards.size > 1) CardGrid(cards, card) else cards.forEach { card(it, Modifier) }
+}
+
+@Composable
+private fun RevealButton(reveal: Boolean, onToggleReveal: () -> Unit) {
+    TextButton(onClick = onToggleReveal, shapes = ButtonDefaults.shapes()) { Text(if (reveal) "Hide" else "Reveal") }
+}
+
+@Composable
+private fun TrophiesCard(
+    state: GamePageUiState,
+    reveal: Boolean,
+    onToggleReveal: () -> Unit,
+    shown: (String) -> Boolean,
+    onShow: (String) -> Unit,
+    modifier: Modifier
+) {
+    SectionCard(
+        title = "Trophies",
+        modifier = modifier,
+        icon = Icons.Rounded.EmojiEvents,
+        subtitle = "${state.trophiesEarned} of ${state.trophiesTotal} · the others stay hidden until you reveal them",
+        trailing = { RevealButton(reveal, onToggleReveal) }
+    ) {
+        state.trophies.forEach { line ->
+            val earned = line.earnedOn
+            val key = "t:${line.set}#${line.trophy.id}"
+            val hidden = earned == null && !shown(key)
+            val name = if (hidden) "???" else line.trophy.name.ifBlank { "Trophy ${line.trophy.id}" }
+            Text(
+                "${TrophySection.gradeIcon(line.trophy.grade)}  $name" + (earned?.let { "  ·  ${day(it)}" } ?: ""),
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (earned != null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.fillMaxWidth().clickable(enabled = hidden) { onShow(key) }
+            )
+        }
+    }
+}
+
+/** Xbox's achievements (13.3, XB2): earned first, the others ??? until tapped or revealed. */
+@Composable
+private fun AchievementsCard(
+    state: GamePageUiState,
+    reveal: Boolean,
+    onToggleReveal: () -> Unit,
+    shown: (String) -> Boolean,
+    onShow: (String) -> Unit,
+    modifier: Modifier
+) {
+    SectionCard(
+        title = "Achievements",
+        modifier = modifier,
+        icon = Icons.Rounded.MilitaryTech,
+        subtitle = "${state.achievementsEarned} of ${state.achievementsTotal} · ${state.gamerscoreEarned} of ${state.gamerscoreTotal} G" +
+            " · the others stay hidden until you reveal them",
+        trailing = { RevealButton(reveal, onToggleReveal) }
+    ) {
+        state.achievements.forEach { line ->
+            val earned = line.earnedOn
+            val key = "a:${line.titleId}#${line.record.id}"
+            val hidden = earned == null && !shown(key)
+            val name = if (hidden) "???" else line.record.name.ifBlank { "Achievement ${line.record.id}" }
+            val set = if (state.achievementSets > 1 && line.setTitle.isNotBlank()) "  ·  ${line.setTitle}" else ""
+            Text(
+                "${AchievementSection.ICON}  $name  ·  ${line.record.gamerscore} G" + (earned?.let { "  ·  ${day(it)}" } ?: "") + set,
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (earned != null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.fillMaxWidth().clickable(enabled = hidden) { onShow(key) }
+            )
+        }
+    }
+}
+
 /**
  * Adds a session the owner forgot to start ([initial] null: day, start, length) or fixes one
  * (its start and length; the day stays). Delete asks a second tap. 13.1.
@@ -608,7 +708,8 @@ private fun PlayedBeforeDialog(initial: Double?, onSave: (String) -> Unit, onDis
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    "The hours your PS5 shows for this game before you used the app. Your sessions add up on top; once PlayStation Network works, its own total replaces both.",
+                    "The hours your console shows for this game before you used the app. Your sessions add up on top; " +
+                        "once PlayStation Network or Xbox measures the game, the measured total replaces both.",
                     style = MaterialTheme.typography.bodyMedium
                 )
                 OutlinedTextField(
@@ -716,4 +817,3 @@ private fun GameToolbar(
         )
     }
 }
-

@@ -5,6 +5,8 @@ import cloud.wafflecommons.pixelbrainreader.data.games.GameTimelineSource
 import cloud.wafflecommons.pixelbrainreader.data.games.GamesRepository
 import cloud.wafflecommons.pixelbrainreader.data.games.psn.OkHttpPsnTransport
 import cloud.wafflecommons.pixelbrainreader.data.games.psn.PsnClient
+import cloud.wafflecommons.pixelbrainreader.data.games.xbox.OkHttpXboxTransport
+import cloud.wafflecommons.pixelbrainreader.data.games.xbox.XboxClient
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -25,5 +27,10 @@ abstract class GamesModule {
         @Provides
         @Singleton
         fun psnClient(): PsnClient = PsnClient(OkHttpPsnTransport(), BuildConfig.PSN_CLIENT_ID, BuildConfig.PSN_CLIENT_SECRET)
+
+        /** The owner's own Microsoft app (XB1), from local.properties; without it Xbox stays hidden. */
+        @Provides
+        @Singleton
+        fun xboxClient(): XboxClient = XboxClient(OkHttpXboxTransport(), BuildConfig.XBOX_CLIENT_ID)
     }
 }

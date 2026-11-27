@@ -42,7 +42,9 @@ class ReadOnlyScreensGuardTest {
         // Games (12.17, RFC-009)
         "ui/games/GamesScreen.kt",
         "ui/games/GamePageScreen.kt",
-        "ui/games/PsnSettingsScreen.kt"
+        "ui/games/PsnSettingsScreen.kt",
+        // 13.3: the Xbox sign-in (XB-E)
+        "ui/games/XboxSettingsScreen.kt"
     )
 
     /** Pages that handled it before 12.15 in their own words, and controls that only hide. */

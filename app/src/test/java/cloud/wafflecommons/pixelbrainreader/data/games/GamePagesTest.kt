@@ -1,6 +1,7 @@
 package cloud.wafflecommons.pixelbrainreader.data.games
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -181,5 +182,32 @@ class GamePagesTest {
         assertTrue(GamePages.withPlayedBefore(decimal, null, today).contains("\nplayed_before: ''\n"))
         // Nothing to change: nothing moves, date included.
         assertEquals(written, GamePages.withPlayedBefore(written, 228.0, LocalDate.of(2026, 12, 1)))
+    }
+
+    // --- 13.3 ------------------------------------------------------------------------------
+
+    @Test
+    fun `prose leaves out the achievements section too`() {
+        val content = "---\ngame_template: souls-like\n---\n# Ring of Ash\n\nMy notes.\n\n" +
+            "## 🏆 Trophies\n\n*1 of 2 trophies · 50 %*\n\n" +
+            "${AchievementSection.HEADING}\n\n*1 of 2 achievements · 10 of 60 G · 50 %*\n\n" +
+            "- ${AchievementSection.ICON} First Steps — 2026-11-02 · 10 G\n\n" +
+            "## Builds\n\nKatana.\n"
+        assertEquals("My notes.\n\n## Builds\n\nKatana.", GamePages.prose(content))
+        // Its heading without the variation selector too.
+        assertEquals(
+            "My notes.",
+            GamePages.prose("---\ngame_template: lego\n---\n# G\n\nMy notes.\n\n## 🎖 Achievements\n\n*0 of 1 achievements · 0 of 10 G · 0 %*\n")
+        )
+    }
+
+    @Test
+    fun `game_match exact marks a page for exact names`() {
+        assertTrue(GamePages.parse("g.md", "---\ngame_template: other\ngame_match: exact\n---\n")!!.exactName)
+        assertTrue(GamePages.parse("g.md", "---\ngame_template: other\ngame_match: 'Exact'\n---\n")!!.exactName)
+        assertFalse(GamePages.parse("g.md", "---\ngame_template: other\n---\n")!!.exactName)
+        assertFalse(GamePages.parse("g.md", "---\ngame_template: other\ngame_match: prefix\n---\n")!!.exactName)
+        assertEquals("game_match", GamePages.MATCH_KEY)
+        assertEquals("exact", GamePages.MATCH_EXACT)
     }
 }

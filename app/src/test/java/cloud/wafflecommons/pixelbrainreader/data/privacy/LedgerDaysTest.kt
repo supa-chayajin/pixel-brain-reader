@@ -80,6 +80,20 @@ class LedgerDaysTest {
     }
 
     @Test
+    fun `the Xbox purpose reads back from its key, PlayStation's keeps its own`() {
+        assertEquals(NetPurpose.XBOX, NetPurpose.of("xbox"))
+        assertEquals("xbox", NetPurpose.XBOX.key)
+        assertEquals("Xbox sync", NetPurpose.XBOX.label)
+        assertEquals(NetPurpose.GAMES, NetPurpose.of("games"))
+        assertEquals("PlayStation sync", NetPurpose.GAMES.label)
+        // A day with both consoles lists them apart, under their own hosts.
+        var day = LedgerDays.add(empty, "m.np.playstation.com", NetPurpose.GAMES, 10, 100)
+        day = LedgerDays.add(day, "titlehub.xboxlive.com", NetPurpose.XBOX, 20, 200)
+        assertEquals(listOf("games", "xbox"), day.calls.map { it.purpose })
+        assertEquals(listOf(NetPurpose.XBOX), LedgerDays.byHost(day).first().purposes)
+    }
+
+    @Test
     fun `bytes read as people say them`() {
         assertEquals("999 B", LedgerDays.bytes(999))
         assertEquals("1 KB", LedgerDays.bytes(1_500))

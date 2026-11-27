@@ -76,8 +76,10 @@ data class GameDayLine(val page: GamePage, val start: LocalTime, val minutes: In
 
 /**
  * A day's game lines (pure): one per game. The start is the earliest manual start when there is
- * one (the owner pressed it), else PSN's; the length is what PSN measured when it measured
- * anything, else the manual sessions'. Sessions whose page is unknown are left out.
+ * one (the owner pressed it), else the earliest a console measured; the length is what the consoles
+ * measured when they measured anything — PSN's and Xbox's add up, the same game played on both the
+ * same day being one line (XB5) — else the manual sessions'. Sessions whose page is unknown are
+ * left out.
  */
 object GameDays {
 
@@ -90,10 +92,10 @@ object GameDays {
                 val page = pairs.first().first
                 val records = pairs.map { it.second }
                 val manual = records.filter { it.source == GameSessionRecord.SOURCE_MANUAL }
-                val psn = records.filter { it.source == GameSessionRecord.SOURCE_PSN }
-                val start = (manual.mapNotNull { time(it.start) }.minOrNull() ?: psn.mapNotNull { time(it.start) }.minOrNull())
+                val measured = records.filter { it.measured }
+                val start = (manual.mapNotNull { time(it.start) }.minOrNull() ?: measured.mapNotNull { time(it.start) }.minOrNull())
                     ?: return@mapNotNull null
-                val minutes = if (psn.isNotEmpty()) psn.sumOf { it.minutes } else manual.sumOf { it.minutes }
+                val minutes = if (measured.isNotEmpty()) measured.sumOf { it.minutes } else manual.sumOf { it.minutes }
                 if (minutes <= 0) null else GameDayLine(page, start, minutes)
             }
             .sortedWith(compareBy({ it.start }, { it.page.title.lowercase() }))
@@ -110,14 +112,23 @@ object GameDays {
 }
 
 /**
- * A game's play time (pure): PSN's own total once PSN measures the game, else the time typed from
- * the console (`played_before`, 13.1) plus the sessions recorded since; null when there is neither.
+ * A game's play time (pure, XB3): what the consoles measured once either measures the game,
+ * PSN's and Xbox's totals added up; else the time typed from the console (`played_before`, 13.1)
+ * plus the sessions recorded since; null when there is neither.
  */
 object GameHours {
-    fun of(psnSeconds: Long, playedBefore: Double?, manualMinutes: Int): Double? = when {
-        psnSeconds > 0 -> psnSeconds / 3600.0
-        playedBefore == null && manualMinutes <= 0 -> null
-        else -> (playedBefore ?: 0.0) + manualMinutes.coerceAtLeast(0) / 60.0
+    /**
+     * A game's play time: what the consoles measured — PSN's seconds plus Xbox's minutes — once
+     * either measures the game; else `played_before` plus the sessions since; null when none.
+     */
+    fun of(psnSeconds: Long, playedBefore: Double?, manualMinutes: Int, xboxMinutes: Long = 0L): Double? {
+        val psn = psnSeconds.coerceAtLeast(0L)
+        val xbox = xboxMinutes.coerceAtLeast(0L)
+        return when {
+            psn > 0 || xbox > 0 -> psn / 3600.0 + xbox / 60.0
+            playedBefore == null && manualMinutes <= 0 -> null
+            else -> (playedBefore ?: 0.0) + manualMinutes.coerceAtLeast(0) / 60.0
+        }
     }
 }
 

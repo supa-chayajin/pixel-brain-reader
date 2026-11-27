@@ -24,9 +24,10 @@ import javax.inject.Singleton
 
 /**
  * Games' vault side (RFC-009, 12.17): the game pages, the data files of [GameFiles], the day's
- * Timeline lines and a past day's edit (D11). Every write reads the disk first, moves an
- * unreadable file aside rather than overwrite it, goes through the vault's writers (the read-only
- * gate) and asks for a push. [changes] ticks after each write so screens read again.
+ * Timeline lines and a past day's edit (D11); since 13.3 also the Xbox files, a page's maps and the
+ * pages the syncs create for played games. Every write reads the disk first, moves an unreadable
+ * file aside rather than overwrite it, goes through the vault's writers (the read-only gate) and
+ * asks for a push. [changes] ticks after each write so screens read again.
  */
 @Singleton
 class GamesRepository @Inject constructor(
@@ -81,7 +82,8 @@ class GamesRepository @Inject constructor(
 
     /**
      * Applies [change] to the page on disk; true when it was saved (or had nothing to change).
-     * Only the page's own lines move: callers pass pure edits ([GamePages], [TrophySection], [TrophyMarkers]).
+     * Only the page's own lines move: callers pass pure edits ([GamePages], [TrophySection],
+     * [TrophyMarkers], [AchievementSection], [AchievementMarkers], [GameMapEdits]).
      */
     suspend fun editPage(path: String, change: (String) -> String): Boolean {
         if (VaultWriteGate.refuses()) return false
@@ -130,6 +132,47 @@ class GamesRepository @Inject constructor(
         return if (saved) result else if (result == MapEditResult.SAVED) MapEditResult.FAILED else MapEditResult.GONE
     }
 
+    // --- Pages for played games (13.3, XB4) ---------------------------------------------------
+
+    /** The vault's Other template ([GamePageCreation.TEMPLATE_PATH]); null when it isn't there. */
+    suspend fun otherTemplate(): String? = withContext(Dispatchers.IO) { read(GamePageCreation.TEMPLATE_PATH) }
+
+    /** The notes under [folder] (the whole vault for `""`), from the notes' mirror; empty when it can't be read. */
+    suspend fun notePathsUnder(folder: String): List<String> = withContext(Dispatchers.IO) {
+        try {
+            fileContentDao.pathsUnder(if (folder.isEmpty()) "" else "$folder/")
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    /**
+     * Writes [pages], never over a file (each path is checked again under the lock); the pages
+     * written. Nothing on a read-only device.
+     */
+    suspend fun createPages(pages: List<NewGamePage>): List<GamePage> {
+        if (pages.isEmpty() || VaultWriteGate.refuses()) return emptyList()
+        return withContext(Dispatchers.IO) {
+            mutex.withLock {
+                val written = pages.mapNotNull { page ->
+                    val path = page.plan.path
+                    val exists = try {
+                        fileRepository.fileExists(path)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        true
+                    }
+                    if (exists || !save(path, page.content)) null else GamePages.parse(path, page.content)
+                }
+                Log.i(TAG, "Game pages created: ${written.size} of ${pages.size}")
+                written
+            }
+        }
+    }
+
     // --- Data files ------------------------------------------------------------------------
 
     suspend fun snapshot(): PsnSnapshot? = load(GameFiles.SNAPSHOT, PsnSnapshot.serializer()).value
@@ -147,6 +190,17 @@ class GamesRepository @Inject constructor(
     suspend fun trophySet(set: String): TrophySetFile? = load(GameFiles.trophies(set), TrophySetFile.serializer()).value
 
     suspend fun saveTrophySet(file: TrophySetFile): Boolean = replace(GameFiles.trophies(file.set), TrophySetFile.serializer(), file)
+
+    /** The last Xbox sync (13.3); null before the first one or when the file doesn't parse. */
+    suspend fun xboxSnapshot(): XboxSnapshot? = load(GameFiles.XBOX_SNAPSHOT, XboxSnapshot.serializer()).value
+
+    suspend fun saveXboxSnapshot(snapshot: XboxSnapshot): Boolean = replace(GameFiles.XBOX_SNAPSHOT, XboxSnapshot.serializer(), snapshot)
+
+    suspend fun achievementSet(titleId: String): AchievementSetFile? =
+        load(GameFiles.achievements(titleId), AchievementSetFile.serializer()).value
+
+    suspend fun saveAchievementSet(file: AchievementSetFile): Boolean =
+        replace(GameFiles.achievements(file.titleId), AchievementSetFile.serializer(), file)
 
     suspend fun sessions(month: YearMonth): List<GameSessionRecord> =
         load(GameFiles.sessions(month.toString()), GameSessionsMonth.serializer()).value?.sessions.orEmpty()
@@ -213,10 +267,10 @@ class GamesRepository @Inject constructor(
 
     // --- The Timeline (RFC-009 §4.3) -------------------------------------------------------
 
-    /** A session's page: its own (manual), or its PSN title's link. */
+    /** A session's page: its own (manual), or its console title's link ([GameLinks.pageFor]: PSN's or Xbox's). */
     fun resolver(pages: List<GamePage>, links: GameLinks): (GameSessionRecord) -> GamePage? {
         val byPath = pages.associateBy { it.path }
-        return { record -> (record.page ?: record.titleId?.let(links::pageOf))?.let(byPath::get) }
+        return { record -> links.pageFor(record)?.let(byPath::get) }
     }
 
     suspend fun dayLines(date: LocalDate): List<GameDayLine> {

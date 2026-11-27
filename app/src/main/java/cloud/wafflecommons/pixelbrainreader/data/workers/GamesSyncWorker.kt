@@ -13,6 +13,7 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.games.psn.PsnSync
+import cloud.wafflecommons.pixelbrainreader.data.games.xbox.XboxSync
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.CancellationException
@@ -20,35 +21,43 @@ import java.time.LocalTime
 import java.util.concurrent.TimeUnit
 
 /**
- * The PSN sync (RFC-009 §7, D3), twice a day, each slot pinned to its time like the burn: at 23:40,
- * so the 23:50 burn writes the evening's game lines, and at 06:00 for the sessions that ran past
- * midnight (D11). A failure waits for the next slot; it never touches the vault sync. Nothing runs
- * on a read-only device.
+ * The PlayStation and Xbox syncs (RFC-009 §7, D3; XB6), twice a day, each slot pinned to its time
+ * like the burn: at 23:40, so the 23:50 burn writes the evening's game lines, and at 06:00 for the
+ * sessions that ran past midnight (D11). PSN runs first, then Xbox, each on its own: one failing
+ * (or not connected) never stops the other. A failure waits for the next slot; it never touches
+ * the vault sync. Nothing runs on a read-only device.
  */
 @HiltWorker
 class GamesSyncWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted workerParams: WorkerParameters,
-    private val psnSync: PsnSync
+    private val psnSync: PsnSync,
+    private val xboxSync: XboxSync
 ) : CoroutineWorker(appContext, workerParams) {
 
     override suspend fun doWork(): Result {
         val slot = inputData.getString(KEY_SLOT) ?: EVENING
         if (!VaultWriteGate.readOnly) {
-            try {
-                psnSync.sync().onFailure { Log.i(TAG, "PSN sync ($slot) skipped: ${it.message}") }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.w(TAG, "PSN sync ($slot) failed", e)
-            }
+            syncOne("PSN", slot) { psnSync.sync() }
+            syncOne("Xbox", slot) { xboxSync.sync() }
         }
         try {
             DailyWorkScheduler.repin(WorkManager.getInstance(applicationContext), uniqueName(slot)) { buildRequest(slot) }
         } catch (e: Exception) {
-            Log.w(TAG, "Could not re-pin the PSN sync ($slot)", e)
+            Log.w(TAG, "Could not re-pin the Games sync ($slot)", e)
         }
         return Result.success()
+    }
+
+    /** One console's sync: its failure is logged and the next console still runs. */
+    private suspend fun syncOne(console: String, slot: String, sync: suspend () -> kotlin.Result<*>) {
+        try {
+            sync().onFailure { Log.i(TAG, "$console sync ($slot) skipped: ${it.message}") }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "$console sync ($slot) failed", e)
+        }
     }
 
     companion object {

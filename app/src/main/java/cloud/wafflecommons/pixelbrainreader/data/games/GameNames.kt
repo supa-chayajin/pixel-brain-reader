@@ -21,26 +21,29 @@ object GameNames {
     }.split(' ').filter { it.isNotEmpty() }.joinToString(" ")
 
     /**
-     * The page a PSN title belongs to: a page name equal to the title's, or the first words of it
-     * ("LEGO® Star Wars™: The Skywalker Saga" → a page called "LEGO Star Wars"). Null when none, or
-     * when two pages tie on the longest name.
+     * The page a console title (PSN's or, 13.3, Xbox's) belongs to: a page name equal to the
+     * title's, or the first words of it ("BRICK® Wars™: The Saga" → a page called
+     * "Brick Wars"). A page marked `game_match: exact` ([GamePage.exactName]) answers to its exact
+     * names only. Null when none, or when two pages tie on the longest name.
      */
     fun pageForTitle(psnName: String, pages: List<GamePage>): GamePage? {
         val title = normalize(psnName)
         if (title.isEmpty()) return null
-        return longest(pages) { candidate -> title == candidate || title.startsWith("$candidate ") }
+        return longest(pages) { page, candidate ->
+            title == candidate || (!page.exactName && title.startsWith("$candidate "))
+        }
     }
 
     /** The page a Timeline line names, anywhere in the line as whole words; null when none or tied. */
     fun pageInLine(line: String, pages: List<GamePage>): GamePage? {
         val text = " ${normalize(line)} "
         if (text.isBlank()) return null
-        return longest(pages) { candidate -> text.contains(" $candidate ") }
+        return longest(pages) { _, candidate -> text.contains(" $candidate ") }
     }
 
-    private fun longest(pages: List<GamePage>, matches: (String) -> Boolean): GamePage? {
+    private fun longest(pages: List<GamePage>, matches: (page: GamePage, candidate: String) -> Boolean): GamePage? {
         val hits = pages.mapNotNull { page ->
-            page.names.map(::normalize).filter { it.isNotEmpty() && matches(it) }.maxByOrNull { it.length }
+            page.names.map(::normalize).filter { it.isNotEmpty() && matches(page, it) }.maxByOrNull { it.length }
                 ?.let { page to it.length }
         }
         val best = hits.maxOfOrNull { it.second } ?: return null

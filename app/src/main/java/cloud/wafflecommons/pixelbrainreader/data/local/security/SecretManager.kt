@@ -39,6 +39,13 @@ class SecretManager @Inject constructor(
         private const val KEY_PSN_ACCESS_EXPIRES_AT = "psn_access_expires_at"
         private const val KEY_PSN_REFRESH = "psn_refresh_token"
         private const val KEY_PSN_REFRESH_EXPIRES_AT = "psn_refresh_expires_at"
+
+        // 13.3: Microsoft's tokens for the Xbox sign-in (XB1). Nothing else of the account is stored:
+        // the Xbox user token, the XSTS token and the xuid are derived again at each sync.
+        private const val KEY_XBOX_ACCESS = "xbox_access_token"
+        private const val KEY_XBOX_ACCESS_EXPIRES_AT = "xbox_access_expires_at"
+        private const val KEY_XBOX_REFRESH = "xbox_refresh_token"
+        private const val KEY_XBOX_REFRESH_ISSUED_AT = "xbox_refresh_issued_at"
     }
 
     // Everything Keystore-backed is created on FIRST USE, never at injection. SecretManager is
@@ -254,6 +261,42 @@ class SecretManager @Inject constructor(
             remove(KEY_PSN_ACCESS_EXPIRES_AT)
             remove(KEY_PSN_REFRESH)
             remove(KEY_PSN_REFRESH_EXPIRES_AT)
+        }
+    }
+
+    // --- 13.3: Xbox (the owner's own Microsoft app) ------------------------------
+
+    /**
+     * Written at once (commit): Microsoft's refresh token replaces itself at every use, so the new
+     * one must be on disk before the sync asks anything else. Callers run it off the main thread.
+     */
+    fun saveXboxTokens(tokens: cloud.wafflecommons.pixelbrainreader.data.games.xbox.XboxTokens) {
+        encryptedPrefs.edit(commit = true) {
+            putString(KEY_XBOX_ACCESS, tokens.access)
+            putLong(KEY_XBOX_ACCESS_EXPIRES_AT, tokens.accessExpiresAt)
+            putString(KEY_XBOX_REFRESH, tokens.refresh)
+            putLong(KEY_XBOX_REFRESH_ISSUED_AT, tokens.refreshIssuedAt)
+        }
+    }
+
+    /** Null unless both the access and the refresh token are there. */
+    fun getXboxTokens(): cloud.wafflecommons.pixelbrainreader.data.games.xbox.XboxTokens? {
+        val access = encryptedPrefs.getString(KEY_XBOX_ACCESS, null) ?: return null
+        val refresh = encryptedPrefs.getString(KEY_XBOX_REFRESH, null) ?: return null
+        return cloud.wafflecommons.pixelbrainreader.data.games.xbox.XboxTokens(
+            access = access,
+            accessExpiresAt = encryptedPrefs.getLong(KEY_XBOX_ACCESS_EXPIRES_AT, 0L),
+            refresh = refresh,
+            refreshIssuedAt = encryptedPrefs.getLong(KEY_XBOX_REFRESH_ISSUED_AT, 0L)
+        )
+    }
+
+    fun clearXboxTokens() {
+        encryptedPrefs.edit(commit = true) {
+            remove(KEY_XBOX_ACCESS)
+            remove(KEY_XBOX_ACCESS_EXPIRES_AT)
+            remove(KEY_XBOX_REFRESH)
+            remove(KEY_XBOX_REFRESH_ISSUED_AT)
         }
     }
 }

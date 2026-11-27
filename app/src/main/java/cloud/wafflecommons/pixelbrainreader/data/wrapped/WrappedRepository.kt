@@ -58,8 +58,9 @@ class WrappedRepository @Inject constructor(
         val health = if (today == from) emptyList() else fact("health") { healthInsightsRepository.days(from, today.minusDays(1)) }.orEmpty()
         val games = fact("games") {
             val links = gamesRepository.links()
+            // A console session's page through that console's links (13.3: PSN's or Xbox's).
             gamesRepository.sessionsBetween(from, today).map { session ->
-                if (session.page != null) session else session.copy(page = session.titleId?.let(links::pageOf))
+                if (session.page != null) session else session.copy(page = links.pageFor(session))
             }
         }.orEmpty()
         val profile = fact("xp") { gamificationRepository.gamificationState.first().profile }

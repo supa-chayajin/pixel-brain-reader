@@ -67,6 +67,7 @@ import androidx.compose.material.icons.rounded.DateRange
 import androidx.compose.material.icons.rounded.Mood
 import androidx.compose.material.icons.rounded.RssFeed
 import androidx.compose.material.icons.rounded.Policy
+import androidx.compose.material.icons.rounded.Gamepad
 import androidx.compose.material.icons.rounded.SportsEsports
 import androidx.compose.material.icons.rounded.SyncProblem
 import androidx.compose.material.icons.rounded.ViewAgenda
@@ -98,6 +99,7 @@ fun SettingsScreen(
     onNavigateToDailyLayout: () -> Unit = {},
     onNavigateToFeeds: () -> Unit = {},
     onNavigateToPsn: () -> Unit = {},
+    onNavigateToXbox: () -> Unit = {},
     onNavigateToPrivacyLedger: () -> Unit = {},
     onNavigateToHabitConfig: () -> Unit = {},
     onNavigateToHomeConfig: () -> Unit = {},
@@ -337,6 +339,20 @@ fun SettingsScreen(
                         supportingContent = { Text("Play time and trophies for Games, synced each night; game nights") }
                     ) {
                         Text("PlayStation Network")
+                    }
+                }
+
+                // 13.3 (XB-E): only in a build that carries the owner's own Microsoft app (XB1).
+                if (cloud.wafflecommons.pixelbrainreader.BuildConfig.XBOX_CLIENT_ID.isNotBlank()) {
+                    ListItem(
+                        modifier = Modifier.clickable {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onNavigateToXbox()
+                        }, colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                        leadingContent = { ExpressiveBadge(Icons.Rounded.Gamepad, key = "Gamepad", size = 36.dp) },
+                        supportingContent = { Text("Play time and achievements for Games, synced each night") }
+                    ) {
+                        Text("Xbox")
                     }
                 }
 

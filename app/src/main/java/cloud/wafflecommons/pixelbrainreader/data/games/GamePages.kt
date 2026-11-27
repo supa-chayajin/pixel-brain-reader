@@ -55,7 +55,8 @@ enum class GameTemplate(val key: String, val label: String) {
  * lives (the owner's are in their area for games) except `99_System/`, where the templates are.
  * [key] is the file name without `.md`: what a Timeline line's marker names. [playedBefore] is the
  * play time the owner typed from the console (hours), counted under the sessions until PSN measures
- * the game itself. [maps]: its `game_maps` (13.2), the first one the main map.
+ * the game itself. [maps]: its `game_maps` (13.2), the first one the main map. [exactName] (13.3):
+ * `game_match: exact`, the page answers to its exact names only (a page the sync created).
  */
 data class GamePage(
     val path: String,
@@ -66,7 +67,8 @@ data class GamePage(
     val started: LocalDate?,
     val finished: LocalDate?,
     val playedBefore: Double? = null,
-    val maps: List<GameMap> = emptyList()
+    val maps: List<GameMap> = emptyList(),
+    val exactName: Boolean = false
 ) {
     val key: String get() = path.substringAfterLast('/').removeSuffix(".md")
     val folder: String get() = path.substringBeforeLast('/', "")
@@ -81,6 +83,13 @@ object GamePages {
     const val TEMPLATE_KEY = "game_template"
     const val STATE_KEY = "game_state"
     const val PLAYED_BEFORE_KEY = "played_before"
+
+    /**
+     * 13.3: `game_match: exact` marks a page that answers to its exact names only, so a page the
+     * sync created for "Glass Tower" never takes a later "Glass Tower Dungeons" by its first words.
+     */
+    const val MATCH_KEY = "game_match"
+    const val MATCH_EXACT = "exact"
 
     /** The vault's templates live here and carry [TEMPLATE_KEY] too: a template is never a game. */
     private const val TEMPLATES_ROOT = "99_System/"
@@ -98,7 +107,8 @@ object GamePages {
             started = date(FrontmatterLines.get(content, "started")),
             finished = date(FrontmatterLines.get(content, "finished")),
             playedBefore = hours(FrontmatterLines.get(content, PLAYED_BEFORE_KEY)),
-            maps = GameMaps.parse(FrontmatterLines.getList(content, GameMaps.KEY))
+            maps = GameMaps.parse(FrontmatterLines.getList(content, GameMaps.KEY)),
+            exactName = FrontmatterLines.get(content, MATCH_KEY)?.trim()?.lowercase() == MATCH_EXACT
         )
     }
 
@@ -153,18 +163,19 @@ object GamePages {
 
     /**
      * The page's own text for the app's game page (RFC-009 §4.2): the note without its frontmatter,
-     * its title, its checklists (tickable cards there) and the derived 🏆 section (the trophy card).
-     * A heading left with nothing under it goes too. Blank when the page holds only checklists.
+     * its title, its checklists (tickable cards there) and the derived 🏆 and 🎖️ sections (the
+     * trophy and achievement cards). A heading left with nothing under it goes too. Blank when the
+     * page holds only checklists.
      */
     fun prose(content: String): String {
         val kept = mutableListOf<String>()
-        var inTrophies = false
+        var inDerived = false
         var titleDropped = false
         bodyLines(content).forEach { raw ->
             val line = raw.trimEnd('\r')
             val trimmed = line.trim()
-            if (trimmed.startsWith("#")) inTrophies = trimmed == TrophySection.HEADING
-            if (inTrophies) return@forEach
+            if (trimmed.startsWith("#")) inDerived = trimmed == TrophySection.HEADING || AchievementSection.isHeading(trimmed)
+            if (inDerived) return@forEach
             if (!titleDropped && trimmed.startsWith("# ")) {
                 titleDropped = true
                 return@forEach

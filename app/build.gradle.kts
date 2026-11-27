@@ -78,6 +78,19 @@ android {
         buildConfigField("String", "PSN_CLIENT_ID", "\"$psnClientId\"")
         buildConfigField("String", "PSN_CLIENT_SECRET", "\"$psnClientSecret\"")
 
+        // Xbox (13.3, XB1): the owner's own Microsoft Entra app, a public client (no secret), kept in
+        // local.properties as `xboxClientId=...` (documentation/how-to/xbox-app-registration.md). Empty by
+        // default → the Xbox row is hidden and Games works by hand. A wrong id only fails at the sign-in, so
+        // the build warns when the value isn't a lowercase 36-character client id, giving its length only.
+        val xboxClientId = localProperties.getProperty("xboxClientId", "")
+        if (xboxClientId.isNotEmpty() && !Regex("[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}").matches(xboxClientId)) {
+            project.logger.warn(
+                "local.properties: xboxClientId isn't a lowercase 36-character client id (it has ${xboxClientId.length} characters): " +
+                    "Microsoft will refuse the sign-in."
+            )
+        }
+        buildConfigField("String", "XBOX_CLIENT_ID", "\"$xboxClientId\"")
+
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary = true

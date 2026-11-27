@@ -2,6 +2,7 @@ package cloud.wafflecommons.pixelbrainreader.data.games
 
 /**
  * One checklist line of a game page, as the app shows it. [line] is the exact line, for the tick.
+ * [waitsForTrophy]: the line waits for a console award, a trophy or (13.3) an achievement.
  * [spoiler]: the line ends with `<!--spoiler-->` (13.1, the owner's call): like a trophy's line, the
  * app shows it as ??? until tapped or ticked, without waiting for PSN.
  */
@@ -15,12 +16,13 @@ data class ChecklistSection(val heading: String, val items: List<ChecklistItem>)
 
 /**
  * A game page's checklists (RFC-009 §4.2, pure): the `- [ ]` / `- [x]` lines under each heading, the
- * frontmatter and the derived 🏆 section left out. A tick flips one exact line, read from disk first.
+ * frontmatter and the derived 🏆 and 🎖️ sections left out. A tick flips one exact line, read from
+ * disk first.
  */
 object GameChecklists {
 
     private val ITEM = Regex("^\\s*[-*+]\\s+\\[([ xX])\\]\\s+(.*)$")
-    private val MARKER = Regex("\\s*<!--\\s*trophy:[^>]*-->\\s*$")
+    private val MARKER = Regex("\\s*<!--\\s*(?:trophy|achievement):[^>]*-->\\s*$")
     private val SPOILER = Regex("\\s*<!--\\s*spoiler\\s*-->\\s*$")
 
     fun sections(content: String): List<ChecklistSection> {
@@ -28,7 +30,7 @@ object GameChecklists {
         val out = mutableListOf<ChecklistSection>()
         var heading = ""
         var items = mutableListOf<ChecklistItem>()
-        var inTrophies = false
+        var inDerived = false
         fun flush() {
             if (items.isNotEmpty()) out += ChecklistSection(heading, items)
             items = mutableListOf()
@@ -37,11 +39,11 @@ object GameChecklists {
             val line = raw.trimEnd('\r')
             if (line.startsWith("#")) {
                 flush()
-                inTrophies = line.trim() == TrophySection.HEADING
+                inDerived = line.trim() == TrophySection.HEADING || AchievementSection.isHeading(line.trim())
                 heading = line.trimStart('#').trim()
                 return@forEach
             }
-            if (inTrophies) return@forEach
+            if (inDerived) return@forEach
             val m = ITEM.matchEntire(line) ?: return@forEach
             val text = m.groupValues[2]
             items += ChecklistItem(

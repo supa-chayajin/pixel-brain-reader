@@ -140,10 +140,40 @@ class GameSessionControllerTest {
         // PSN saw Brick Wars yesterday: later than the manual session two days ago.
         val yesterday = today.minusDays(1).atTime(20, 0).atZone(zone).toInstant().toString()
         coEvery { games.snapshot() } returns PsnSnapshot("x", listOf(PsnTitleState("PPSA1", "BRICK WARS", lastPlayed = yesterday)))
+        coEvery { games.xboxSnapshot() } returns null
         assertEquals(other, controller.defaultPage(zone))
 
         coEvery { games.snapshot() } returns null
         assertEquals(page, controller.defaultPage(zone))
+    }
+
+    @Test
+    fun `the game played last includes Xbox's last played times`() = runTest {
+        val other = GamePage("30_Areas/Games/Bricks/Bricks.md", "Brick Wars", emptyList(), GameTemplate.LEGO, GameState.BACKLOG, null, null)
+        coEvery { games.pages() } returns listOf(other, page)
+        coEvery { games.links() } returns GameLinks(links = mapOf("PPSA1" to other.path)).linkConsole(GameConsole.XBOX, "1915865634", page.path)
+        every { games.resolver(any(), any()) } returns { _: GameSessionRecord -> null }
+        coEvery { games.sessionsBetween(any(), any()) } returns emptyList()
+        val today = LocalDate.now(zone)
+        fun at(daysAgo: Long, hour: Int) = today.minusDays(daysAgo).atTime(hour, 0).atZone(zone).toInstant().toString()
+        // PSN saw Brick Wars two days ago, Xbox Ring of Ash yesterday.
+        coEvery { games.snapshot() } returns PsnSnapshot("x", listOf(PsnTitleState("PPSA1", "BRICK WARS", lastPlayed = at(2, 20))))
+        coEvery { games.xboxSnapshot() } returns XboxSnapshot(
+            "y",
+            titles = listOf(
+                XboxTitleState("1915865634", "Ring of Ash", lastPlayed = at(1, 21)),
+                // Played later, but on no page: left out.
+                XboxTitleState("1234567890", "Unlinked", lastPlayed = at(0, 1))
+            )
+        )
+        assertEquals(page, controller.defaultPage(zone))
+        // An Xbox time that doesn't read is left out.
+        coEvery { games.xboxSnapshot() } returns XboxSnapshot("y", titles = listOf(XboxTitleState("1915865634", "Ring of Ash", lastPlayed = "yesterday")))
+        assertEquals(other, controller.defaultPage(zone))
+        // A PSN link with the same id isn't an Xbox one.
+        coEvery { games.links() } returns GameLinks(links = mapOf("PPSA1" to other.path, "1915865634" to page.path))
+        coEvery { games.xboxSnapshot() } returns XboxSnapshot("y", titles = listOf(XboxTitleState("1915865634", "Ring of Ash", lastPlayed = at(1, 21))))
+        assertEquals(other, controller.defaultPage(zone))
     }
 
     // --- 13.1 ------------------------------------------------------------------------------

@@ -3,10 +3,12 @@ package cloud.wafflecommons.pixelbrainreader.data.games.psn
 import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.games.GameLinks
 import cloud.wafflecommons.pixelbrainreader.data.games.GamePage
+import cloud.wafflecommons.pixelbrainreader.data.games.GamePages
 import cloud.wafflecommons.pixelbrainreader.data.games.GameSessionRecord
 import cloud.wafflecommons.pixelbrainreader.data.games.GameState
 import cloud.wafflecommons.pixelbrainreader.data.games.GameTemplate
 import cloud.wafflecommons.pixelbrainreader.data.games.GamesRepository
+import cloud.wafflecommons.pixelbrainreader.data.games.NewGamePage
 import cloud.wafflecommons.pixelbrainreader.data.games.PsnSnapshot
 import cloud.wafflecommons.pixelbrainreader.data.games.PsnTitleState
 import cloud.wafflecommons.pixelbrainreader.data.sync.GitSyncCoordinator
@@ -51,6 +53,10 @@ class PsnSyncTest {
         coEvery { trophySet(any()) } returns null
         coEvery { addSessions(any()) } returns emptySet()
         coEvery { saveSnapshot(any()) } returns true
+        // 13.3 (XB4): pages for played games.
+        coEvery { notePathsUnder(any()) } returns emptyList()
+        coEvery { otherTemplate() } returns null
+        coEvery { createPages(any()) } answers { firstArg<List<NewGamePage>>().mapNotNull { GamePages.parse(it.plan.path, it.content) } }
     }
     private val dashboard: cloud.wafflecommons.pixelbrainreader.data.repository.DailyDashboardRepository = mockk(relaxed = true)
     private val sync = PsnSync(account, client, games, GitSyncCoordinator(), dashboard)
@@ -135,5 +141,93 @@ class PsnSyncTest {
         sync.sync(now, zone)
         assertEquals(page.path, change.captured(GameLinks()).pageOf("PPSA1"))
         assertEquals(null, change.captured(GameLinks(hidden = listOf("PPSA1"))).pageOf("PPSA1"))
+    }
+
+    // --- 13.3 (XB4): pages for played games ----------------------------------------------------
+
+    private val tower = PsnPlayedTitle(
+        titleId = "PPSA2", name = "GLASS TOWER™", category = "ps5_native_game", playDuration = "PT3H",
+        firstPlayedDateTime = "2026-03-01T10:00:00Z", lastPlayedDateTime = "2026-11-13T21:00:00Z",
+        concept = PsnConcept(titleIds = listOf("PPSA2", "CUSA2"))
+    )
+
+    @Test
+    fun `a played title no page claims gets a page, linked in the same sync`() = runTest {
+        coEvery { client.playedGames("ACCESS") } returns listOf(
+            PsnPlayedTitle(titleId = "PPSA1", name = "RING OF ASH", playDuration = "PT12H", lastPlayedDateTime = "2026-11-14T22:30:00Z"),
+            tower
+        )
+        coEvery { games.snapshot() } returns null
+        coEvery { games.notePathsUnder("30_Areas/Games") } returns listOf(page.path)
+        val written = slot<List<NewGamePage>>()
+        coEvery { games.createPages(capture(written)) } answers { firstArg<List<NewGamePage>>().mapNotNull { GamePages.parse(it.plan.path, it.content) } }
+        val change = slot<(GameLinks) -> GameLinks>()
+        coEvery { games.updateLinks(capture(change)) } returns GameLinks()
+
+        val result = sync.sync(now, zone)
+
+        assertTrue(result.isSuccess)
+        assertEquals(1, result.getOrThrow().pagesCreated)
+        val made = written.captured.single()
+        assertEquals("30_Areas/Games/GLASS_TOWER/GLASS_TOWER.md", made.plan.path)
+        assertEquals("GLASS TOWER", made.plan.title)
+        assertEquals(listOf("PPSA2"), made.plan.titleIds)
+        assertEquals(listOf("GLASS TOWER™"), made.plan.aliases)
+        assertTrue(made.content.contains("\nstarted: '2026-03-01'\n"))
+        assertTrue(made.content.contains("\ngame_match: exact\n"))
+        // The links written: Ring of Ash by its name, the new page by its id; what the owner linked meanwhile stays.
+        val linked = change.captured(GameLinks())
+        assertEquals(page.path, linked.pageOf("PPSA1"))
+        assertEquals(made.plan.path, linked.pageOf("PPSA2"))
+        assertEquals("elsewhere.md", change.captured(GameLinks(links = mapOf("PPSA2" to "elsewhere.md"))).pageOf("PPSA2"))
+        assertEquals(null, change.captured(GameLinks(hidden = listOf("PPSA2"))).pageOf("PPSA2"))
+        // The page was read again after it was written.
+        coVerify(atLeast = 2) { games.pages() }
+    }
+
+    @Test
+    fun `a hidden title or a title linked to a deleted page gets none`() = runTest {
+        coEvery { client.playedGames("ACCESS") } returns listOf(
+            tower,
+            PsnPlayedTitle(titleId = "PPSA3", name = "OUTLAW TRAIL 2", playDuration = "PT5H"),
+            PsnPlayedTitle(titleId = "PPSA4", name = "CORAL REEF", playDuration = "PT0S")
+        )
+        coEvery { games.snapshot() } returns null
+        coEvery { games.links() } returns GameLinks(links = mapOf("PPSA3" to "30_Areas/Games/Deleted/Deleted.md"), hidden = listOf("PPSA2"))
+
+        val result = sync.sync(now, zone)
+
+        assertTrue(result.isSuccess)
+        assertEquals(0, result.getOrThrow().pagesCreated)
+        // Coral Reef was never played: no page either.
+        coVerify { games.createPages(emptyList()) }
+        coVerify(exactly = 0) { games.otherTemplate() }
+    }
+
+    @Test
+    fun `the trophies of a page created in this sync are read in it`() = runTest {
+        coEvery { client.playedGames("ACCESS") } returns listOf(tower)
+        coEvery { client.setsForTitles("ACCESS", any()) } returns mapOf(
+            "PPSA2" to listOf(PsnTrophyTitle(npServiceName = "trophy2", npCommunicationId = "NPWR00002_00", trophyTitleName = "Glass Tower"))
+        )
+        coEvery { client.trophies("ACCESS", "NPWR00002_00", "trophy2") } returns
+            PsnTrophyList(trophies = listOf(PsnTrophy(1, trophyType = "bronze", trophyName = "First Floor")))
+        coEvery { client.earned("ACCESS", "NPWR00002_00", "trophy2") } returns
+            PsnTrophyList(trophies = listOf(PsnTrophy(1, earned = true, earnedDateTime = "2026-11-13T20:00:00Z")))
+        coEvery { games.snapshot() } returns null
+        val template = "---\ntitle: \"{{title}}\"\ngame_template: other\n---\n# {{title}}\n"
+        coEvery { games.otherTemplate() } returns template
+        val written = slot<List<NewGamePage>>()
+        coEvery { games.createPages(capture(written)) } answers { firstArg<List<NewGamePage>>().mapNotNull { GamePages.parse(it.plan.path, it.content) } }
+
+        assertTrue(sync.sync(now, zone).isSuccess)
+
+        coVerify { games.saveTrophySet(match { it.set == "NPWR00002_00" && it.trophies.single().earnedAt == "2026-11-13T20:00:00Z" }) }
+        // The page came from the vault's template, its aliases where the vault keeps them.
+        assertEquals(
+            "---\ntitle: \"GLASS TOWER\"\naliases:\n  - \"GLASS TOWER™\"\ngame_template: other\ngame_match: exact\n" +
+                "started: '2026-03-01'\ngame_state: backlog\n---\n# GLASS TOWER\n",
+            written.captured.single().content
+        )
     }
 }

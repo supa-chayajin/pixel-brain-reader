@@ -378,6 +378,18 @@ class UserPreferencesRepository @Inject constructor(
         }
     }
 
+    // 13.3: the last Xbox sync's outcome (`XboxStatus`: "ok|millis" or "paused|kind|millis|message"). Device-only.
+    private val KEY_XBOX_STATUS = stringPreferencesKey("xbox_status")
+
+    val xboxStatus: Flow<String?> = setting { it[KEY_XBOX_STATUS] }
+
+    /** Keeps [encoded] as the last Xbox sync's outcome; null removes it (Disconnect). */
+    suspend fun setXboxStatus(encoded: String?) {
+        context.dataStore.edit { preferences ->
+            if (encoded == null) preferences.remove(KEY_XBOX_STATUS) else preferences[KEY_XBOX_STATUS] = encoded
+        }
+    }
+
     // --- Review notifications (12.13): off by default, nothing notifies unless switched on ---
     private val KEY_REVIEW_NOTIFICATIONS = booleanPreferencesKey("review_notifications")
 

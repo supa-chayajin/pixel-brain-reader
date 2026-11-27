@@ -42,6 +42,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -56,12 +57,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import cloud.wafflecommons.pixelbrainreader.data.games.AchievementSection
+import cloud.wafflecommons.pixelbrainreader.data.games.GameConsole
 import cloud.wafflecommons.pixelbrainreader.data.games.GameGroup
 import cloud.wafflecommons.pixelbrainreader.data.games.GameNames
 import cloud.wafflecommons.pixelbrainreader.data.games.GamePage
 import cloud.wafflecommons.pixelbrainreader.data.games.GameSessionGuard
 import cloud.wafflecommons.pixelbrainreader.data.games.GameState
 import cloud.wafflecommons.pixelbrainreader.data.games.psn.PsnException
+import cloud.wafflecommons.pixelbrainreader.data.games.xbox.XboxException
 import cloud.wafflecommons.pixelbrainreader.ui.components.EmptyHint
 import cloud.wafflecommons.pixelbrainreader.ui.components.ExpressiveBadge
 import cloud.wafflecommons.pixelbrainreader.ui.components.FormScaffold
@@ -89,13 +93,14 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ListItemDefaults
 
 /**
- * The Games tab (RFC-009 §4.1): the library in four groups, the running session, the PSN line, and
- * the PSN titles no page claims. A tap opens the game's page.
+ * The Games tab (RFC-009 §4.1): the library in four groups, the running session, the PSN and Xbox
+ * lines (13.3), and each console's titles no page claims. A tap opens the game's page.
  */
 @Composable
 fun GamesScreen(
     onOpenGame: (String) -> Unit,
     onOpenPsn: () -> Unit,
+    onOpenXbox: () -> Unit = {},
     onOpenMap: (String) -> Unit = {},
     onBack: (() -> Unit)? = null,
     viewModel: GamesViewModel = hiltViewModel()
@@ -141,6 +146,7 @@ fun GamesScreen(
         }
 
         PsnLineRow(state.psn, onOpenPsn)
+        XboxLineRow(state.xbox, onOpenXbox)
 
         if (!state.loading && state.pages.isEmpty()) {
             EmptyHint("No game pages yet. A note with game_template in its frontmatter shows here.")
@@ -163,7 +169,21 @@ fun GamesScreen(
             }
         }
 
-        if (state.unlinked.isNotEmpty()) UnlinkedFold(state.unlinked, state.readOnly, onLink = { linking = it }, onHide = viewModel::hide)
+        // One fold per console (13.3): a title linked to a deleted page comes back here too.
+        GameConsole.entries.forEach { console ->
+            val titles = state.unlinked.filter { it.console == console }
+            if (titles.isNotEmpty()) {
+                key(console) {
+                    UnlinkedFold(
+                        heading = "On ${console.label}, not in your library",
+                        titles = titles,
+                        readOnly = state.readOnly,
+                        onLink = { linking = it },
+                        onHide = viewModel::hide
+                    )
+                }
+            }
+        }
     }
 
     if (picking) {
@@ -184,7 +204,7 @@ fun GamesScreen(
             pages = state.pages,
             onPick = { page, _ ->
                 linking = null
-                viewModel.link(title.titleId, page)
+                viewModel.link(title, page)
             },
             onDismiss = { linking = null }
         )
@@ -207,6 +227,7 @@ private fun GameCard(row: GameRow, onClick: () -> Unit, onOpenMap: () -> Unit) {
         if (row.page.state == GameState.PAUSED) "Paused" else null,
         row.hours?.let { hours(it) },
         row.trophyPercent?.let { "$it % 🏆" },
+        row.achievementPercent?.let { "$it % ${AchievementSection.ICON}" },
         row.lastPlayed?.let { "played ${day(it)}" }
     )
     Card(
@@ -331,15 +352,46 @@ private fun PsnLineRow(psn: PsnLine, onOpenPsn: () -> Unit) {
     )
 }
 
+/** The Xbox line (13.3), in PSN's style: hidden in a build without the Xbox app; a tap opens its settings. */
 @Composable
-private fun UnlinkedFold(titles: List<UnlinkedTitle>, readOnly: Boolean, onLink: (UnlinkedTitle) -> Unit, onHide: (String) -> Unit) {
+private fun XboxLineRow(xbox: XboxLine, onOpenXbox: () -> Unit) {
+    if (!xbox.configured) return
+    val status = xbox.status
+    val text = when {
+        !xbox.connected -> "Connect Xbox to bring play time and achievements"
+        status == null -> "Xbox connected · first sync tonight at 23:40"
+        status.ok -> "Xbox ✓ ${clock(status.atMillis)}"
+        status.needsSignIn -> "Xbox paused: sign in again"
+        status.kind == XboxException.Kind.CLIENT_REJECTED -> "Xbox paused: Microsoft refused this build's app"
+        status.kind == XboxException.Kind.ACCOUNT_REFUSED -> "Xbox paused: ${status.message.ifBlank { "Microsoft refused the account" }}"
+        else -> "Xbox: last sync failed (${status.message.ifBlank { "unknown error" }})"
+    }
+    // A status kept from before a disconnect never colours the Connect line.
+    val failed = xbox.connected && status != null && !status.ok
+    Text(
+        text,
+        style = MaterialTheme.typography.bodyMedium,
+        color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenXbox).padding(vertical = 4.dp)
+    )
+}
+
+/** One console's titles no page claims, under [heading] (13.3: a fold per console). */
+@Composable
+private fun UnlinkedFold(
+    heading: String,
+    titles: List<UnlinkedTitle>,
+    readOnly: Boolean,
+    onLink: (UnlinkedTitle) -> Unit,
+    onHide: (UnlinkedTitle) -> Unit
+) {
     var open by rememberSaveable { mutableStateOf(false) }
     Row(
         modifier = Modifier.fillMaxWidth().clickable { open = !open }.padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            "On PlayStation, not in your library (${titles.size})",
+            "$heading (${titles.size})",
             style = MaterialTheme.typography.titleSmall,
             modifier = Modifier.weight(1f)
         )
@@ -350,15 +402,19 @@ private fun UnlinkedFold(titles: List<UnlinkedTitle>, readOnly: Boolean, onLink:
         ElevatedCard(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(title.name, style = MaterialTheme.typography.titleSmall)
-                Text(
-                    listOfNotNull(hours(title.hours), title.lastPlayed?.let { "played ${day(it)}" }).joinToString(" · "),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                // The hours only when the console says (an Xbox title may not report its minutes).
+                val facts = listOfNotNull(title.hours?.let { hours(it) }, title.lastPlayed?.let { "played ${day(it)}" })
+                if (facts.isNotEmpty()) {
+                    Text(
+                        facts.joinToString(" · "),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 if (!readOnly) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(onClick = { onLink(title) }, shapes = ButtonDefaults.shapes()) { Text("Link to a page") }
-                        TextButton(onClick = { onHide(title.titleId) }, shapes = ButtonDefaults.shapes()) { Text("Hide") }
+                        TextButton(onClick = { onHide(title) }, shapes = ButtonDefaults.shapes()) { Text("Hide") }
                     }
                 }
             }
