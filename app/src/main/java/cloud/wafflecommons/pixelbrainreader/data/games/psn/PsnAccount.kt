@@ -23,6 +23,10 @@ data class PsnStatus(val ok: Boolean, val atMillis: Long, val kind: PsnException
     val needsOwner: Boolean
         get() = !ok && kind in setOf(PsnException.Kind.TOKEN_EXPIRED, PsnException.Kind.NPSSO_REJECTED, PsnException.Kind.CLIENT_REJECTED)
 
+    /** Only a new NPSSO helps: not a refused client (4102), which a corrected build and Sync now fix. */
+    val needsNpsso: Boolean
+        get() = !ok && kind in setOf(PsnException.Kind.TOKEN_EXPIRED, PsnException.Kind.NPSSO_REJECTED)
+
     fun encode(): String = if (ok) "ok|$atMillis" else "paused|${kind?.name.orEmpty()}|$atMillis|${message.replace('\n', ' ')}"
 
     companion object {

@@ -142,8 +142,19 @@ class PsnClientTest {
         val paused = PsnStatus(false, 42L, PsnException.Kind.TOKEN_EXPIRED, "The sign-in has expired | paste a new NPSSO")
         assertEquals(paused, PsnStatus.decode(paused.encode()))
         assertTrue(paused.needsOwner)
+        assertTrue(paused.needsNpsso)
         assertEquals(PsnStatus(true, 7L), PsnStatus.decode("ok|7"))
         assertNull(PsnStatus.decode("garbage"))
+    }
+
+    @Test
+    fun `a refused client needs the owner, but not a new NPSSO`() {
+        val refused = PsnStatus(false, 42L, PsnException.Kind.CLIENT_REJECTED, "PlayStation refused this build's client id or secret (4102)")
+        assertTrue(refused.needsOwner)
+        assertFalse(refused.needsNpsso)
+        assertTrue(PsnStatus(false, 42L, PsnException.Kind.NPSSO_REJECTED, "").needsNpsso)
+        assertFalse(PsnStatus(false, 42L, PsnException.Kind.NETWORK, "").needsNpsso)
+        assertFalse(PsnStatus(true, 42L).needsNpsso)
     }
 
     private suspend fun expect(kind: PsnException.Kind, block: suspend () -> Unit) {

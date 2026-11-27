@@ -88,7 +88,7 @@ fun PsnSettingsScreen(onBack: () -> Unit, viewModel: PsnSettingsViewModel = hilt
             }
         }
 
-        if (!state.readOnly && (!state.connected || state.status?.needsOwner == true)) {
+        if (!state.readOnly && (!state.connected || state.status?.needsNpsso == true)) {
             SectionCard(
                 title = if (state.connected) "Paste a new NPSSO" else "Connect",
                 icon = Icons.Rounded.SportsEsports,

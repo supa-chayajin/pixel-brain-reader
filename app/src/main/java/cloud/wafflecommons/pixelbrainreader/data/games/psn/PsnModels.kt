@@ -100,9 +100,10 @@ class PsnException(val kind: Kind, message: String) : Exception(message) {
         /** The NPSSO was refused (expired or mistyped, 4165). */
         NPSSO_REJECTED,
         /**
-         * PlayStation refused the client id or secret this build carries (4102, invalid_client). A
-         * wrong value in `local.properties` does exactly this: 12.17's secret had one character too
-         * many, and it read as a Sony block until 13.2.3.
+         * PlayStation refused the client this build carries (4102, invalid_client). A wrong secret in
+         * `local.properties` does exactly this, at the token step (a wrong id fails earlier, at the
+         * authorize step): 12.17's had one character too many, and it read as a Sony block until
+         * 13.2.3.
          */
         CLIENT_REJECTED,
         /** The refresh token is no longer valid: paste a new NPSSO. */
