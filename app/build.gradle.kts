@@ -54,13 +54,20 @@ android {
         // and secret, as the open-source PSN libraries publish them, kept in local.properties as
         // `psnClientId=...` and `psnClientSecret=...` so this public repository doesn't carry Sony's
         // app credentials. Empty by default → the PSN row is hidden and Games works by hand.
-        // A wrong value only shows at the token step, after the NPSSO was accepted: "4102 Bad client
-        // credentials" (13.2.3: 12.17's secret had one character too many, and it read as a Sony
-        // block). So the build warns when either value lacks the published shape, never printing it.
+        // A wrong secret only shows at the token step, after the NPSSO was accepted: "4102 Bad
+        // client credentials" (13.2.3: 12.17's secret had one character too many, and it read as a
+        // Sony block); a wrong id fails earlier, at the authorize step. So the build warns when a
+        // value lacks the published shape, or only one of the two is set, never printing either.
         val psnClientId = localProperties.getProperty("psnClientId", "")
         val psnClientSecret = localProperties.getProperty("psnClientSecret", "")
+        if (psnClientId.isEmpty() != psnClientSecret.isEmpty()) {
+            project.logger.warn("local.properties: only one of psnClientId and psnClientSecret is set: the PSN sign-in stays off until both are.")
+        }
         if (psnClientId.isNotEmpty() && !Regex("[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}").matches(psnClientId)) {
-            project.logger.warn("local.properties: psnClientId isn't a 36-character client id: PlayStation will refuse the sign-in (4102).")
+            project.logger.warn(
+                "local.properties: psnClientId isn't a lowercase 8-4-4-4-12 hex client id (it has ${psnClientId.length} characters): " +
+                    "PlayStation will refuse the sign-in."
+            )
         }
         if (psnClientSecret.isNotEmpty() && !Regex("[A-Za-z0-9]{16}").matches(psnClientSecret)) {
             project.logger.warn(
