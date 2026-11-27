@@ -54,8 +54,22 @@ android {
         // and secret, as the open-source PSN libraries publish them, kept in local.properties as
         // `psnClientId=...` and `psnClientSecret=...` so this public repository doesn't carry Sony's
         // app credentials. Empty by default → the PSN row is hidden and Games works by hand.
-        buildConfigField("String", "PSN_CLIENT_ID", "\"${localProperties.getProperty("psnClientId", "")}\"")
-        buildConfigField("String", "PSN_CLIENT_SECRET", "\"${localProperties.getProperty("psnClientSecret", "")}\"")
+        // A wrong value only shows at the token step, after the NPSSO was accepted: "4102 Bad client
+        // credentials" (13.2.3: 12.17's secret had one character too many, and it read as a Sony
+        // block). So the build warns when either value lacks the published shape, never printing it.
+        val psnClientId = localProperties.getProperty("psnClientId", "")
+        val psnClientSecret = localProperties.getProperty("psnClientSecret", "")
+        if (psnClientId.isNotEmpty() && !Regex("[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}").matches(psnClientId)) {
+            project.logger.warn("local.properties: psnClientId isn't a 36-character client id: PlayStation will refuse the sign-in (4102).")
+        }
+        if (psnClientSecret.isNotEmpty() && !Regex("[A-Za-z0-9]{16}").matches(psnClientSecret)) {
+            project.logger.warn(
+                "local.properties: psnClientSecret isn't 16 letters and digits (it has ${psnClientSecret.length} characters): " +
+                    "PlayStation will refuse the sign-in (4102)."
+            )
+        }
+        buildConfigField("String", "PSN_CLIENT_ID", "\"$psnClientId\"")
+        buildConfigField("String", "PSN_CLIENT_SECRET", "\"$psnClientSecret\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
