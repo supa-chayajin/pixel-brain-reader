@@ -30,19 +30,28 @@ portal's labels move from time to time, so look for the same words nearby.
 
 ## 1. Get a directory
 
-1. Open <https://entra.microsoft.com> and sign in with the account your Xbox uses.
-2. Go to **Applications › App registrations** (in the Azure portal, <https://portal.azure.com>, search
-   for **App registrations**).
-3. If Microsoft says that applications can't be created outside a directory, follow its **Sign up
-   for Azure** link: a free account, with the phone and card check. The portal then asks you to set
-   up multi-factor authentication; do it.
+A personal Microsoft account has no Entra directory of its own, and the portals can't open
+without one: signing in to entra.microsoft.com or portal.azure.com first fails with `AADSTS50020`
+("… does not exist in tenant 'Microsoft Services' and cannot access the application
+'c44b4083-…'", the Azure portal's id). The free Azure sign-up is what creates the directory.
+
+1. Open a private window (InPrivate or Incognito), so that no work or school account signed in in
+   the browser gets picked instead.
+2. Go to <https://azure.microsoft.com/free>, choose **Try Azure for free** (or **Start free**), and
+   sign in with the account your Xbox uses; if Microsoft asks which kind, choose the personal
+   account.
+3. Finish the sign-up: the phone check, the card check (the free account charges nothing) and the
+   agreement. It creates your directory, with you as its administrator.
+4. In the same window, open <https://portal.azure.com>: it now opens, in your directory. Set up
+   multi-factor authentication when it asks.
 
 The directory stays after the free account's trial ends: an app registration lives in the
 directory, not in a subscription.
 
 ## 2. Register the app
 
-1. **App registrations › New registration.**
+1. In the portal, search for **App registrations** (or open <https://entra.microsoft.com> ›
+   Applications › App registrations), then **New registration**.
 2. **Name:** `Pixel Brain Reader` (any name; Microsoft shows it when you sign in).
 3. **Supported account types:** **Personal Microsoft accounts only.**
 4. **Redirect URI:** leave it empty.
@@ -100,6 +109,7 @@ whoever asked for it.
 
 | What you see | Why | What to do |
 |---|---|---|
+| `AADSTS50020`: the account "does not exist in tenant 'Microsoft Services'" | The account has no directory yet, so the portal can't open | Step 1: the free Azure sign-up first, in a private window |
 | `AADSTS7000218` (asks for a `client_secret`) | Public client flows are off, so Microsoft takes the app for one with a secret | Step 3: **Allow public client flows: Yes**, then Save |
 | `unauthorized_client`: not enabled for consumers | The registration isn't for personal accounts | Register a new app with **Personal Microsoft accounts only** (step 2) |
 | `AADSTS700016` (application not found) | A typo in `xboxClientId`, or the registration was deleted | Copy the **Application (client) ID** again, then build again |
