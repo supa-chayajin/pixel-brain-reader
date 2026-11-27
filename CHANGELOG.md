@@ -39,6 +39,8 @@ The PlayStation Network sign-in: the refusal came from this build, not from Sony
 
 - 12.17.0's and 13.1.0's notes that PSN was blocked by Sony were wrong. The roadmap and the plans
   that recorded it now say so.
+- Checked on the Fold on 2026-11-27: the signed APK installed in place, started cleanly, signed in
+  to PSN with a fresh NPSSO, and the first sync went through.
 
 ## [13.2.2] — 2026-11-16
 
