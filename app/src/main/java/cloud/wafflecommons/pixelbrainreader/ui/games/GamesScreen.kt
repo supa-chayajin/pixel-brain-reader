@@ -320,7 +320,7 @@ private fun PsnLineRow(psn: PsnLine, onOpenPsn: () -> Unit) {
         status == null -> "PSN connected · first sync tonight at 23:40"
         status.ok -> "PSN ✓ ${clock(status.atMillis)}" + (psn.expiresInDays?.let { " · token expires in $it days" } ?: "")
         status.kind == PsnException.Kind.TOKEN_EXPIRED || status.kind == PsnException.Kind.NPSSO_REJECTED -> "PSN paused: paste a new token"
-        status.kind == PsnException.Kind.CLIENT_REJECTED -> "PSN paused: PlayStation changed its sign-in"
+        status.kind == PsnException.Kind.CLIENT_REJECTED -> "PSN paused: PlayStation refused this build's client"
         else -> "PSN: last sync failed (${status.message.ifBlank { "unknown error" }})"
     }
     Text(

@@ -99,7 +99,11 @@ class PsnException(val kind: Kind, message: String) : Exception(message) {
     enum class Kind {
         /** The NPSSO was refused (expired or mistyped, 4165). */
         NPSSO_REJECTED,
-        /** Sony refused the app client (4102): the API changed, PSN can't be used for now. */
+        /**
+         * PlayStation refused the client id or secret this build carries (4102, invalid_client). A
+         * wrong value in `local.properties` does exactly this: 12.17's secret had one character too
+         * many, and it read as a Sony block until 13.2.3.
+         */
         CLIENT_REJECTED,
         /** The refresh token is no longer valid: paste a new NPSSO. */
         TOKEN_EXPIRED,

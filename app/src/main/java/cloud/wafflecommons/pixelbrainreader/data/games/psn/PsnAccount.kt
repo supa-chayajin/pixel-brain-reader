@@ -19,7 +19,7 @@ import javax.inject.Singleton
  */
 data class PsnStatus(val ok: Boolean, val atMillis: Long, val kind: PsnException.Kind? = null, val message: String = "") {
 
-    /** A paused sync needs the owner: a new NPSSO, or PSN can't be used for now. */
+    /** A paused sync needs the owner: a new NPSSO, or a corrected PSN client in the build. */
     val needsOwner: Boolean
         get() = !ok && kind in setOf(PsnException.Kind.TOKEN_EXPIRED, PsnException.Kind.NPSSO_REJECTED, PsnException.Kind.CLIENT_REJECTED)
 

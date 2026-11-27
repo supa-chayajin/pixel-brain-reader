@@ -195,7 +195,10 @@ class PsnClient(
         }
         throw when {
             answer.errorCode == 4102 || answer.error == "invalid_client" ->
-                PsnException(PsnException.Kind.CLIENT_REJECTED, "PlayStation refused the app's client (4102): its sign-in has changed.")
+                PsnException(
+                    PsnException.Kind.CLIENT_REJECTED,
+                    "PlayStation refused this build's client id or secret (4102): check psnClientId and psnClientSecret in local.properties, then rebuild."
+                )
             answer.error == "invalid_grant" || (previousRefresh != null && response.code in 400..401) ->
                 PsnException(PsnException.Kind.TOKEN_EXPIRED, "The PlayStation sign-in has expired: paste a new NPSSO.")
             response.code == 429 -> PsnException(PsnException.Kind.RATE_LIMITED, "PlayStation asks to wait (too many requests).")
