@@ -28,6 +28,7 @@ class ReadOnlyScreensGuardTest {
         // 13.4: the Modes hub's short pages, Navigation (the tabs each mode shows), Repair (write back)
         "ui/modes/ModesPages.kt",
         "ui/settings/NavigationSettingsScreen.kt",
+        "ui/settings/RepairScreen.kt",
         // The toolkit
         "ui/work/MissionLogScreen.kt",
         "ui/work/BoardScreen.kt",

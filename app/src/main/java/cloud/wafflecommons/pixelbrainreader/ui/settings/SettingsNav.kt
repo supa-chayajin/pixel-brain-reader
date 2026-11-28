@@ -27,4 +27,8 @@ fun NavGraphBuilder.settingsPageDestinations(navController: NavHostController) {
     // S-h, Privacy & safety
     composable(SettingsRoutes.PRIVATE_JOURNAL) { PrivateJournalSettingsScreen(onBack = back) }
     composable(SettingsRoutes.PERMISSIONS) { PermissionsScreen(onBack = back) }
+
+    // S-i, Vault & device
+    composable(SettingsRoutes.REPAIR) { RepairScreen(onBack = back) }
+    composable(SettingsRoutes.DEVICE) { DeviceScreen(onBack = back) }
 }
