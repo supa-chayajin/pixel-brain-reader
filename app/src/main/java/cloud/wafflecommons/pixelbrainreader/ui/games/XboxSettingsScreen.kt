@@ -45,9 +45,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import cloud.wafflecommons.pixelbrainreader.data.games.xbox.XboxClient
 import cloud.wafflecommons.pixelbrainreader.ui.components.EmptyHint
-import cloud.wafflecommons.pixelbrainreader.ui.components.FormScaffold
 import cloud.wafflecommons.pixelbrainreader.ui.components.ReadOnlyNotice
 import cloud.wafflecommons.pixelbrainreader.ui.components.SectionCard
+import cloud.wafflecommons.pixelbrainreader.ui.settings.SettingsPage
+import cloud.wafflecommons.pixelbrainreader.ui.settings.SettingsPageScaffold
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -57,7 +58,7 @@ import java.util.Locale
  * Xbox (13.3, XB-E): Connect with the owner's own Microsoft app by device code (the code shown
  * here, typed at microsoft.com/link on any device), the last sync and how long the sign-in lasts,
  * Sync now and Disconnect. On a read-only device the page only says so: no Connect. 13.4: the last
- * sync says its day; a sync running anywhere shows as "Syncing…".
+ * sync says its day; a sync running anywhere shows as "Syncing…"; the page is Settings › Games › Xbox.
  */
 @Composable
 fun XboxSettingsScreen(onBack: () -> Unit, viewModel: XboxSettingsViewModel = hiltViewModel()) {
@@ -68,14 +69,15 @@ fun XboxSettingsScreen(onBack: () -> Unit, viewModel: XboxSettingsViewModel = hi
     // Back from microsoft.com/link in the browser: read the sign-in again.
     LaunchedEffect(lifecycle) { lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) { viewModel.refresh() } }
 
-    FormScaffold(title = "Xbox", icon = Icons.Rounded.Gamepad, onBack = onBack) {
+    // 13.4 (S-k): the Settings frame, its pill "Games".
+    SettingsPageScaffold(page = SettingsPage.XBOX, onBack = onBack) {
         if (state.readOnly) ReadOnlyNotice()
         if (!state.configured) {
             EmptyHint(
                 "This build has no Xbox app: register one (the how-to in documentation), add xboxClientId to " +
                     "local.properties, then build again. Games works by hand without it."
             )
-            return@FormScaffold
+            return@SettingsPageScaffold
         }
         if (state.busy) LinearWavyProgressIndicator(modifier = Modifier.fillMaxWidth())
         state.message?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }

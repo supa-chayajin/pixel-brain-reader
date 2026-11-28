@@ -7,6 +7,7 @@ import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
 import cloud.wafflecommons.pixelbrainreader.data.modes.CustodySchedule
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.model.HabitConfig
 import cloud.wafflecommons.pixelbrainreader.data.repository.HabitRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -43,14 +44,18 @@ class HabitConfigViewModel @Inject constructor(
         }
     }
 
+    /** A habit's change is a vault write (its config file): refused on a read-only device. */
     fun saveHabit(habit: HabitConfig) {
+        if (VaultWriteGate.refuses()) return
         viewModelScope.launch {
             habitRepository.addHabitConfig(habit)
             // Note: addHabitConfig already calls exportConfigToJson() inside HabitRepository as requested
         }
     }
 
+    /** Archives [habit] (the editor's Archive): its logs stay, it leaves the lists. */
     fun deleteHabit(habit: HabitConfig) {
+        if (VaultWriteGate.refuses()) return
         viewModelScope.launch {
             val archived = habit.copy(archived = true)
             habitRepository.addHabitConfig(archived)

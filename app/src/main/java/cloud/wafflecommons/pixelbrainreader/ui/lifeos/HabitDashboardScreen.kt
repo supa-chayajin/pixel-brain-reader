@@ -104,7 +104,8 @@ fun HabitDashboardScreen(
             } else if (state.habits.isEmpty()) {
                 Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), contentAlignment = Alignment.Center) {
                     Text(
-                        text = "No habits configured.\nGo to Settings > Life OS Automations to set them up.",
+                        // 13.4: where Settings keeps the habits now (S1).
+                        text = "No habits configured.\nGo to Settings › Life OS › Habits to set them up.",
                         textAlign = TextAlign.Center,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

@@ -1,49 +1,83 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package cloud.wafflecommons.pixelbrainreader.ui.settings
 
-import cloud.wafflecommons.pixelbrainreader.domain.lifeos.HabitScheduler
-import cloud.wafflecommons.pixelbrainreader.data.modes.CustodySchedule
-import cloud.wafflecommons.pixelbrainreader.ui.utils.centeredMaxWidth
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.layout.*
-import cloud.wafflecommons.pixelbrainreader.ui.theme.LocalNavRail
-import cloud.wafflecommons.pixelbrainreader.ui.theme.NavBarClearance
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material3.*
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Archive
+import androidx.compose.material.icons.rounded.AutoMode
+import androidx.compose.material.icons.rounded.TaskAlt
+import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import cloud.wafflecommons.pixelbrainreader.ui.components.connectedShapes
-import cloud.wafflecommons.pixelbrainreader.ui.components.ConnectedButtonRow
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.runtime.*
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SheetValue
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.ToggleButton
+import androidx.compose.material3.rememberBottomSheetState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.model.HabitConfig
 import cloud.wafflecommons.pixelbrainreader.data.model.HabitType
-import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
-import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
+import cloud.wafflecommons.pixelbrainreader.data.modes.CustodySchedule
+import cloud.wafflecommons.pixelbrainreader.domain.lifeos.HabitScheduler
+import cloud.wafflecommons.pixelbrainreader.ui.components.ConnectedButtonRow
 import cloud.wafflecommons.pixelbrainreader.ui.components.ReadOnlyNotice
+import cloud.wafflecommons.pixelbrainreader.ui.components.connectedShapes
+import cloud.wafflecommons.pixelbrainreader.ui.components.segmentShape
+import cloud.wafflecommons.pixelbrainreader.ui.theme.LocalNavRail
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.util.UUID
-import androidx.compose.material.icons.rounded.DateRange
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+/**
+ * Settings › Life OS › Habits: the habits as a segmented list, each opening its editor; + adds one.
+ * 13.4 (S-k): the Settings frame, "New habit" for a new one, Archive (it keeps the logs) only on an
+ * existing one, the custody Days as a connected group and the automatic sources by name. A
+ * read-only device lists the habits and edits none (12.15, S2).
+ */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HabitConfigScreen(
     onNavigateBack: () -> Unit,
@@ -53,7 +87,6 @@ fun HabitConfigScreen(
     val custody by viewModel.custody.collectAsStateWithLifecycle()
     val activeHabits = habits.filter { !it.archived }.sortedBy { it.sortOrder }
     val haptic = LocalHapticFeedback.current
-    // A read-only device lists the habits and edits none (12.15, S2).
     val readOnly = VaultWriteGate.readOnly
 
     var editingHabit by remember { mutableStateOf<HabitConfig?>(null) }
@@ -64,18 +97,9 @@ fun HabitConfigScreen(
     )
     val coroutineScope = rememberCoroutineScope()
 
-    Scaffold(
-        topBar = {
-            cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
-                title = "Manage Habits & Automations",
-                icon = Icons.Rounded.DateRange,
-                navigationIcon = {
-                    CortexIconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                }
-            )
-        },
+    SettingsLazyPageScaffold(
+        page = SettingsPage.HABITS,
+        onBack = onNavigateBack,
         floatingActionButton = {
             // Lift the FAB above the floating ExpressiveNavBar (which overlays content); none beside the rail.
             if (!readOnly) Box(modifier = Modifier.padding(bottom = if (LocalNavRail.current) 0.dp else 66.dp)) {
@@ -88,77 +112,52 @@ fun HabitConfigScreen(
                     )
                     isSheetOpen = true
                 }) {
-                    Icon(Icons.Filled.Add, contentDescription = "Add Habit")
+                    Icon(Icons.Rounded.Add, contentDescription = "Add a habit")
                 }
             }
         }
-    ) { padding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding).centeredMaxWidth(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = NavBarClearance),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            if (readOnly) item(key = "read-only") { ReadOnlyNotice() }
-            items(activeHabits, key = { it.id }) { habit ->
-                ElevatedCard(
-                    onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+    ) {
+        if (readOnly) item(key = "read-only") { ReadOnlyNotice(Modifier.padding(bottom = 14.dp)) }
+        if (activeHabits.isEmpty()) {
+            item(key = "empty") { SettingsNote(if (readOnly) "No habits yet." else "No habits yet: add one with +.") }
+        }
+        itemsIndexed(activeHabits, key = { _, habit -> habit.id }) { index, habit ->
+            val automatic = !habit.autoSource.isNullOrBlank()
+            SettingsRow(
+                title = habit.title,
+                description = habitLine(habit, custody),
+                icon = if (automatic) Icons.Rounded.AutoMode else Icons.Rounded.TaskAlt,
+                iconKey = habit.title,
+                shape = segmentShape(index, activeHabits.size),
+                onClick = if (readOnly) {
+                    null
+                } else {
+                    {
                         editingHabit = habit
                         isSheetOpen = true
-                    },
-                    enabled = !readOnly,
-                    modifier = Modifier.fillMaxWidth().animateItem()
-                ) {
-                    Column(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(habit.title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                            if (!habit.autoSource.isNullOrBlank()) {
-                                AssistChip(
-                                    onClick = { },
-                                    label = { Text("🤖 Auto") },
-                                    colors = AssistChipDefaults.assistChipColors(
-                                        leadingIconContentColor = MaterialTheme.colorScheme.primary,
-                                        labelColor = MaterialTheme.colorScheme.primary
-                                    )
-                                )
-                            }
-                        }
-                        if (habit.description.isNotBlank()) {
-                            Text(habit.description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Spacer(Modifier.height(8.dp))
-                        }
-                        SuggestionChip(
-                            onClick = { },
-                            label = {
-                                Text(
-                                    cloud.wafflecommons.pixelbrainreader.domain.lifeos.HabitScheduler.describe(
-                                        habit,
-                                        custody.label.takeIf { custody.isActive }
-                                    ),
-                                    style = MaterialTheme.typography.labelSmall
-                                )
-                            }
-                        )
                     }
-                }
-            }
+                },
+                modifier = Modifier.animateItem()
+            )
         }
     }
 
-    if (isSheetOpen && editingHabit != null) {
+    val editing = editingHabit
+    if (isSheetOpen && editing != null) {
         ModalBottomSheet(
             onDismissRequest = { isSheetOpen = false },
             sheetState = sheetState
         ) {
             HabitEditorForm(
-                initialHabit = editingHabit!!,
+                initialHabit = editing,
                 custody = custody,
+                isNew = habits.none { it.id == editing.id },
                 onSave = { updated ->
                     viewModel.saveHabit(updated)
                     coroutineScope.launch { sheetState.hide(); isSheetOpen = false }
                 },
                 onDelete = {
-                    viewModel.deleteHabit(editingHabit!!)
+                    viewModel.deleteHabit(editing)
                     coroutineScope.launch { sheetState.hide(); isSheetOpen = false }
                 },
                 onCancel = {
@@ -169,11 +168,23 @@ fun HabitConfigScreen(
     }
 }
 
+/** A habit's line in the list: its own description, then its schedule and, for an automatic one, its source. */
+private fun habitLine(habit: HabitConfig, custody: CustodySchedule): String {
+    val schedule = HabitScheduler.describe(habit, custody.label.takeIf { custody.isActive })
+    val source = habit.autoSource?.takeIf { it.isNotBlank() }?.let { " · " + HabitSources.label(it) }.orEmpty()
+    return listOfNotNull(habit.description.trim().takeIf { it.isNotEmpty() }, schedule + source).joinToString("\n")
+}
+
+/**
+ * A habit's editor, in a bottom sheet. [isNew]: a habit not saved yet, titled "New habit" and with
+ * no Archive (13.4, S-k). [onDelete] archives the habit: its logs stay.
+ */
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun HabitEditorForm(
     initialHabit: HabitConfig,
     custody: CustodySchedule,
+    isNew: Boolean,
     onSave: (HabitConfig) -> Unit,
     onDelete: () -> Unit,
     onCancel: () -> Unit
@@ -191,20 +202,9 @@ fun HabitEditorForm(
     var intervalUnit by remember { mutableStateOf(initialHabit.intervalUnit.uppercase().ifBlank { "DAY" }) }
     // "" any day, or HabitScheduler.WITH_CHILD / WITHOUT_CHILD (the Modes custody calendar).
     var custodyChoice by remember { mutableStateOf(initialHabit.custody.trim().uppercase()) }
-    var autoSource by remember { mutableStateOf(initialHabit.autoSource ?: "None (Manual)") }
+    // A HabitSources key; null: ticked by hand. A key this version doesn't know is kept as it is.
+    var autoSource by remember { mutableStateOf(initialHabit.autoSource?.takeIf { it.isNotBlank() }) }
     val haptic = LocalHapticFeedback.current
-
-    val autoSources = listOf(
-        "None (Manual)",
-        "health_connect_steps",
-        "health_connect_sleep",
-        "health_connect_hydration",
-        "health_connect_nutrition",
-        "health_connect_active_minutes",
-        "health_connect_distance",
-        "health_connect_mindfulness",
-        "health_connect_weight"
-    )
 
     var expandedAutoSource by remember { mutableStateOf(false) }
 
@@ -215,7 +215,7 @@ fun HabitEditorForm(
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text("Edit Habit", style = MaterialTheme.typography.titleLarge)
+        Text(if (isNew) "New habit" else "Edit habit", style = MaterialTheme.typography.titleLarge)
 
         OutlinedTextField(
             value = title,
@@ -234,8 +234,8 @@ fun HabitEditorForm(
         )
 
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Type: ", style = MaterialTheme.typography.bodyLarge)
-            Spacer(Modifier.width(8.dp))
+            Text("Type", style = MaterialTheme.typography.bodyLarge)
+            Spacer(Modifier.width(16.dp))
             ConnectedButtonRow {
                 ToggleButton(
                     checked = type == HabitType.BOOLEAN,
@@ -371,26 +371,28 @@ fun HabitEditorForm(
             }
         }
 
-        // The custody calendar's days, on top of the schedule (only while the calendar is on).
+        // The custody calendar's days, on top of the schedule (only while the calendar is on): a connected group.
         if (custody.isActive) {
             Text("Days", style = MaterialTheme.typography.titleMedium)
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                listOf(
-                    "" to "Any day",
-                    HabitScheduler.WITH_CHILD to "With ${custody.label}",
-                    HabitScheduler.WITHOUT_CHILD to "Without ${custody.label}"
-                ).forEach { (choice, lbl) ->
-                    FilterChip(
-                        selected = custodyChoice == choice,
-                        onClick = {
+            val choices = listOf(
+                "" to "Any day",
+                HabitScheduler.WITH_CHILD to "With ${custody.label}",
+                HabitScheduler.WITHOUT_CHILD to "Without ${custody.label}"
+            )
+            ConnectedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                choices.forEachIndexed { index, (choice, lbl) ->
+                    ToggleButton(
+                        checked = custodyChoice == choice,
+                        onCheckedChange = {
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             custodyChoice = choice
                         },
-                        label = { Text(lbl) }
-                    )
+                        shapes = connectedShapes(index, choices.size),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(lbl, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    }
                 }
             }
         }
@@ -400,10 +402,10 @@ fun HabitEditorForm(
             onExpandedChange = { expandedAutoSource = it }
         ) {
             OutlinedTextField(
-                value = autoSource,
+                value = HabitSources.label(autoSource),
                 onValueChange = {},
                 readOnly = true,
-                label = { Text("Auto Source (Health Connect)") },
+                label = { Text("Automatic source") },
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedAutoSource) },
                 modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, true).fillMaxWidth()
             )
@@ -411,9 +413,9 @@ fun HabitEditorForm(
                 expanded = expandedAutoSource,
                 onDismissRequest = { expandedAutoSource = false }
             ) {
-                autoSources.forEach { source ->
+                HabitSources.KEYS.forEach { source ->
                     DropdownMenuItem(
-                        text = { Text(source) },
+                        text = { Text(HabitSources.label(source)) },
                         onClick = {
                             autoSource = source
                             expandedAutoSource = false
@@ -428,16 +430,21 @@ fun HabitEditorForm(
             modifier = Modifier.fillMaxWidth().padding(bottom = 32.dp),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            TextButton(
-                onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onDelete()
-                }, shapes = ButtonDefaults.shapes(),
-                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-            ) {
-                Icon(Icons.Filled.Delete, contentDescription = "Delete")
-                Spacer(Modifier.width(8.dp))
-                Text("Delete")
+            // Archive keeps the habit's logs; a habit not saved yet has nothing to archive.
+            if (!isNew) {
+                TextButton(
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onDelete()
+                    }, shapes = ButtonDefaults.shapes(),
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Icon(Icons.Rounded.Archive, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Archive")
+                }
+            } else {
+                Spacer(Modifier.width(1.dp))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(onClick = {
@@ -446,10 +453,9 @@ fun HabitEditorForm(
                 }, shapes = ButtonDefaults.shapes()) { Text("Cancel") }
                 Button(onClick = {
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    val finalSource = if (autoSource == "None (Manual)") null else autoSource
                     val target = targetValue.toDoubleOrNull() ?: 0.0
                     val updated = initialHabit.copy(
-                        title = title.takeIf { it.isNotBlank() } ?: "Unnamed Habit",
+                        title = title.takeIf { it.isNotBlank() } ?: "Unnamed habit",
                         description = description,
                         type = type,
                         targetValue = if (type == HabitType.MEASURABLE) target else 0.0,
@@ -463,7 +469,7 @@ fun HabitEditorForm(
                         scheduleMode = scheduleMode,
                         intervalCount = intervalCount.toIntOrNull()?.coerceAtLeast(1) ?: 1,
                         intervalUnit = intervalUnit,
-                        autoSource = finalSource,
+                        autoSource = autoSource,
                         custody = custodyChoice
                     )
                     onSave(updated)

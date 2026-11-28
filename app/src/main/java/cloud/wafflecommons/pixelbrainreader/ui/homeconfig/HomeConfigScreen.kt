@@ -1,46 +1,82 @@
 package cloud.wafflecommons.pixelbrainreader.ui.homeconfig
 
-import cloud.wafflecommons.pixelbrainreader.ui.utils.centeredMaxWidth
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
-import cloud.wafflecommons.pixelbrainreader.ui.theme.LocalNavRail
-import cloud.wafflecommons.pixelbrainreader.ui.theme.NavBarClearance
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.CleaningServices
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Home
-import androidx.compose.material3.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.runtime.*
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.InputChip
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SmallFloatingActionButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.ChoreEntity
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.HomeRoomEntity
-import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
 import cloud.wafflecommons.pixelbrainreader.ui.components.ReadOnlyNotice
+import cloud.wafflecommons.pixelbrainreader.ui.components.segmentShape
+import cloud.wafflecommons.pixelbrainreader.ui.settings.SettingsLazyPageScaffold
+import cloud.wafflecommons.pixelbrainreader.ui.settings.SettingsNote
+import cloud.wafflecommons.pixelbrainreader.ui.settings.SettingsPage
+import cloud.wafflecommons.pixelbrainreader.ui.settings.SettingsRow
+import cloud.wafflecommons.pixelbrainreader.ui.settings.SettingsSubhead
+import cloud.wafflecommons.pixelbrainreader.ui.theme.LocalNavRail
 import cloud.wafflecommons.pixelbrainreader.ui.theme.RoomPalette
 import java.time.LocalDate
 import java.util.UUID
 import kotlin.math.roundToInt
-import androidx.compose.material.icons.rounded.CleaningServices
 
+/**
+ * Settings › Life OS › Home & chores: the rooms, and each room's chores as a segmented list (13.4,
+ * S-k: the Settings frame). The rooms and chores live in the vault: a read-only device lists them
+ * and edits none (12.15, S2).
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeConfigScreen(
@@ -53,7 +89,7 @@ fun HomeConfigScreen(
 
     var showRoomDialog by remember { mutableStateOf<HomeRoomEntity?>(null) }
     var showCreateRoomDialog by remember { mutableStateOf(false) }
-    
+
     var showChoreSheet by remember { mutableStateOf<ChoreEntity?>(null) }
     var showCreateChoreSheet by remember { mutableStateOf(false) }
 
@@ -62,18 +98,9 @@ fun HomeConfigScreen(
     // A read-only device lists the rooms and chores and edits none (12.15, S2).
     val readOnly = VaultWriteGate.readOnly
 
-    Scaffold(
-        topBar = {
-            cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
-                title = "Home Configuration",
-                icon = Icons.Rounded.CleaningServices,
-                navigationIcon = {
-                    CortexIconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
-                    }
-                }
-            )
-        },
+    SettingsLazyPageScaffold(
+        page = SettingsPage.HOME_CHORES,
+        onBack = onNavigateBack,
         floatingActionButton = {
             // Lift the stacked FABs above the floating ExpressiveNavBar (which overlays content); none beside the rail.
             if (!readOnly) Column(
@@ -87,42 +114,29 @@ fun HomeConfigScreen(
                     },
                     modifier = Modifier.padding(bottom = 8.dp)
                 ) {
-                    Icon(Icons.Rounded.Home, contentDescription = "Add Room")
+                    Icon(Icons.Rounded.Home, contentDescription = "Add a room")
                 }
                 ExtendedFloatingActionButton(
                     onClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         showCreateChoreSheet = true
                     },
-                    icon = { Icon(Icons.Rounded.Add, contentDescription = "Add Chore") },
-                    text = { Text("Add Chore") }
+                    icon = { Icon(Icons.Rounded.Add, contentDescription = null) },
+                    text = { Text("Add chore") }
                 )
             }
         }
-    ) { padding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .centeredMaxWidth(),
-            contentPadding = PaddingValues(bottom = NavBarClearance)
-        ) {
-            if (readOnly) item(key = "read-only") { ReadOnlyNotice(Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp)) }
-            item {
-                Text(
-                    text = "My Rooms",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(16.dp),
-                    color = MaterialTheme.colorScheme.primary
-                )
-                
+    ) {
+        if (readOnly) item(key = "read-only") { ReadOnlyNotice(Modifier.padding(bottom = 14.dp)) }
+        item(key = "rooms-header") { SettingsSubhead("Rooms", Modifier.padding(bottom = 6.dp)) }
+        item(key = "rooms") {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 LazyRow(
-                    contentPadding = PaddingValues(horizontal = 16.dp),
+                    contentPadding = PaddingValues(horizontal = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // "Add Room" Chip
+                    // "Add" chip
                     if (!readOnly) item {
                         InputChip(
                             selected = false,
@@ -131,7 +145,7 @@ fun HomeConfigScreen(
                                 showCreateRoomDialog = true
                             },
                             label = { Text("Add") },
-                            leadingIcon = { Icon(Icons.Rounded.Add, "Add", Modifier.size(18.dp)) }
+                            leadingIcon = { Icon(Icons.Rounded.Add, "Add a room", Modifier.size(18.dp)) }
                         )
                     }
 
@@ -148,77 +162,59 @@ fun HomeConfigScreen(
                             label = { Text("${room.name} ($choreCount)") },
                             trailingIcon = if (readOnly) null else {
                                 {
-                                CortexIconButton(
-                                    onClick = { roomToDelete = room },
-                                    modifier = Modifier.size(18.dp)
-                                ) {
-                                    Icon(
-                                        Icons.Rounded.Delete, 
-                                        contentDescription = "Delete",
-                                        tint = MaterialTheme.colorScheme.error,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                }
+                                    CortexIconButton(
+                                        onClick = { roomToDelete = room },
+                                        modifier = Modifier.size(18.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Rounded.Delete,
+                                            contentDescription = "Delete ${room.name}",
+                                            tint = MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
                                 }
                             }
                         )
                     }
                 }
-                
                 if (rooms.isEmpty()) {
-                    Text(
-                        text = "No rooms configured. Add a room to get started.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 16.dp)
-                    )
+                    SettingsNote(if (readOnly) "No rooms yet." else "No rooms yet. Add a room to get started.")
                 }
-                
-                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+            }
+        }
+
+        rooms.forEach { room ->
+            item(key = "header_${room.id}") {
+                SettingsSubhead(room.name, Modifier.padding(top = 14.dp, bottom = 6.dp))
             }
 
-            rooms.forEach { room ->
-                item(key = "header_${room.id}") {
-                    Text(
-                        text = room.name,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                    )
-                }
-
-                val chores = choresByRoom[room.id] ?: emptyList()
-                if (chores.isEmpty()) {
-                    item {
-                        Text(
-                            text = "No chores in this room.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
-                        )
-                    }
-                } else {
-                    items(chores, key = { it.id }) { chore ->
-                        ListItem(
-                            supportingContent = { Text("Every ${chore.frequencyDays} days • ${chore.baseEffort} XP") },
-                            trailingContent = if (readOnly) null else {
-                                { Row {
+            val chores = choresByRoom[room.id] ?: emptyList()
+            if (chores.isEmpty()) {
+                item(key = "empty_${room.id}") { SettingsNote("No chores in this room.") }
+            } else {
+                itemsIndexed(chores, key = { _, chore -> chore.id }) { index, chore ->
+                    SettingsRow(
+                        title = chore.name,
+                        description = "Every ${chore.frequencyDays} days • ${chore.baseEffort} XP",
+                        icon = Icons.Rounded.CleaningServices,
+                        iconKey = room.name,
+                        shape = segmentShape(index, chores.size),
+                        onClick = if (readOnly) null else { { showChoreSheet = chore } },
+                        trailing = if (readOnly) null else {
+                            {
+                                Row {
                                     CortexIconButton(onClick = { showChoreSheet = chore }) {
-                                        Icon(Icons.Rounded.Edit, contentDescription = "Edit Chore")
+                                        Icon(Icons.Rounded.Edit, contentDescription = "Edit ${chore.name}")
                                     }
                                     CortexIconButton(onClick = { choreToDelete = chore }) {
-                                        Icon(Icons.Rounded.Delete, contentDescription = "Delete Chore", tint = MaterialTheme.colorScheme.error)
+                                        Icon(Icons.Rounded.Delete, contentDescription = "Delete ${chore.name}", tint = MaterialTheme.colorScheme.error)
                                     }
-                                } }
-                            },
-                            modifier = Modifier
-                                .clickable(enabled = !readOnly) {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    showChoreSheet = chore
                                 }
-                                .animateItem()
-                        ) { Text(chore.name, fontWeight = FontWeight.Medium) }
-                    }
+                            }
+                        },
+                        modifier = Modifier.animateItem()
+                    )
                 }
             }
         }
@@ -232,16 +228,16 @@ fun HomeConfigScreen(
         var nameInput by remember { mutableStateOf(targetRoom?.name ?: "") }
 
         AlertDialog(
-            onDismissRequest = { 
+            onDismissRequest = {
                 showRoomDialog = null
-                showCreateRoomDialog = false 
+                showCreateRoomDialog = false
             },
-            title = { Text(if (isEdit) "Edit Room" else "New Room") },
+            title = { Text(if (isEdit) "Edit room" else "New room") },
             text = {
                 OutlinedTextField(
                     value = nameInput,
                     onValueChange = { nameInput = it },
-                    label = { Text("Room Name") },
+                    label = { Text("Room name") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -268,9 +264,9 @@ fun HomeConfigScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { 
+                TextButton(onClick = {
                     showRoomDialog = null
-                    showCreateRoomDialog = false 
+                    showCreateRoomDialog = false
                 }, shapes = ButtonDefaults.shapes()) {
                     Text("Cancel")
                 }
@@ -281,7 +277,7 @@ fun HomeConfigScreen(
     if (roomToDelete != null) {
         AlertDialog(
             onDismissRequest = { roomToDelete = null },
-            title = { Text("Delete Room?") },
+            title = { Text("Delete room?") },
             text = { Text("Deleting '${roomToDelete?.name}' will permanently remove it and cascade delete all associated chores. This cannot be undone.") },
             confirmButton = {
                 Button(
@@ -305,7 +301,7 @@ fun HomeConfigScreen(
     if (choreToDelete != null) {
         AlertDialog(
             onDismissRequest = { choreToDelete = null },
-            title = { Text("Delete Chore?") },
+            title = { Text("Delete chore?") },
             text = { Text("Are you sure you want to delete '${choreToDelete?.name}'?") },
             confirmButton = {
                 Button(
@@ -339,9 +335,9 @@ fun HomeConfigScreen(
         val frequencyError = frequencyDays.toIntOrNull()?.let { it <= 0 } ?: true
 
         ModalBottomSheet(
-            onDismissRequest = { 
+            onDismissRequest = {
                 showChoreSheet = null
-                showCreateChoreSheet = false 
+                showCreateChoreSheet = false
             }
         ) {
             Column(
@@ -351,7 +347,7 @@ fun HomeConfigScreen(
                     .verticalScroll(rememberScrollState())
             ) {
                 Text(
-                    text = if (isEdit) "Edit Chore" else "New Chore",
+                    text = if (isEdit) "Edit chore" else "New chore",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(bottom = 16.dp)
@@ -360,7 +356,7 @@ fun HomeConfigScreen(
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Chore Name") },
+                    label = { Text("Chore name") },
                     modifier = Modifier.fillMaxWidth(),
                     isError = nameError,
                     singleLine = true
@@ -369,7 +365,7 @@ fun HomeConfigScreen(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 var roomExpanded by remember { mutableStateOf(false) }
-                val selectedRoomName = rooms.find { it.id == selectedRoomId }?.name ?: "Select Room"
+                val selectedRoomName = rooms.find { it.id == selectedRoomId }?.name ?: "Select a room"
 
                 ExposedDropdownMenuBox(
                     expanded = roomExpanded,
@@ -382,7 +378,7 @@ fun HomeConfigScreen(
                         label = { Text("Room") },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .menuAnchor(androidx.compose.material3.ExposedDropdownMenuAnchorType.PrimaryNotEditable),
+                            .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
                         colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
                     )
 
@@ -407,7 +403,7 @@ fun HomeConfigScreen(
                 OutlinedTextField(
                     value = frequencyDays,
                     onValueChange = { frequencyDays = it.filter { char -> char.isDigit() } },
-                    label = { Text("Frequency (Days)") },
+                    label = { Text("Every (days)") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth(),
                     isError = frequencyError,
@@ -417,11 +413,11 @@ fun HomeConfigScreen(
                 Spacer(modifier = Modifier.height(24.dp))
 
                 Text(
-                    text = "Effort / Base XP Reward: ${baseEffort.roundToInt()}",
+                    text = "Effort: ${baseEffort.roundToInt()} XP",
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.SemiBold
                 )
-                
+
                 Slider(
                     value = baseEffort,
                     onValueChange = { baseEffort = it },
@@ -429,13 +425,13 @@ fun HomeConfigScreen(
                     steps = 8,
                     modifier = Modifier.fillMaxWidth()
                 )
-                
+
                 Spacer(modifier = Modifier.height(32.dp))
 
                 Button(
                     onClick = {
                         if (selectedRoomId.isBlank()) return@Button // Should never happen unless no rooms exist
-                        
+
                         val finalFreq = frequencyDays.toIntOrNull() ?: 1
                         // Editing keeps every field the form doesn't show (archived flag, manual sort
                         // order): rebuilding the entity used to un-archive the chore and reset its order.
@@ -455,16 +451,16 @@ fun HomeConfigScreen(
                             createdAt = System.currentTimeMillis()
                         )
                         viewModel.upsertChore(newChore)
-                        
+
                         showChoreSheet = null
                         showCreateChoreSheet = false
                     }, shapes = ButtonDefaults.shapes(),
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !nameError && !frequencyError && selectedRoomId.isNotBlank()
                 ) {
-                    Text("Save Chore")
+                    Text("Save chore")
                 }
-                
+
                 Spacer(modifier = Modifier.height(32.dp))
             }
         }

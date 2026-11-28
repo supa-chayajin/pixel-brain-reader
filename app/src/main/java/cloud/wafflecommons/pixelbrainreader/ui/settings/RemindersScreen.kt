@@ -1,78 +1,48 @@
 package cloud.wafflecommons.pixelbrainreader.ui.settings
 
-import cloud.wafflecommons.pixelbrainreader.ui.utils.centeredMaxWidth
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import cloud.wafflecommons.pixelbrainreader.ui.theme.NavBarClearance
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.CleaningServices
-import androidx.compose.material.icons.rounded.EditCalendar
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Diversity3
+import androidx.compose.material.icons.rounded.EditCalendar
 import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Mood
 import androidx.compose.material.icons.rounded.Schedule
-import androidx.compose.material3.BasicAlertDialog
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TimePicker
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.rememberTimePickerState
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
-import androidx.compose.material.icons.rounded.NotificationsActive
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
+import cloud.wafflecommons.pixelbrainreader.ui.components.PickTimeDialog
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+/**
+ * Settings › Your day › Reminders: the six reminders, each a switch row (with its time, or its
+ * windows, under it while it is on), each an anchor the search opens the page at (13.4, S6). One
+ * time picker for all of them, the app's own. This device's settings; they don't run on a read-only
+ * device, which says so.
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun RemindersScreen(
     onBack: () -> Unit,
@@ -93,140 +63,152 @@ fun RemindersScreen(
     // When set, holds the initial "HH:mm" and the callback to run on confirm.
     var timePicker by remember { mutableStateOf<Pair<String, (String) -> Unit>?>(null) }
 
-    Scaffold(
-        topBar = {
-            cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
-                title = "Reminders",
-                icon = Icons.Rounded.NotificationsActive,
-                navigationIcon = {
-                    CortexIconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                }
-            )
+    SettingsPageScaffold(page = SettingsPage.REMINDERS, onBack = onBack) {
+        if (VaultWriteGate.readOnly) {
+            SettingsGroup { row { SettingsNote("Reminders don't run on a read-only device.") } }
         }
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .padding(padding)
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .centeredMaxWidth()
-                .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = NavBarClearance),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
-        ) {
-            // --- Evening check-in ---
-            ReminderSection(
-                icon = Icons.Rounded.Mood,
-                iconTint = MaterialTheme.colorScheme.secondary,
-                title = "Evening check-in",
-                subtitle = "One minute from the notification: tap your mood, then type one line or something you're thankful for. No need to open the app.",
-                checked = checkInEnabled,
-                onCheckedChange = viewModel::setCheckInEnabled
-            ) {
-                TimeRow(
-                    label = "Check-in time",
-                    time = checkInTime,
-                    onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+
+        // --- Evening check-in ---
+        SettingsGroup {
+            row {
+                SettingsSwitchRow(
+                    title = "Evening check-in",
+                    checked = checkInEnabled,
+                    onCheckedChange = viewModel::setCheckInEnabled,
+                    description = "One minute from the notification: tap your mood, then type one line or something " +
+                        "you're thankful for. No need to open the app.",
+                    icon = Icons.Rounded.Mood,
+                    anchor = SettingsAnchors.CHECK_IN
+                )
+            }
+            if (checkInEnabled) {
+                row {
+                    TimeRow(label = "Check-in time", time = checkInTime) {
                         timePicker = checkInTime to { hhmm -> viewModel.setCheckInTime(hhmm) }
                     }
+                }
+            }
+        }
+
+        // --- Private vault reminder ---
+        SettingsGroup {
+            row {
+                SettingsSwitchRow(
+                    title = "Private vault reminder",
+                    checked = vaultEnabled,
+                    onCheckedChange = viewModel::setVaultEnabled,
+                    description = "A daily nudge to journal at your chosen time — always fires, never skipped.",
+                    icon = Icons.Rounded.Lock,
+                    anchor = SettingsAnchors.VAULT_REMINDER
                 )
             }
-
-            // --- Private vault reminder ---
-            ReminderSection(
-                icon = Icons.Rounded.Lock,
-                iconTint = MaterialTheme.colorScheme.primary,
-                title = "Private vault reminder",
-                subtitle = "A daily nudge to journal at your chosen time — always fires, never skipped.",
-                checked = vaultEnabled,
-                onCheckedChange = viewModel::setVaultEnabled
-            ) {
-                TimeRow(
-                    label = "Reminder time",
-                    time = vaultTime,
-                    onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            if (vaultEnabled) {
+                row {
+                    TimeRow(label = "Reminder time", time = vaultTime) {
                         timePicker = vaultTime to { hhmm -> viewModel.setVaultTime(hhmm) }
                     }
+                }
+            }
+        }
+
+        // --- Meeting prep (12.12) ---
+        SettingsGroup {
+            row {
+                SettingsSwitchRow(
+                    title = "Meeting prep",
+                    checked = meetingPrepEnabled,
+                    onCheckedChange = viewModel::setMeetingPrepEnabled,
+                    description = "Ten minutes before a meeting from your calendar: what your notes and the mission log " +
+                        "hold about it. In $workLabel mode only; Do Not Disturb silences it.",
+                    icon = Icons.Rounded.Groups,
+                    anchor = SettingsAnchors.MEETING_PREP
                 )
             }
+        }
 
-            // --- Meeting prep (12.12) ---
-            ReminderSection(
-                icon = Icons.Rounded.Groups,
-                iconTint = MaterialTheme.colorScheme.primary,
-                title = "Meeting prep",
-                subtitle = "Ten minutes before a meeting from your calendar: what your notes and the mission log hold " +
-                    "about it. In $workLabel mode only; Do Not Disturb silences it.",
-                checked = meetingPrepEnabled,
-                onCheckedChange = viewModel::setMeetingPrepEnabled
-            ) {}
+        // --- 1:1 reminders (12.19) ---
+        SettingsGroup {
+            row {
+                SettingsSwitchRow(
+                    title = "1:1 reminders",
+                    checked = oneOnOneEnabled,
+                    onCheckedChange = viewModel::setOneOnOneEnabled,
+                    description = "Thirty minutes before a meeting you linked to a person in its prep, or one titled like " +
+                        "a 1:1. A work person's in $workLabel mode only; Do Not Disturb silences it.",
+                    icon = Icons.Rounded.Diversity3,
+                    anchor = SettingsAnchors.ONE_ON_ONE
+                )
+            }
+        }
 
-            // --- 1:1 reminders (12.19) ---
-            ReminderSection(
-                icon = Icons.Rounded.Diversity3,
-                iconTint = MaterialTheme.colorScheme.tertiary,
-                title = "1:1 reminders",
-                subtitle = "Thirty minutes before a meeting you linked to a person in its prep, or one titled like a 1:1. " +
-                    "A work person's in $workLabel mode only; Do Not Disturb silences it.",
-                checked = oneOnOneEnabled,
-                onCheckedChange = viewModel::setOneOnOneEnabled
-            ) {}
+        // --- Weekly review & monthly reports (12.13) ---
+        SettingsGroup {
+            row {
+                SettingsSwitchRow(
+                    title = "Weekly review & monthly reports",
+                    checked = reviewNotificationsEnabled,
+                    onCheckedChange = viewModel::setReviewNotificationsEnabled,
+                    description = "One quiet notification when Sunday night's review or last month's reports are " +
+                        "written, opening them. The work report's only in $workLabel mode.",
+                    icon = Icons.Rounded.EditCalendar,
+                    anchor = SettingsAnchors.REVIEWS
+                )
+            }
+        }
 
-            // --- Weekly review & monthly reports (12.13) ---
-            ReminderSection(
-                icon = Icons.Rounded.EditCalendar,
-                iconTint = MaterialTheme.colorScheme.secondary,
-                title = "Weekly review & monthly reports",
-                subtitle = "One quiet notification when Sunday night's review or last month's reports are written, " +
-                    "opening them. The work report's only in $workLabel mode.",
-                checked = reviewNotificationsEnabled,
-                onCheckedChange = viewModel::setReviewNotificationsEnabled
-            ) {}
-
-            // --- Chores & habits reminder ---
-            ReminderSection(
-                icon = Icons.Rounded.CleaningServices,
-                iconTint = MaterialTheme.colorScheme.tertiary,
-                title = "Chores & habits reminder",
-                subtitle = "At each window, a summary of due chores and unfinished habits.",
-                checked = choresEnabled,
-                onCheckedChange = viewModel::setChoresEnabled
-            ) {
-                Text("Time windows", style = MaterialTheme.typography.labelLarge)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    choresWindows.forEach { win ->
-                        InputChip(
-                            selected = false,
-                            onClick = {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                viewModel.removeChoresWindow(win)
-                            },
-                            label = { Text(win) },
-                            trailingIcon = {
-                                Icon(Icons.Default.Close, contentDescription = "Remove $win", modifier = Modifier.size(16.dp))
+        // --- Chores & habits reminder ---
+        SettingsGroup {
+            row {
+                SettingsSwitchRow(
+                    title = "Chores & habits reminder",
+                    checked = choresEnabled,
+                    onCheckedChange = viewModel::setChoresEnabled,
+                    description = "At each window, a summary of due chores and unfinished habits.",
+                    icon = Icons.Rounded.CleaningServices,
+                    anchor = SettingsAnchors.CHORES
+                )
+            }
+            if (choresEnabled) {
+                row {
+                    SettingsRow(
+                        title = "Time windows",
+                        description = if (choresWindows.isEmpty()) "No window yet" else null,
+                        below = {
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                choresWindows.forEach { win ->
+                                    InputChip(
+                                        selected = false,
+                                        onClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            viewModel.removeChoresWindow(win)
+                                        },
+                                        label = { Text(win) },
+                                        trailingIcon = {
+                                            Icon(Icons.Rounded.Close, contentDescription = "Remove $win", modifier = Modifier.size(16.dp))
+                                        }
+                                    )
+                                }
                             }
-                        )
-                    }
-                }
-                FilledTonalButton(onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    timePicker = "09:00" to { hhmm -> viewModel.addChoresWindow(hhmm) }
-                }, shapes = ButtonDefaults.shapes()) {
-                    Icon(Icons.Default.Add, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Add window")
+                            FilledTonalButton(onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                timePicker = "09:00" to { hhmm -> viewModel.addChoresWindow(hhmm) }
+                            }, shapes = ButtonDefaults.shapes()) {
+                                Icon(Icons.Rounded.Add, contentDescription = null)
+                                Spacer(Modifier.width(8.dp))
+                                Text("Add window")
+                            }
+                        }
+                    )
                 }
             }
         }
     }
 
     timePicker?.let { (initial, onConfirm) ->
-        TimePickerDialog(
+        PickTimeDialog(
             initial = initial,
             onConfirm = { hhmm ->
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 onConfirm(hhmm)
                 timePicker = null
             },
@@ -235,136 +217,13 @@ fun RemindersScreen(
     }
 }
 
-/** An Expressive settings card: icon badge + title + switch, with a spring-revealed body. */
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
-@Composable
-private fun ReminderSection(
-    icon: ImageVector,
-    iconTint: Color,
-    title: String,
-    subtitle: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    content: @Composable () -> Unit
-) {
-    val haptic = LocalHapticFeedback.current
-    ElevatedCard(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
-    ) {
-        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Surface(shape = CircleShape, color = iconTint.copy(alpha = 0.15f), modifier = Modifier.size(44.dp)) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(24.dp))
-                    }
-                }
-                Spacer(Modifier.width(16.dp))
-                Text(
-                    title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f)
-                )
-                Switch(
-                    checked = checked,
-                    onCheckedChange = {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onCheckedChange(it)
-                    },
-                    thumbContent = if (checked) {
-                        { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(SwitchDefaults.IconSize)) }
-                    } else null
-                )
-            }
-            Text(
-                subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            AnimatedVisibility(
-                visible = checked,
-                enter = expandVertically(MaterialTheme.motionScheme.defaultSpatialSpec()) +
-                    fadeIn(MaterialTheme.motionScheme.defaultEffectsSpec()),
-                exit = shrinkVertically(MaterialTheme.motionScheme.defaultSpatialSpec()) +
-                    fadeOut(MaterialTheme.motionScheme.defaultEffectsSpec())
-            ) {
-                Column(
-                    modifier = Modifier.padding(top = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) { content() }
-            }
-        }
-    }
-}
-
-/** Clickable time selector row — a tonal surface showing the current time. */
+/** A reminder's time: a row of its group, the time at its end, a tap to change it. */
 @Composable
 private fun TimeRow(label: String, time: String, onClick: () -> Unit) {
-    Surface(
+    SettingsRow(
+        title = label,
+        icon = Icons.Rounded.Schedule,
         onClick = onClick,
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainerHighest
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(Icons.Rounded.Schedule, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.width(12.dp))
-            Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-            Text(time, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-        }
-    }
-}
-
-/** Material 3 time picker wrapped in a dialog. */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun TimePickerDialog(
-    initial: String,
-    onConfirm: (String) -> Unit,
-    onDismiss: () -> Unit
-) {
-    val haptic = LocalHapticFeedback.current
-    val parts = initial.split(":")
-    val state = rememberTimePickerState(
-        initialHour = parts.getOrNull(0)?.toIntOrNull() ?: 20,
-        initialMinute = parts.getOrNull(1)?.toIntOrNull() ?: 0,
-        is24Hour = true
+        trailing = { Text(time, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary) }
     )
-    BasicAlertDialog(onDismissRequest = onDismiss) {
-        Surface(
-            shape = MaterialTheme.shapes.extraLarge,
-            tonalElevation = 6.dp,
-            color = MaterialTheme.colorScheme.surfaceContainerHigh
-        ) {
-            Column(
-                modifier = Modifier.padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    "Select time",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(20.dp))
-                TimePicker(state = state)
-                Spacer(Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text("Cancel") }
-                    Spacer(Modifier.width(8.dp))
-                    TextButton(onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onConfirm("%02d:%02d".format(state.hour, state.minute))
-                    }, shapes = ButtonDefaults.shapes()) { Text("OK") }
-                }
-            }
-        }
-    }
 }

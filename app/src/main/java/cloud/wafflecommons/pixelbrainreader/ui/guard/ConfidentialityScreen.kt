@@ -23,17 +23,15 @@ import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.VerifiedUser
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -58,15 +56,18 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cloud.wafflecommons.pixelbrainreader.data.guard.FindingKind
 import cloud.wafflecommons.pixelbrainreader.data.guard.GuardFinding
 import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
-import cloud.wafflecommons.pixelbrainreader.ui.components.EmptyHint
-import cloud.wafflecommons.pixelbrainreader.ui.components.FormScaffold
-import cloud.wafflecommons.pixelbrainreader.ui.components.RemovableRow
 import cloud.wafflecommons.pixelbrainreader.ui.components.SectionCard
 import cloud.wafflecommons.pixelbrainreader.ui.components.TextPromptDialog
+import cloud.wafflecommons.pixelbrainreader.ui.settings.LocalSegmentPosition
+import cloud.wafflecommons.pixelbrainreader.ui.settings.SettingsGroup
+import cloud.wafflecommons.pixelbrainreader.ui.settings.SettingsNote
+import cloud.wafflecommons.pixelbrainreader.ui.settings.SettingsPage
+import cloud.wafflecommons.pixelbrainreader.ui.settings.SettingsPageScaffold
+import cloud.wafflecommons.pixelbrainreader.ui.settings.SettingsRow
+import cloud.wafflecommons.pixelbrainreader.ui.settings.SettingsRowPadding
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import androidx.compose.material.icons.rounded.Security
 
 /**
  * The confidentiality guard: what is held back from the git remote and why, the protected names,
@@ -90,7 +91,8 @@ fun ConfidentialityScreen(
     var addingTerm by remember { mutableStateOf(false) }
     var movingPath by remember { mutableStateOf<String?>(null) }
 
-    FormScaffold(title = "Confidentiality", icon = Icons.Rounded.Security, onBack = onBack, snackbarHostState = snackbarHostState) {
+    // 13.4 (S-k): the Settings frame, "Confidentiality guard" under Privacy & safety.
+    SettingsPageScaffold(page = SettingsPage.CONFIDENTIALITY, onBack = onBack, snackbarHostState = snackbarHostState) {
         if (settingsWereReset) {
             SectionCard(
                 title = "Settings were reset",
@@ -103,7 +105,7 @@ fun ConfidentialityScreen(
         StatusCard(held = held, checking = checking, lastCheck = lastCheck, onCheck = viewModel::check)
 
         held.groupBy { it.path }.forEach { (path, findings) ->
-            HeldNoteCard(
+            HeldNote(
                 path = path,
                 findings = findings,
                 onOpen = { onOpenNote(path) },
@@ -112,20 +114,31 @@ fun ConfidentialityScreen(
             )
         }
 
-        SectionCard(
-            title = "Protected names",
-            icon = Icons.Rounded.Badge,
-            subtitle = "Clients, employers, people: names that must never reach your git remote. Matched as whole words, " +
-                "ignoring case and accents, in note text and file names. Stored only on this phone, encrypted.",
-            trailing = {
-                CortexIconButton(onClick = { addingTerm = true }) {
-                    Icon(Icons.Filled.Add, contentDescription = "Add a protected name")
-                }
+        // 13.4: segmented like the rest of Settings: what the names are and the + first, then each name its own row.
+        SettingsGroup {
+            row {
+                SettingsRow(
+                    title = "Protected names",
+                    description = "Clients, employers, people: names that must never reach your git remote. Matched as whole " +
+                        "words, ignoring case and accents, in note text and file names. Stored only on this phone, encrypted.",
+                    icon = Icons.Rounded.Badge,
+                    trailing = {
+                        CortexIconButton(onClick = { addingTerm = true }) {
+                            Icon(Icons.Filled.Add, contentDescription = "Add a protected name")
+                        }
+                    }
+                )
             }
-        ) {
-            if (settings.terms.isEmpty()) EmptyHint("No protected names yet.")
+            if (settings.terms.isEmpty()) row { SettingsNote("No protected names yet.") }
             settings.terms.forEach { term ->
-                RemovableRow(title = term, subtitle = null, onRemove = { viewModel.removeTerm(term) })
+                row {
+                    SettingsRow(
+                        title = term,
+                        trailing = {
+                            TextButton(onClick = { viewModel.removeTerm(term) }, shapes = ButtonDefaults.shapes()) { Text("Remove") }
+                        }
+                    )
+                }
             }
         }
 
@@ -205,47 +218,62 @@ private fun StatusCard(held: List<GuardFinding>, checking: Boolean, lastCheck: L
     )
 }
 
+/**
+ * A held note (13.4: segmented like the rest of Settings): its path and actions, then each finding
+ * its own segment, all in the error container.
+ */
 @Composable
-private fun HeldNoteCard(
+private fun HeldNote(
     path: String,
     findings: List<GuardFinding>,
     onOpen: () -> Unit,
     onMoveToPrivate: () -> Unit,
     onAllow: (GuardFinding, Boolean) -> Unit
 ) {
-    ElevatedCard(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
-    ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(
-                path,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onErrorContainer
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (path.endsWith(".md")) {
-                    OutlinedButton(onClick = onOpen, shapes = ButtonDefaults.shapes()) {
-                        Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Open")
-                    }
-                    if (!path.startsWith("99_Private/")) {
-                        OutlinedButton(onClick = onMoveToPrivate, shapes = ButtonDefaults.shapes()) {
-                            Icon(Icons.Rounded.Lock, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Move to private")
+    SettingsGroup {
+        row {
+            HeldSegment {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        path,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (path.endsWith(".md")) {
+                            OutlinedButton(onClick = onOpen, shapes = ButtonDefaults.shapes()) {
+                                Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Open")
+                            }
+                            if (!path.startsWith("99_Private/")) {
+                                OutlinedButton(onClick = onMoveToPrivate, shapes = ButtonDefaults.shapes()) {
+                                    Icon(Icons.Rounded.Lock, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Move to private")
+                                }
+                            }
                         }
                     }
                 }
             }
-            findings.forEachIndexed { index, finding ->
-                if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.15f))
-                FindingRow(finding = finding, onAllow = { wholeFolder -> onAllow(finding, wholeFolder) })
-            }
         }
+        findings.forEach { finding ->
+            row { HeldSegment { FindingRow(finding = finding, onAllow = { wholeFolder -> onAllow(finding, wholeFolder) }) } }
+        }
+    }
+}
+
+/** A segment of a held note's group: its place's shape, the error container, the kit's inner margin. */
+@Composable
+private fun HeldSegment(content: @Composable () -> Unit) {
+    Surface(
+        shape = LocalSegmentPosition.current.shape,
+        color = MaterialTheme.colorScheme.errorContainer,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Box(modifier = Modifier.padding(SettingsRowPadding)) { content() }
     }
 }
 

@@ -47,6 +47,18 @@ class SettingsPagesTest {
     }
 
     @Test
+    fun `the held sync's message names the guard's place in Settings`() {
+        val page = SettingsPage.CONFIDENTIALITY
+        val finding = GuardFinding("00_Inbox/a.md", FindingKind.SECRET, "token", "Access token", line = 3, excerpt = "…")
+
+        assertEquals(
+            "Sync held: 1 possible confidential item in 1 note. Review them in Settings › ${page.topic.title} › ${page.title}.",
+            CommitHeldException(listOf(finding)).message
+        )
+        assertEquals("Settings › Privacy & safety › Confidentiality guard", "Settings › ${page.topic.title} › ${page.title}")
+    }
+
+    @Test
     fun `anchors are lowercase words`() {
         val anchors = SettingsAnchors::class.java.declaredFields
             .filter { Modifier.isStatic(it.modifiers) && it.type == String::class.java }

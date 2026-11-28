@@ -76,7 +76,7 @@ class CommitHeldException(val findings: List<GuardFinding>) : Exception(holdMess
             val notes = findings.map { it.path }.distinct().size
             val items = if (findings.size == 1) "1 possible confidential item" else "${findings.size} possible confidential items"
             val where = if (notes == 1) "1 note" else "$notes notes"
-            return "Sync held: $items in $where. Review them in Settings > Confidentiality."
+            return "Sync held: $items in $where. Review them in Settings › Privacy & safety › Confidentiality guard."
         }
     }
 }

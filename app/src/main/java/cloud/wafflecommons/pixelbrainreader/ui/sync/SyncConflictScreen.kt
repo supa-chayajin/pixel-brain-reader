@@ -5,8 +5,6 @@ package cloud.wafflecommons.pixelbrainreader.ui.sync
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -23,7 +21,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -32,6 +29,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ToggleButton
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -60,7 +59,10 @@ import cloud.wafflecommons.pixelbrainreader.data.sync.PendingConflict
 import cloud.wafflecommons.pixelbrainreader.data.sync.SyncOrchestrator
 import cloud.wafflecommons.pixelbrainreader.data.system.AppClock
 import cloud.wafflecommons.pixelbrainreader.data.utils.LineDiff
-import cloud.wafflecommons.pixelbrainreader.ui.components.FormScaffold
+import cloud.wafflecommons.pixelbrainreader.ui.components.ConnectedButtonRow
+import cloud.wafflecommons.pixelbrainreader.ui.components.connectedShapes
+import cloud.wafflecommons.pixelbrainreader.ui.settings.SettingsPage
+import cloud.wafflecommons.pixelbrainreader.ui.settings.SettingsPageScaffold
 import cloud.wafflecommons.pixelbrainreader.ui.utils.isMediumOrWider
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -177,7 +179,8 @@ class SyncConflictViewModel @Inject constructor(
 @Composable
 fun SyncConflictScreen(onBack: () -> Unit, viewModel: SyncConflictViewModel = hiltViewModel()) {
     val ui by viewModel.ui.collectAsStateWithLifecycle()
-    FormScaffold(title = "Sync conflict", icon = Icons.Rounded.SyncProblem, onBack = onBack) {
+    // 13.4 (S-k): the Settings frame, under Vault & device.
+    SettingsPageScaffold(page = SettingsPage.SYNC_CONFLICTS, onBack = onBack) {
         if (ui.loading || ui.resolving) LinearWavyProgressIndicator(modifier = Modifier.fillMaxWidth())
         val pushed = ui.pushed
         if (pushed != null) {
@@ -187,12 +190,12 @@ fun SyncConflictScreen(onBack: () -> Unit, viewModel: SyncConflictViewModel = hi
                 style = MaterialTheme.typography.bodyLarge
             )
             Button(onClick = onBack, shapes = ButtonDefaults.shapes()) { Text("Done") }
-            return@FormScaffold
+            return@SettingsPageScaffold
         }
-        if (ui.loading && ui.files.isEmpty()) return@FormScaffold
+        if (ui.loading && ui.files.isEmpty()) return@SettingsPageScaffold
         if (!ui.waiting) {
             Text("No conflict is waiting.", style = MaterialTheme.typography.bodyLarge)
-            return@FormScaffold
+            return@SettingsPageScaffold
         }
         if (ui.files.isEmpty()) {
             if (ui.error != null) {
@@ -205,7 +208,7 @@ fun SyncConflictScreen(onBack: () -> Unit, viewModel: SyncConflictViewModel = hi
                 )
                 Button(onClick = viewModel::resolve, shapes = ButtonDefaults.shapes(), enabled = !ui.resolving, modifier = Modifier.fillMaxWidth()) { Text("Resume syncing") }
             }
-            return@FormScaffold
+            return@SettingsPageScaffold
         }
         Text(
             "These files changed both on this phone and on GitHub. Choose what each becomes: the result is one commit on top of GitHub's, and syncing resumes.",
@@ -240,7 +243,6 @@ fun SyncConflictScreen(onBack: () -> Unit, viewModel: SyncConflictViewModel = hi
 
 private const val DIFF_ROWS = 40
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ConflictFileCard(file: ConflictFile, choice: ConflictChoice?, onChoose: (ConflictChoice) -> Unit, onEdit: () -> Unit) {
     ElevatedCard(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large) {
@@ -250,14 +252,7 @@ private fun ConflictFileCard(file: ConflictFile, choice: ConflictChoice?, onChoo
                 Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             if (file.isData) DataSummary(file) else ConflictDiff(theirs = file.theirs, mine = file.mine)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(selected = choice == ConflictChoice.Mine, onClick = { onChoose(ConflictChoice.Mine) }, label = { Text("Keep mine") })
-                FilterChip(selected = choice == ConflictChoice.Theirs, onClick = { onChoose(ConflictChoice.Theirs) }, label = { Text("Keep GitHub's") })
-                if (!file.isData) {
-                    FilterChip(selected = choice is ConflictChoice.Edited, onClick = onEdit, label = { Text("Edit…") })
-                    FilterChip(selected = choice == ConflictChoice.Both, onClick = { onChoose(ConflictChoice.Both) }, label = { Text("Keep both") })
-                }
-            }
+            ConflictChoices(isData = file.isData, choice = choice, onChoose = onChoose, onEdit = onEdit)
             if (choice == ConflictChoice.Both) {
                 Text(
                     "GitHub's version stays; yours is saved beside it as a copy.",
@@ -268,6 +263,45 @@ private fun ConflictFileCard(file: ConflictFile, choice: ConflictChoice?, onChoo
         }
     }
 }
+
+/**
+ * A file's choice as a connected group (13.4, S-k): Keep mine / Keep GitHub's, then Edit… and Keep
+ * both for a text file. Side by side from a medium window; on a phone's width the four make two
+ * connected pairs, so no label is cut.
+ */
+@Composable
+private fun ConflictChoices(isData: Boolean, choice: ConflictChoice?, onChoose: (ConflictChoice) -> Unit, onEdit: () -> Unit) {
+    val keep = listOf(
+        ChoiceButton("Keep mine", choice == ConflictChoice.Mine) { onChoose(ConflictChoice.Mine) },
+        ChoiceButton("Keep GitHub's", choice == ConflictChoice.Theirs) { onChoose(ConflictChoice.Theirs) }
+    )
+    val text = if (isData) {
+        emptyList<ChoiceButton>()
+    } else {
+        listOf(
+            ChoiceButton("Edit…", choice is ConflictChoice.Edited, onEdit),
+            ChoiceButton("Keep both", choice == ConflictChoice.Both) { onChoose(ConflictChoice.Both) }
+        )
+    }
+    val rows = if (isMediumOrWider() || text.isEmpty()) listOf(keep + text) else listOf(keep, text)
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        rows.forEach { buttons ->
+            ConnectedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                buttons.forEachIndexed { index, button ->
+                    ToggleButton(
+                        checked = button.checked,
+                        onCheckedChange = { button.onClick() },
+                        shapes = connectedShapes(index, buttons.size),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+                        modifier = Modifier.weight(1f)
+                    ) { Text(button.label, maxLines = 1) }
+                }
+            }
+        }
+    }
+}
+
+private class ChoiceButton(val label: String, val checked: Boolean, val onClick: () -> Unit)
 
 /** A data file in one line: what differs, never raw JSON (a year of habit logs can be large: parsed off the main thread). */
 @Composable
