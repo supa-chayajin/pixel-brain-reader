@@ -39,10 +39,10 @@ class NavOrderTest {
     @Test
     fun `projects is a tab, and joins an order saved before it among the last ones`() {
         val defaults = UserPreferencesRepository.DEFAULT_NAVBAR_ORDER
-        assertEquals(V11Routes.PROJECTS, defaults[defaults.size - 2])
+        assertEquals(6, defaults.indexOf(V11Routes.PROJECTS))
         // A phone's order from 12.6.0, tabs rearranged: everything stays where it was.
         assertEquals(
-            listOf("stats", "home", "chat", "habits", "home_os", "mood", "projects", "games"),
+            listOf("stats", "home", "chat", "habits", "home_os", "mood", "projects", "games", "feeds"),
             inNavOrder(listOf("stats", "home", "chat", "habits", "home_os", "mood"), defaults) { it }
         )
     }
@@ -50,10 +50,20 @@ class NavOrderTest {
     @Test
     fun `games is the 8th tab and joins an order saved before it at its end`() {
         val defaults = UserPreferencesRepository.DEFAULT_NAVBAR_ORDER
-        assertEquals(cloud.wafflecommons.pixelbrainreader.ui.games.GamesRoutes.GAMES, defaults.last())
-        assertEquals(8, defaults.size)
-        // The owner's 12.16 order, rearranged: nothing existing moves, Games comes last.
+        assertEquals(7, defaults.indexOf(cloud.wafflecommons.pixelbrainreader.ui.games.GamesRoutes.GAMES))
+        // The owner's 12.16 order, rearranged: nothing existing moves, Games comes last, then Feeds.
         val saved = listOf("home", "habits", "home_os", "projects", "chat", "mood", "stats")
-        assertEquals(saved + "games", inNavOrder(saved, defaults) { it })
+        assertEquals(saved + "games" + "feeds", inNavOrder(saved, defaults) { it })
+    }
+
+    @Test
+    fun `feeds is the 9th tab and joins an order saved before it at its end`() {
+        val defaults = UserPreferencesRepository.DEFAULT_NAVBAR_ORDER
+        // The key is persisted: never renamed.
+        assertEquals("feeds", defaults.last())
+        assertEquals(9, defaults.size)
+        // A 13.3 order, rearranged: nothing existing moves, Feeds comes last.
+        val saved = listOf("games", "home", "habits", "home_os", "projects", "chat", "mood", "stats")
+        assertEquals(saved + "feeds", inNavOrder(saved, defaults) { it })
     }
 }

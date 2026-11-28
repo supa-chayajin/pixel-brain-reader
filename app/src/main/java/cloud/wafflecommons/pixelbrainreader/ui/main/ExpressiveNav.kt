@@ -44,24 +44,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.MenuOpen
-import androidx.compose.material.icons.outlined.CleaningServices
-import androidx.compose.material.icons.outlined.Dashboard
-import androidx.compose.material.icons.outlined.DateRange
-import androidx.compose.material.icons.outlined.Mood
-import androidx.compose.material.icons.outlined.Psychology
-import androidx.compose.material.icons.outlined.RocketLaunch
-import androidx.compose.material.icons.outlined.SportsEsports
 import androidx.compose.material.icons.rounded.AutoAwesome
-import androidx.compose.material.icons.rounded.CleaningServices
-import androidx.compose.material.icons.rounded.Dashboard
-import androidx.compose.material.icons.rounded.DateRange
 import androidx.compose.material.icons.rounded.Menu
-import androidx.compose.material.icons.rounded.Mood
-import androidx.compose.material.icons.rounded.Psychology
-import androidx.compose.material.icons.rounded.RocketLaunch
-import androidx.compose.material.icons.rounded.SportsEsports
-import androidx.compose.material.icons.rounded.Star
-import androidx.compose.material.icons.rounded.StarOutline
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -101,6 +85,7 @@ import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.ui.components.OpenTabEmblem
 import cloud.wafflecommons.pixelbrainreader.ui.components.TabEmblems
 import cloud.wafflecommons.pixelbrainreader.ui.components.placeTone
+import cloud.wafflecommons.pixelbrainreader.ui.feeds.FeedsRoutes
 import cloud.wafflecommons.pixelbrainreader.ui.games.GamesRoutes
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
@@ -119,7 +104,8 @@ import kotlin.math.abs
  *    tabs the emblem slides, stretching like jelly with the spring's speed, then pops into the new
  *    shape and colour as it arrives.
  *  - Daily is a sun shape that turns while Daily is open.
- *  - A running game session puts a pulsing dot on Games.
+ *  - A running game session puts a pulsing dot on Games; headlines that arrived since the Feeds
+ *    tab was last opened put a still one on Feeds (13.4).
  *  - The rail widens to show the names beside the icons (a menu button at its top, kept on the
  *    device), and the phone's bar slides away while a page scrolls down ([NavBarHideOnScroll]).
  *
@@ -134,50 +120,52 @@ internal data class NavDest(
     val label: String,
     val selected: Boolean,
     /** Games while a session runs: the live dot. */
-    val live: Boolean = false
+    val live: Boolean = false,
+    /** 13.4: headlines arrived since the Feeds tab was last opened. */
+    val dot: Boolean = false
 )
 
 /**
- * The regular tabs (all but Daily) in the user's custom order; a destination absent from the saved
- * order (one added in a later app version) is appended, so nothing ever disappears from the bar.
+ * The regular tabs (all but Daily) in the user's custom order, named and drawn as [NavTabs] has
+ * them; a destination absent from the saved order (one added in a later app version) is appended,
+ * so nothing ever disappears from the bar. [feedsNew] puts the dot on Feeds, never while it is open.
  */
 internal fun navDestinations(
     currentRoute: String?,
     isViewingDailyNote: Boolean,
     order: List<String>,
     hidden: Set<String> = emptySet(),
-    gameRunning: Boolean = false
+    gameRunning: Boolean = false,
+    feedsNew: Boolean = false
 ): List<NavDest> =
     inNavOrder(
         order,
-        listOfNotNull(
-            NavDest(Screen.Home, Icons.Rounded.Dashboard, Icons.Outlined.Dashboard, "Repo", currentRoute == Screen.Home && !isViewingDailyNote),
-            NavDest("habits", Icons.Rounded.DateRange, Icons.Outlined.DateRange, "Habits", currentRoute == "habits"),
-            NavDest(Screen.HomeOS, Icons.Rounded.CleaningServices, Icons.Outlined.CleaningServices, "Chores", currentRoute == Screen.HomeOS),
+        NavTabs.ALL.mapNotNull { tab ->
             // No AI on a read-only device (DeviceRole).
-            NavDest(Screen.Chat, Icons.Rounded.Psychology, Icons.Outlined.Psychology, "Chat", currentRoute == Screen.Chat)
-                .takeUnless { VaultWriteGate.readOnly },
-            NavDest(Screen.MoodTracker, Icons.Rounded.Mood, Icons.Outlined.Mood, "Mood", currentRoute == Screen.MoodTracker),
-            NavDest(Screen.Stats, Icons.Rounded.Star, Icons.Rounded.StarOutline, "Stats", currentRoute == Screen.Stats),
-            // Also lit on a project page opened directly (the Projects widget, a deep link).
+            if (tab.key == Screen.Chat && VaultWriteGate.readOnly) return@mapNotNull null
             NavDest(
-                V11Routes.PROJECTS,
-                Icons.Rounded.RocketLaunch,
-                Icons.Outlined.RocketLaunch,
-                "Projects",
-                currentRoute == V11Routes.PROJECTS || currentRoute == V11Routes.PROJECT
-            ),
-            // 12.17 (RFC-009): lit on a game's page too.
-            NavDest(
-                GamesRoutes.GAMES,
-                Icons.Rounded.SportsEsports,
-                Icons.Outlined.SportsEsports,
-                "Games",
-                currentRoute == GamesRoutes.GAMES || currentRoute == GamesRoutes.GAME,
-                live = gameRunning
+                route = tab.key,
+                icon = tab.icon,
+                iconOff = tab.iconOff,
+                label = tab.label,
+                selected = isOpenTab(tab.key, currentRoute, isViewingDailyNote),
+                live = tab.key == GamesRoutes.GAMES && gameRunning,
+                dot = tab.key == FeedsRoutes.FEEDS && feedsNew && currentRoute != FeedsRoutes.FEEDS
             )
-        )
+        }
     ) { it.route }.filterNot { it.route in hidden }
+
+/**
+ * Whether [key]'s tab is the one open at [currentRoute]: Repo only off today's note, Projects on a
+ * project page opened directly too (the Projects widget, a deep link), Games on a game's page too
+ * (12.17, RFC-009).
+ */
+private fun isOpenTab(key: String, currentRoute: String?, isViewingDailyNote: Boolean): Boolean = when (key) {
+    Screen.Home -> currentRoute == Screen.Home && !isViewingDailyNote
+    V11Routes.PROJECTS -> currentRoute == V11Routes.PROJECTS || currentRoute == V11Routes.PROJECT
+    GamesRoutes.GAMES -> currentRoute == GamesRoutes.GAMES || currentRoute == GamesRoutes.GAME
+    else -> currentRoute == key
+}
 
 /** The open tab: its name and its place among the tabs as shown (0 for the first). */
 internal data class OpenTab(val label: String, val place: Int)
@@ -227,6 +215,8 @@ internal fun ExpressiveNavBar(
     modifier: Modifier = Modifier,
     hidden: Set<String> = emptySet(),
     gameRunning: Boolean = false,
+    /** 13.4 (F1): headlines arrived since the Feeds tab was last opened: its dot. */
+    feedsNew: Boolean = false,
     /** The open tab's emblem, drawn for this visit (null on Daily). */
     emblem: OpenTabEmblem? = null
 ) {
@@ -234,7 +224,7 @@ internal fun ExpressiveNavBar(
     // The first four of the user's order = the folded set (four since 12.17, owner's D9: Games made
     // eight tabs, and three left too many out of reach). Unfolded reveals the rest. A tab's index
     // here is its place: the folded set is the first places.
-    val ordered = navDestinations(currentRoute, isViewingDailyNote, order, hidden, gameRunning)
+    val ordered = navDestinations(currentRoute, isViewingDailyNote, order, hidden, gameRunning, feedsNew)
     val regular = if (isLargeScreen) ordered else ordered.take(FOLDED_TABS)
 
     Row(
@@ -312,13 +302,15 @@ internal fun ExpressiveNavRail(
     modifier: Modifier = Modifier,
     hidden: Set<String> = emptySet(),
     gameRunning: Boolean = false,
+    /** 13.4 (F1): headlines arrived since the Feeds tab was last opened: its dot. */
+    feedsNew: Boolean = false,
     expanded: Boolean = false,
     onToggleExpanded: () -> Unit = {},
     /** The open tab's emblem, drawn for this visit (null on Daily). */
     emblem: OpenTabEmblem? = null
 ) {
     val shadowColor = navShadowColor()
-    val regular = navDestinations(currentRoute, isViewingDailyNote, order, hidden, gameRunning)
+    val regular = navDestinations(currentRoute, isViewingDailyNote, order, hidden, gameRunning, feedsNew)
     val width by animateDpAsState(
         targetValue = if (expanded) RailWidthExpanded else RailWidth,
         animationSpec = spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow),
@@ -527,13 +519,17 @@ private fun NavPiece(
         Box(modifier = Modifier.size(emblem), contentAlignment = Alignment.Center) {
             Icon(
                 if (item.selected) item.icon else item.iconOff,
-                contentDescription = if (item.live) "${item.label}, a game session is running" else item.label,
+                contentDescription = when {
+                    item.live -> "${item.label}, a game session is running"
+                    item.dot -> "${item.label}, new headlines"
+                    else -> item.label
+                },
                 tint = tint,
                 modifier = Modifier
                     .size(iconSize)
                     .graphicsLayer { scaleX = iconScale.value; scaleY = iconScale.value }
             )
-            if (item.live) LiveDot(Modifier.align(Alignment.TopEnd))
+            if (item.live) LiveDot(Modifier.align(Alignment.TopEnd)) else if (item.dot) NewDot(Modifier.align(Alignment.TopEnd))
         }
     }
     val name: @Composable () -> Unit = {
@@ -590,6 +586,12 @@ private fun LiveDot(modifier: Modifier = Modifier) {
         )
         Box(modifier = Modifier.size(7.dp).background(color, CircleShape))
     }
+}
+
+/** Headlines arrived since the Feeds tab was last opened (13.4): a still dot on Feeds, seen from every page. */
+@Composable
+private fun NewDot(modifier: Modifier = Modifier) {
+    Box(modifier = modifier.size(8.dp).background(MaterialTheme.colorScheme.primary, CircleShape))
 }
 
 /**

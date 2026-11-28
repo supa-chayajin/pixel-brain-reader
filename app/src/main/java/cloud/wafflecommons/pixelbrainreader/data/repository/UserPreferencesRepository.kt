@@ -581,7 +581,8 @@ class UserPreferencesRepository @Inject constructor(
     companion object {
         /** Canonical order + membership of the reorderable regular nav destinations. */
         // A tab added later joins the end of a saved order (see navBarOrder): "projects" came in 12.7.0,
-        // "games" in 12.17.0 (RFC-009, D4: the 8th, nothing existing moves).
-        val DEFAULT_NAVBAR_ORDER = listOf("home", "habits", "home_os", "chat", "mood", "stats", "projects", "games")
+        // "games" in 12.17.0 (RFC-009, D4: the 8th, nothing existing moves), "feeds" in 13.4.0 (F1:
+        // the 9th, nothing existing moves). The keys are persisted: never rename one.
+        val DEFAULT_NAVBAR_ORDER = listOf("home", "habits", "home_os", "chat", "mood", "stats", "projects", "games", "feeds")
     }
 }

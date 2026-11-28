@@ -66,6 +66,7 @@ import androidx.compose.material.icons.rounded.RocketLaunch
 import androidx.compose.material.icons.rounded.SportsEsports
 import cloud.wafflecommons.pixelbrainreader.ui.games.GamesRoutes
 import cloud.wafflecommons.pixelbrainreader.ui.games.gamesDestinations
+import cloud.wafflecommons.pixelbrainreader.ui.feeds.feedsDestinations
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.DateRange
 import androidx.compose.material.icons.rounded.Search
@@ -177,6 +178,8 @@ fun MainScreen(
     // 13.2: the navigation's live dot (a game session running) and the rail's names (kept on the device).
     val gameRunning by navViewModel.gameRunning.collectAsStateWithLifecycle()
     val railExpanded by navViewModel.railExpanded.collectAsStateWithLifecycle()
+    // 13.4 (F-c): headlines arrived since the Feeds tab was last opened, its dot.
+    val feedsNew by navViewModel.feedsNew.collectAsStateWithLifecycle()
     // What the last sync brought (K3, D4): marked in the file list, opened first in a note's history.
     val lastSyncDigest by syncMarksViewModel.lastSync.collectAsStateWithLifecycle()
     val changedBySync = remember(lastSyncDigest) { lastSyncDigest?.brought ?: emptySet() }
@@ -511,6 +514,7 @@ fun MainScreen(
                 onSelect = navigateToTab,
                 hidden = hiddenTabs,
                 gameRunning = gameRunning,
+                feedsNew = feedsNew,
                 expanded = railExpanded,
                 onToggleExpanded = { navViewModel.setRailExpanded(!railExpanded) },
                 emblem = openEmblem
@@ -1057,12 +1061,6 @@ fun MainScreen(
                 )
             }
 
-            composable("watch_feeds") {
-                cloud.wafflecommons.pixelbrainreader.ui.settings.FeedsScreen(
-                    onNavigateBack = { navController.popBackStack() }
-                )
-            }
-
             composable(cloud.wafflecommons.pixelbrainreader.ui.wrapped.WRAPPED_ROUTE) {
                 cloud.wafflecommons.pixelbrainreader.ui.wrapped.WrappedScreen(
                     onNavigateBack = { navController.popBackStack() }
@@ -1180,6 +1178,9 @@ fun MainScreen(
             // Games (12.17, RFC-009): the tab, a game's page, the PlayStation settings.
             gamesDestinations(navController, openNote = { path -> viewModel.openVaultFile(path) })
 
+            // Feeds (13.4, F1): the tab, and the feeds' page on its 12.12 route.
+            feedsDestinations(navController)
+
             v11Destinations(
                 navController,
                 openNote = { path -> viewModel.openVaultFile(path) },
@@ -1215,6 +1216,7 @@ fun MainScreen(
                     .graphicsLayer { translationY = barOffset },
                 hidden = hiddenTabs,
                 gameRunning = gameRunning,
+                feedsNew = feedsNew,
                 emblem = openEmblem
             )
         }

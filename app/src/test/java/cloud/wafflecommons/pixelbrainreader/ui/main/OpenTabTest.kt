@@ -1,9 +1,11 @@
 package cloud.wafflecommons.pixelbrainreader.ui.main
 
 import cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
+import cloud.wafflecommons.pixelbrainreader.ui.feeds.FeedsRoutes
 import cloud.wafflecommons.pixelbrainreader.ui.games.GamesRoutes
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** The open tab and its place among the tabs as shown: its emblem's colour follows the place (13.2.1). */
@@ -42,5 +44,24 @@ class OpenTabTest {
     fun `Daily and today's note have no tab`() {
         assertNull(open(Screen.DailyNote))
         assertNull(open(Screen.Home, daily = true))
+    }
+
+    @Test
+    fun `the Feeds tab takes the ninth place`() {
+        assertEquals(OpenTab("Feeds", 8), open(FeedsRoutes.FEEDS))
+        // Its page of settings is no tab: nothing is lit there.
+        assertNull(open(FeedsRoutes.SETTINGS))
+    }
+
+    @Test
+    fun `new headlines put a dot on Feeds, never on the open tab`() {
+        val elsewhere = navDestinations(Screen.Home, isViewingDailyNote = false, order = defaultOrder, feedsNew = true)
+        assertEquals(listOf(FeedsRoutes.FEEDS), elsewhere.filter { it.dot }.map { it.route })
+
+        val onFeeds = navDestinations(FeedsRoutes.FEEDS, isViewingDailyNote = false, order = defaultOrder, feedsNew = true)
+        assertTrue(onFeeds.none { it.dot })
+
+        val nothingNew = navDestinations(Screen.Home, isViewingDailyNote = false, order = defaultOrder)
+        assertTrue(nothingNew.none { it.dot })
     }
 }

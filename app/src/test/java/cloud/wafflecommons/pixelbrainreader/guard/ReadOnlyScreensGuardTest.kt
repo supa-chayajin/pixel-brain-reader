@@ -65,7 +65,9 @@ class ReadOnlyScreensGuardTest {
         "ui/share/ShareImportScreen.kt",
         // 13.4 (P5): a shared image's choice, a photo note or a game's picture (never reached on a
         // read-only device either: MainActivity finishes a share there; it asks nothing if it were).
-        "ui/share/SharedImageChooser.kt"
+        "ui/share/SharedImageChooser.kt",
+        // 13.4 (F-c): the Feeds tab's Import only hides; a tap opens the browser (the marks are the device's own).
+        "ui/feeds/FeedsTabScreen.kt"
     )
 
     @Test
