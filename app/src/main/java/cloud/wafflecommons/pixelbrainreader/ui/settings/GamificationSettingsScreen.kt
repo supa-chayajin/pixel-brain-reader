@@ -1,39 +1,57 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package cloud.wafflecommons.pixelbrainreader.ui.settings
 
-import cloud.wafflecommons.pixelbrainreader.ui.utils.centeredMaxWidth
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.MutableTransitionState
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Bedtime
+import androidx.compose.material.icons.automirrored.rounded.DirectionsWalk
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cloud.wafflecommons.pixelbrainreader.data.gamification.Attribute
-import cloud.wafflecommons.pixelbrainreader.data.mood.MoodEmojiSet
-import cloud.wafflecommons.pixelbrainreader.data.mood.MoodEmojiSets
-import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
-import cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar
-import cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry
 import cloud.wafflecommons.pixelbrainreader.ui.utils.HapticHelper.performHapticClick
 import cloud.wafflecommons.pixelbrainreader.ui.utils.HapticHelper.performHapticSuccess
 import cloud.wafflecommons.pixelbrainreader.ui.utils.HapticHelper.performHapticTick
-import androidx.compose.material.icons.rounded.EmojiEvents
+import java.text.NumberFormat
+import java.util.Locale
+import kotlin.math.roundToInt
 
-@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
+/**
+ * Settings › RPG rules (13.4, S-f; route `gamification_settings`): the health goals that decide
+ * when a day earns its health XP, and the tag rules that send a mood tag's XP to one of the hero's
+ * stats, each stat by its name. The sliders move on round steps (1,000 steps, 30 minutes). This
+ * device's own settings: usable on a read-only device. The mood faces are on the Moods page.
+ */
 @Composable
 fun GamificationSettingsScreen(
     onNavigateBack: () -> Unit,
@@ -42,269 +60,191 @@ fun GamificationSettingsScreen(
     val stepTarget by viewModel.stepTarget.collectAsStateWithLifecycle()
     val sleepMinMinutes by viewModel.sleepMinMinutes.collectAsStateWithLifecycle()
     val tagMappings by viewModel.tagToStatMapping.collectAsStateWithLifecycle()
-    val moodEmojiSet by viewModel.moodEmojiSet.collectAsStateWithLifecycle()
 
-    var newTagText by remember { mutableStateOf("") }
-    var expandedDropdown by remember { mutableStateOf(false) }
-    var selectedAttribute by remember { mutableStateOf(Attribute.VIG) }
+    var newTagText by rememberSaveable { mutableStateOf("") }
+    var selectedAttribute by rememberSaveable { mutableStateOf(Attribute.VIG) }
     val view = LocalView.current
 
-    Scaffold(
-        topBar = {
-            CortexTopAppBar(
-                title = "RPG Engine Rules",
-                icon = Icons.Rounded.EmojiEvents,
-                navigationIcon = {
-                    CortexIconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.Close, contentDescription = "Close")
-                    }
-                }
-            )
+    SettingsPageScaffold(page = SettingsPage.RPG, onBack = onNavigateBack) {
+        SettingsGroup {
+            row {
+                SettingsNote(
+                    "Your health goals decide when a day earns its health XP. Each tag rule sends a mood tag's XP to " +
+                        "one of your hero's stats."
+                )
+            }
         }
-    ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .centeredMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(24.dp)
-        ) {
-            
-            // Goals Section
-            StaggeredEntry(index = 0) {
-            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    Text("Health Synergy Goals", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
 
-                    Column {
-                        Text("Target Steps: $stepTarget", style = MaterialTheme.typography.bodyMedium)
+        SettingsPageSection("Health goals") {
+            row {
+                SettingsRow(
+                    title = "Step goal",
+                    icon = Icons.AutoMirrored.Rounded.DirectionsWalk,
+                    anchor = SettingsAnchors.GOALS,
+                    trailing = { GoalValue(stepsLabel(stepTarget)) },
+                    below = {
                         Slider(
                             value = stepTarget.toFloat(),
-                            onValueChange = { 
-                                val newVal = it.toInt()
-                                if (newVal != stepTarget && newVal % 1000 == 0) view.performHapticTick()
-                                viewModel.updateStepTarget(newVal) 
+                            onValueChange = { raw ->
+                                val steps = ((raw / STEP_GOAL_STEP).roundToInt() * STEP_GOAL_STEP).coerceIn(STEP_GOAL_MIN, STEP_GOAL_MAX)
+                                if (steps != stepTarget) {
+                                    view.performHapticTick()
+                                    viewModel.updateStepTarget(steps)
+                                }
                             },
-                            valueRange = 1000f..20000f,
-                            steps = 19
+                            valueRange = STEP_GOAL_MIN.toFloat()..STEP_GOAL_MAX.toFloat(),
+                            // 1,000 to 20,000 by 1,000: 18 stops between the two ends.
+                            steps = (STEP_GOAL_MAX - STEP_GOAL_MIN) / STEP_GOAL_STEP - 1
                         )
                     }
-
-                    Column {
-                        val hours = sleepMinMinutes / 60
-                        val mins = sleepMinMinutes % 60
-                        val suffix = if (mins > 0) "h $mins" else "h"
-                        Text("Minimum Sleep: $hours$suffix", style = MaterialTheme.typography.bodyMedium)
+                )
+            }
+            row {
+                SettingsRow(
+                    title = "Sleep goal",
+                    icon = Icons.Rounded.Bedtime,
+                    trailing = { GoalValue(sleepLabel(sleepMinMinutes)) },
+                    below = {
                         Slider(
                             value = sleepMinMinutes.toFloat(),
-                            onValueChange = { 
-                                val newVal = it.toInt()
-                                if (newVal != sleepMinMinutes && newVal % 30 == 0) view.performHapticTick()
-                                viewModel.updateSleepMinMinutes(newVal) 
-                            },
-                            valueRange = 180f..600f, // 3h to 10h
-                            steps = 14 // 30 min intervals
-                        )
-                    }
-                }
-            }
-            }
-
-            // Mood Emojis Section: one set of faces for every mood this device shows.
-            StaggeredEntry(index = 1) {
-            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    Text("Mood Emojis", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text(
-                        "The faces of your moods on this device: the check-in, the history, the stats and the widgets. " +
-                            "Moods you already logged change face too.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    MoodEmojiSetDropdown(
-                        selected = moodEmojiSet,
-                        onSelect = { set ->
-                            view.performHapticTick()
-                            viewModel.selectMoodEmojiSet(set.id)
-                        }
-                    )
-                    // The set at a glance: score 1 (worst) to 5 (best).
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceEvenly
-                    ) {
-                        moodEmojiSet.faces.forEachIndexed { index, face ->
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(face, fontSize = 28.sp)
-                                Text(
-                                    "${index + 1}",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-            }
-
-            // Mappings Section
-            StaggeredEntry(index = 2) {
-            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    Text("Tag Mappings", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    
-                    FlowRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        tagMappings.forEach { (tag, attribute) ->
-                            key(tag) {
-                                val chipVisibleState = remember {
-                                    MutableTransitionState(false).apply { targetState = true }
-                                }
-                                AnimatedVisibility(
-                                    visibleState = chipVisibleState,
-                                    enter = fadeIn() + scaleIn(),
-                                    exit = fadeOut() + scaleOut()
-                                ) {
-                                    InputChip(
-                                        selected = true,
-                                        onClick = { },
-                                        label = { Text("$tag ➡️ ${attribute.name}") },
-                                        trailingIcon = {
-                                            CortexIconButton(
-                                                modifier = Modifier.size(16.dp),
-                                                onClick = {
-                                                    view.performHapticClick()
-                                                    viewModel.removeTagMapping(tag)
-                                                }
-                                            ) {
-                                                Icon(Icons.Default.Close, "Remove")
-                                            }
-                                        }
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    // Add new mapping
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedTextField(
-                            value = newTagText,
-                            onValueChange = { 
-                                if (it.startsWith("#") || it.isEmpty()) {
-                                    newTagText = it 
-                                } else {
-                                    newTagText = "#$it"
+                            onValueChange = { raw ->
+                                val minutes = ((raw / SLEEP_GOAL_STEP).roundToInt() * SLEEP_GOAL_STEP).coerceIn(SLEEP_GOAL_MIN, SLEEP_GOAL_MAX)
+                                if (minutes != sleepMinMinutes) {
+                                    view.performHapticTick()
+                                    viewModel.updateSleepMinMinutes(minutes)
                                 }
                             },
-                            label = { Text("Tag (e.g. #sport)") },
-                            modifier = Modifier.weight(1f),
-                            singleLine = true
+                            valueRange = SLEEP_GOAL_MIN.toFloat()..SLEEP_GOAL_MAX.toFloat(),
+                            // 3 h to 10 h by 30 min: 13 stops between the two ends.
+                            steps = (SLEEP_GOAL_MAX - SLEEP_GOAL_MIN) / SLEEP_GOAL_STEP - 1
                         )
-
-                        ExposedDropdownMenuBox(
-                            expanded = expandedDropdown,
-                            onExpandedChange = { expandedDropdown = !expandedDropdown }
-                        ) {
-                            OutlinedTextField(
-                                value = selectedAttribute.name,
-                                onValueChange = {},
-                                readOnly = true,
-                                label = { Text("Stat") },
-                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedDropdown) },
-                                modifier = Modifier
-                                    .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, true)
-                                    .width(120.dp)
-                            )
-                            ExposedDropdownMenu(
-                                expanded = expandedDropdown,
-                                onDismissRequest = { expandedDropdown = false }
-                            ) {
-                                Attribute.entries.forEach { attr ->
-                                    DropdownMenuItem(
-                                        text = { Text(attr.name) },
-                                        onClick = {
-                                            selectedAttribute = attr
-                                            expandedDropdown = false
-                                        }
-                                    )
-                                }
-                            }
-                        }
-
-                        CortexIconButton(
-                            onClick = {
-                                if (newTagText.isNotBlank()) {
-                                    view.performHapticSuccess()
-                                    viewModel.addTagMapping(newTagText, selectedAttribute)
-                                    newTagText = ""
-                                }
-                            }
-                        ) {
-                            Icon(Icons.Default.Add, "Add Mapping")
-                        }
                     }
+                )
+            }
+        }
+
+        SettingsPageSection("Tag rules") {
+            if (tagMappings.isEmpty()) {
+                row { SettingsNote("No tag rule yet: add one below.", modifier = Modifier.settingsAnchor(SettingsAnchors.TAG_RULES)) }
+            }
+            tagMappings.entries.forEachIndexed { index, (tag, attribute) ->
+                row {
+                    SettingsRow(
+                        title = "$tag → ${attribute.statName()}",
+                        anchor = if (index == 0) SettingsAnchors.TAG_RULES else null,
+                        trailing = {
+                            TextButton(
+                                onClick = {
+                                    view.performHapticClick()
+                                    viewModel.removeTagMapping(tag)
+                                },
+                                shapes = ButtonDefaults.shapes()
+                            ) { Text("Remove") }
+                        }
+                    )
                 }
             }
+            row {
+                AddRuleRow(
+                    tag = newTagText,
+                    onTagChange = { typed -> newTagText = if (typed.isEmpty() || typed.startsWith("#")) typed else "#$typed" },
+                    stat = selectedAttribute,
+                    onStat = { selectedAttribute = it },
+                    onAdd = {
+                        if (newTagText.trim().length > 1) {
+                            view.performHapticSuccess()
+                            viewModel.addTagMapping(newTagText.trim(), selectedAttribute)
+                            newTagText = ""
+                        }
+                    }
+                )
             }
         }
     }
 }
 
-/** Picks the device's mood emoji set; each entry shows its five faces. */
+/** A stat's name, as the hero's sheet shows it (13.4: rules read "#tag → Vigor", never "VIG"). */
+internal fun Attribute.statName(): String = when (this) {
+    Attribute.VIG -> "Vigor"
+    Attribute.MND -> "Focus"
+    Attribute.END -> "Endurance"
+    Attribute.SOC -> "Social"
+    Attribute.CRE -> "Creativity"
+    Attribute.INT -> "Intellect"
+    Attribute.FTH -> "Spirit"
+}
+
+private const val STEP_GOAL_MIN = 1_000
+private const val STEP_GOAL_MAX = 20_000
+private const val STEP_GOAL_STEP = 1_000
+private const val SLEEP_GOAL_MIN = 180
+private const val SLEEP_GOAL_MAX = 600
+private const val SLEEP_GOAL_STEP = 30
+
+private fun stepsLabel(steps: Int): String = NumberFormat.getIntegerInstance(Locale.ENGLISH).format(steps) + " steps"
+
+private fun sleepLabel(minutes: Int): String {
+    val hours = minutes / 60
+    val rest = minutes % 60
+    return if (rest > 0) "$hours h $rest min" else "$hours h"
+}
+
+/** A goal's value at the end of its row. */
+@Composable
+private fun GoalValue(text: String) {
+    Text(text, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+}
+
+/** The add row of the tag rules: a tag, then its stat by name, then Add. */
+@Composable
+private fun AddRuleRow(tag: String, onTagChange: (String) -> Unit, stat: Attribute, onStat: (Attribute) -> Unit, onAdd: () -> Unit) {
+    Surface(
+        shape = LocalSegmentPosition.current.shape,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(SettingsRowPadding), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            OutlinedTextField(
+                value = tag,
+                onValueChange = onTagChange,
+                label = { Text("Tag (e.g. #sport)") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                StatMenu(selected = stat, onSelect = onStat, modifier = Modifier.weight(1f))
+                FilledIconButton(onClick = onAdd, enabled = tag.trim().length > 1, shapes = IconButtonDefaults.shapes()) {
+                    Icon(Icons.Rounded.Add, contentDescription = "Add the rule")
+                }
+            }
+        }
+    }
+}
+
+/** The stat a rule sends its tag's XP to, by name. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MoodEmojiSetDropdown(selected: MoodEmojiSet, onSelect: (MoodEmojiSet) -> Unit) {
+private fun StatMenu(selected: Attribute, onSelect: (Attribute) -> Unit, modifier: Modifier = Modifier) {
     var expanded by remember { mutableStateOf(false) }
-    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }, modifier = modifier) {
         OutlinedTextField(
-            value = selected.name,
+            value = selected.statName(),
             onValueChange = {},
             readOnly = true,
             singleLine = true,
-            label = { Text("Emoji set") },
+            label = { Text("Stat") },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             modifier = Modifier
                 .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, true)
                 .fillMaxWidth()
         )
         ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            MoodEmojiSets.ALL.forEach { set ->
+            Attribute.entries.forEach { attribute ->
                 DropdownMenuItem(
-                    text = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(set.name, modifier = Modifier.weight(1f))
-                            Spacer(Modifier.width(16.dp))
-                            Text(set.faces.joinToString(" "), fontSize = 20.sp)
-                        }
-                    },
-                    leadingIcon = {
-                        // Keeps every name aligned; only the current set shows the check.
-                        Box(Modifier.size(24.dp)) {
-                            if (set.id == selected.id) Icon(Icons.Default.Check, contentDescription = "Current set")
-                        }
-                    },
+                    text = { Text(attribute.statName()) },
                     onClick = {
+                        onSelect(attribute)
                         expanded = false
-                        if (set.id != selected.id) onSelect(set)
                     }
                 )
             }

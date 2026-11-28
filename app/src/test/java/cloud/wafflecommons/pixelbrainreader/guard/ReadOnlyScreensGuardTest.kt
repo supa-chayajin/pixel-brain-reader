@@ -24,6 +24,7 @@ class ReadOnlyScreensGuardTest {
         "ui/homeconfig/HomeConfigScreen.kt",
         "ui/modes/ModesSettingsScreen.kt",
         "ui/settings/FeedsScreen.kt",
+        "ui/settings/MoodTagSettingsScreen.kt",
         // 13.4: the Modes hub's short pages, Navigation (the tabs each mode shows), Repair (write back)
         "ui/modes/ModesPages.kt",
         "ui/settings/NavigationSettingsScreen.kt",
@@ -52,7 +53,6 @@ class ReadOnlyScreensGuardTest {
 
     /** Pages that handled it before 12.15 in their own words, and controls that only hide. */
     private val ownWords = listOf(
-        "ui/settings/MoodTagSettingsScreen.kt",
         "ui/meetings/MeetingPrepScreen.kt",
         "ui/work/ExplainErrorScreen.kt",
         "ui/daily/DailyNoteScreen.kt",

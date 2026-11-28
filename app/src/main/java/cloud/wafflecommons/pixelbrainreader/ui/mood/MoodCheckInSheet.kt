@@ -152,7 +152,8 @@ fun MoodCheckInSheet(
             // The tags by category (12.19, owner's M4): a colored card each, empty categories left out.
             if (availableTags.isEmpty()) {
                 Text(
-                    text = "No tags yet. Add some in Settings ▸ Mood Tags.",
+                    // 13.4: the tags are on the Moods page (S10).
+                    text = "No tags yet. Add some in Settings › Life OS › Moods.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.fillMaxWidth()
