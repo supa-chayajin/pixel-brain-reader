@@ -73,7 +73,7 @@ import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material.icons.rounded.CleaningServices
 import androidx.compose.material.icons.filled.Mood
-import cloud.wafflecommons.pixelbrainreader.ui.settings.SettingsScreen
+import cloud.wafflecommons.pixelbrainreader.ui.settings.settingsHomeDestinations
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -1012,30 +1012,8 @@ fun MainScreen(
                 }
             }
 
-            composable(Screen.Settings) {
-                SettingsScreen(
-                    onBack = { navController.popBackStack() },
-                    onNavigateToDailyLayout = { navController.navigate("daily_layout") },
-                    onNavigateToFeeds = { navController.navigate("watch_feeds") },
-                    onNavigateToPsn = { navController.navigate(cloud.wafflecommons.pixelbrainreader.ui.games.GamesRoutes.PSN) },
-                    onNavigateToXbox = { navController.navigate(cloud.wafflecommons.pixelbrainreader.ui.games.GamesRoutes.XBOX) },
-                    onNavigateToPrivacyLedger = { navController.navigate(cloud.wafflecommons.pixelbrainreader.ui.settings.PRIVACY_LEDGER_ROUTE) },
-                    onNavigateToHabitConfig = { navController.navigate("habit_config") },
-                    onNavigateToHomeConfig = { navController.navigate(Screen.ROUTE_HOME_CONFIG) },
-                    onNavigateToReminders = { navController.navigate("reminders") },
-                    onNavigateToNavBarReorder = { navController.navigate("navbar_reorder") },
-                    onNavigateToMoodTags = { navController.navigate("mood_tags") },
-                    onNavigateToGamificationSettings = { navController.navigate("gamification_settings") },
-                    onNavigateToModes = { navController.navigate(V11Routes.MODES_SETTINGS) },
-                    onNavigateToConfidentiality = { navController.navigate(V11Routes.CONFIDENTIALITY) },
-                    onOpenSyncConflicts = { navController.navigate(V11Routes.SYNC_CONFLICTS) },
-                    onOpenNote = { path ->
-                        viewModel.openVaultFile(path)
-                        navController.popBackStack()
-                    },
-                    onLogout = onLogout
-                )
-            }
+            // Settings (13.4, S-b): the home by topic, with its search, and the pages that took its controls.
+            settingsHomeDestinations(navController, openNote = { path -> viewModel.openVaultFile(path) }, onLogout = onLogout)
 
             composable("gamification_settings") {
                 cloud.wafflecommons.pixelbrainreader.ui.settings.GamificationSettingsScreen(

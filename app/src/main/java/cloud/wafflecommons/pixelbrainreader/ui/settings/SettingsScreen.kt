@@ -2,1098 +2,272 @@
 
 package cloud.wafflecommons.pixelbrainreader.ui.settings
 
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.Logout
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.BrightnessMedium
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.foundation.clickable
-import androidx.compose.material.icons.filled.Memory
-import androidx.compose.material.icons.filled.Psychology
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.Sync
-import androidx.compose.material.icons.filled.Storage
-import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.Upload
-import androidx.compose.material.icons.rounded.HomeWork
-import androidx.compose.material.icons.rounded.AccountCircle
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material.icons.outlined.FolderOpen
-import androidx.compose.material.icons.rounded.Hub
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.material3.*
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.LinearWavyProgressIndicator
-import androidx.compose.material3.LoadingIndicator
-import cloud.wafflecommons.pixelbrainreader.ui.components.switchThumb
-import kotlinx.coroutines.launch
-import androidx.compose.runtime.*
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
-import cloud.wafflecommons.pixelbrainreader.data.ai.NanoState
-import cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
-import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
-import cloud.wafflecommons.pixelbrainreader.ui.theme.NavBarClearance
-import cloud.wafflecommons.pixelbrainreader.ui.utils.centeredMaxWidth
-import cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry
-import androidx.health.connect.client.HealthConnectClient
-import androidx.health.connect.client.PermissionController
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.compose.material.icons.filled.HealthAndSafety
-import androidx.hilt.navigation.compose.hiltViewModel
-import android.app.Activity
-import android.content.Context
-import android.content.ContextWrapper
-import android.widget.Toast
-import androidx.compose.material.icons.rounded.CleaningServices
-import androidx.compose.material.icons.rounded.Shield
-import androidx.compose.material.icons.rounded.Work
-import androidx.compose.material.icons.rounded.DateRange
-import androidx.compose.material.icons.rounded.Mood
-import androidx.compose.material.icons.rounded.RssFeed
-import androidx.compose.material.icons.rounded.Policy
-import androidx.compose.material.icons.rounded.Gamepad
-import androidx.compose.material.icons.rounded.SportsEsports
-import androidx.compose.material.icons.rounded.SyncProblem
-import androidx.compose.material.icons.rounded.ViewAgenda
-import androidx.health.connect.client.records.StepsRecord
-import androidx.health.connect.client.records.SleepSessionRecord
-import androidx.health.connect.client.records.HeartRateRecord
-import androidx.health.connect.client.permission.HealthPermission
-import androidx.activity.result.IntentSenderRequest
-import androidx.activity.result.contract.ActivityResultContracts
-import cloud.wafflecommons.pixelbrainreader.ui.components.ExpressiveBadge
-import androidx.compose.ui.draw.clip
-import androidx.compose.foundation.background
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import cloud.wafflecommons.pixelbrainreader.BuildConfig
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
+import cloud.wafflecommons.pixelbrainreader.data.modes.ModeAppearance
+import cloud.wafflecommons.pixelbrainreader.data.sync.PendingConflict
+import cloud.wafflecommons.pixelbrainreader.ui.components.CortexIconButton
+import cloud.wafflecommons.pixelbrainreader.ui.components.EmptyHint
+import cloud.wafflecommons.pixelbrainreader.ui.components.FormScaffold
+import cloud.wafflecommons.pixelbrainreader.ui.components.VaultGraphDialog
+import cloud.wafflecommons.pixelbrainreader.ui.sync.PendingConflictViewModel
+import cloud.wafflecommons.pixelbrainreader.ui.utils.StaggeredEntry
 
-/** Walk the ContextWrapper chain to the hosting Activity (avoids casting LocalContext directly). */
-private fun Context.findActivity(): Activity? {
-    var ctx: Context? = this
-    while (ctx is ContextWrapper) {
-        if (ctx is Activity) return ctx
-        ctx = ctx.baseContext
-    }
-    return null
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * The Settings home (13.4, S1 and S6): a search field over every setting, then the eight topics in
+ * the owner's order, all on one page and nothing folded. A row opens its page; the two device
+ * switches and the two actions (the link check, Log out) act in place. While the field holds a
+ * query, its hits replace the topics. A wide window shows the same page in one centred column
+ * (settled decision #17). The home writes nothing: each page that changes the vault says so itself.
+ */
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
-    onNavigateToDailyLayout: () -> Unit = {},
-    onNavigateToFeeds: () -> Unit = {},
-    onNavigateToPsn: () -> Unit = {},
-    onNavigateToXbox: () -> Unit = {},
-    onNavigateToPrivacyLedger: () -> Unit = {},
-    onNavigateToHabitConfig: () -> Unit = {},
-    onNavigateToHomeConfig: () -> Unit = {},
-    onNavigateToReminders: () -> Unit = {},
-    onNavigateToModes: () -> Unit = {},
-    onNavigateToConfidentiality: () -> Unit = {},
-    onNavigateToNavBarReorder: () -> Unit = {},
-    onNavigateToMoodTags: () -> Unit = {},
-    onNavigateToGamificationSettings: () -> Unit = {},
-    onOpenNote: (String) -> Unit = {},
-    onLogout: () -> Unit = {},
-    onOpenSyncConflicts: () -> Unit = {},
+    onOpen: (route: String) -> Unit,
+    onOpenNote: (String) -> Unit,
+    onLogout: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
-    pendingConflictViewModel: cloud.wafflecommons.pixelbrainreader.ui.sync.PendingConflictViewModel = hiltViewModel()
+    pendingConflictViewModel: PendingConflictViewModel = hiltViewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    // A sync stopped on a conflict (12.15, S1): About lists it while it waits.
-    val pendingConflict by pendingConflictViewModel.pending.collectAsStateWithLifecycle()
-    androidx.compose.runtime.LaunchedEffect(Unit) { pendingConflictViewModel.reload() }
-    val nanoState by viewModel.nanoState.collectAsStateWithLifecycle()
-    val vaultGraphReport by viewModel.vaultGraphReport.collectAsStateWithLifecycle()
-    val isAnalyzingGraph by viewModel.isAnalyzingGraph.collectAsStateWithLifecycle()
+    val uiState = viewModel.uiState.collectAsStateWithLifecycle().value
+    // A sync stopped on a conflict (12.15, S1): Vault & device lists it while it waits.
+    val pendingConflict = pendingConflictViewModel.pending.collectAsStateWithLifecycle().value
+    LaunchedEffect(Unit) { pendingConflictViewModel.reload() }
+    val vaultGraphReport = viewModel.vaultGraphReport.collectAsStateWithLifecycle().value
+    val isAnalyzingGraph = viewModel.isAnalyzingGraph.collectAsStateWithLifecycle().value
     var showGraphDialog by rememberSaveable { mutableStateOf(false) }
     var confirmLogout by rememberSaveable { mutableStateOf(false) }
+    // The field's text is its own synchronous state, never a flow's echo.
+    var query by rememberSaveable { mutableStateOf("") }
+    val snackbarHostState = remember { SnackbarHostState() }
 
-    // Logging out forgets the token only; the next login picks the vault and the device's role.
-    if (confirmLogout) {
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { confirmLogout = false },
-            title = { Text("Log out?") },
-            text = {
-                Text(
-                    "This device forgets its GitHub token. Your notes stay on GitHub and in this " +
-                        "device's copy; logging in again needs a token."
-                )
-            },
-            confirmButton = {
-                androidx.compose.material3.TextButton(onClick = {
-                    confirmLogout = false
-                    onLogout()
-                }) { Text("Log out") }
-            },
-            dismissButton = {
-                androidx.compose.material3.TextButton(onClick = { confirmLogout = false }) { Text("Cancel") }
-            }
+    val appearance = uiState.appearance
+    val conflictPending = pendingConflict != null
+    val settingsContext = remember(appearance, conflictPending) {
+        SettingsContext(
+            appearance = appearance,
+            readOnly = VaultWriteGate.readOnly,
+            psn = BuildConfig.PSN_CLIENT_ID.isNotBlank(),
+            xbox = BuildConfig.XBOX_CLIENT_ID.isNotBlank(),
+            conflictPending = conflictPending
         )
     }
 
+    // Logging out forgets the token only; the next login picks the vault and the device's role.
+    if (confirmLogout) {
+        LogOutConfirmDialog(
+            onConfirm = {
+                confirmLogout = false
+                onLogout()
+            },
+            onDismiss = { confirmLogout = false }
+        )
+    }
     if (showGraphDialog) {
-        cloud.wafflecommons.pixelbrainreader.ui.components.VaultGraphDialog(
+        VaultGraphDialog(
             report = vaultGraphReport,
             isLoading = isAnalyzingGraph,
-            onRefresh = { viewModel.analyzeVaultGraph() },
-            onOpenNote = { notePath ->
+            onRefresh = viewModel::analyzeVaultGraph,
+            onOpenNote = { path ->
                 showGraphDialog = false
-                onOpenNote(notePath)
+                onOpenNote(path)
             },
             onDismiss = { showGraphDialog = false }
         )
     }
 
-    val scrollState = rememberScrollState()
-    val snackbarHostState = remember { SnackbarHostState() }
-    val context = LocalContext.current
-    val haptic = LocalHapticFeedback.current
-
-    // Surface gating errors from the AI selection (e.g. picking Local AI before
-    // the model is downloaded) as a snackbar.
-    LaunchedEffect(Unit) {
-        viewModel.nanoModelEvents.collect { event ->
-            when (event) {
-                is SettingsViewModel.NanoModelEvent.MustDownloadFirst ->
-                    snackbarHostState.showSnackbar(event.reason)
-            }
+    // What a row that isn't a link does: its switch, or its action.
+    val onSwitch: (SettingsEntry, Boolean) -> Unit = { entry, on ->
+        when (entry.key) {
+            SettingsIndex.SOUND_EFFECTS -> viewModel.setSoundEffects(on)
+            SettingsIndex.SCREEN_SHARE_SAFE -> viewModel.setScreenShareSafe(on)
+            else -> Unit
         }
     }
-    
-    // Health Connect Permission Launcher — the full set the "Connected" check requires.
-    val permissions = remember { viewModel.getHealthPermissions() }
+    val onAction: (SettingsEntry) -> Unit = { entry ->
+        when (entry.key) {
+            SettingsIndex.VAULT_LINKS -> {
+                showGraphDialog = true
+                viewModel.analyzeVaultGraph()
+            }
+            SettingsIndex.LOG_OUT -> {
+                confirmLogout = true
+            }
+            else -> Unit
+        }
+    }
 
-    val healthPermissionLauncher = rememberLauncherForActivityResult(
-        PermissionController.createRequestPermissionResultContract()
-    ) { granted ->
-        if (granted.containsAll(permissions)) {
-             Toast.makeText(context, "Permissions Granted!", Toast.LENGTH_SHORT).show()
-             viewModel.checkHealthConnectStatus()
-             viewModel.syncHealthData()
+    // The header stays put as the page scrolls (13.2.2); the snackbar clears the floating bar.
+    FormScaffold(title = "Settings", onBack = onBack, snackbarHostState = snackbarHostState, icon = Icons.Rounded.Settings) {
+        SettingsSearchField(query = query, onQueryChange = { query = it })
+
+        if (query.isBlank()) {
+            val home = remember(settingsContext) { SettingsIndex.home(settingsContext) }
+            Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
+                home.forEachIndexed { index, (topic, entries) ->
+                    StaggeredEntry(index = index) {
+                        SettingsTopicSection(title = topic.titleFor(appearance), icon = topic.icon) {
+                            entries.forEach { entry ->
+                                row {
+                                    SettingsEntryRow(
+                                        entry = entry,
+                                        title = SettingsIndex.text(entry.title, appearance),
+                                        description = homeDescription(entry, appearance, pendingConflict),
+                                        state = uiState,
+                                        onOpen = { entry.route?.let(onOpen) },
+                                        onSwitch = onSwitch,
+                                        onAction = onAction
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         } else {
-             Toast.makeText(context, "Permissions Denied or Partial", Toast.LENGTH_SHORT).show()
-             viewModel.checkHealthConnectStatus() // Update UI anyway
-        }
-    }
-
-
-    val coroutineScope = rememberCoroutineScope()
-
-    // V6: Credential Manager flow.
-    // signIn() is suspending and triggered from the VM; AuthorizationClient may
-    // surface a consent IntentSender, which we resolve through StartIntentSenderForResult.
-    val activity = remember(context) { context.findActivity() }
-    val consentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartIntentSenderForResult()
-    ) { result ->
-        viewModel.onConsentResolved(result.data)
-    }
-
-    LaunchedEffect(Unit) {
-        viewModel.googleAuthEvents.collect { event ->
-            when (event) {
-                is SettingsViewModel.GoogleAuthEvent.ConsentRequired ->
-                    consentLauncher.launch(IntentSenderRequest.Builder(event.intentSender).build())
-                SettingsViewModel.GoogleAuthEvent.Linked ->
-                    Toast.makeText(context, "Google account linked", Toast.LENGTH_SHORT).show()
-                is SettingsViewModel.GoogleAuthEvent.Failed ->
-                    Toast.makeText(context, "Google: ${event.message}", Toast.LENGTH_LONG).show()
-            }
-        }
-    }
-    
-
-    // 13.2.2: the header stays put as the page scrolls, like Daily's (collapsing it left its
-    // status-bar strip in the scrolled colour, a block at the top).
-    Scaffold(
-        snackbarHost = {
-            // Lift the snackbar above the floating ExpressiveNavBar (overlaid by
-            // MainScreen), which would otherwise cover the toasts entirely.
-            SnackbarHost(
-                snackbarHostState,
-                modifier = Modifier.padding(bottom = NavBarClearance)
-            )
-        },
-        topBar = {
-            cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
-                title = "Settings",
-                icon = Icons.Rounded.Settings,
-                navigationIcon = {
-                    CortexIconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
-                        )
-                    }
-                }
-            )
-        }
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .verticalScroll(scrollState)
-                // Same page on a large screen, centred at a readable width (nothing moves or folds).
-                .centeredMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(24.dp)
-        ) {
-            
-            // 0. Integrations (Health Connect)
-            StaggeredEntry(index = 0) {
-            SettingsSection(
-                title = "Integrations",
-                icon = Icons.Default.HealthAndSafety
-            ) {
-                 val status = uiState.healthConnectStatus
-                 val isConnected = uiState.healthConnectPermissionsGranted
-                 
-                 Card(
-                     colors = CardDefaults.cardColors(
-                         containerColor = if (isConnected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
-                     ),
-                     onClick = {
-                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                         if (!isConnected) {
-                             if (status == HealthConnectClient.SDK_UNAVAILABLE || status == HealthConnectClient.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED) {
-                                 // Prompt install (simplified)
-                             } else {
-                                 Toast.makeText(context, "Requesting Permissions...", Toast.LENGTH_SHORT).show()
-                                 // Every permission the "Connected" check requires: requesting only three
-                                 // left the card stuck on "Connect" and most metrics at 0.
-                                 val perms = viewModel.getHealthPermissions()
-                                 healthPermissionLauncher.launch(perms)
-                             }
-                         }
-                     }
-                 ) {
-                     Row(
-                         modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                         verticalAlignment = Alignment.CenterVertically,
-                         horizontalArrangement = Arrangement.SpaceBetween
-                     ) {
-                         Column {
-                             Text(
-                                 text = "Health Connect",
-                                 style = MaterialTheme.typography.titleMedium,
-                                 fontWeight = FontWeight.Bold
-                             )
-                             Text(
-                                 text = if (isConnected) "Connected & Syncing Active" else "Sync Steps & Sleep",
-                                 style = MaterialTheme.typography.bodyMedium
-                             )
-                         }
-                         if (!isConnected) {
-                             Button(onClick = { 
-                                 Toast.makeText(context, "Requesting Permissions...", Toast.LENGTH_SHORT).show()
-                                 // Every permission the "Connected" check requires: requesting only three
-                                 // left the card stuck on "Connect" and most metrics at 0.
-                                 val perms = viewModel.getHealthPermissions()
-                                 healthPermissionLauncher.launch(perms)
-                             }, shapes = ButtonDefaults.shapes()) {
-                                 Text("Connect")
-                             }
-                         } else {
-                             Icon(imageVector = Icons.Default.CheckCircle, contentDescription = "Connected")
-                         }
-                     }
-                 }
-
-                ListItem(
-                    modifier = Modifier.clickable {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onNavigateToFeeds()
-                    }, colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-                    leadingContent = { ExpressiveBadge(Icons.Rounded.RssFeed, key = "RssFeed", size = 36.dp) },
-                    supportingContent = { Text("The feeds behind the Daily screen's Tech watch, kept in your vault") }
-                ) {
-                    Text("Tech watch feeds")
-                }
-
-                // 12.17 (RFC-009): only in a build that carries the PlayStation client (D10).
-                if (cloud.wafflecommons.pixelbrainreader.BuildConfig.PSN_CLIENT_ID.isNotBlank()) {
-                    ListItem(
-                        modifier = Modifier.clickable {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            onNavigateToPsn()
-                        }, colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-                        leadingContent = { ExpressiveBadge(Icons.Rounded.SportsEsports, key = "SportsEsports", size = 36.dp) },
-                        supportingContent = { Text("Play time and trophies for Games, synced each night; game nights") }
-                    ) {
-                        Text("PlayStation Network")
-                    }
-                }
-
-                // 13.3 (XB-E): only in a build that carries the owner's own Microsoft app (XB1).
-                if (cloud.wafflecommons.pixelbrainreader.BuildConfig.XBOX_CLIENT_ID.isNotBlank()) {
-                    ListItem(
-                        modifier = Modifier.clickable {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            onNavigateToXbox()
-                        }, colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-                        leadingContent = { ExpressiveBadge(Icons.Rounded.Gamepad, key = "Gamepad", size = 36.dp) },
-                        supportingContent = { Text("Play time and achievements for Games, synced each night") }
-                    ) {
-                        Text("Xbox")
-                    }
-                }
-
-                // 13.0 (X3): what left this phone, kept on the phone.
-                ListItem(
-                    modifier = Modifier.clickable {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onNavigateToPrivacyLedger()
-                    }, colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-                    leadingContent = { ExpressiveBadge(Icons.Rounded.Policy, key = "Policy", size = 36.dp) },
-                    supportingContent = { Text("Each host the app talked to, why, and about how much: today and the last 30 days") }
-                ) {
-                    Text("Privacy ledger")
-                }
-            }
-            }
-
-            // 0b. Google Ecosystem
-            StaggeredEntry(index = 1) {
-            SettingsSection(
-                title = "Google Ecosystem",
-                icon = Icons.Rounded.AccountCircle
-            ) {
-                val isEnabled = uiState.isGoogleSyncEnabled
-                val isLinked = uiState.isGoogleAccountLinked
-
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (isLinked) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant
-                    ),
-                    onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        if (!isEnabled) {
-                            activity?.let { viewModel.connectGoogle(it) }
-                        } else {
-                            viewModel.setGoogleSyncEnabled(false)
-                        }
-                    }
-                ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Google Calendar & Tasks",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = if (isLinked) "Synced, read-only (Calendar & Tasks)" else "Connect your Google account (read-only access)",
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        }
-                        Switch(
-                            checked = isEnabled, thumbContent = switchThumb(isEnabled),
-                            onCheckedChange = { checked ->
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                if (checked) {
-                                    activity?.let { viewModel.connectGoogle(it) }
-                                } else {
-                                    viewModel.setGoogleSyncEnabled(false)
-                                }
-                            }
-                        )
-                    }
-                }
-            }
-            }
-
-            // 1. Intelligence Section
-            StaggeredEntry(index = 2) {
-            SettingsSection(
-                title = "Intelligence",
-                icon = Icons.Default.Psychology
-            ) {
-                cloud.wafflecommons.pixelbrainreader.data.model.AiModel.entries.forEach { model ->
-                    val isSelected = (uiState.currentAiModel == model)
-
-                    val subtitle = when(model) {
-                         cloud.wafflecommons.pixelbrainreader.data.model.AiModel.CORTEX_LOCAL -> "Gemini Nano. 100% Private & Offline."
-                    }
-
-                    // Local AI radio is disabled while the on-device model is not yet
-                    // Ready — the user must explicitly download it via the panel below.
-                    val isLocal = model == cloud.wafflecommons.pixelbrainreader.data.model.AiModel.CORTEX_LOCAL
-                    val enabled = !isLocal || nanoState is NanoState.Ready
-
-                    IntelligenceOption(
-                        title = model.displayName,
-                        subtitle = subtitle,
-                        selected = isSelected,
-                        enabled = enabled,
-                        onClick = { viewModel.updateAiModel(model) }
-                    )
-
-                    if (isLocal) {
-                        NanoModelLifecyclePanel(
-                            state = nanoState,
-                            onDownload = viewModel::onDownloadNanoModel,
-                            onManageStorage = viewModel::onOpenNanoModelSettings
-                        )
-                        if (!VaultWriteGate.readOnly) {
-                            val selfTest by viewModel.nanoSelfTest.collectAsStateWithLifecycle()
-                            val isSelfTestRunning by viewModel.isSelfTestRunning.collectAsStateWithLifecycle()
-                            NanoSelfTestRow(
-                                result = selfTest,
-                                isRunning = isSelfTestRunning,
-                                enabled = nanoState is NanoState.Ready,
-                                onRun = viewModel::runNanoSelfTest
+            val hits = remember(query, settingsContext) { SettingsSearch.search(query, settingsContext) }
+            if (hits.isEmpty()) {
+                EmptyHint("No setting matches “${query.trim()}”.")
+            } else {
+                SettingsGroup {
+                    hits.forEach { hit ->
+                        row {
+                            SettingsEntryRow(
+                                entry = hit.entry,
+                                title = hit.title,
+                                description = "${hit.where} · ${hit.description}",
+                                state = uiState,
+                                onOpen = {
+                                    hit.entry.route?.let { route ->
+                                        // The page opens at that setting, once (S6).
+                                        hit.entry.anchor?.let { anchor -> SettingsFocus.request(route, anchor) }
+                                        onOpen(route)
+                                    }
+                                },
+                                onSwitch = onSwitch,
+                                onAction = onAction
                             )
                         }
                     }
                 }
             }
-            }
-
-            // Theme follows the system automatically (no manual selector — Android's
-            // force-dark handling makes a per-app light/dark override unreliable).
-
-            // 3. Knowledge Vault — manual RAG indexing (kept beside Intelligence — both are the on-device brain)
-            StaggeredEntry(index = 3) {
-            SettingsSection(
-                title = "Knowledge Vault (RAG)",
-                icon = Icons.Default.Psychology
-            ) {
-                val indexingState by viewModel.indexingState.collectAsStateWithLifecycle()
-                val isRunning = indexingState is SettingsViewModel.IndexingState.Running ||
-                    indexingState is SettingsViewModel.IndexingState.Enqueued
-
-                Text(
-                    text = if (VaultWriteGate.readOnly) {
-                        "The AI is off on this read-only device: the vault is not embedded. Search and the link check still work."
-                    } else {
-                        "Notes are embedded on this phone in the background each time the app starts, only the passages that changed. Tap below to start now."
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Spacer(Modifier.height(12.dp))
-
-                // Settled decision #20: the private vault reaches the AI only when switched on.
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Private notes in AI answers", style = MaterialTheme.typography.titleSmall)
-                        Text(
-                            text = if (uiState.privateNotesInAi) {
-                                "On: while the private journal is unlocked, its notes are embedded and Chat reads them."
-                            } else {
-                                "Off: your private vault is never embedded, and Chat never reads it."
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = uiState.privateNotesInAi, thumbContent = switchThumb(uiState.privateNotesInAi),
-                        onCheckedChange = { checked ->
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            viewModel.setPrivateNotesInAi(checked)
-                        },
-                        enabled = !VaultWriteGate.readOnly
-                    )
-                }
-
-                Spacer(Modifier.height(12.dp))
-
-                // R2 (12.20): words re-rank what meaning found, never add a note on their own.
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Hybrid search", style = MaterialTheme.typography.titleSmall)
-                        Text(
-                            text = if (uiState.hybridSearch) {
-                                "On: Chat ranks the notes it finds by meaning higher when they share words with your question. Words never bring in a note on their own."
-                            } else {
-                                "Off: Chat ranks notes by meaning only."
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = uiState.hybridSearch, thumbContent = switchThumb(uiState.hybridSearch),
-                        onCheckedChange = { checked ->
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            viewModel.setHybridSearch(checked)
-                        },
-                        enabled = !VaultWriteGate.readOnly
-                    )
-                }
-
-                Spacer(Modifier.height(12.dp))
-
-                Button(
-                    onClick = { viewModel.triggerVaultIndexing() }, shapes = ButtonDefaults.shapes(),
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !isRunning && !VaultWriteGate.readOnly
-                ) {
-                    if (isRunning) {
-                        LoadingIndicator(modifier = Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary)
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            when (val state = indexingState) {
-                                SettingsViewModel.IndexingState.Enqueued -> "Queued…"
-                                // Notes left, not "done / total": each run of a long index counts its own
-                                // total, while what is left only goes down across them.
-                                is SettingsViewModel.IndexingState.Running -> {
-                                    val left = state.notesTotal - state.notesDone
-                                    if (left > 0) "Indexing… $left ${if (left == 1) "note" else "notes"} to go" else "Indexing…"
-                                }
-                                else -> "Working…"
-                            }
-                        )
-                    } else {
-                        Icon(Icons.Default.Memory, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Index Knowledge Vault (delta)")
-                    }
-                }
-
-                // Live status chip — reflects the terminal state of the last
-                // run; the user can dismiss it to return to a clean idle button.
-                when (val state = indexingState) {
-                    is SettingsViewModel.IndexingState.Succeeded -> {
-                        Spacer(Modifier.height(8.dp))
-                        AssistChip(
-                            onClick = { viewModel.dismissIndexingState() },
-                            label = { Text("Last run: succeeded ✓") },
-                            leadingIcon = {
-                                Icon(
-                                    Icons.Default.CheckCircle,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                        )
-                    }
-                    is SettingsViewModel.IndexingState.Failed -> {
-                        Spacer(Modifier.height(8.dp))
-                        AssistChip(
-                            onClick = { viewModel.dismissIndexingState() },
-                            label = { Text("Last run failed: ${state.reason}") },
-                            colors = AssistChipDefaults.assistChipColors(
-                                labelColor = MaterialTheme.colorScheme.error
-                            )
-                        )
-                    }
-                    else -> Unit
-                }
-
-                Spacer(Modifier.height(12.dp))
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                Spacer(Modifier.height(12.dp))
-
-                FilledTonalButton(
-                    onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        showGraphDialog = true
-                        viewModel.analyzeVaultGraph()
-                    }, shapes = ButtonDefaults.shapes(),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Hub,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text("Check links & orphan notes")
-                }
-
-                // R1: the retrieval harness, on the vault's golden set (read-only, on the device).
-                if (!VaultWriteGate.readOnly) {
-                    val goldenSummary by viewModel.goldenSummary.collectAsStateWithLifecycle()
-                    val isGoldenRunning by viewModel.isGoldenRunning.collectAsStateWithLifecycle()
-                    Spacer(Modifier.height(12.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Measure retrieval", style = MaterialTheme.typography.titleSmall)
-                            Text(
-                                "Runs the golden set (99_System/rag_golden_set.md): how often meaning, words or both find the right notes",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        OutlinedButton(onClick = viewModel::runGoldenSet, shapes = ButtonDefaults.shapes(), enabled = !isGoldenRunning) {
-                            Text(if (isGoldenRunning) "Measuring…" else "Run")
-                        }
-                    }
-                    goldenSummary?.let { Text(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp)) }
-                }
-            }
-            }
-
-            // 4. Life OS Automations
-            StaggeredEntry(index = 4) {
-            SettingsSection(
-                title = "Life OS Automations",
-                icon = Icons.AutoMirrored.Filled.List
-            ) {
-                ListItem(
-                    modifier = Modifier.clickable {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onNavigateToHabitConfig()
-                    }, colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-                    leadingContent = { ExpressiveBadge(Icons.Rounded.DateRange, key = "DateRange", size = 36.dp) },
-                    supportingContent = { Text("Add and edit habits; some tick themselves from Health Connect") }
-                ) {
-                    Text("Manage Habits & Automations")
-                }
-
-                ListItem(
-                    modifier = Modifier.clickable {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onNavigateToHomeConfig()
-                    }, colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-                    leadingContent = { ExpressiveBadge(Icons.Rounded.CleaningServices, key = "CleaningServices", size = 36.dp) },
-                    supportingContent = { Text("Rooms and chores, and how often each one comes back") }
-                ) {
-                    Text("Manage House & Chores")
-                }
-
-                ListItem(
-                    modifier = Modifier.clickable {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onNavigateToReminders()
-                    }, colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-                    leadingContent = { ExpressiveBadge(Icons.Filled.Notifications, key = "Notifications", size = 36.dp) },
-                    supportingContent = { Text("Evening check-in, private vault reminder, chores & habits reminders") }
-                ) {
-                    Text("Reminders & Notifications")
-                }
-
-                ListItem(
-                    modifier = Modifier.clickable {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onNavigateToModes()
-                    }, colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-                    leadingContent = { ExpressiveBadge(Icons.Rounded.Work, key = "Work", size = 36.dp) },
-                    supportingContent = { Text("Names and icons, work folders and hours, leave, key dates, screen-share safe") }
-                ) {
-                    Text("Modes: work, personal, off")
-                }
-
-                ListItem(
-                    modifier = Modifier.clickable {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onNavigateToConfidentiality()
-                    }, colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-                    leadingContent = { ExpressiveBadge(Icons.Rounded.Shield, key = "Shield", size = 36.dp) },
-                    supportingContent = { Text("Protected names and secrets: a commit holding one waits for your review") }
-                ) {
-                    Text("Confidentiality guard")
-                }
-
-                ListItem(
-                    modifier = Modifier.clickable {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onNavigateToMoodTags()
-                    }, colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-                    leadingContent = { ExpressiveBadge(Icons.Rounded.Mood, key = "Mood", size = 36.dp) },
-                    supportingContent = { Text("The tags you can add when you log a mood, and their icons") }
-                ) {
-                    Text("Manage Mood Tags")
-                }
-
-                ListItem(
-                    modifier = Modifier.clickable {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onNavigateToGamificationSettings()
-                    }, colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-                    leadingContent = { ExpressiveBadge(Icons.Filled.Tune, key = "Tune", size = 36.dp) },
-                    supportingContent = { Text("Health goals, the mood emoji set, and which tags feed which stat") }
-                ) {
-                    Text("RPG & Gamification Rules")
-                }
-
-                Spacer(Modifier.height(8.dp))
-
-                val isSyncingConfigs by viewModel.isSyncingConfigs.collectAsStateWithLifecycle()
-
-                // Full config bridge between the vault and the app. Import pulls
-                // Habits + Rooms + Chores from the vault into Room (fixes a fresh
-                // sign-in where chores/rooms aren't yet imported); Export writes
-                // the same set back to the vault and pushes. Both wipe-and-replace,
-                // so Import first after a sign-in, Export after local edits.
-                Text(
-                    text = "Import brings Habits, Rooms & Chores from the vault into the app. Export sends them back and pushes. Both replace the whole set — import first after signing in, export after making changes here.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Spacer(Modifier.height(8.dp))
-
-                Button(
-                    onClick = {
-                        viewModel.importAllFromVault { success ->
-                            coroutineScope.launch {
-                                snackbarHostState.showSnackbar(
-                                    if (success) "Imported all (Habits, Rooms, Chores) from the vault."
-                                    else "Import failed. Check Git logs."
-                                )
-                            }
-                        }
-                    }, shapes = ButtonDefaults.shapes(),
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !isSyncingConfigs
-                ) {
-                    if (isSyncingConfigs) {
-                        LoadingIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary)
-                    } else {
-                        Icon(Icons.Default.Download, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Import All (Vault → App)")
-                    }
-                }
-
-                Spacer(Modifier.height(8.dp))
-
-                OutlinedButton(
-                    onClick = {
-                        viewModel.exportAllToVault { success ->
-                            coroutineScope.launch {
-                                snackbarHostState.showSnackbar(
-                                    if (success) "Exported all (Habits, Rooms, Chores) to the vault & pushed."
-                                    else "Export failed. Check Git logs."
-                                )
-                            }
-                        }
-                    }, shapes = ButtonDefaults.shapes(),
-                    modifier = Modifier.fillMaxWidth(),
-                    // Export writes the vault: a read-only device imports only (12.15, S2).
-                    enabled = !isSyncingConfigs && !VaultWriteGate.readOnly
-                ) {
-                    Icon(Icons.Default.Upload, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Export All (App → Vault)")
-                }
-                if (VaultWriteGate.readOnly) {
-                    Spacer(Modifier.height(8.dp))
-                    cloud.wafflecommons.pixelbrainreader.ui.components.ReadOnlyNotice()
-                }
-            }
-            }
-
-            // 5. Interface & Sound — app-level UI preferences
-            StaggeredEntry(index = 5) {
-            SettingsSection(
-                title = "Interface & Sound",
-                icon = Icons.Default.Tune
-            ) {
-                ListItem(
-                    modifier = Modifier.clickable {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onNavigateToDailyLayout()
-                    }, colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-                    leadingContent = { ExpressiveBadge(Icons.Rounded.ViewAgenda, key = "ViewAgenda", size = 36.dp) },
-                    supportingContent = { Text("Order the blocks and choose which stay on screen") }
-                ) {
-                    Text("Daily screen")
-                }
-
-                ListItem(
-                    modifier = Modifier.clickable {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onNavigateToNavBarReorder()
-                    }, colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-                    leadingContent = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) },
-                    supportingContent = { Text("Reorder the tabs at the bottom; the Daily button stays put") }
-                ) {
-                    Text("Navigation bar order")
-                }
-
-                ListItem(
-                    leadingContent = { Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = null) }, colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-                    supportingContent = { Text("A short sound when you complete a habit or a task") },
-                    trailingContent = {
-                        Switch(
-                            checked = uiState.soundEffectsEnabled, thumbContent = switchThumb(uiState.soundEffectsEnabled),
-                            onCheckedChange = {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                viewModel.setSoundEffects(it)
-                            }
-                        )
-                    }
-                ) {
-                    Text("Sound effects")
-                }
-            }
-            }
-
-            // 6. About
-            StaggeredEntry(index = 6) {
-             SettingsSection(
-                title = "About",
-                icon = Icons.Default.Info
-            ) {
-                Text(
-                    text = "Pixel Brain Reader v${uiState.appVersion}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                // The device's role (DeviceRole) is chosen at login: changing it means logging out.
-                if (VaultWriteGate.readOnly) {
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = "Read-only device: it reads the vault and never changes it. Log out to change this.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                pendingConflict?.let { pending ->
-                    ListItem(
-                        modifier = Modifier.clickable {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            onOpenSyncConflicts()
-                        }, colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-                        leadingContent = { Icon(Icons.Rounded.SyncProblem, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-                        supportingContent = {
-                            Text(
-                                (if (pending.paths.size == 1) "1 file" else "${pending.paths.size} files") +
-                                    " changed both here and on GitHub: syncing waits for your choice"
-                            )
-                        }
-                    ) {
-                        Text("Sync conflict")
-                    }
-                }
-                ListItem(
-                    modifier = Modifier.clickable {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        confirmLogout = true
-                    }, colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-                    leadingContent = { Icon(Icons.AutoMirrored.Outlined.Logout, contentDescription = null) },
-                    supportingContent = { Text("Forget this device's token; the next login picks the vault and the role") }
-                ) {
-                    Text("Log out")
-                }
-            }
-            
-            }
-            Spacer(modifier = Modifier.height(32.dp))
         }
     }
 }
 
+/** One entry as a row: a link to its page, a device switch, or an action. */
 @Composable
-fun SettingsSection(
+private fun SettingsEntryRow(
+    entry: SettingsEntry,
     title: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    content: @Composable () -> Unit
+    description: String,
+    state: SettingsViewModel.SettingsUiState,
+    onOpen: () -> Unit,
+    onSwitch: (SettingsEntry, Boolean) -> Unit,
+    onAction: (SettingsEntry) -> Unit
 ) {
-    Column {
-        // 13.2: the section's emblem on an expressive shape, then its emphasized title.
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            cloud.wafflecommons.pixelbrainreader.ui.components.ExpressiveBadge(icon = icon, key = title, size = 34.dp)
-            Spacer(modifier = Modifier.width(12.dp))
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleLargeEmphasized,
-                color = MaterialTheme.colorScheme.onSurface
+    when (entry.kind) {
+        EntryKind.SWITCH -> {
+            val checked = when (entry.key) {
+                SettingsIndex.SOUND_EFFECTS -> state.soundEffects
+                SettingsIndex.SCREEN_SHARE_SAFE -> state.screenShareSafe
+                else -> false
+            }
+            SettingsSwitchRow(
+                title = title,
+                checked = checked,
+                onCheckedChange = { on -> onSwitch(entry, on) },
+                description = description,
+                icon = entry.icon
             )
         }
-        Spacer(modifier = Modifier.height(16.dp))
-        // 13.2, Material 3 Expressive (the Android 16 look): the section's rows as one segmented
-        // group, extra-large outer corners, each row its own tonal surface, 2 dp of the page between.
-        Column(
-            modifier = Modifier.clip(MaterialTheme.shapes.extraLarge),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
-        ) {
-            content()
-        }
-    }
-}
-
-@Composable
-fun IntelligenceOption(
-    title: String,
-    subtitle: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    enabled: Boolean = true
-) {
-    val rowAlpha = if (enabled) 1f else 0.5f
-    val haptic = LocalHapticFeedback.current
-    val hapticOnClick = {
-        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-        onClick()
-    }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .clickable(enabled = enabled, onClick = hapticOnClick)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        RadioButton(
-            selected = selected,
-            onClick = hapticOnClick,
-            enabled = enabled
-        )
-        Spacer(modifier = Modifier.width(12.dp))
-        Column(modifier = Modifier.alpha(rowAlpha)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyLarge
-            )
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
+        EntryKind.ACTION -> SettingsRow(title = title, description = description, icon = entry.icon, onClick = { onAction(entry) })
+        EntryKind.PAGE -> SettingsRow(title = title, description = description, icon = entry.icon, onClick = onOpen)
     }
 }
 
 /**
- * Cohesive panel rendered directly below the "Local AI" radio option. Drives the
- * full on-device model lifecycle — Download, Progress, Ready, Error — without
- * leaving the existing AI selection section.
+ * A home row's line: the index's, with the owner's names. The sync conflict says how many files wait,
+ * and This device & version shows the version and the device's role.
  */
-@Composable
-private fun NanoModelLifecyclePanel(
-    state: NanoState,
-    onDownload: () -> Unit,
-    onManageStorage: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(start = 52.dp, end = 4.dp, top = 4.dp, bottom = 12.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        shape = MaterialTheme.shapes.medium,
-        tonalElevation = 1.dp
-    ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            when (state) {
-                NanoState.Unknown, NanoState.Checking -> {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        LoadingIndicator(modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(12.dp))
-                        Text(
-                            text = "Checking model availability…",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-                }
-                NanoState.NotDownloaded -> {
-                    Button(
-                        onClick = onDownload, shapes = ButtonDefaults.shapes(),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(Icons.Default.Download, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Download Gemini Nano (~1.5 GB)")
-                    }
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = "Stays on-device. Required before selecting Local AI.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                is NanoState.Downloading -> {
-                    val label = if (state.totalBytes > 0L) {
-                        "Downloading model… ${formatBytes(state.bytesDownloaded)} / ${formatBytes(state.totalBytes)}"
-                    } else {
-                        "Downloading model…"
-                    }
-                    Text(text = label, style = MaterialTheme.typography.bodyMedium)
-                    Spacer(Modifier.height(8.dp))
-                    if (state.progress in 0f..1f) {
-                        LinearWavyProgressIndicator(
-                            progress = { state.progress },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    } else {
-                        LinearWavyProgressIndicator(modifier = Modifier.fillMaxWidth())
-                    }
-                }
-                NanoState.Ready -> {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.CheckCircle,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Model ready for offline use",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Text(
-                                text = "Manage storage in AICore settings",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        CortexIconButton(onClick = onManageStorage) {
-                            Icon(
-                                imageVector = Icons.Outlined.FolderOpen,
-                                contentDescription = "Manage model storage in AICore settings"
-                            )
-                        }
-                    }
-                }
-                is NanoState.Unavailable -> {
-                    Text(
-                        text = "Local AI unavailable on this device: ${state.reason}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
-                is NanoState.Error -> {
-                    Text(
-                        text = "Download failed: ${state.cause.localizedMessage ?: state.cause.message ?: state.cause::class.java.simpleName}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedButton(
-                        onClick = onDownload, shapes = ButtonDefaults.shapes(),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Retry download")
-                    }
-                }
-            }
-        }
-    }
+private fun homeDescription(entry: SettingsEntry, appearance: ModeAppearance, pending: PendingConflict?): String = when (entry.key) {
+    SettingsIndex.SYNC_CONFLICT -> pending?.let { conflict ->
+        val files = conflict.paths.size
+        (if (files == 1) "1 file" else "$files files") + " changed both here and on GitHub: syncing waits for your choice"
+    } ?: SettingsIndex.text(entry.description, appearance)
+    SettingsIndex.DEVICE -> "Pixel Brain Reader ${BuildConfig.VERSION_NAME} · " +
+        (if (VaultWriteGate.readOnly) "read-only device" else "this device writes the vault")
+    else -> SettingsIndex.text(entry.description, appearance)
 }
 
-private fun formatBytes(bytes: Long): String {
-    if (bytes <= 0L) return "0 MB"
-    val mb = bytes / 1_000_000.0
-    if (mb >= 1024.0) return "%.2f GB".format(mb / 1024.0)
-    return "%.0f MB".format(mb)
+/** The search (S6): a name or a few words, the topics' rows give way to every setting that matches. */
+@Composable
+private fun SettingsSearchField(query: String, onQueryChange: (String) -> Unit) {
+    val focusManager = LocalFocusManager.current
+    OutlinedTextField(
+        value = query,
+        onValueChange = onQueryChange,
+        modifier = Modifier.fillMaxWidth(),
+        placeholder = { Text("Search settings") },
+        leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
+        trailingIcon = if (query.isEmpty()) {
+            null
+        } else {
+            {
+                CortexIconButton(onClick = { onQueryChange("") }) {
+                    Icon(Icons.Rounded.Close, contentDescription = "Clear the search")
+                }
+            }
+        },
+        singleLine = true,
+        shape = MaterialTheme.shapes.extraLarge,
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+        keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() })
+    )
+}
+
+@Composable
+private fun LogOutConfirmDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Log out?") },
+        text = {
+            Text(
+                "This device forgets its GitHub token. Your notes stay on GitHub and in this " +
+                    "device's copy; logging in again needs a token."
+            )
+        },
+        confirmButton = { TextButton(onClick = onConfirm, shapes = ButtonDefaults.shapes()) { Text("Log out") } },
+        dismissButton = { TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text("Cancel") } }
+    )
 }

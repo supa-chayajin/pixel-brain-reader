@@ -19,11 +19,10 @@ class ReadOnlyScreensGuardTest {
 
     /** Pages that change the vault, each showing `ReadOnlyNotice` on a read-only device. */
     private val noticed = listOf(
-        // Settings
+        // Settings (13.4: the home writes nothing, its pages say it)
         "ui/settings/HabitConfigScreen.kt",
         "ui/homeconfig/HomeConfigScreen.kt",
         "ui/modes/ModesSettingsScreen.kt",
-        "ui/settings/SettingsScreen.kt",
         "ui/settings/FeedsScreen.kt",
         // The toolkit
         "ui/work/MissionLogScreen.kt",
@@ -66,6 +65,10 @@ class ReadOnlyScreensGuardTest {
         // 13.4 (P5): a shared image's choice, a photo note or a game's picture (never reached on a
         // read-only device either: MainActivity finishes a share there; it asks nothing if it were).
         "ui/share/SharedImageChooser.kt",
+        // 13.4 (S-b): the pages that took the Settings home's Health Connect and Google cards say in
+        // their own words what doesn't run on a read-only device (the day's health file, the import).
+        "ui/settings/HealthSettingsScreen.kt",
+        "ui/settings/GoogleSettingsScreen.kt",
         // 13.4 (F-c): the Feeds tab's Import only hides; a tap opens the browser (the marks are the device's own).
         "ui/feeds/FeedsTabScreen.kt"
     )
