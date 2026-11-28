@@ -35,6 +35,17 @@ class PhotoCaptureTest {
     }
 
     @Test
+    fun `a game picture is kept at most 768 on its longest side`() {
+        assertEquals(768, PhotoCapture.COVER_SIDE)
+        assertEquals(85, PhotoCapture.COVER_QUALITY)
+        assertEquals(768 to 576, PhotoCapture.targetSize(4000, 3000, PhotoCapture.COVER_SIDE))
+        assertEquals(384 to 768, PhotoCapture.targetSize(1000, 2000, PhotoCapture.COVER_SIDE))
+        assertEquals(768 to 768, PhotoCapture.targetSize(1024, 1024, PhotoCapture.COVER_SIDE))
+        // A smaller picture keeps its own size.
+        assertEquals(500 to 300, PhotoCapture.targetSize(500, 300, PhotoCapture.COVER_SIDE))
+    }
+
+    @Test
     fun `what the photo said comes after what was typed`() {
         assertEquals("Le tableau du jeudi\n\nLundi : réunion", PhotoCapture.withRead("Le tableau du jeudi  ", "  Lundi : réunion\n"))
         assertEquals("Lundi : réunion", PhotoCapture.withRead("", "Lundi : réunion"))

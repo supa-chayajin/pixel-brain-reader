@@ -94,6 +94,20 @@ class LedgerDaysTest {
     }
 
     @Test
+    fun `the game pictures purpose reads back from its key`() {
+        assertEquals(NetPurpose.GAME_PICTURES, NetPurpose.of("game_pictures"))
+        assertEquals("game_pictures", NetPurpose.GAME_PICTURES.key)
+        assertEquals("Game pictures", NetPurpose.GAME_PICTURES.label)
+        // Added before Other, which stays last; the keys stay unique.
+        assertEquals(NetPurpose.OTHER, NetPurpose.entries.last())
+        assertEquals(NetPurpose.entries.size, NetPurpose.entries.map { it.key }.toSet().size)
+        // A picture's host lists under its own purpose, apart from PlayStation's sync.
+        var day = LedgerDays.add(empty, "image.api.playstation.com", NetPurpose.GAME_PICTURES, 1, 40_000)
+        day = LedgerDays.add(day, "m.np.playstation.com", NetPurpose.GAMES, 10, 100)
+        assertEquals(listOf(NetPurpose.GAME_PICTURES), LedgerDays.byHost(day).first().purposes)
+    }
+
+    @Test
     fun `bytes read as people say them`() {
         assertEquals("999 B", LedgerDays.bytes(999))
         assertEquals("1 KB", LedgerDays.bytes(1_500))

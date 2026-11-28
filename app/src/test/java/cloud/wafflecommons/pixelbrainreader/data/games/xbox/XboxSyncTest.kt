@@ -65,7 +65,8 @@ class XboxSyncTest {
         name = name,
         type = "Game",
         mediaItemType = "Application",
-        displayImage = "https://store-images.s-microsoft.com/image/apps.$id",
+        // titlehub's recorded shape: http on Microsoft's image host (13.4: kept as https).
+        displayImage = "http://store-images.s-microsoft.com/image/apps.$id",
         achievement = XboxTitleAchievement(currentAchievements = earned, currentGamerscore = score, sourceVersion = source),
         titleHistory = XboxTitleHistory(lastTimePlayed = lastPlayed)
     )

@@ -56,7 +56,9 @@ enum class GameTemplate(val key: String, val label: String) {
  * [key] is the file name without `.md`: what a Timeline line's marker names. [playedBefore] is the
  * play time the owner typed from the console (hours), counted under the sessions until PSN measures
  * the game itself. [maps]: its `game_maps` (13.2), the first one the main map. [exactName] (13.3):
- * `game_match: exact`, the page answers to its exact names only (a page the sync created).
+ * `game_match: exact`, the page answers to its exact names only (a page the sync created). [cover]
+ * (13.4, P5): its `game_cover` as [GameCovers.target] reads it, the owner's own picture; null without
+ * one or when it names something a picture can't be.
  */
 data class GamePage(
     val path: String,
@@ -68,7 +70,8 @@ data class GamePage(
     val finished: LocalDate?,
     val playedBefore: Double? = null,
     val maps: List<GameMap> = emptyList(),
-    val exactName: Boolean = false
+    val exactName: Boolean = false,
+    val cover: String? = null
 ) {
     val key: String get() = path.substringAfterLast('/').removeSuffix(".md")
     val folder: String get() = path.substringBeforeLast('/', "")
@@ -108,7 +111,8 @@ object GamePages {
             finished = date(FrontmatterLines.get(content, "finished")),
             playedBefore = hours(FrontmatterLines.get(content, PLAYED_BEFORE_KEY)),
             maps = GameMaps.parse(FrontmatterLines.getList(content, GameMaps.KEY)),
-            exactName = FrontmatterLines.get(content, MATCH_KEY)?.trim()?.lowercase() == MATCH_EXACT
+            exactName = FrontmatterLines.get(content, MATCH_KEY)?.trim()?.lowercase() == MATCH_EXACT,
+            cover = GameCovers.target(FrontmatterLines.get(content, GameCovers.KEY))
         )
     }
 

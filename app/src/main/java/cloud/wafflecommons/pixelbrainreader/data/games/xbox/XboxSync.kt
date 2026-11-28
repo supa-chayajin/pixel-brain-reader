@@ -102,7 +102,7 @@ class XboxSync @Inject constructor(
         val previous = games.xboxSnapshot()
         val before = previous?.titles?.associateBy { it.titleId }.orEmpty()
         val minutes = withSession(now) { client.minutesPlayed(it, list.titles) }
-        val listed = list.titles.map { title -> stateOf(title, before[title.titleId], minutes[title.titleId], baseline) }
+        val listed = list.titles.map { title -> stateOf(title, before[title.titleId], minutes[title.titleId], baseline, previous) }
         val listedIds = listed.mapTo(HashSet()) { it.titleId }
         val seen = XboxSnapshot(
             syncedAt = Instant.ofEpochMilli(now).toString(),
@@ -250,13 +250,19 @@ class XboxSync @Inject constructor(
     /**
      * A title as this sync saw it; what the answer leaves out is kept from the last sync, except a
      * baseline's minutes: a title whose minutes weren't read (a 429 on its batch) starts at its next
-     * reading instead of from the count before the new sign-in.
+     * reading instead of from the count before the new sign-in. A newcomer seen without its minutes
+     * while [previous]'s list was complete keeps [previous]'s time (13.4), read once at the next sync.
      */
-    private fun stateOf(title: XboxTitle, old: XboxTitleState?, minutes: Long?, baseline: Boolean): XboxTitleState {
+    private fun stateOf(title: XboxTitle, old: XboxTitleState?, minutes: Long?, baseline: Boolean, previous: XboxSnapshot?): XboxTitleState {
         val summary = title.achievement
         val source = summary?.sourceVersion ?: 0
         // A 360 title's totals are right in titlehub; a One title's read 0 there, its file has them.
         val legacyTotals = summary?.takeIf { source == 1 }
+        val newcomerSince = if (!baseline && old == null && minutes == null && previous != null && previous.complete && previous.syncedAt.isNotBlank()) {
+            previous.syncedAt
+        } else {
+            null
+        }
         return XboxTitleState(
             titleId = title.titleId,
             name = title.name.ifBlank { old?.name.orEmpty() },
@@ -265,20 +271,23 @@ class XboxSync @Inject constructor(
             modernTitleId = title.modernTitleId?.takeIf { it.isNotBlank() },
             minutesPlayed = if (baseline) minutes else minutes ?: old?.minutesPlayed,
             lastPlayed = XboxTimes.instant(title.titleHistory?.lastTimePlayed)?.toString() ?: old?.lastPlayed,
-            // 360 icons are cleartext http: only an https icon is kept.
-            imageUrl = title.displayImage?.trim()?.takeIf { it.startsWith("https://", ignoreCase = true) } ?: old?.imageUrl,
+            // titlehub's http addresses on Microsoft's two image hosts asked over https (13.4); never http.
+            imageUrl = XboxImages.https(title.displayImage) ?: old?.imageUrl,
             currentAchievements = summary?.currentAchievements,
             currentGamerscore = summary?.currentGamerscore,
             totalAchievements = old?.totalAchievements ?: legacyTotals?.totalAchievements?.takeIf { it > 0 },
             totalGamerscore = old?.totalGamerscore ?: legacyTotals?.totalGamerscore?.takeIf { it > 0 },
             progress = summary?.progressPercentage?.toInt(),
-            visible = title.titleHistory?.visible ?: true
+            visible = title.titleHistory?.visible ?: true,
+            newcomerSince = newcomerSince
         )
     }
 
     /**
      * A new page's `started` (Xbox has no first-played date): the earliest of its titles' first
-     * earned achievement (this sync's files, else the saved ones) and their last played days.
+     * earned achievement (this sync's files, else the saved ones) and their last played days. Null
+     * (13.4) when none of its titles has a file yet while one shows earned achievements: the date
+     * waits for the file ([fillStarts]), instead of a last played day the achievements contradict.
      */
     private suspend fun startedOf(plan: PagePlan, current: XboxSnapshot, read: Map<String, AchievementSetFile>, zone: ZoneId): LocalDate? {
         val files = plan.titleIds.associateWith { id -> read[id] ?: games.achievementSet(id) }

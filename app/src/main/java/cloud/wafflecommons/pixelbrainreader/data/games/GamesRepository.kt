@@ -4,7 +4,10 @@ import android.util.Log
 import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.games.xbox.XboxTimes
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.FileContentDao
+import cloud.wafflecommons.pixelbrainreader.data.repository.AssetRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.FileRepository
+import cloud.wafflecommons.pixelbrainreader.data.repository.VaultDiscoveryRepository
+import cloud.wafflecommons.pixelbrainreader.data.sync.GitSyncCoordinator
 import cloud.wafflecommons.pixelbrainreader.data.sync.VaultPushScheduler
 import cloud.wafflecommons.pixelbrainreader.data.utils.TimelineLine
 import cloud.wafflecommons.pixelbrainreader.data.vault.FrontmatterLines
@@ -48,7 +51,10 @@ data class LinksRead(val links: GameLinks, val readable: Boolean)
 class GamesRepository @Inject constructor(
     private val fileRepository: FileRepository,
     private val fileContentDao: FileContentDao,
-    private val pushScheduler: VaultPushScheduler
+    private val pushScheduler: VaultPushScheduler,
+    private val gitSyncCoordinator: GitSyncCoordinator,
+    private val vaultDiscovery: VaultDiscoveryRepository,
+    private val assets: AssetRepository
 ) : GameTimelineSource {
 
     private val json = Json {
@@ -186,6 +192,137 @@ class GamesRepository @Inject constructor(
                 Log.i(TAG, "Game pages created: ${written.size} of ${pages.size}")
                 written
             }
+        }
+    }
+
+    /**
+     * The page for one console title (13.4: the fold's "Create a page", a held-back lookalike
+     * included), linked with it; the page it is already linked to when that page is there. A link to
+     * a page deleted since claims nothing (the Games tab's fold lists such a title as unclaimed):
+     * the new page takes it over. Null when refused: a read-only device, links.json
+     * unreadable, the title unknown, no layout, a page answering it, its path taken. Under the git
+     * lock: never call it while holding that lock.
+     */
+    suspend fun createPageFor(console: GameConsole, titleId: String, today: LocalDate = LocalDate.now()): GamePage? {
+        if (VaultWriteGate.refuses()) return null
+        return gitSyncCoordinator.mutex.withLock {
+            val read = linksRead()
+            if (!read.readable) return@withLock null
+            val pages = pages()
+            val present = pages.mapTo(HashSet()) { it.path }
+            read.links.consolePage(console, titleId)?.takeIf { it in present }?.let { linked ->
+                return@withLock pages.firstOrNull { it.path == linked }
+            }
+            val candidate: PageCandidate
+            val started: Instant?
+            when (console) {
+                GameConsole.PSN -> {
+                    val title = snapshot()?.titles?.firstOrNull { it.titleId == titleId } ?: return@withLock null
+                    candidate = PageCandidate(title.titleId, title.name, title.conceptTitleIds - title.titleId, instantOf(title.lastPlayed))
+                    started = instantOf(title.firstPlayed)
+                }
+                GameConsole.XBOX -> {
+                    // A title hidden on the Xbox profile too: the owner asked for its page.
+                    val title = xboxSnapshot()?.titles?.firstOrNull { it.titleId == titleId } ?: return@withLock null
+                    val lastPlayed = XboxTimes.instant(title.lastPlayed)
+                    candidate = PageCandidate(title.titleId, title.name, emptyList(), lastPlayed)
+                    val firstUnlock = achievementSet(titleId)?.achievements?.mapNotNull { XboxTimes.instant(it.earnedAt) }?.minOrNull()
+                    started = listOfNotNull(firstUnlock, lastPlayed).minOrNull()
+                }
+            }
+            val layout = GamePageCreation.layout(pages) ?: return@withLock null
+            val plan = GamePageCreation.planOne(candidate, pages, notePathsUnder(layout.root), console) ?: return@withLock null
+            val page = GamePageCreation.render(plan, otherTemplate(), started?.let { dayOf(it) }, today)
+            // 13.4 review: once the lock is held, the page and its link are written together, whatever
+            // cancels the caller (a Back that clears the tab): a page left without its link stays unlinked.
+            withContext(NonCancellable) {
+                val created = createPages(listOf(page)).firstOrNull() ?: return@withContext null
+                updateLinks { links ->
+                    plan.titleIds.fold(links) { acc, id ->
+                        // Unlinked, or linked to a page that's gone: the new page's; a hidden id stays as it is.
+                        val claimed = acc.consolePage(console, id)?.let { it in present } ?: false
+                        if (!claimed && !acc.isHidden(console, id)) acc.linkConsole(console, id, plan.path) else acc
+                    }
+                }
+                created
+            }
+        }
+    }
+
+    /** True when a folder or file on [path]'s way exists with another case only. Blocking: call from IO. */
+    private fun caseClash(path: String): Boolean {
+        var dir = ""
+        for (part in path.split('/').filter { it.isNotEmpty() }) {
+            val names = fileRepository.getLocalFile(dir).list() ?: return false
+            if (names.any { it != part && it.equals(part, ignoreCase = true) }) return true
+            if (part !in names) return false
+            dir = if (dir.isEmpty()) part else "$dir/$part"
+        }
+        return false
+    }
+
+    // --- The owner's game pictures (13.4, P5) ---------------------------------------------------
+
+    /**
+     * Each page's own picture (page path → file), for the pages whose `game_cover` resolves to a
+     * picture of the vault, through Room's file index (read once per call, never a walk of the disk)
+     * and inside the vault (a link out of it never resolves).
+     */
+    suspend fun coverFiles(pages: List<GamePage>): Map<String, File> {
+        val withCover = pages.filter { it.cover != null }
+        if (withCover.isEmpty()) return emptyMap()
+        val index = try {
+            vaultDiscovery.observeAttachmentIndex().first()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return emptyMap()
+        }
+        return withContext(Dispatchers.IO) {
+            withCover.mapNotNull { page ->
+                val path = GameCovers.resolve(page, index) ?: return@mapNotNull null
+                assets.safeFile(path)?.let { page.path to it }
+            }.toMap()
+        }
+    }
+
+    /**
+     * The owner's picture for the page [path] (P5): [jpeg] written as the page's own file (replaced
+     * when there, the same game's picture), then `game_cover` pointed at it. Never stopped half-way:
+     * a page left mid-way never keeps a file without its key. Refused on a read-only device.
+     */
+    suspend fun setCover(path: String, jpeg: ByteArray, today: LocalDate = LocalDate.now()): CoverEditResult {
+        if (VaultWriteGate.refuses()) return CoverEditResult.READ_ONLY
+        return withContext(NonCancellable + Dispatchers.IO) {
+            val page = read(path)?.let { GamePages.parse(path, it) } ?: return@withContext CoverEditResult.GONE
+            if (!assets.writeAt(GameCovers.ownPath(page), jpeg)) return@withContext CoverEditResult.FAILED
+            pushScheduler.requestPush()
+            _changes.value++
+            if (editPage(path) { GameCovers.withCover(it, GameCovers.fileName(page.key), today) }) {
+                CoverEditResult.SAVED
+            } else {
+                CoverEditResult.FAILED
+            }
+        }
+    }
+
+    /**
+     * The page's picture taken away: `game_cover` removed, and the file deleted only when the key
+     * named the app's own file (a picture the owner named by hand stays). Refused on a read-only device.
+     */
+    suspend fun removeCover(path: String, today: LocalDate = LocalDate.now()): CoverEditResult {
+        if (VaultWriteGate.refuses()) return CoverEditResult.READ_ONLY
+        return withContext(NonCancellable + Dispatchers.IO) {
+            val content = read(path) ?: return@withContext CoverEditResult.GONE
+            val page = GamePages.parse(path, content) ?: return@withContext CoverEditResult.GONE
+            if (FrontmatterLines.get(content, GameCovers.KEY) == null) return@withContext CoverEditResult.NOTHING_TO_REMOVE
+            if (!editPage(path) { GameCovers.withoutCover(it, today) }) return@withContext CoverEditResult.FAILED
+            val target = page.cover
+            if (target != null && GameCovers.namesOwnFile(page, target) && assets.deleteAt(GameCovers.ownPath(page))) {
+                pushScheduler.requestPush()
+                _changes.value++
+            }
+            CoverEditResult.SAVED
         }
     }
 

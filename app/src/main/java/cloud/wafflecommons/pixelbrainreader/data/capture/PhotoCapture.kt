@@ -13,6 +13,14 @@ object PhotoCapture {
 
     const val JPEG_QUALITY = 85
 
+    /**
+     * The longest side of a game's own picture (13.4, P5), the `(cover).jpg` next to its page: a
+     * cover still reads on a wide game page, and it stays about 100 KB in the vault.
+     */
+    const val COVER_SIDE = 768
+
+    const val COVER_QUALITY = 85
+
     /** The size a photo is decoded and kept at: its own when small enough, else its longest side at [max]. */
     fun targetSize(width: Int, height: Int, max: Int = MAX_SIDE): Pair<Int, Int> {
         val longest = maxOf(width, height)

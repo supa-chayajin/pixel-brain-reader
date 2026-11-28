@@ -3,6 +3,7 @@ package cloud.wafflecommons.pixelbrainreader.data.utils
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.net.InetAddress
 
 /** Guards the pixelbrain://import deep link and shared links against SSRF / arbitrary-fetch abuse. */
 class ImportUrlValidatorTest {
@@ -95,6 +96,29 @@ class ImportUrlValidatorTest {
     fun `rejects garbage that fails to parse`() {
         assertFalse(ImportUrlValidator.isSafe("not a url"))
         assertFalse(ImportUrlValidator.isSafe("http://"))
+    }
+
+    @Test
+    fun `isPublicAddress tells private, loopback and public apart`() {
+        fun v4(vararg parts: Int) = InetAddress.getByAddress(ByteArray(4) { parts[it].toByte() })
+        fun v6(literal: String) = InetAddress.getByName(literal) // a literal never touches DNS
+
+        assertTrue(ImportUrlValidator.isPublicAddress(v4(8, 8, 8, 8)))
+        assertTrue(ImportUrlValidator.isPublicAddress(v4(172, 32, 0, 1)))
+        assertTrue(ImportUrlValidator.isPublicAddress(v6("2606:4700:4700::1111")))
+
+        assertFalse(ImportUrlValidator.isPublicAddress(v4(10, 0, 0, 1)))           // private
+        assertFalse(ImportUrlValidator.isPublicAddress(v4(172, 16, 0, 1)))         // private
+        assertFalse(ImportUrlValidator.isPublicAddress(v4(192, 168, 1, 20)))       // private
+        assertFalse(ImportUrlValidator.isPublicAddress(v4(127, 0, 0, 1)))          // loopback
+        assertFalse(ImportUrlValidator.isPublicAddress(v4(169, 254, 169, 254)))    // link-local (cloud metadata)
+        assertFalse(ImportUrlValidator.isPublicAddress(v4(100, 64, 0, 1)))         // carrier-grade NAT
+        assertFalse(ImportUrlValidator.isPublicAddress(v4(0, 0, 0, 0)))            // any-local
+        assertFalse(ImportUrlValidator.isPublicAddress(v4(224, 0, 0, 1)))          // multicast
+        assertFalse(ImportUrlValidator.isPublicAddress(v6("::1")))                 // loopback
+        assertFalse(ImportUrlValidator.isPublicAddress(v6("fd12:3456::1")))        // unique local
+        assertFalse(ImportUrlValidator.isPublicAddress(v6("fe80::1")))             // link-local
+        assertFalse(ImportUrlValidator.isPublicAddress(v6("::ffff:10.0.0.1")))     // IPv4-mapped private
     }
 
     @Test

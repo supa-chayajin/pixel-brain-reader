@@ -90,7 +90,15 @@ object ImportUrlValidator {
         null
     }
 
-    private fun isPublicAddress(address: InetAddress): Boolean {
+    /**
+     * True when [address] is a public internet address: not the any-local, loopback, link-local,
+     * private (site-local), multicast, carrier-grade NAT, benchmarking or reserved ranges, nor a
+     * unique-local IPv6 address, nor an IPv6 form (IPv4-mapped or -compatible) of a refused IPv4
+     * one. Pure: it reads the address's bytes and never resolves anything. [isSafe] and
+     * [resolvesToPublicAddresses] use it, and so does the games pictures' DNS (13.4), which refuses
+     * a name that points at the LAN.
+     */
+    fun isPublicAddress(address: InetAddress): Boolean {
         if (address.isAnyLocalAddress || address.isLoopbackAddress || address.isLinkLocalAddress ||
             address.isSiteLocalAddress || address.isMulticastAddress
         ) return false

@@ -17,6 +17,8 @@ enum class NetPurpose(val key: String, val label: String) {
     MAPS("maps", "Game maps"),
     /** 13.3: the Xbox sign-in and its reads (Microsoft's sign-in, the Xbox network). */
     XBOX("xbox", "Xbox sync"),
+    /** 13.4: the games' pictures from the consoles' image hosts, through the games image loader only. */
+    GAME_PICTURES("game_pictures", "Game pictures"),
     OTHER("other", "Other");
 
     companion object {
