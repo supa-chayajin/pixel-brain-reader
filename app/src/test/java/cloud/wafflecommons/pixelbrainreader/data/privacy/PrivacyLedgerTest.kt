@@ -1,6 +1,18 @@
 package cloud.wafflecommons.pixelbrainreader.data.privacy
 
+import io.mockk.every
+import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
+import okhttp3.Address
+import okhttp3.Authenticator
+import okhttp3.Call
+import okhttp3.Connection
+import okhttp3.ConnectionSpec
+import okhttp3.Dns
+import okhttp3.Handshake
+import okhttp3.Protocol
+import okhttp3.Request
+import okhttp3.Route
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -10,7 +22,12 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
+import java.net.InetSocketAddress
+import java.net.Proxy
+import java.net.ProxySelector
+import java.net.Socket
 import java.time.LocalDate
+import javax.net.SocketFactory
 
 class PrivacyLedgerTest {
 
@@ -108,6 +125,87 @@ class PrivacyLedgerTest {
         PrivacyLedger.measured("github.com", NetPurpose.SYNC) { sent += 5 }
         assertEquals(5L, PrivacyLedger.days().first().calls.single().sent)
         assertTrue(File(dir, "2026-11-15.json.bad").exists())
+    }
+
+    /** A call to [url] as an OkHttp client's listener sees it. */
+    private fun callTo(url: String): Call = mockk { every { request() } returns Request.Builder().url(url).build() }
+
+    /** A connection opened for [host] (its route's address). */
+    private fun connectionTo(host: String): Connection = object : Connection {
+        override fun route(): Route = Route(
+            Address(
+                host, 443, Dns.SYSTEM, SocketFactory.getDefault(), null, null, null, Authenticator.NONE, null,
+                listOf(Protocol.HTTP_1_1), listOf(ConnectionSpec.CLEARTEXT), ProxySelector.getDefault()
+            ),
+            Proxy.NO_PROXY,
+            InetSocketAddress.createUnresolved(host, 443)
+        )
+
+        override fun socket(): Socket = Socket()
+
+        override fun handshake(): Handshake? = null
+
+        override fun protocol(): Protocol = Protocol.HTTP_1_1
+    }
+
+    @Test
+    fun `a redirect to another host inside a call is that host's, each byte counted once`() = runTest {
+        install()
+        val call = callTo("https://news.example/pic.jpg")
+        val listener = PrivacyLedger.events(NetPurpose.FEED_PICTURES).create(call)
+
+        listener.callStart(call)
+        listener.connectionAcquired(call, connectionTo("news.example"))
+        sent += 300
+        received += 120 // the redirect
+        listener.connectionAcquired(call, connectionTo("cdn.example"))
+        sent += 280
+        received += 9_000 // the picture
+        listener.callEnd(call)
+
+        val day = PrivacyLedger.days().first()
+        assertEquals(
+            listOf(
+                LedgerCall("news.example", "feed_pictures", 1, 300, 120),
+                LedgerCall("cdn.example", "feed_pictures", 1, 280, 9_000)
+            ),
+            day.calls
+        )
+        assertEquals(0L, day.unnamedSent + day.unnamedReceived)
+    }
+
+    @Test
+    fun `a call that stays on its host is one call, and a shared connection keeps the request's host`() = runTest {
+        install()
+        val call = callTo("https://img2.example/a.png")
+        val listener = PrivacyLedger.events(NetPurpose.GAME_PICTURES).create(call)
+
+        listener.callStart(call)
+        // An HTTP/2 connection opened for a sibling host carries the call's own request.
+        listener.connectionAcquired(call, connectionTo("img1.example"))
+        received += 4_000
+        listener.callEnd(call)
+
+        assertEquals(listOf(LedgerCall("img2.example", "game_pictures", 1, 0, 4_000)), PrivacyLedger.days().first().calls)
+    }
+
+    @Test
+    fun `a redirect on the shared client keeps the call's purpose`() = runTest {
+        install()
+        val call = callTo("https://github.com/login/device")
+        val listener = PrivacyLedger.events(null).create(call)
+
+        listener.callStart(call)
+        listener.connectionAcquired(call, connectionTo("github.com"))
+        received += 10
+        listener.connectionAcquired(call, connectionTo("objects.example"))
+        received += 20
+        listener.callFailed(call, java.io.IOException("reset"))
+
+        assertEquals(
+            listOf(LedgerCall("github.com", "sign_in", 1, 0, 10), LedgerCall("objects.example", "sign_in", 1, 0, 20)),
+            PrivacyLedger.days().first().calls
+        )
     }
 
     @Test

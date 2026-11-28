@@ -13,6 +13,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import okhttp3.Call
+import okhttp3.Connection
 import okhttp3.EventListener
 import java.io.File
 import java.io.IOException
@@ -103,8 +104,9 @@ object PrivacyLedger {
     }
 
     /**
-     * An OkHttp client's calls in the ledger, each from its start to its end. [purpose] null: the
-     * shared client, whose hosts say what they are for.
+     * An OkHttp client's calls in the ledger, each from its start to its end; a redirect inside a
+     * call to another host is that host's from its connection on (13.4). [purpose] null: the shared
+     * client, whose hosts say what they are for (the call's first host names its purpose).
      */
     fun events(purpose: NetPurpose?): EventListener.Factory = EventListener.Factory { LedgerListener(purpose) }
 
@@ -222,9 +224,44 @@ object PrivacyLedger {
         @Volatile
         private var token = 0L
 
+        /** The host the open span is named after, and the call's purpose, kept from its start. */
+        @Volatile
+        private var spanHost: String? = null
+
+        @Volatile
+        private var callPurpose: NetPurpose? = null
+
+        /** The call has its first connection: a redirect followed inside the call takes another one. */
+        @Volatile
+        private var connected = false
+
         override fun callStart(call: Call) {
             val host = call.request().url.host
-            token = begin(host, purpose ?: purposeOf(host), expires = true)
+            val named = purpose ?: purposeOf(host)
+            spanHost = host
+            callPurpose = named
+            connected = false
+            token = begin(host, named, expires = true)
+        }
+
+        /**
+         * A redirect followed inside the call (13.4: the picture guards follow theirs by hand, and a
+         * feed picture may hop to any public host) can reach another host: from its connection on,
+         * the traffic is that host's, under the call's purpose. The span so far closes first, so a
+         * byte is counted once. The call's first connection carries the call's own request and keeps
+         * its host (an HTTP/2 connection shared with a sibling host would name the sibling).
+         */
+        override fun connectionAcquired(call: Call, connection: Connection) {
+            if (!connected) {
+                connected = true
+                return
+            }
+            val host = connection.route().address.url.host
+            val named = callPurpose ?: return
+            if (token == 0L || host == spanHost) return
+            end(token)
+            spanHost = host
+            token = begin(host, named, expires = true)
         }
 
         override fun callEnd(call: Call) = finish()
