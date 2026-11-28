@@ -58,6 +58,21 @@ object MoodTagCategories {
         return from to to
     }
 
+    /**
+     * To place [targetInCategory] among its category's tags (13.4, S5: a drag's drop): the tag's
+     * index in the whole list and the one it moves to, for `MoodTagRepository.moveTag` (which takes
+     * it out, then puts it in at the second index). A target past the category's end puts it last;
+     * null when nothing moves (the tag is already there, or isn't in the list).
+     */
+    fun moveWithinCategoryTo(tags: List<MoodTag>, name: String, targetInCategory: Int): Pair<Int, Int>? {
+        val from = tags.indexOfFirst { it.name == name }
+        if (from < 0) return null
+        val category = of(tags[from])
+        val slots = tags.indices.filter { of(tags[it]) == category }
+        val to = slots[targetInCategory.coerceIn(0, slots.lastIndex)]
+        return if (to == from) null else from to to
+    }
+
     /** A category card's colors: its container, what sits on it, and the strong color of a picked chip. */
     data class CardColors(val container: Color, val content: Color, val strong: Color, val onStrong: Color)
 

@@ -555,15 +555,16 @@ class UserPreferencesRepository @Inject constructor(
     }
 
     /**
-     * Moves [section] one step within its group. The order and the shown set are read inside the
-     * same edit, so quick taps on the arrows never compute from a stale order and lose a move.
+     * Moves [section] to [targetInGroup] within its group (on screen, or in "More today"), read and
+     * written in one edit (13.4, S5: a drag's drop, or a screen reader's Move up / Move down), so a
+     * quick second move never computes from a stale order. An order nothing changes is left as stored.
      */
-    suspend fun moveDailySection(section: cloud.wafflecommons.pixelbrainreader.data.model.DailySection, up: Boolean) {
+    suspend fun moveDailySectionTo(section: cloud.wafflecommons.pixelbrainreader.data.model.DailySection, targetInGroup: Int) {
         context.dataStore.edit { prefs ->
             val ds = cloud.wafflecommons.pixelbrainreader.data.model.DailySection
             val order = ds.orderFromKeys(prefs[KEY_DAILY_ORDER])
-            val shown = ds.fromKeys(prefs[KEY_DAILY_SHOWN])
-            prefs[KEY_DAILY_ORDER] = ds.toKeys(ds.moved(order, shown, section, up))
+            val next = ds.movedTo(order, ds.fromKeys(prefs[KEY_DAILY_SHOWN]), section, targetInGroup)
+            if (next != order) prefs[KEY_DAILY_ORDER] = ds.toKeys(next)
         }
     }
 

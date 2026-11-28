@@ -1,32 +1,23 @@
 package cloud.wafflecommons.pixelbrainreader.ui.settings
 
-import cloud.wafflecommons.pixelbrainreader.ui.utils.centeredMaxWidth
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.rounded.KeyboardArrowDown
-import androidx.compose.material.icons.rounded.KeyboardArrowUp
-import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.IconButtonDefaults
-import cloud.wafflecommons.pixelbrainreader.ui.components.switchThumb
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -37,15 +28,23 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cloud.wafflecommons.pixelbrainreader.data.model.DailySection
+import cloud.wafflecommons.pixelbrainreader.ui.components.ReorderHandle
+import cloud.wafflecommons.pixelbrainreader.ui.components.ReorderMath
+import cloud.wafflecommons.pixelbrainreader.ui.components.ReorderState
+import cloud.wafflecommons.pixelbrainreader.ui.components.rememberReorderState
+import cloud.wafflecommons.pixelbrainreader.ui.components.reorderActions
+import cloud.wafflecommons.pixelbrainreader.ui.components.reorderable
+import cloud.wafflecommons.pixelbrainreader.ui.components.segmentShape
+import cloud.wafflecommons.pixelbrainreader.ui.components.switchThumb
 import cloud.wafflecommons.pixelbrainreader.ui.daily.DailyLayoutViewModel
-import cloud.wafflecommons.pixelbrainreader.ui.theme.NavBarClearance
-import androidx.compose.material.icons.rounded.Tune
 
 /**
- * Settings → Daily screen: the order of the Daily blocks and which ones stay on screen. The Daily
- * screen shows each group in this order; a block switched off waits in "More today".
+ * Settings › Daily screen: the order of the Daily blocks and which ones stay on screen. The Daily
+ * screen shows each group in this order; a block switched off waits in "More today". 13.4 (S5): a
+ * block's ≡ handle drags it within its group (long-press, then drag; the block is saved at its new
+ * place at the drop), and a screen reader moves it with "Move up" and "Move down". The owner
+ * arranges this screen: nothing here moves a block on its own.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DailyLayoutScreen(
     onNavigateBack: () -> Unit,
@@ -54,132 +53,137 @@ fun DailyLayoutScreen(
     val order by viewModel.order.collectAsStateWithLifecycle()
     val shown by viewModel.shown.collectAsStateWithLifecycle()
     val haptic = LocalHapticFeedback.current
+    val listState = rememberLazyListState()
     val onScreen = order.filter { it in shown }
     val folded = order.filter { it !in shown }
 
-    val move: (DailySection, Boolean) -> Unit = { section, up ->
-        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-        viewModel.move(section, up)
-    }
+    val moveTo: (DailySection, Int) -> Unit = { section, target -> viewModel.moveTo(section, target) }
+    val onScreenDrag = rememberBlockDrag(onScreen, listState::scrollBy, moveTo)
+    val foldedDrag = rememberBlockDrag(folded, listState::scrollBy, moveTo)
     val setShown: (DailySection, Boolean) -> Unit = { section, on ->
         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
         viewModel.setShown(section, on)
     }
 
-    Scaffold(
-        topBar = {
-            cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
-                title = "Daily screen",
-                icon = Icons.Rounded.Tune,
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack, shapes = IconButtonDefaults.shapes()) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                }
+    SettingsLazyPageScaffold(page = SettingsPage.DAILY_LAYOUT, onBack = onNavigateBack, listState = listState) {
+        item(key = "intro") {
+            SettingsNote(
+                "Long-press a block's ≡, then drag it. Switch a block off and it waits in \"More today\", in the " +
+                    "same order. The mode chips, the Add box and the banners stay at the top."
             )
         }
-    ) { padding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding).centeredMaxWidth(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = NavBarClearance),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            item(key = "intro") {
-                Text(
-                    text = "Put the blocks in the order you want with the arrows. Switch a block off and " +
-                        "it waits in \"More today\", one tap away, in the same order. The mode chips, " +
-                        "the Add box and the banners stay at the top.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(vertical = 8.dp)
-                )
-            }
 
-            item(key = "header-on-screen") { GroupTitle("On the Daily screen") }
-            if (onScreen.isEmpty()) {
-                item(key = "empty-on-screen") { GroupHint("Nothing on screen: switch a block on below.") }
-            }
-            itemsIndexed(onScreen, key = { _, s -> s.key }) { index, section ->
-                DailyBlockRow(
-                    section = section,
-                    shown = true,
-                    canMoveUp = index > 0,
-                    canMoveDown = index < onScreen.lastIndex,
-                    onMove = { up -> move(section, up) },
-                    onShownChange = { setShown(section, it) },
-                    modifier = Modifier.animateItem()
-                )
-            }
+        item(key = "header-on-screen") { SettingsSubhead("On the Daily screen", Modifier.padding(top = 14.dp, bottom = 6.dp)) }
+        if (onScreenDrag.working.isEmpty()) {
+            item(key = "empty-on-screen") { SettingsNote("Nothing on screen: switch a block on below.") }
+        }
+        itemsIndexed(onScreenDrag.working, key = { _, s -> s.key }) { index, section ->
+            DailyBlockRow(
+                section = section,
+                shown = true,
+                index = index,
+                drag = onScreenDrag,
+                onShownChange = { setShown(section, it) },
+                // The dragged block follows the finger, never animated; the others slide into their new places.
+                modifier = if (onScreenDrag.state.draggedKey == section.key) Modifier.animateItem(placementSpec = null) else Modifier.animateItem()
+            )
+        }
 
-            item(key = "header-more-today") { GroupTitle("In \"More today\"") }
-            if (folded.isEmpty()) {
-                item(key = "empty-more-today") { GroupHint("Empty: every block is on screen.") }
-            }
-            itemsIndexed(folded, key = { _, s -> s.key }) { index, section ->
-                DailyBlockRow(
-                    section = section,
-                    shown = false,
-                    canMoveUp = index > 0,
-                    canMoveDown = index < folded.lastIndex,
-                    onMove = { up -> move(section, up) },
-                    onShownChange = { setShown(section, it) },
-                    modifier = Modifier.animateItem()
-                )
-            }
+        item(key = "header-more-today") { SettingsSubhead("In \"More today\"", Modifier.padding(top = 14.dp, bottom = 6.dp)) }
+        if (foldedDrag.working.isEmpty()) {
+            item(key = "empty-more-today") { SettingsNote("Empty: every block is on screen.") }
+        }
+        itemsIndexed(foldedDrag.working, key = { _, s -> s.key }) { index, section ->
+            DailyBlockRow(
+                section = section,
+                shown = false,
+                index = index,
+                drag = foldedDrag,
+                onShownChange = { setShown(section, it) },
+                modifier = if (foldedDrag.state.draggedKey == section.key) Modifier.animateItem(placementSpec = null) else Modifier.animateItem()
+            )
         }
     }
 }
 
-@Composable
-private fun GroupTitle(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.titleSmall,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(top = 8.dp)
-    )
-}
+/**
+ * One group's drag: its blocks as a working copy while a drag runs; at the drop, the block that
+ * moved is saved at its new place in the group ([onDrop]), once.
+ */
+private class BlockDrag(
+    val working: List<DailySection>,
+    val state: ReorderState,
+    val onMove: (Int, Int) -> Unit,
+    val onDrop: () -> Unit
+)
 
 @Composable
-private fun GroupHint(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
+private fun rememberBlockDrag(
+    group: List<DailySection>,
+    scrollBy: suspend (Float) -> Float,
+    onDrop: (DailySection, Int) -> Unit
+): BlockDrag {
+    var working by remember(group) { mutableStateOf(group) }
+    // The block this drag (or this screen reader's step) moves: the one at the first move's start.
+    var moving by remember { mutableStateOf<DailySection?>(null) }
+    val onMove: (Int, Int) -> Unit = { from, to ->
+        if (moving == null) moving = working.getOrNull(from)
+        working = ReorderMath.moved(working, from, to)
+    }
+    val drop: () -> Unit = {
+        moving?.let { section -> working.indexOf(section).takeIf { it >= 0 }?.let { onDrop(section, it) } }
+        moving = null
+    }
+    val state = rememberReorderState(onMove = onMove, onDrop = drop, scrollBy = scrollBy)
+    return BlockDrag(working, state, onMove, drop)
 }
 
 @Composable
 private fun DailyBlockRow(
     section: DailySection,
     shown: Boolean,
-    canMoveUp: Boolean,
-    canMoveDown: Boolean,
-    onMove: (up: Boolean) -> Unit,
+    index: Int,
+    drag: BlockDrag,
     onShownChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    ElevatedCard(modifier = modifier.fillMaxWidth()) {
+    val count = drag.working.size
+    val dragged = drag.state.draggedKey == section.key
+    Surface(
+        shape = segmentShape(index, count),
+        color = if (dragged) MaterialTheme.colorScheme.surfaceContainerHighest else MaterialTheme.colorScheme.surfaceContainerHigh,
+        shadowElevation = if (dragged) 4.dp else 0.dp,
+        // reorderable lifts the dragged block above its neighbours (and while it settles back).
+        modifier = modifier
+            .fillMaxWidth()
+            .reorderable(drag.state, section.key, index)
+    ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 20.dp, top = 8.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(section.label, style = MaterialTheme.typography.titleMedium)
-                Text(
-                    section.description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                // The block's name and the screen reader's "Move up" / "Move down" as one item.
+                modifier = Modifier
+                    .weight(1f)
+                    .semantics(mergeDescendants = true) {}
+                    .reorderActions(index, count, drag.onMove, drag.onDrop)
+            ) {
+                ReorderHandle(state = drag.state, key = section.key, index = index)
+                Column(modifier = Modifier.weight(1f).padding(vertical = 6.dp)) {
+                    Text(section.label, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+                    Text(
+                        section.description,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
-            IconButton(enabled = canMoveUp, shapes = IconButtonDefaults.shapes(), onClick = { onMove(true) }) {
-                Icon(Icons.Rounded.KeyboardArrowUp, contentDescription = "Move ${section.label} up")
-            }
-            IconButton(enabled = canMoveDown, shapes = IconButtonDefaults.shapes(), onClick = { onMove(false) }) {
-                Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = "Move ${section.label} down")
-            }
+            Spacer(Modifier.width(12.dp))
             Switch(
-                checked = shown, thumbContent = switchThumb(shown),
+                checked = shown,
+                thumbContent = switchThumb(shown),
                 onCheckedChange = onShownChange,
                 modifier = Modifier.semantics { contentDescription = "Keep ${section.label} on screen" }
             )

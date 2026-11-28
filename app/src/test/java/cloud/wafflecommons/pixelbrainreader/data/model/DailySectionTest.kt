@@ -97,4 +97,44 @@ class DailySectionTest {
         assertEquals(WATCH, DailySection.orderFromKeys("watch,weather").first())
         assertEquals(setOf(WATCH), DailySection.fromKeys(setOf("watch")))
     }
+
+    @Test
+    fun `movedTo puts a block at a place in its group, the other group untouched`() {
+        val shown = DailySection.DEFAULT_SHOWN
+        val moved = DailySection.movedTo(default, shown, TIMELINE, 0)
+        assertEquals(listOf(TIMELINE, WEATHER, VITALS, TASKS), moved.filter { it in shown })
+        // The folded blocks keep their order and their places in the whole order.
+        assertEquals(default.filter { it !in shown }, moved.filter { it !in shown })
+        assertEquals(default.indices.filter { default[it] !in shown }, moved.indices.filter { moved[it] !in shown })
+
+        // A folded block moves among the folded ones only.
+        val folded = DailySection.movedTo(default, shown, WATCH, 1)
+        assertEquals(listOf(PROJECTS, WATCH, GRATITUDE, COUNTDOWNS, MANTRA, ECHOES, SECOND_BRAIN, SCRATCHPAD, DUE), folded.filter { it !in shown })
+        assertEquals(listOf(WEATHER, VITALS, TASKS, TIMELINE), folded.filter { it in shown })
+
+        // Groups interleaved in the order: each group's slots are refilled in its new order.
+        val mixed = DailySection.movedTo(default, shown + MANTRA, MANTRA, 1)
+        assertEquals(
+            listOf(WEATHER, MANTRA, VITALS, TASKS, PROJECTS, GRATITUDE, COUNTDOWNS, TIMELINE, ECHOES, SECOND_BRAIN, SCRATCHPAD, DUE, WATCH),
+            mixed
+        )
+        // Where it already is: the same order.
+        assertEquals(default, DailySection.movedTo(default, shown, VITALS, 1))
+    }
+
+    @Test
+    fun `movedTo past the end lands last in the group`() {
+        val shown = DailySection.DEFAULT_SHOWN
+        val moved = DailySection.movedTo(default, shown, WEATHER, 99)
+        assertEquals(listOf(VITALS, TASKS, TIMELINE, WEATHER), moved.filter { it in shown })
+        assertEquals(default.filter { it !in shown }, moved.filter { it !in shown })
+        // Before the start: first.
+        assertEquals(listOf(TIMELINE, WEATHER, VITALS, TASKS), DailySection.movedTo(default, shown, TIMELINE, -3).filter { it in shown })
+    }
+
+    @Test
+    fun `movedTo of a block missing from the order changes nothing`() {
+        val order = default - WATCH
+        assertEquals(order, DailySection.movedTo(order, DailySection.DEFAULT_SHOWN, WATCH, 0))
+    }
 }

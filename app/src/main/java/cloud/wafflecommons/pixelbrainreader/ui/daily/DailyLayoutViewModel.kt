@@ -30,9 +30,12 @@ class DailyLayoutViewModel @Inject constructor(
         viewModelScope.launch { preferences.setDailySectionShown(section, shown) }
     }
 
-    /** One step [up] or down within the block's group (on screen, or in "More today"). */
-    fun move(section: DailySection, up: Boolean) {
-        viewModelScope.launch { preferences.moveDailySection(section, up) }
+    /**
+     * [section] to place [targetInGroup] of its group (13.4, S5): a drag's drop or a screen reader's
+     * Move up / Move down, read and written in one edit.
+     */
+    fun moveTo(section: DailySection, targetInGroup: Int) {
+        viewModelScope.launch { preferences.moveDailySectionTo(section, targetInGroup) }
     }
 
     fun setMoreExpanded(expanded: Boolean) {

@@ -69,5 +69,31 @@ enum class DailySection(val key: String, val label: String, val description: Str
                 it[to] = section
             }
         }
+
+        /**
+         * [order] with [section] moved to place [targetInGroup] among the blocks of its group (both on
+         * screen, or both in "More today"), the other group's blocks keeping their places; a target past
+         * the group's end puts it last; a block not in [order] changes nothing (13.4, S5: a drag's drop).
+         * The group's slots in the full order are refilled in the group's new order.
+         */
+        fun movedTo(
+            order: List<DailySection>,
+            shown: Set<DailySection>,
+            section: DailySection,
+            targetInGroup: Int
+        ): List<DailySection> {
+            if (section !in order) return order
+            val sameGroup = { s: DailySection -> (s in shown) == (section in shown) }
+            val slots = order.indices.filter { sameGroup(order[it]) }
+            val group = slots.map { order[it] }
+            val from = group.indexOf(section)
+            val to = targetInGroup.coerceIn(0, group.lastIndex)
+            if (from == to) return order
+            val moved = group.toMutableList().apply {
+                removeAt(from)
+                add(to, section)
+            }
+            return order.toMutableList().also { list -> slots.forEachIndexed { i, slot -> list[slot] = moved[i] } }
+        }
     }
 }

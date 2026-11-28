@@ -59,4 +59,46 @@ class MoodTagCategoriesTest {
         assertNull(MoodTagCategories.moveWithinCategory(tags, "Kid", up = false))
         assertNull(MoodTagCategories.moveWithinCategory(tags, "Nobody", up = true))
     }
+
+    /** What MoodTagRepository.moveTag does with the pair: out at the first index, in at the second. */
+    private fun List<MoodTag>.moved(move: Pair<Int, Int>?): List<MoodTag> =
+        move?.let { (from, to) -> toMutableList().apply { add(to, removeAt(from)) } } ?: this
+
+    private val mixed = listOf(
+        MoodTag("Gaming", category = "activities"),
+        MoodTag("Kid", category = "people"),
+        MoodTag("Coding", category = "activities"),
+        MoodTag("Home", category = "places"),
+        MoodTag("Reading", category = "activities")
+    )
+
+    private fun inCategory(tags: List<MoodTag>, category: MoodTagCategory) =
+        MoodTagCategories.grouped(tags).first { it.first == category }.second.map { it.name }
+
+    @Test
+    fun `moveWithinCategoryTo moves a tag among its category only`() {
+        // Reading to the top of Activities, Coding to the middle of it.
+        val first = mixed.moved(MoodTagCategories.moveWithinCategoryTo(mixed, "Reading", 0))
+        assertEquals(listOf("Reading", "Gaming", "Coding"), inCategory(first, MoodTagCategory.ACTIVITIES))
+        val second = mixed.moved(MoodTagCategories.moveWithinCategoryTo(mixed, "Gaming", 1))
+        assertEquals(listOf("Coding", "Gaming", "Reading"), inCategory(second, MoodTagCategory.ACTIVITIES))
+        // The other categories keep their tags, in their order.
+        listOf(first, second).forEach { moved ->
+            assertEquals(listOf("Kid"), inCategory(moved, MoodTagCategory.PEOPLE))
+            assertEquals(listOf("Home"), inCategory(moved, MoodTagCategory.PLACES))
+        }
+    }
+
+    @Test
+    fun `a target past the category's end lands last`() {
+        val moved = mixed.moved(MoodTagCategories.moveWithinCategoryTo(mixed, "Gaming", 9))
+        assertEquals(listOf("Coding", "Reading", "Gaming"), inCategory(moved, MoodTagCategory.ACTIVITIES))
+    }
+
+    @Test
+    fun `no move gives null`() {
+        assertNull(MoodTagCategories.moveWithinCategoryTo(mixed, "Coding", 1))
+        assertNull(MoodTagCategories.moveWithinCategoryTo(mixed, "Kid", 3))
+        assertNull(MoodTagCategories.moveWithinCategoryTo(mixed, "Nobody", 0))
+    }
 }
