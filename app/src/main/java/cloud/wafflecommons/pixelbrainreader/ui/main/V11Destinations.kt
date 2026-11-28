@@ -16,6 +16,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import cloud.wafflecommons.pixelbrainreader.ui.guard.ConfidentialityScreen
 import cloud.wafflecommons.pixelbrainreader.ui.modes.ModesSettingsScreen
+import cloud.wafflecommons.pixelbrainreader.ui.settings.SettingsRoutes
+import cloud.wafflecommons.pixelbrainreader.ui.settings.settingsPageDestinations
 import cloud.wafflecommons.pixelbrainreader.ui.work.ActivityScreen
 import cloud.wafflecommons.pixelbrainreader.ui.work.BoardScreen
 import cloud.wafflecommons.pixelbrainreader.ui.work.BoardsScreen
@@ -114,8 +116,9 @@ fun NavGraphBuilder.v11Destinations(navController: NavHostController, openNote: 
             onSent = onHandoffSent
         )
     }
+    // 13.4 (S2): the Modes hub, each of its rows opening a short page.
     composable(V11Routes.MODES_SETTINGS) {
-        ModesSettingsScreen(onBack = { navController.popBackStack() })
+        ModesSettingsScreen(onBack = { navController.popBackStack() }, onOpen = { navController.navigate(it) })
     }
     composable(V11Routes.CONFIDENTIALITY) {
         ConfidentialityScreen(onBack = { navController.popBackStack() }, onOpenNote = openNote)
@@ -242,7 +245,8 @@ fun NavGraphBuilder.v11Destinations(navController: NavHostController, openNote: 
         LeaveScreen(
             onBack = { navController.popBackStack() },
             onOpenNote = openNote,
-            onManageLeave = { navController.navigate(V11Routes.MODES_SETTINGS) }
+            // 13.4 (S2): the leaves have a page of their own in the Modes hub.
+            onManageLeave = { navController.navigate(SettingsRoutes.MODES_DATES) }
         )
     }
     composable(
@@ -255,4 +259,7 @@ fun NavGraphBuilder.v11Destinations(navController: NavHostController, openNote: 
             onOpenNote = openNote
         )
     }
+    // 13.4: the Settings pages added with the new map (the Modes hub's short pages, Games, Privacy
+    // & safety, Vault & device).
+    settingsPageDestinations(navController)
 }

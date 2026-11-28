@@ -2,6 +2,7 @@ package cloud.wafflecommons.pixelbrainreader.ui.modes
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.modes.ContextMode
 import cloud.wafflecommons.pixelbrainreader.data.modes.CustodyException
 import cloud.wafflecommons.pixelbrainreader.data.modes.KeyDate
@@ -131,11 +132,6 @@ class ModesViewModel @Inject constructor(
         cfg.copy(personalProjects = roots.sorted())
     }
 
-    /** Hides [key] in [mode], or shows it again (E1). */
-    fun toggleTab(mode: cloud.wafflecommons.pixelbrainreader.data.modes.ContextMode, key: String) = update { cfg ->
-        cloud.wafflecommons.pixelbrainreader.data.modes.ModeTabs.toggled(cfg, mode, key)
-    }
-
     /** A blank [ModeStyle] puts the default name and icon back. */
     fun setModeStyle(mode: ContextMode, style: ModeStyle) = update { cfg ->
         val styles = if (style == ModeStyle()) cfg.modeStyles - mode else cfg.modeStyles + (mode to style)
@@ -155,7 +151,9 @@ class ModesViewModel @Inject constructor(
 
     fun removeKeyDate(keyDate: KeyDate) = update { cfg -> cfg.copy(keyDates = cfg.keyDates - keyDate) }
 
+    /** Every change of the modes is a vault write: refused on a read-only device (settled decision #18). */
     private fun update(transform: (ModesConfig) -> ModesConfig) {
+        if (VaultWriteGate.refuses()) return
         viewModelScope.launch { modesRepository.updateConfig(transform) }
     }
 }

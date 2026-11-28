@@ -24,6 +24,8 @@ class ReadOnlyScreensGuardTest {
         "ui/homeconfig/HomeConfigScreen.kt",
         "ui/modes/ModesSettingsScreen.kt",
         "ui/settings/FeedsScreen.kt",
+        // 13.4: the Modes hub's short pages, Navigation (the tabs each mode shows), Repair (write back)
+        "ui/modes/ModesPages.kt",
         // The toolkit
         "ui/work/MissionLogScreen.kt",
         "ui/work/BoardScreen.kt",
