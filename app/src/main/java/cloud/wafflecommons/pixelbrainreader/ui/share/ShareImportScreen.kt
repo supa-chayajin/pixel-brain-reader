@@ -77,11 +77,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import cloud.wafflecommons.pixelbrainreader.data.ai.LocalAiManager
 import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
+import cloud.wafflecommons.pixelbrainreader.data.games.GameArt
 import cloud.wafflecommons.pixelbrainreader.data.games.GameMaps
 import cloud.wafflecommons.pixelbrainreader.data.games.GamePage
 import cloud.wafflecommons.pixelbrainreader.data.games.GamesRepository
 import cloud.wafflecommons.pixelbrainreader.data.games.MapEditResult
 import cloud.wafflecommons.pixelbrainreader.data.games.MapOffer
+import cloud.wafflecommons.pixelbrainreader.data.games.pictures.GamePictureSource
 import cloud.wafflecommons.pixelbrainreader.data.privacy.NetPurpose
 import cloud.wafflecommons.pixelbrainreader.data.privacy.PrivacyLedger
 import cloud.wafflecommons.pixelbrainreader.data.ai.NanoState
@@ -102,7 +104,7 @@ import cloud.wafflecommons.pixelbrainreader.ui.components.EmptyHint
 import cloud.wafflecommons.pixelbrainreader.ui.components.FolderPickerDialog
 import cloud.wafflecommons.pixelbrainreader.ui.components.FormScaffold
 import cloud.wafflecommons.pixelbrainreader.ui.components.SectionCard
-import cloud.wafflecommons.pixelbrainreader.ui.games.GamePickerDialog
+import cloud.wafflecommons.pixelbrainreader.ui.games.GameChooserDialog
 import cloud.wafflecommons.pixelbrainreader.ui.games.MapEditDialog
 import cloud.wafflecommons.pixelbrainreader.ui.games.message
 import cloud.wafflecommons.pixelbrainreader.ui.main.MarkwonContent
@@ -133,7 +135,8 @@ class ShareImportViewModel @Inject constructor(
     private val vaultDiscoveryRepository: VaultDiscoveryRepository,
     private val errorExplainRepository: cloud.wafflecommons.pixelbrainreader.data.work.ErrorExplainRepository,
     private val games: GamesRepository,
-    localAiManager: LocalAiManager
+    localAiManager: LocalAiManager,
+    private val pictures: GamePictureSource
 ) : ViewModel() {
 
     /** C8: hand a shared error to "Explain an error", which looks it up on arrival. */
@@ -210,6 +213,11 @@ class ShareImportViewModel @Inject constructor(
     /** The game pages the map can go to (the session picker's list). */
     val gamePages: StateFlow<List<GamePage>> = _gamePages.asStateFlow()
 
+    private val _gameArts = MutableStateFlow<Map<String, GameArt>>(emptyMap())
+
+    /** Each game page's picture, by path (13.4, P1): the picker's rows show them; the initials until read. */
+    val gameArts: StateFlow<Map<String, GameArt>> = _gameArts.asStateFlow()
+
     private val _addingMap = MutableStateFlow(false)
 
     /** A map is being written to a game's page. */
@@ -224,13 +232,16 @@ class ShareImportViewModel @Inject constructor(
     fun loadGamePages() {
         if (VaultWriteGate.readOnly) return
         viewModelScope.launch {
-            _gamePages.value = try {
+            val pages = try {
                 games.pages()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 emptyList()
             }
+            _gamePages.value = pages
+            // The pictures are decoration, read once the list is there: the button never waits for them.
+            _gameArts.value = pictures.artFor(pages)
         }
     }
 
@@ -277,6 +288,7 @@ fun ShareImportScreen(
     // 13.3 (ME2): the shared link as a game's map.
     val mapOffer by viewModel.mapOffer.collectAsStateWithLifecycle()
     val gamePages by viewModel.gamePages.collectAsStateWithLifecycle()
+    val gameArts by viewModel.gameArts.collectAsStateWithLifecycle()
     val addingMap by viewModel.addingMap.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -412,8 +424,10 @@ fun ShareImportScreen(
     }
     val offer = mapOffer
     if (pickingGame && offer != null) {
-        GamePickerDialog(
+        // 13.4 (P1): each game with its picture.
+        GameChooserDialog(
             pages = gamePages,
+            arts = gameArts,
             title = "Add the map to",
             onPick = { page, _ ->
                 pickingGame = false

@@ -21,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /**
@@ -34,7 +35,9 @@ import androidx.compose.ui.unit.dp
  *    and collapsing as it scrolls ([scrollBehavior], `exitUntilCollapsed`). Every [FormScaffold]
  *    page uses it.
  *
- * Every colour is a role of the device's dynamic scheme.
+ * Every colour is a role of the device's dynamic scheme. [picture] (13.4, P1) draws something of the
+ * page's own in the emblem's place, at the emblem's size: the open map's header shows its game's
+ * picture there.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -48,7 +51,9 @@ fun CortexTopAppBar(
     navigationIcon: @Composable () -> Unit = {},
     actions: @Composable RowScope.() -> Unit = {},
     scrollBehavior: TopAppBarScrollBehavior? = null,
-    large: Boolean = false
+    large: Boolean = false,
+    /** Drawn in the emblem's place at the size given (13.4); null: the emblem of [icon]. */
+    picture: (@Composable (size: Dp) -> Unit)? = null
 ) {
     val colors = TopAppBarDefaults.topAppBarColors(
         containerColor = MaterialTheme.colorScheme.surface,
@@ -56,7 +61,7 @@ fun CortexTopAppBar(
     )
     if (large) {
         LargeFlexibleTopAppBar(
-            title = { Heading(title, icon, emblemKey, badgeSize = 40.dp, large = true) },
+            title = { Heading(title, icon, emblemKey, badgeSize = 40.dp, large = true, picture = picture) },
             subtitle = subtitle?.let { line -> { SubtitlePill(line) } },
             navigationIcon = navigationIcon,
             actions = actions,
@@ -70,7 +75,7 @@ fun CortexTopAppBar(
     if (subtitle != null) {
         // The owner's review (13.2): taller and larger, the pill clear of the emblem.
         TopAppBar(
-            title = { Heading(title, icon, emblemKey, badgeSize = 44.dp, large = false) },
+            title = { Heading(title, icon, emblemKey, badgeSize = 44.dp, large = false, picture = picture) },
             subtitle = { SubtitlePill(subtitle, modifier = Modifier.padding(top = 8.dp)) },
             navigationIcon = navigationIcon,
             actions = actions,
@@ -82,7 +87,7 @@ fun CortexTopAppBar(
         )
     } else {
         CenterAlignedTopAppBar(
-            title = { Heading(title, icon, emblemKey, badgeSize = 44.dp, large = false) },
+            title = { Heading(title, icon, emblemKey, badgeSize = 44.dp, large = false, picture = picture) },
             navigationIcon = navigationIcon,
             actions = actions,
             expandedHeight = 80.dp,
@@ -95,13 +100,16 @@ fun CortexTopAppBar(
 
 /**
  * The emblem on its expressive shape, then the emphasized headline. The open tab's page shows its
- * tab's emblem, drawn for this visit (13.2.1).
+ * tab's emblem, drawn for this visit (13.2.1). A [picture] takes the emblem's place (13.4).
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun Heading(title: String, icon: ImageVector?, key: String, badgeSize: androidx.compose.ui.unit.Dp, large: Boolean) {
+private fun Heading(title: String, icon: ImageVector?, key: String, badgeSize: Dp, large: Boolean, picture: (@Composable (Dp) -> Unit)?) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        if (icon != null) {
+        if (picture != null) {
+            picture(badgeSize)
+            Spacer(Modifier.width(if (large) 14.dp else 12.dp))
+        } else if (icon != null) {
             val openTab = LocalOpenTabEmblem.current?.takeIf { it.label == key }
             if (openTab != null) {
                 ExpressiveBadge(

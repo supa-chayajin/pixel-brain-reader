@@ -1,7 +1,12 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package cloud.wafflecommons.pixelbrainreader.ui.games
 
 import android.content.Intent
 import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -9,14 +14,18 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Article
+import androidx.compose.material.icons.rounded.AddPhotoAlternate
 import androidx.compose.material.icons.rounded.Checklist
 import androidx.compose.material.icons.rounded.EmojiEvents
 import androidx.compose.material.icons.rounded.History
@@ -29,11 +38,18 @@ import androidx.compose.material.icons.rounded.QuestionAnswer
 import androidx.compose.material.icons.rounded.SportsEsports
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -42,8 +58,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -54,7 +68,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -63,14 +76,16 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cloud.wafflecommons.pixelbrainreader.data.games.AchievementSection
+import cloud.wafflecommons.pixelbrainreader.data.games.GameArtRules
 import cloud.wafflecommons.pixelbrainreader.data.games.GameConsole
 import cloud.wafflecommons.pixelbrainreader.data.games.GameMap
+import cloud.wafflecommons.pixelbrainreader.data.games.GamePage
 import cloud.wafflecommons.pixelbrainreader.data.games.GamePages
 import cloud.wafflecommons.pixelbrainreader.data.games.GameSessionRecord
-import cloud.wafflecommons.pixelbrainreader.data.games.GamesRepository
-import cloud.wafflecommons.pixelbrainreader.data.games.ManualSessions
 import cloud.wafflecommons.pixelbrainreader.data.games.GameState
 import cloud.wafflecommons.pixelbrainreader.data.games.GameTimeline
+import cloud.wafflecommons.pixelbrainreader.data.games.GamesRepository
+import cloud.wafflecommons.pixelbrainreader.data.games.ManualSessions
 import cloud.wafflecommons.pixelbrainreader.data.games.TrophySection
 import cloud.wafflecommons.pixelbrainreader.ui.components.CardGrid
 import cloud.wafflecommons.pixelbrainreader.ui.components.EmptyHint
@@ -80,20 +95,19 @@ import cloud.wafflecommons.pixelbrainreader.ui.components.PickTimeDialog
 import cloud.wafflecommons.pixelbrainreader.ui.components.ReadOnlyNotice
 import cloud.wafflecommons.pixelbrainreader.ui.components.SectionCard
 import cloud.wafflecommons.pixelbrainreader.ui.main.MarkwonContent
-import coil.compose.AsyncImage
+import cloud.wafflecommons.pixelbrainreader.ui.theme.NavBarClearance
+import cloud.wafflecommons.pixelbrainreader.ui.utils.isWideLayout
+import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
-import androidx.compose.material3.IconButton
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.Spacer
-import cloud.wafflecommons.pixelbrainreader.ui.theme.NavBarClearance
+import java.time.ZoneId
 
 /**
  * A game's page (RFC-009 §4.2): its state, hours and trophies, the checklists of its note (a trophy's
  * line stays ??? until reached or revealed), its sessions, the notes of its folder, and Ask Claude.
  * 13.3: its maps, changed here (ME1), and Xbox's achievements beside the trophies (XB2: side by side
- * on a wide window, stacked on the phone).
+ * on a wide window, stacked on the phone). 13.4: the game's picture beside its facts (P3), the
+ * owner's own one chosen or removed here (P5), and every day label counted from the state's day.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -111,7 +125,8 @@ fun GamePageScreen(
     var reveal by rememberSaveable { mutableStateOf(false) }
     // One hidden item revealed at a time (RFC-009 §4.2: "??? until reached or tapped"); Reveal shows them all.
     var revealedKeys by rememberSaveable { mutableStateOf("") }
-    fun shown(key: String) = reveal || key in revealedKeys.split('\n')
+    val revealed = remember(revealedKeys) { revealedKeys.split('\n').filter { it.isNotEmpty() }.toSet() }
+    fun shown(key: String) = reveal || key in revealed
     fun show(key: String) {
         revealedKeys = if (revealedKeys.isEmpty()) key else revealedKeys + "\n" + key
     }
@@ -125,6 +140,11 @@ fun GamePageScreen(
     var addingMap by rememberSaveable { mutableStateOf(false) }
     var changingMap by rememberSaveable { mutableStateOf<String?>(null) }
     var removingMap by rememberSaveable { mutableStateOf<String?>(null) }
+    // 13.4 (P5): the owner's own picture, from the system's photo picker (no permission asked).
+    var removingPicture by rememberSaveable { mutableStateOf(false) }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) viewModel.setCover(uri)
+    }
     // A map that left the page meanwhile (a sync, a desktop edit) takes its dialog along.
     LaunchedEffect(page?.maps) {
         val urls = page?.maps?.map { it.url } ?: return@LaunchedEffect
@@ -142,46 +162,14 @@ fun GamePageScreen(
         }
         if (state.readOnly) ReadOnlyNotice()
 
-        SectionCard(
-            title = page.template.label,
-            icon = Icons.Rounded.SportsEsports,
-            subtitle = listOfNotNull(
-                state.hours?.let { hours(it) },
-                if (state.trophiesTotal > 0) "${state.trophiesEarned} of ${state.trophiesTotal} trophies" else null,
-                if (state.achievementsTotal > 0) "${state.achievementsEarned} of ${state.achievementsTotal} achievements" else null,
-                page.started?.let { "started ${day(it)}" },
-                page.finished?.let { "finished ${day(it)}" }
-            ).joinToString(" · ").ifEmpty { null }
-        ) {
-            state.iconUrl?.let { url ->
-                AsyncImage(
-                    model = url,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.size(96.dp).clip(RoundedCornerShape(16.dp))
-                )
-            }
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                GameState.entries.forEach { s ->
-                    FilterChip(
-                        selected = page.state == s,
-                        onClick = { if (page.state != s) viewModel.setState(s) },
-                        enabled = !state.readOnly,
-                        label = { Text(s.label) }
-                    )
-                }
-            }
-            if (!state.readOnly) {
-                TextButton(onClick = { editingPlayedBefore = true }, shapes = ButtonDefaults.shapes()) {
-                    Text(
-                        page.playedBefore?.let { typed ->
-                            "Console play time before the app: ${hours(typed)}" +
-                                if (state.measured) " (a console's own total replaces it)" else ""
-                        } ?: "Add the console's play time"
-                    )
-                }
-            }
-        }
+        GameHeaderCard(
+            page = page,
+            state = state,
+            onSetState = viewModel::setState,
+            onEditPlayedBefore = { editingPlayedBefore = true },
+            onChoosePicture = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+            onRemovePicture = { removingPicture = true }
+        )
 
         // The page itself, without what the cards below show (RFC-009 §4.2: the app renders it).
         if (state.prose.isNotBlank()) {
@@ -231,7 +219,7 @@ fun GamePageScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth().clickable(enabled = hidden, onClickLabel = "Reveal") { show(key) }
                     ) {
-                        Checkbox(checked = item.done, onCheckedChange = { viewModel.toggle(item.line) }, enabled = !state.readOnly)
+                        Checkbox(checked = item.done, onCheckedChange = { viewModel.toggle(item) }, enabled = !state.readOnly)
                         Text(if (hidden) "???" else item.text, style = MaterialTheme.typography.bodyMedium)
                     }
                 }
@@ -249,22 +237,25 @@ fun GamePageScreen(
             if (state.sessions.isEmpty() && state.history.isEmpty()) {
                 EmptyHint("No session yet: start one here, or add one you forgot to start.")
             }
-            state.sessions.take(SESSIONS_SHOWN).forEach { record ->
-                val manual = record.source == GameSessionRecord.SOURCE_MANUAL
-                val date = runCatching { LocalDate.parse(record.date) }.getOrNull()
-                Text(
-                    listOfNotNull(date?.let { day(it) }, record.start, GameTimeline.duration(record.minutes), consoleOf(record))
-                        .joinToString(" · "),
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.fillMaxWidth()
-                        .clickable(enabled = manual && !state.readOnly) { editingId = record.id }
-                        .padding(vertical = 6.dp)
-                )
+            // 13.4: rows of at least 48 dp, side by side, so a tap lands on the session aimed at.
+            Column {
+                state.sessions.take(SESSIONS_SHOWN).forEach { record ->
+                    val manual = record.source == GameSessionRecord.SOURCE_MANUAL
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = TOUCH_ROW)
+                            .clickable(enabled = manual && !state.readOnly, onClickLabel = "Fix this session") { editingId = record.id }
+                    ) {
+                        Text(sessionLine(record, state.today), style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
             }
             if (state.history.isNotEmpty()) {
                 Text("Earlier, from your Timeline", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
                 state.history.take(30).forEach { entry ->
-                    Text("${day(entry.date)} ${entry.time} · ${entry.text}", style = MaterialTheme.typography.bodySmall)
+                    Text("${dayLabel(entry.date, state.today)} ${entry.time} · ${entry.text}", style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
@@ -298,6 +289,7 @@ fun GamePageScreen(
     if (adding) {
         GameSessionDialog(
             initial = null,
+            today = state.today,
             onSave = { date, start, minutes ->
                 adding = false
                 viewModel.addSession(date, start, minutes)
@@ -309,6 +301,7 @@ fun GamePageScreen(
     state.sessions.firstOrNull { it.id == editingId }?.let { record ->
         GameSessionDialog(
             initial = record,
+            today = state.today,
             onSave = { _, start, minutes ->
                 editingId = null
                 viewModel.editSession(record, start, minutes)
@@ -372,6 +365,25 @@ fun GamePageScreen(
                 ) { Text("Remove", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = { TextButton(onClick = { removingMap = null }, shapes = ButtonDefaults.shapes()) { Text("Cancel") } }
+        )
+    }
+
+    // 13.4 (P5): the owner's own picture goes; the console's shows again, or the initials.
+    if (removingPicture && state.hasOwnPicture && !state.readOnly) {
+        AlertDialog(
+            onDismissRequest = { removingPicture = false },
+            title = { Text("Remove this picture?") },
+            text = { Text("The console's picture shows again, or the initials.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        removingPicture = false
+                        viewModel.removeCover()
+                    },
+                    shapes = ButtonDefaults.shapes()
+                ) { Text("Remove", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { removingPicture = false }, shapes = ButtonDefaults.shapes()) { Text("Cancel") } }
         )
     }
 
@@ -672,6 +684,7 @@ private fun TrophiesCard(
     onShow: (String) -> Unit,
     modifier: Modifier
 ) {
+    val showingHidden = reveal || state.trophies.any { it.earnedOn == null && shown(trophyKey(it)) }
     SectionCard(
         title = "Trophies",
         modifier = modifier,
@@ -679,17 +692,28 @@ private fun TrophiesCard(
         subtitle = "${state.trophiesEarned} of ${state.trophiesTotal} · the others stay hidden until you reveal them",
         trailing = { RevealButton(reveal, onToggleReveal) }
     ) {
-        state.trophies.forEach { line ->
-            val earned = line.earnedOn
-            val key = "t:${line.set}#${line.trophy.id}"
-            val hidden = earned == null && !shown(key)
-            val name = if (hidden) "???" else line.trophy.name.ifBlank { "Trophy ${line.trophy.id}" }
-            Text(
-                "${TrophySection.gradeIcon(line.trophy.grade)}  $name" + (earned?.let { "  ·  ${day(it)}" } ?: ""),
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (earned != null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.fillMaxWidth().clickable(enabled = hidden, onClickLabel = "Reveal") { onShow(key) }
-            )
+        // 13.4 (the audit's spoiler-rows-small-targets): 48 dp rows side by side, so a slightly-off
+        // tap never reveals the neighbour.
+        Column {
+            state.trophies.forEach { line ->
+                val earned = line.earnedOn
+                val key = trophyKey(line)
+                val hidden = earned == null && !shown(key)
+                val name = if (hidden) "???" else line.trophy.name.ifBlank { "Trophy ${line.trophy.id}" }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = TOUCH_ROW)
+                        .clickable(enabled = hidden, onClickLabel = "Reveal") { onShow(key) }
+                ) {
+                    Text(
+                        "${TrophySection.gradeIcon(line.trophy.grade)}  $name" + (earned?.let { "  ·  ${dayLabel(it, state.today)}" } ?: ""),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (earned != null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         }
     }
 }
@@ -704,6 +728,7 @@ private fun AchievementsCard(
     onShow: (String) -> Unit,
     modifier: Modifier
 ) {
+    val showingHidden = reveal || state.achievements.any { it.earnedOn == null && shown(achievementKey(it)) }
     SectionCard(
         title = "Achievements",
         modifier = modifier,
@@ -712,34 +737,45 @@ private fun AchievementsCard(
             " · the others stay hidden until you reveal them",
         trailing = { RevealButton(reveal, onToggleReveal) }
     ) {
-        state.achievements.forEach { line ->
-            val earned = line.earnedOn
-            val key = "a:${line.titleId}#${line.record.id}"
-            val hidden = earned == null && !shown(key)
-            val name = if (hidden) "???" else line.record.name.ifBlank { "Achievement ${line.record.id}" }
-            val set = if (state.achievementSets > 1 && line.setTitle.isNotBlank()) "  ·  ${line.setTitle}" else ""
-            Text(
-                "${AchievementSection.ICON}  $name  ·  ${line.record.gamerscore} G" + (earned?.let { "  ·  ${day(it)}" } ?: "") + set,
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (earned != null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.fillMaxWidth().clickable(enabled = hidden, onClickLabel = "Reveal") { onShow(key) }
-            )
+        Column {
+            state.achievements.forEach { line ->
+                val earned = line.earnedOn
+                val key = achievementKey(line)
+                val hidden = earned == null && !shown(key)
+                val name = if (hidden) "???" else line.record.name.ifBlank { "Achievement ${line.record.id}" }
+                val set = if (state.achievementSets > 1 && line.setTitle.isNotBlank()) "  ·  ${line.setTitle}" else ""
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = TOUCH_ROW)
+                        .clickable(enabled = hidden, onClickLabel = "Reveal") { onShow(key) }
+                ) {
+                    Text(
+                        "${AchievementSection.ICON}  $name  ·  ${line.record.gamerscore} G" +
+                            (earned?.let { "  ·  ${dayLabel(it, state.today)}" } ?: "") + set,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (earned != null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         }
     }
 }
 
 /**
  * Adds a session the owner forgot to start ([initial] null: day, start, length) or fixes one
- * (its start and length; the day stays). Delete asks a second tap. 13.1.
+ * (its start and length; the day stays). Delete asks a second tap. 13.1. [today] is the page's day
+ * (13.4: AppClock's, as every label of the page).
  */
 @Composable
 private fun GameSessionDialog(
     initial: GameSessionRecord?,
+    today: LocalDate,
     onSave: (LocalDate, LocalTime, Int) -> Unit,
     onDelete: (() -> Unit)?,
     onDismiss: () -> Unit
 ) {
-    val today = LocalDate.now()
     var date by rememberSaveable { mutableStateOf(initial?.date ?: today.toString()) }
     var start by rememberSaveable { mutableStateOf(initial?.start ?: LocalTime.now().minusHours(1).withSecond(0).withNano(0).format(HHMM)) }
     var hoursText by rememberSaveable { mutableStateOf(((initial?.minutes ?: 60) / 60).toString()) }
@@ -761,7 +797,7 @@ private fun GameSessionDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = { pickingDate = true }, shapes = ButtonDefaults.shapes(), enabled = initial == null, modifier = Modifier.fillMaxWidth()) {
-                    Text("Day: ${day(picked)}")
+                    Text("Day: ${dayLabel(picked, today)}")
                 }
                 OutlinedButton(onClick = { pickingTime = true }, shapes = ButtonDefaults.shapes(), modifier = Modifier.fillMaxWidth()) {
                     Text("Started at $start")
@@ -854,7 +890,6 @@ private val HHMM: java.time.format.DateTimeFormatter = java.time.format.DateTime
  * The game's actions (13.2): Material 3 Expressive's floating toolbar, play or stop as its vibrant
  * FAB, then "Started earlier", the map and Ask Claude. A read-only device keeps only the map.
  */
-@OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun GameToolbar(
     running: Boolean,

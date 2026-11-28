@@ -2,6 +2,8 @@ package cloud.wafflecommons.pixelbrainreader.data.games
 
 import android.graphics.Bitmap
 import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
+import cloud.wafflecommons.pixelbrainreader.data.games.pictures.GameNotificationPicture
+import cloud.wafflecommons.pixelbrainreader.data.games.pictures.GamePictureSource
 import cloud.wafflecommons.pixelbrainreader.data.modes.ContextMode
 import cloud.wafflecommons.pixelbrainreader.data.modes.ModesConfig
 import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
@@ -71,7 +73,13 @@ class GameSessionControllerTest {
         coEvery { currentVisibility() } returns Visibility(mode = ContextMode.PERSONAL)
     }
     private val dashboard: DailyDashboardRepository = mockk(relaxed = true)
-    private val controller = GameSessionController(preferences, games, platform, modes, dashboard)
+    private val pictureSource: GamePictureSource = mockk {
+        coEvery { artFor(any<GamePage>()) } answers { GameArtRules.initialsOnly(firstArg<GamePage>().title) }
+    }
+    private val notificationPicture: GameNotificationPicture = mockk {
+        coEvery { largeIcon(any(), any()) } returns null
+    }
+    private val controller = GameSessionController(preferences, games, platform, modes, dashboard, pictureSource, notificationPicture)
 
     @Before
     fun setUp() {
@@ -336,5 +344,342 @@ class GameSessionControllerTest {
         coEvery { games.page(withMap.path) } returns withMap
         controller.restore(saturdayEvening + hour)
         verify(exactly = 2) { platform.postRunning(any(), "Ring of Ash", true) }
+    }
+
+    // --- 13.4: the stop runs to its end (the audit's critical finding) ------------------------
+
+    @Test
+    fun `stop runs to its end when its own job is cancelled`() = runTest {
+        // 21:00, asked at 00:00, nobody answered by 01:00: the check ends the session at 00:00.
+        controller.start(page, saturdayEvening, zone)
+        controller.check(saturdayEvening + 3 * hour, zone)
+        val events = mutableListOf<String>()
+        lateinit var job: Job
+        // What WorkManager does once the job's unique work is cancelled or replaced: it cancels the
+        // job's coroutine wherever it is. Here it lands in the save, as it did in 13.3.
+        every { platform.cancelCheck() } answers { job.cancel() }
+        coEvery { games.addSessions(any()) } coAnswers {
+            job.cancel()
+            yield() // a real save suspends: a stop that could be cancelled would end here
+            events += "saved"
+            firstArg<List<GameSessionRecord>>().map { LocalDate.parse(it.date) }.toSet()
+        }
+        // DataStore's writes and the past day's edit suspend too.
+        coEvery { preferences.setGameSession(any()) } coAnswers {
+            yield()
+            events += if (firstArg<String?>() == null) "session cleared" else "session set"
+            session.value = firstArg()
+        }
+        coEvery { preferences.setGameSessionCheck(any()) } coAnswers {
+            yield()
+            check.value = firstArg()
+        }
+        coEvery { games.applyPastDay(any(), any()) } coAnswers {
+            yield()
+            events += "past day"
+            true
+        }
+        every { platform.endGameNight(any()) } answers { events += "game night off" }
+
+        job = launch { controller.check(saturdayEvening + 4 * hour, zone) }
+        job.join()
+
+        assertTrue(job.isCancelled)
+        coVerify { games.addSessions(match { it.single().minutes == 180 && it.single().date == "2026-11-14" }) }
+        // Saved first, cleared after, the evening's note edited, the game night ended: all of it.
+        assertEquals(listOf("saved", "session cleared", "past day", "game night off"), events)
+        assertNull(controller.current())
+        assertNull(check.value)
+        coVerify { games.applyPastDay(LocalDate.of(2026, 11, 14), LocalDate.of(2026, 11, 15)) }
+        verify { platform.endGameNight("rule-1") }
+        verify { platform.cancelRunning() }
+        verify { platform.cancelAsk() }
+    }
+
+    @Test
+    fun `the check's own end never cancels its job`() = runTest {
+        controller.start(page, saturdayEvening, zone)
+        clearMocks(platform, answers = false)
+        // Every look the check schedules is appended to its own job.
+        controller.check(saturdayEvening + hour, zone)
+        verify { platform.scheduleCheck(2 * hour, true) }
+        controller.check(saturdayEvening + 3 * hour, zone)
+        verify { platform.scheduleCheck(hour, true) }
+        verify(exactly = 0) { platform.scheduleCheck(any(), false) }
+        clearMocks(platform, answers = false)
+
+        controller.check(saturdayEvening + 4 * hour, zone)
+        assertNull(controller.current())
+        verify(exactly = 0) { platform.cancelCheck() }
+        verify(exactly = 0) { platform.scheduleCheck(any(), any()) }
+        verify { platform.cancelRunning() }
+        verify { platform.cancelAsk() }
+    }
+
+    @Test
+    fun `a stop that can't be saved keeps the session and its notification, and ends the game night`() = runTest {
+        controller.start(page, saturdayEvening, zone)
+        coEvery { games.addSessions(any()) } returns null
+        clearMocks(platform, answers = false)
+        assertNull(controller.stop(saturdayEvening + hour, zone))
+        assertEquals(RunningGame(saturdayEvening, page.path), controller.current())
+        assertNotNull(SessionCheck.decode(check.value))
+        verify(exactly = 0) { platform.cancelRunning() }
+        verify(exactly = 0) { platform.cancelAsk() }
+        verify(exactly = 0) { platform.cancelCheck() }
+        verify { platform.endGameNight("rule-1") }
+        coVerify(exactly = 0) { dashboard.burnToDisk(any()) }
+
+        // A later Stop saves it under the same id, so the two tries never make two sessions.
+        coEvery { games.addSessions(any()) } answers { firstArg<List<GameSessionRecord>>().map { LocalDate.parse(it.date) }.toSet() }
+        val record = controller.stop(saturdayEvening + 2 * hour, zone)!!
+        assertEquals(120, record.minutes)
+        assertEquals(ManualSessions.idFor(page.path, saturdayEvening), record.id)
+        coVerify(exactly = 2) { games.addSessions(match { it.single().id == record.id }) }
+        assertNull(controller.current())
+        verify { platform.cancelRunning() }
+    }
+
+    @Test
+    fun `an end the check can't save is tried again a quarter of an hour later`() = runTest {
+        controller.start(page, saturdayEvening, zone)
+        controller.check(saturdayEvening + 3 * hour, zone)
+        coEvery { games.addSessions(any()) } returns null
+        clearMocks(platform, answers = false)
+        controller.check(saturdayEvening + 4 * hour, zone)
+        assertEquals(RunningGame(saturdayEvening, page.path), controller.current())
+        verify { platform.scheduleCheck(GameSessionController.RETRY_MS, true) }
+        verify(exactly = 0) { platform.cancelCheck() }
+        verify(exactly = 0) { platform.cancelRunning() }
+        verify { platform.endGameNight("rule-1") }
+
+        // The next look saves it, still ending at the question.
+        coEvery { games.addSessions(any()) } answers { firstArg<List<GameSessionRecord>>().map { LocalDate.parse(it.date) }.toSet() }
+        controller.check(saturdayEvening + 4 * hour + GameSessionController.RETRY_MS, zone)
+        assertNull(controller.current())
+        coVerify(exactly = 2) { games.addSessions(match { it.single().minutes == 180 && it.single().id == ManualSessions.idFor(page.path, saturdayEvening) }) }
+    }
+
+    @Test
+    fun `a stop whose note can't follow still keeps the session`() = runTest {
+        controller.start(page, saturdayEvening, zone)
+        coEvery { dashboard.burnToDisk(any()) } throws IOException("disk full")
+        val record = controller.stop(saturdayEvening + hour, zone)
+        assertEquals(60, record?.minutes)
+        assertNull(controller.current())
+        verify { platform.endGameNight("rule-1") }
+    }
+
+    // --- 13.4: when a session ends (E4, the backdated start) ---------------------------------
+
+    @Test
+    fun `a stop after the answer's deadline ends at the deadline`() = runTest {
+        controller.start(page, saturdayEvening, zone)
+        controller.check(saturdayEvening + 3 * hour, zone) // asked at 00:00, answer by 01:00
+        // Doze held the end back; at 01:40 the owner taps Stop on the question.
+        val record = controller.stop(saturdayEvening + 4 * hour + 40 * 60_000L, zone)!!
+        assertEquals(180, record.minutes)
+        assertEquals("21:00", record.start)
+        assertNull(controller.current())
+    }
+
+    @Test
+    fun `a stop inside the hour records until the tap`() = runTest {
+        controller.start(page, saturdayEvening, zone)
+        controller.check(saturdayEvening + 3 * hour, zone)
+        val record = controller.stop(saturdayEvening + 3 * hour + 30 * 60_000L, zone)!!
+        assertEquals(210, record.minutes)
+    }
+
+    @Test
+    fun `starting a game started earlier ends the running one at the new start`() = runTest {
+        controller.start(page, saturdayEvening, zone) // Ring of Ash since 21:00
+        val tap = saturdayEvening + 90 * 60_000L // 22:30: Tin Orchard "started 30 min ago"
+        controller.start(tin, tap, zone, startedMinutesAgo = 30)
+        coVerify(exactly = 1) { games.addSessions(any()) }
+        coVerify { games.addSessions(match { it.single().page == page.path && it.single().start == "21:00" && it.single().minutes == 60 }) }
+        val running = RunningGame(tap - 30 * 60_000L, tin.path)
+        assertEquals(running, controller.current())
+        assertEquals(SessionCheck.first(running), SessionCheck.decode(check.value))
+        verify { platform.postRunning(running, "Tin Orchard", false) }
+    }
+
+    @Test
+    fun `a running session that started after the new start leaves no record`() = runTest {
+        controller.start(page, saturdayEvening, zone) // Ring of Ash since 21:00
+        val tap = saturdayEvening + 10 * 60_000L // 21:10: Tin Orchard "started 20 min ago", since 20:50
+        controller.start(tin, tap, zone, startedMinutesAgo = 20)
+        coVerify(exactly = 0) { games.addSessions(any()) }
+        assertEquals(RunningGame(tap - 20 * 60_000L, tin.path), controller.current())
+        verify { platform.cancelCheck() }
+    }
+
+    @Test
+    fun `a backdated start after an unanswered deadline ends the running one at the deadline`() = runTest {
+        controller.start(page, saturdayEvening, zone)
+        controller.check(saturdayEvening + 3 * hour, zone) // asked at 00:00, answer by 01:00
+        val tap = saturdayEvening + 4 * hour + 30 * 60_000L // 01:30, the end held back
+        controller.start(tin, tap, zone, startedMinutesAgo = 10)
+        coVerify { games.addSessions(match { it.single().page == page.path && it.single().minutes == 180 }) }
+        assertEquals(RunningGame(tap - 10 * 60_000L, tin.path), controller.current())
+    }
+
+    @Test
+    fun `a start whose running session can't be saved starts nothing`() = runTest {
+        controller.start(page, saturdayEvening, zone)
+        coEvery { games.addSessions(any()) } returns null
+        assertNull(controller.start(tin, saturdayEvening + hour, zone))
+        assertEquals(RunningGame(saturdayEvening, page.path), controller.current())
+        verify(exactly = 0) { platform.postRunning(any(), "Tin Orchard", any(), any()) }
+    }
+
+    // --- 13.4: nothing left behind, nothing interleaved ----------------------------------------
+
+    @Test
+    fun `a check with no session removes the running notification`() = runTest {
+        controller.check(saturdayEvening, zone)
+        verify { platform.cancelRunning() }
+        verify { platform.cancelAsk() }
+        coVerify { preferences.setGameSessionCheck(null) }
+        verify(exactly = 0) { platform.postRunning(any(), any(), any(), any()) }
+        verify(exactly = 0) { platform.scheduleCheck(any(), any()) }
+    }
+
+    @Test
+    fun `restore with no session clears the notification and the game night`() = runTest {
+        rule.value = "rule-1"
+        controller.restore(saturdayEvening)
+        verify { platform.cancelRunning() }
+        verify { platform.cancelAsk() }
+        coVerify { preferences.setGameSessionCheck(null) }
+        verify { platform.endGameNight("rule-1") }
+        verify(exactly = 0) { platform.postRunning(any(), any(), any(), any()) }
+        verify(exactly = 0) { platform.scheduleCheck(any(), any()) }
+    }
+
+    @Test
+    fun `keep playing with no session only takes the question away`() = runTest {
+        controller.keepPlaying(saturdayEvening)
+        verify { platform.cancelAsk() }
+        verify(exactly = 0) { platform.scheduleCheck(any(), any()) }
+        coVerify(exactly = 0) { preferences.setGameSessionCheck(any()) }
+    }
+
+    @Test
+    fun `a stop racing a check leaves no running notification`() = runTest {
+        controller.start(page, saturdayEvening, zone)
+        val events = mutableListOf<String>()
+        every { platform.postRunning(any(), any(), any(), any()) } answers { events += "posted" }
+        every { platform.cancelRunning() } answers { events += "cancelled" }
+        val read = CompletableDeferred<GamePage?>()
+        coEvery { games.page(page.path) } coAnswers { read.await() }
+
+        val checking = launch { controller.check(saturdayEvening + hour, zone) } // a Wait: posts the notification again
+        runCurrent() // the check reads the session's page
+        val stopping = launch { controller.stop(saturdayEvening + hour, zone) }
+        runCurrent() // the Stop comes in meanwhile
+        read.complete(page)
+        checking.join()
+        stopping.join()
+
+        assertEquals(listOf("posted", "cancelled"), events)
+        assertNull(controller.current())
+        assertNull(check.value)
+    }
+
+    @Test
+    fun `a return to the app while the check ends the session posts nothing back`() = runTest {
+        controller.start(page, saturdayEvening, zone)
+        controller.check(saturdayEvening + 3 * hour, zone)
+        val saving = CompletableDeferred<Set<LocalDate>?>()
+        coEvery { games.addSessions(any()) } coAnswers { saving.await() }
+        clearMocks(platform, answers = false)
+
+        val ending = launch { controller.check(saturdayEvening + 4 * hour, zone) }
+        runCurrent() // the end is saving the session
+        val restoring = launch { controller.restore(saturdayEvening + 4 * hour) }
+        runCurrent() // the app comes back meanwhile
+        saving.complete(setOf(LocalDate.of(2026, 11, 14)))
+        ending.join()
+        restoring.join()
+
+        assertNull(controller.current())
+        verify(exactly = 0) { platform.postRunning(any(), any(), any(), any()) }
+        // Nothing replaced (and so cancelled) the ending check's job.
+        verify(exactly = 0) { platform.scheduleCheck(any(), any()) }
+        verify(exactly = 0) { platform.cancelCheck() }
+    }
+
+    @Test
+    fun `a check cancelled while it waits for the lock schedules no look`() = runTest {
+        // 13.4 review: restore's REPLACE cancels the check's job, whose body still runs once the lock is free.
+        controller.start(page, saturdayEvening, zone)
+        val read = CompletableDeferred<GamePage?>()
+        coEvery { games.page(page.path) } coAnswers { read.await() }
+        clearMocks(platform, answers = false)
+
+        val restoring = launch { controller.restore(saturdayEvening + hour) }
+        runCurrent() // restore holds the lock, reading the page
+        val checking = launch { controller.check(saturdayEvening + hour, zone) }
+        runCurrent() // the check waits for the lock
+        checking.cancel()
+        read.complete(page)
+        restoring.join()
+        checking.join()
+
+        verify(exactly = 1) { platform.scheduleCheck(any(), false) }
+        verify(exactly = 0) { platform.scheduleCheck(any(), true) }
+    }
+
+    @Test
+    fun `refreshing days after a relink passes the old page's key`() = runTest {
+        val now = ZonedDateTime.of(2026, 11, 16, 9, 0, 0, 0, zone).toInstant().toEpochMilli()
+        controller.refreshDays(setOf(LocalDate.of(2026, 11, 14)), now, zone, replacingKeys = setOf("Old_Name"))
+        coVerify { games.applyPastDay(LocalDate.of(2026, 11, 14), LocalDate.of(2026, 11, 16), setOf("Old_Name")) }
+    }
+
+    @Test
+    fun `refreshing days edits this week's notes and burns today's`() = runTest {
+        val now = ZonedDateTime.of(2026, 11, 16, 9, 0, 0, 0, zone).toInstant().toEpochMilli()
+        controller.refreshDays(setOf(LocalDate.of(2026, 11, 14), LocalDate.of(2026, 11, 16)), now, zone)
+        coVerify { games.applyPastDay(LocalDate.of(2026, 11, 14), LocalDate.of(2026, 11, 16)) }
+        coVerify { dashboard.ensureDay(LocalDate.of(2026, 11, 16)) }
+        coVerify { dashboard.burnToDisk(LocalDate.of(2026, 11, 16)) }
+    }
+
+    // --- 13.4: the session notification's picture (P1) ----------------------------------------
+
+    @Test
+    fun `the large icon is posted after the first notification`() = runTest {
+        val icon = mockk<Bitmap>()
+        coEvery { notificationPicture.largeIcon(any(), any()) } returns icon
+        controller.start(page, saturdayEvening, zone)
+        verifyOrder {
+            platform.postRunning(any(), "Ring of Ash", false, null)
+            platform.postRunning(any(), "Ring of Ash", false, icon)
+        }
+        coVerify { notificationPicture.largeIcon(GameArtRules.initialsOnly("Ring of Ash"), any()) }
+
+        // A return to the app and a look post it at once, and the question carries it too.
+        clearMocks(platform, answers = false)
+        coEvery { games.page(page.path) } returns page
+        controller.restore(saturdayEvening + hour)
+        controller.check(saturdayEvening + 3 * hour, zone)
+        verify(exactly = 0) { platform.postRunning(any(), any(), any(), null) }
+        verify(exactly = 2) { platform.postRunning(any(), "Ring of Ash", false, icon) }
+        verify { platform.postAsk("Ring of Ash", saturdayEvening, any(), any(), icon) }
+
+        // A page that's gone: the initials of its file name.
+        coEvery { games.page(page.path) } returns null
+        controller.restore(saturdayEvening + 3 * hour + 5 * 60_000L)
+        coVerify { notificationPicture.largeIcon(GameArtRules.initialsOnly("Ring"), any()) }
+    }
+
+    @Test
+    fun `a picture that fails never holds the session back`() = runTest {
+        coEvery { notificationPicture.largeIcon(any(), any()) } throws IllegalStateException("no picture")
+        assertEquals(GameNightOutcome.ON, controller.start(page, saturdayEvening, zone))
+        assertEquals(RunningGame(saturdayEvening, page.path), controller.current())
+        verify(exactly = 1) { platform.postRunning(any(), "Ring of Ash", false, null) }
     }
 }

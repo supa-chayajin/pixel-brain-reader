@@ -3,6 +3,7 @@ package cloud.wafflecommons.pixelbrainreader
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -27,14 +28,21 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
+import cloud.wafflecommons.pixelbrainreader.data.games.GameArt
+import cloud.wafflecommons.pixelbrainreader.data.games.GamePage
+import cloud.wafflecommons.pixelbrainreader.data.games.GamesRepository
+import cloud.wafflecommons.pixelbrainreader.data.games.pictures.GamePictureSource
 import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
 import cloud.wafflecommons.pixelbrainreader.data.repository.AppThemeConfig
 import cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
 import cloud.wafflecommons.pixelbrainreader.data.web.ShareImportRepository
 import cloud.wafflecommons.pixelbrainreader.data.web.SharedContent
+import cloud.wafflecommons.pixelbrainreader.ui.games.COVER_NOT_SAVED
+import cloud.wafflecommons.pixelbrainreader.ui.games.coverMessage
 import cloud.wafflecommons.pixelbrainreader.ui.login.LoginScreen
 import cloud.wafflecommons.pixelbrainreader.ui.main.MainScreen
 import cloud.wafflecommons.pixelbrainreader.ui.main.MainViewModel
+import cloud.wafflecommons.pixelbrainreader.ui.share.SharedImageChooser
 import cloud.wafflecommons.pixelbrainreader.ui.theme.PixelBrainReaderTheme
 import cloud.wafflecommons.pixelbrainreader.widget.ui.WidgetNav
 import dagger.hilt.android.AndroidEntryPoint
@@ -64,6 +72,12 @@ class MainActivity : FragmentActivity() {
     @Inject
     lateinit var privateVaultSession: cloud.wafflecommons.pixelbrainreader.data.privatevault.PrivateVaultSession
 
+    @Inject
+    lateinit var gamesRepository: GamesRepository
+
+    @Inject
+    lateinit var gamePictures: GamePictureSource
+
     private val viewModel: MainViewModel by viewModels()
 
     /**
@@ -84,6 +98,16 @@ class MainActivity : FragmentActivity() {
 
     /** A widget/shortcut quick-capture request awaiting login (opens the new-note flow on Home). */
     private var pendingCapture by mutableStateOf(false)
+
+    /**
+     * An image shared to the app while the owner chooses what it becomes (13.4, P5): a photo note or
+     * a game's own picture. Kept across a recreation ([PENDING_SHARED_IMAGE]) until it is kept or
+     * dropped, so a theme switch mid-choice offers it again.
+     */
+    private var pendingSharedImage by mutableStateOf<Uri?>(null)
+
+    /** The game pages the chooser offers for [pendingSharedImage], with their pictures; null while read. */
+    private var sharedImageGames by mutableStateOf<SharedImageGames?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -204,6 +228,25 @@ class MainActivity : FragmentActivity() {
                             }
                         )
                     }
+
+                    // 13.4 (P5): a shared image, once the game pages are read: a photo note or a game's picture.
+                    val sharedImage = pendingSharedImage
+                    val sharedGames = sharedImageGames
+                    if (sharedImage != null && sharedGames != null) {
+                        SharedImageChooser(
+                            pages = sharedGames.pages,
+                            arts = sharedGames.arts,
+                            onPhotoNote = {
+                                dropSharedImage()
+                                importSharedPhoto(sharedImage)
+                            },
+                            onGamePicture = { page -> saveSharedCover(sharedImage, page) },
+                            onDismiss = {
+                                dropSharedImage()
+                                if (intent?.action == Intent.ACTION_SEND) finish()
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -215,6 +258,13 @@ class MainActivity : FragmentActivity() {
         if (savedInstanceState == null && !launchedFromHistory) {
             handleIntent(intent)
         }
+        // 13.4 (P5): a shared image still waiting for its choice when the activity was recreated.
+        savedInstanceState?.getParcelable(PENDING_SHARED_IMAGE, Uri::class.java)?.let { offerSharedImage(it) }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        pendingSharedImage?.let { outState.putParcelable(PENDING_SHARED_IMAGE, it) }
     }
 
     @OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
@@ -260,6 +310,77 @@ class MainActivity : FragmentActivity() {
         }
     }
 
+    /**
+     * An image shared to the app (13.4, P5): the owner chooses what it becomes, a photo note (X2) or
+     * a game's own picture ([SharedImageChooser]). Only from another app's provider, as a photo note
+     * (the same check, refused the same way). Without a login or a game page, a photo note as before.
+     */
+    private fun offerSharedImage(uri: Uri?) {
+        if (uri == null || !isForeignImage(uri)) {
+            // Says it can't be read, and ends a share.
+            importSharedPhoto(uri)
+            return
+        }
+        pendingSharedImage = uri
+        sharedImageGames = null
+        lifecycleScope.launch {
+            val games = sharedImageGamesOrNull()
+            // Another share replaced this one meanwhile, or the choice was already made.
+            if (pendingSharedImage != uri) return@launch
+            if (games == null) {
+                dropSharedImage()
+                importSharedPhoto(uri)
+            } else {
+                sharedImageGames = games
+            }
+        }
+    }
+
+    /** The game pages a shared image can be the picture of, with their pictures; null before a login or without a page. */
+    private suspend fun sharedImageGamesOrNull(): SharedImageGames? = try {
+        val loggedIn = withContext(Dispatchers.IO) { secretManager.getToken() != null }
+        val pages = if (loggedIn) gamesRepository.pages() else emptyList()
+        if (pages.isEmpty()) null else SharedImageGames(pages, gamePictures.artFor(pages))
+    } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        null
+    }
+
+    /**
+     * The shared image as [page]'s own picture (13.4, P5): re-encoded on the phone and kept next to
+     * the page ([GamesRepository.setCover], refused on a read-only device), then the share ends. The
+     * image stays pending until then: a recreation mid-save offers the choice again.
+     */
+    private fun saveSharedCover(uri: Uri, page: GamePage) {
+        val launchedForShare = intent?.action == Intent.ACTION_SEND
+        sharedImageGames = null
+        lifecycleScope.launch {
+            val message = try {
+                val jpeg = photoReader.prepareCover(uri)
+                coverMessage(gamesRepository.setCover(page.path, jpeg), done = "Picture saved for ${page.title}")
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: java.io.IOException) {
+                "That image can't be read"
+            } catch (e: Exception) {
+                COVER_NOT_SAVED
+            }
+            dropSharedImage()
+            android.widget.Toast.makeText(this@MainActivity, message, android.widget.Toast.LENGTH_LONG).show()
+            if (launchedForShare) finish()
+        }
+    }
+
+    private fun dropSharedImage() {
+        pendingSharedImage = null
+        sharedImageGames = null
+    }
+
+    /** Another app's image: a `content:` address none of this app's providers serves. */
+    private fun isForeignImage(uri: Uri): Boolean =
+        cloud.wafflecommons.pixelbrainreader.data.capture.PhotoCapture.isForeign(uri.scheme, uri.authority, ownAuthorities())
+
     /** The authorities of this app's own content providers, its libraries' included. */
     private fun ownAuthorities(): Set<String> =
         packageManager.getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(PackageManager.GET_PROVIDERS.toLong()))
@@ -278,9 +399,10 @@ class MainActivity : FragmentActivity() {
                 finish()
                 return
             }
-            // 13.0 (X2): an image shared from another app becomes a photo capture in the inbox.
+            // 13.0 (X2): an image shared from another app becomes a photo capture in the inbox; 13.4
+            // (P5): or a game's own picture, the owner's choice.
             if (intent.type?.startsWith("image/") == true) {
-                importSharedPhoto(intent.getParcelableExtra(Intent.EXTRA_STREAM, android.net.Uri::class.java))
+                offerSharedImage(intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java))
                 return
             }
             val text = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()
@@ -339,5 +461,13 @@ class MainActivity : FragmentActivity() {
         // Waits for connectivity rather than failing the import when offline.
         cloud.wafflecommons.pixelbrainreader.data.workers.ImportWorker.enqueue(this, url)
         android.widget.Toast.makeText(this, "Importing Article...", android.widget.Toast.LENGTH_SHORT).show()
+    }
+
+    /** The game pages a shared image's chooser offers, and each one's picture by path (13.4, P5). */
+    private class SharedImageGames(val pages: List<GamePage>, val arts: Map<String, GameArt>)
+
+    private companion object {
+        /** The saved state's key of a shared image waiting for its choice (13.4): saved state only. */
+        const val PENDING_SHARED_IMAGE = "pending_shared_image"
     }
 }

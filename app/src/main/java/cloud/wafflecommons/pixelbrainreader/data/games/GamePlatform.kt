@@ -10,6 +10,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.graphics.drawable.Icon
 import android.net.Uri
 import android.os.Build
@@ -65,6 +66,7 @@ class GamePlatform @Inject constructor(@param:ApplicationContext private val con
             .addAction(
                 Notification.Action.Builder(Icon.createWithResource(context, R.drawable.ic_notification), "Stop", stopIntent()).build()
             )
+        largeIcon?.let { builder.setLargeIcon(Icon.createWithBitmap(it)) }
         if (hasMap) {
             builder.addAction(
                 Notification.Action.Builder(Icon.createWithResource(context, R.drawable.ic_notification), "Open the map", openMap()).build()
@@ -84,9 +86,10 @@ class GamePlatform @Inject constructor(@param:ApplicationContext private val con
 
     /**
      * "Still playing?" (13.1): an alerting notification beside the running one, with Keep playing and
-     * Stop. [endsAt] is when the session will be recorded as ending if nobody answers by [answerBy].
+     * Stop. [endsAt] is when the session will be recorded as ending if nobody answers by [answerBy];
+     * [largeIcon] is the game's picture (13.4, P1).
      */
-    fun postAsk(title: String, startMillis: Long, endsAt: Long, answerBy: Long) {
+    fun postAsk(title: String, startMillis: Long, endsAt: Long, answerBy: Long, largeIcon: Bitmap? = null) {
         if (!notificationsAllowed()) return
         val manager = manager() ?: return
         val hhmm = DateTimeFormatter.ofPattern("HH:mm")
@@ -94,7 +97,7 @@ class GamePlatform @Inject constructor(@param:ApplicationContext private val con
         val since = LocalTime.ofInstant(Instant.ofEpochMilli(startMillis), zone).format(hhmm)
         val end = LocalTime.ofInstant(Instant.ofEpochMilli(endsAt), zone).format(hhmm)
         val by = LocalTime.ofInstant(Instant.ofEpochMilli(answerBy), zone).format(hhmm)
-        val notification = Notification.Builder(context, CHANNEL_CHECK)
+        val builder = Notification.Builder(context, CHANNEL_CHECK)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("Still playing $title?")
             .setContentText("Playing since $since. No answer by $by: the session ends at $end.")
@@ -109,8 +112,8 @@ class GamePlatform @Inject constructor(@param:ApplicationContext private val con
             .addAction(
                 Notification.Action.Builder(Icon.createWithResource(context, R.drawable.ic_notification), "Stop", stopIntent()).build()
             )
-            .build()
-        manager.notify(ID_CHECK, notification)
+        largeIcon?.let { builder.setLargeIcon(Icon.createWithBitmap(it)) }
+        manager.notify(ID_CHECK, builder.build())
     }
 
     fun cancelAsk() {

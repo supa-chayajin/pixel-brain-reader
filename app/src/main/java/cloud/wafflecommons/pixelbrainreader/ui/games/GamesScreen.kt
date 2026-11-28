@@ -196,7 +196,7 @@ fun GamesScreen(
     // The pickers show each game with its picture (13.4, P1).
     val arts = remember(state.rows) { state.rows.associate { it.page.path to it.art } }
     if (picking) {
-        GamePickerDialog(
+        GameChooserDialog(
             pages = state.pages,
             arts = arts,
             lastPlayed = state.lastPlayedPath,
@@ -209,13 +209,27 @@ fun GamesScreen(
         )
     }
     linking?.let { title ->
-        GamePickerDialog(
+        GameChooserDialog(
+            pages = state.pages,
+            arts = arts,
             title = "Link \"${title.name}\" to",
             onPick = { page, _ ->
                 linking = null
                 viewModel.link(title, page)
             },
             onDismiss = { linking = null }
+        )
+    }
+    relinking?.let { orphan ->
+        GameChooserDialog(
+            pages = state.pages,
+            arts = arts,
+            title = "Link the sessions of \"${orphan.name}\" to",
+            onPick = { page, _ ->
+                relinking = null
+                viewModel.linkOrphan(orphan, page)
+            },
+            onDismiss = { relinking = null }
         )
     }
     if (state.askAccess) {
@@ -417,19 +431,110 @@ private fun XboxLineRow(xbox: XboxLine, onOpenXbox: () -> Unit) {
  * pill over it with Stop (a writing device), then "Still playing?" and Keep playing while asked.
  */
 @Composable
-fun GamePickerDialog(
-    pages: List<GamePage>,
-    onPick: (GamePage, Int) -> Unit,
-    onDismiss: () -> Unit,
-    title: String = "Start a session",
-    lastPlayed: String? = null,
-    offerEarlier: Boolean = false
-) {
-    var query by rememberSaveable { mutableStateOf("") }
-    var minutesAgo by rememberSaveable { mutableIntStateOf(0) }
-    val ordered = remember(pages, lastPlayed) {
-        pages.sortedWith(
-            compareBy({ it.path != lastPlayed }, { it.state != GameState.PLAYING }, { it.state != GameState.NEXT }, { it.title.lowercase() })
+private fun NowPlayingCard(state: GamesUiState, running: RunningGame, actions: GamesActions) {
+    val title = state.runningTitle ?: "A game"
+    val art = state.runningArt ?: GameArtRules.initialsOnly(title)
+    val tone = toneFor(art.key)
+    val asked = state.runningCheck?.takeIf { it.sessionStart == running.startMillis }
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.extraLarge,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+    ) {
+        Box(Modifier.fillMaxWidth().height(GamePictureSizes.NowPlaying)) {
+            // The card's shape clips the picture: none of its own (P6: its tone under it, no tint).
+            GamePicture(art, Modifier.fillMaxSize(), shape = null, sizeHint = GamePictures.HERO_SIZE_HINT)
+            Row(
+                modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                    Surface(shape = CircleShape, color = tone.container, contentColor = tone.content) {
+                        Text(
+                            "$title · since ${clock(running.startMillis)}",
+                            style = MaterialTheme.typography.labelLarge,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                        )
+                    }
+                }
+                if (!state.readOnly) {
+                    Spacer(Modifier.width(8.dp))
+                    FilledTonalButton(onClick = actions.onStop, shapes = ButtonDefaults.shapes()) {
+                        Icon(Icons.Rounded.Stop, contentDescription = null)
+                        Text("Stop", modifier = Modifier.padding(start = 6.dp))
+                    }
+                }
+            }
+        }
+        // "Still playing?" (13.1): unanswered, the session ends at the time it was asked.
+        val askedAt = asked?.askedAt
+        if (asked != null && askedAt != null && !state.readOnly) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    "Still playing? No answer by ${clock(askedAt + GameSessionGuard.ANSWER_MS)}: the session ends at ${clock(asked.nextAskAt)}.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                OutlinedButton(onClick = actions.onKeepPlaying, shapes = ButtonDefaults.shapes()) { Text("Keep playing") }
+            }
+        }
+    }
+}
+
+/** A group's heading with its count (13.4), 8 dp above what it heads. */
+@Composable
+private fun GroupHeading(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.titleLargeEmphasized,
+        modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp).semantics { heading() }
+    )
+}
+
+/**
+ * One game of Next, Backlog or Done (13.4, P2): its square cover in the game's own shape, the title
+ * under it, "Paused" or "100%" when so; the cell reads as one and opens the page. A map button sits
+ * at the picture's top end when the page has maps, named with the game.
+ */
+@Composable
+private fun GameCell(row: GameRow, onOpen: () -> Unit, onOpenMap: () -> Unit, modifier: Modifier = Modifier) {
+    val caption = when (row.page.state) {
+        GameState.PAUSED -> "Paused"
+        GameState.HUNDRED -> "100%"
+        else -> null
+    }
+    Column(
+        modifier = modifier
+            // The space to the next row of cells, outside the tap target.
+            .padding(bottom = BLOCK_PAD)
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.large)
+            .clickable(role = Role.Button, onClick = onOpen)
+            .padding(bottom = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Box(Modifier.fillMaxWidth().aspectRatio(1f)) {
+            // The cell reads as its title: the initials would merge into it ("LB, Lantern Bay").
+            GamePicture(row.art, Modifier.fillMaxSize().clearAndSetSemantics {}, contentDescription = null)
+            if (row.page.maps.isNotEmpty()) {
+                FilledTonalIconButton(
+                    onClick = onOpenMap,
+                    shapes = IconButtonDefaults.shapes(),
+                    modifier = Modifier.align(Alignment.TopEnd)
+                ) {
+                    Icon(Icons.Rounded.Map, contentDescription = "Open the map of ${row.page.title}")
+                }
+            }
+        }
+        Text(
+            row.page.title,
+            style = MaterialTheme.typography.labelLarge,
+            textAlign = TextAlign.Center,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 4.dp)
         )
         if (caption != null) {
             Text(caption, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)

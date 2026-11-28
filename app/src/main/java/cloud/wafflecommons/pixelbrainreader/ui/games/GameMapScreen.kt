@@ -60,11 +60,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
+import cloud.wafflecommons.pixelbrainreader.data.games.GameArt
 import cloud.wafflecommons.pixelbrainreader.data.games.GameMap
 import cloud.wafflecommons.pixelbrainreader.data.games.GameMaps
 import cloud.wafflecommons.pixelbrainreader.data.games.GameSessionController
 import cloud.wafflecommons.pixelbrainreader.data.games.GamesRepository
 import cloud.wafflecommons.pixelbrainreader.data.games.MapEditResult
+import cloud.wafflecommons.pixelbrainreader.data.games.pictures.GamePictureSource
 import cloud.wafflecommons.pixelbrainreader.data.privacy.NetPurpose
 import cloud.wafflecommons.pixelbrainreader.data.privacy.PrivacyLedger
 import cloud.wafflecommons.pixelbrainreader.data.web.GuardedWebViewClient
@@ -97,7 +99,9 @@ data class GameMapUiState(
      * A read-only device changes no map (13.3, ME3): the browser's controls only hide, a full-screen
      * browser having no room for the notice.
      */
-    val readOnly: Boolean = VaultWriteGate.readOnly
+    val readOnly: Boolean = VaultWriteGate.readOnly,
+    /** The game's picture for the browser's header (13.4, P1); null until read, or without a game. */
+    val art: GameArt? = null
 )
 
 /**
@@ -105,12 +109,15 @@ data class GameMapUiState(
  * the running session's game (the Live Update's "Open the map" carries a fixed key, no path).
  * 13.3 (ME3): the map shown can be changed from here, given the page the browser is at, or kept
  * beside as another map; each edit reads the page from disk and names the map by its address.
+ * 13.4: the map picked from the Maps menu is kept in the saved state ([SELECTED]), so a recreation,
+ * or the process coming back, reopens it rather than the route's own index.
  */
 @HiltViewModel
 class GameMapViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val games: GamesRepository,
-    private val controller: GameSessionController
+    private val controller: GameSessionController,
+    private val pictures: GamePictureSource
 ) : ViewModel() {
 
     private val pageArg: String = savedStateHandle.get<String>("page").orEmpty()
@@ -262,6 +269,7 @@ fun GameMapScreen(onBack: () -> Unit, onOpenGames: () -> Unit, viewModel: GameMa
     }
     MapBrowser(
         title = state.title,
+        art = state.art,
         map = map,
         maps = state.maps,
         readOnly = state.readOnly,
@@ -278,6 +286,7 @@ fun GameMapScreen(onBack: () -> Unit, onOpenGames: () -> Unit, viewModel: GameMa
 @Composable
 private fun MapBrowser(
     title: String,
+    art: GameArt?,
     map: GameMap,
     maps: List<GameMap>,
     readOnly: Boolean,
@@ -321,12 +330,16 @@ private fun MapBrowser(
         val view = holder.view
         if (view != null && view.canGoBack()) view.goBack() else onBack()
     }
+    // 13.4 (P1): the game's picture in the header's emblem, the map's emblem until it is read.
+    val headerPicture: (@Composable (Dp) -> Unit)? =
+        art?.let { game -> @Composable { size: Dp -> GamePicture(game, Modifier.size(size), contentDescription = null) } }
     Scaffold(
         topBar = {
             cloud.wafflecommons.pixelbrainreader.ui.components.CortexTopAppBar(
                 title = title,
                 subtitle = "${map.label} · ${map.site}",
                 icon = androidx.compose.material.icons.Icons.Rounded.Map,
+                picture = headerPicture,
                 navigationIcon = {
                     IconButton(onClick = onBack, shapes = IconButtonDefaults.shapes()) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back") }
                 },

@@ -1,14 +1,20 @@
 package cloud.wafflecommons.pixelbrainreader.ui.games
 
+import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import cloud.wafflecommons.pixelbrainreader.data.capture.PhotoReader
 import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.games.AchievementRecord
 import cloud.wafflecommons.pixelbrainreader.data.games.AchievementSetFile
+import cloud.wafflecommons.pixelbrainreader.data.games.ChecklistItem
 import cloud.wafflecommons.pixelbrainreader.data.games.ChecklistSection
+import cloud.wafflecommons.pixelbrainreader.data.games.CoverEditResult
+import cloud.wafflecommons.pixelbrainreader.data.games.GameArt
 import cloud.wafflecommons.pixelbrainreader.data.games.GameChecklists
 import cloud.wafflecommons.pixelbrainreader.data.games.GameConsole
+import cloud.wafflecommons.pixelbrainreader.data.games.GameCovers
 import cloud.wafflecommons.pixelbrainreader.data.games.GameDays
 import cloud.wafflecommons.pixelbrainreader.data.games.GameDayLine
 import cloud.wafflecommons.pixelbrainreader.data.games.GameHistoryEntry
@@ -25,7 +31,12 @@ import cloud.wafflecommons.pixelbrainreader.data.games.MapEditResult
 import cloud.wafflecommons.pixelbrainreader.data.games.RunningGame
 import cloud.wafflecommons.pixelbrainreader.data.games.TrophyRecord
 import cloud.wafflecommons.pixelbrainreader.data.games.TrophySetFile
+import cloud.wafflecommons.pixelbrainreader.data.games.pictures.GamePictureSource
+import cloud.wafflecommons.pixelbrainreader.data.modes.ContextMode
+import cloud.wafflecommons.pixelbrainreader.data.modes.ModeAppearance
+import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
 import cloud.wafflecommons.pixelbrainreader.data.system.AppClock
+import cloud.wafflecommons.pixelbrainreader.ui.components.READ_ONLY_NOTICE
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
@@ -34,9 +45,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.io.IOException
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -114,8 +128,12 @@ data class GamePageUiState(
     val checklists: List<ChecklistSection> = emptyList(),
     /** The page's own text, without its checklists and 🏆 section (shown as cards). */
     val prose: String = "",
-    /** The game's icon: PSN's when a linked title has one, else Xbox's. */
-    val iconUrl: String? = null,
+    /** The game's picture (13.4, P3): the owner's, else PlayStation's, else Xbox's, else its initials. */
+    val art: GameArt? = null,
+    /** `game_cover` names the app's own file beside the page (13.4, P5): it can be removed here. */
+    val hasOwnPicture: Boolean = false,
+    /** A picture is being read or saved: its buttons wait. */
+    val coverBusy: Boolean = false,
     /** A line per day played, newest first. */
     val days: List<Pair<LocalDate, GameDayLine>> = emptyList(),
     /** Each session of the last year, newest first: the manual ones can be fixed (13.1). */
@@ -134,7 +152,10 @@ class GamePageViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val games: GamesRepository,
     private val controller: GameSessionController,
-    private val clock: AppClock
+    private val clock: AppClock,
+    private val pictures: GamePictureSource,
+    private val photoReader: PhotoReader,
+    private val modesRepository: ModesRepository
 ) : ViewModel() {
 
     private val path: String = savedStateHandle.get<String>("page").orEmpty()
@@ -147,7 +168,7 @@ class GamePageViewModel @Inject constructor(
 
     private val _messages = Channel<String>(Channel.BUFFERED)
 
-    /** What each map edit did (13.3, ME1), for the page's snackbar. */
+    /** What each map or picture edit did (13.3, ME1; 13.4, P5), for the page's snackbar. */
     val messages: Flow<String> = _messages.receiveAsFlow()
 
     init {
@@ -158,11 +179,13 @@ class GamePageViewModel @Inject constructor(
     }
 
     private suspend fun load(running: RunningGame?, today: LocalDate) {
+        // The labels follow the day even when the read below fails.
+        _state.update { it.copy(today = today) }
         try {
             val content = games.pageContent(path)
             val page = content?.let { GamePages.parse(path, it) }
             if (page == null) {
-                _state.update { it.copy(loading = false, page = null) }
+                _state.update { it.copy(loading = false, page = null, art = null, hasOwnPicture = false) }
                 return
             }
             val pages = games.pages()
@@ -217,14 +240,16 @@ class GamePageViewModel @Inject constructor(
                     unreadableMaps = GameMapEdits.unreadable(content),
                     checklists = GameChecklists.sections(content),
                     prose = GamePages.prose(content),
-                    iconUrl = titles.firstNotNullOfOrNull { t -> t.imageUrl } ?: xboxTitles.firstNotNullOfOrNull { t -> t.imageUrl },
+                    art = art,
+                    hasOwnPicture = page.cover?.let { cover -> GameCovers.namesOwnFile(page, cover) } == true,
                     days = days,
                     sessions = sessions.sortedWith(compareByDescending<GameSessionRecord> { s -> s.date }.thenByDescending { s -> s.start ?: "" }),
                     history = history ?: games.history(listOf(page)).also { history = it },
                     folderNotes = games.folderNotes(page),
                     running = running,
                     askProject = games.config().askProject,
-                    readOnly = VaultWriteGate.readOnly
+                    readOnly = VaultWriteGate.readOnly,
+                    today = today
                 )
             }
         } catch (e: CancellationException) {

@@ -192,10 +192,15 @@ fun DailyNoteScreen(
 
     var showAddTimelineDialog by remember { mutableStateOf(false) }
     var editTimelineEntry by remember { mutableStateOf<TimelineEntryEntity?>(null) }
-    // The day's game lines (12.17): shown among the board's entries, never part of the board.
+    // The day's game lines (12.17): shown among the board's entries, never part of the board. 13.4:
+    // the page's own day only (the day before's rows stay until the new day's are read), each drawn
+    // with its game's picture on screen; the burned line stays text (settled decision #7).
     val gameRows by gamesViewModel.rows.collectAsStateWithLifecycle()
     LaunchedEffect(state.date) { gamesViewModel.show(state.date) }
-    val timelineEvents = state.timelineEvents + gameRows
+    val todaysGameRows = remember(gameRows, state.date) { gameRowsOn(gameRows, state.date) }
+    val gameArts = remember(todaysGameRows) { todaysGameRows.associate { it.entry.id to it.art } }
+    val gameArtOf: (TimelineEntryEntity) -> cloud.wafflecommons.pixelbrainreader.data.games.GameArt? = { entry -> gameArts[entry.id] }
+    val timelineEvents = state.timelineEvents + todaysGameRows.map { it.entry }
     val onTimelineTap: (TimelineEntryEntity) -> Unit = { entry ->
         when {
             DailyGamesViewModel.isGameRow(entry) -> onOpenGame(DailyGamesViewModel.pageOf(entry))
@@ -601,7 +606,7 @@ fun DailyNoteScreen(
                                     Column {
                                         TimelineHeader()
                                         Spacer(Modifier.height(8.dp))
-                                        TimelineList(events = timelineEvents, onEdit = onTimelineTap)
+                                        TimelineList(events = timelineEvents, onEdit = onTimelineTap, artOf = gameArtOf)
                                     }
                                 }
                             }
@@ -707,7 +712,7 @@ fun DailyNoteScreen(
                                             Column(modifier = Modifier.weight(0.4f)) {
                                                 TimelineHeader()
                                                 Spacer(Modifier.height(8.dp))
-                                                TimelineList(events = timelineEvents, onEdit = onTimelineTap)
+                                                TimelineList(events = timelineEvents, onEdit = onTimelineTap, artOf = gameArtOf)
                                             }
                                             Column(modifier = Modifier.weight(0.6f)) {
                                                 JournalHeader()
@@ -964,8 +969,13 @@ private fun JournalHeader(modifier: Modifier = Modifier) {
     }
 }
 
+/** The day's timeline; [artOf] gives a game line its game's picture (13.4, P1), null for any other entry. */
 @Composable
-private fun TimelineList(events: List<TimelineEntryEntity>, onEdit: (TimelineEntryEntity) -> Unit) {
+private fun TimelineList(
+    events: List<TimelineEntryEntity>,
+    onEdit: (TimelineEntryEntity) -> Unit,
+    artOf: (TimelineEntryEntity) -> cloud.wafflecommons.pixelbrainreader.data.games.GameArt? = { null }
+) {
     if (events.isEmpty()) {
         Text(
             text = "No events recorded yet.",
@@ -980,7 +990,8 @@ private fun TimelineList(events: List<TimelineEntryEntity>, onEdit: (TimelineEnt
                 TimelineItem(
                     event = event,
                     isLast = index == sortedEvents.lastIndex,
-                    onClick = { onEdit(event) }
+                    onClick = { onEdit(event) },
+                    art = artOf(event)
                 )
             }
         }
@@ -988,7 +999,12 @@ private fun TimelineList(events: List<TimelineEntryEntity>, onEdit: (TimelineEnt
 }
 
 @Composable
-private fun TimelineItem(event: TimelineEntryEntity, isLast: Boolean, onClick: () -> Unit) {
+private fun TimelineItem(
+    event: TimelineEntryEntity,
+    isLast: Boolean,
+    onClick: () -> Unit,
+    art: cloud.wafflecommons.pixelbrainreader.data.games.GameArt? = null
+) {
     Row(modifier = Modifier.height(IntrinsicSize.Min).clickable { onClick() }.padding(vertical = 4.dp)) {
         // Time Column & Line
         Column(
@@ -1023,14 +1039,31 @@ private fun TimelineItem(event: TimelineEntryEntity, isLast: Boolean, onClick: (
         }
         
         Spacer(modifier = Modifier.width(12.dp))
-        
-        // Content
-        Text(
-            text = event.content,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(bottom = 24.dp) // Spacing for next item
-        )
+
+        // Content. 13.4 (P1): a game line shows its game's picture first, on screen only. Its fixed size
+        // answers this row's intrinsic measure itself: the picture's own layout can't.
+        if (art != null) {
+            Row(modifier = Modifier.padding(bottom = 24.dp)) {
+                cloud.wafflecommons.pixelbrainreader.ui.games.GamePicture(
+                    art = art,
+                    modifier = Modifier.size(cloud.wafflecommons.pixelbrainreader.ui.games.GamePictureSizes.Daily),
+                    contentDescription = null
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = event.content,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+        } else {
+            Text(
+                text = event.content,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(bottom = 24.dp) // Spacing for next item
+            )
+        }
     }
 }
 

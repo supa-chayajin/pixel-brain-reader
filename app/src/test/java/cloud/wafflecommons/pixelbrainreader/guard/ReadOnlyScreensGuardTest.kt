@@ -62,7 +62,10 @@ class ReadOnlyScreensGuardTest {
         // for the notice), and the share screen's "Add as a game map" (never reached on a read-only
         // device: MainActivity finishes a share there).
         "ui/games/GameMapScreen.kt",
-        "ui/share/ShareImportScreen.kt"
+        "ui/share/ShareImportScreen.kt",
+        // 13.4 (P5): a shared image's choice, a photo note or a game's picture (never reached on a
+        // read-only device either: MainActivity finishes a share there; it asks nothing if it were).
+        "ui/share/SharedImageChooser.kt"
     )
 
     @Test

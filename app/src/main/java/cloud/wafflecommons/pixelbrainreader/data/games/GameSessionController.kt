@@ -4,6 +4,8 @@ import android.graphics.Bitmap
 import android.util.Log
 import cloud.wafflecommons.pixelbrainreader.data.daily.Shutdown
 import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
+import cloud.wafflecommons.pixelbrainreader.data.games.pictures.GameNotificationPicture
+import cloud.wafflecommons.pixelbrainreader.data.games.pictures.GamePictureSource
 import cloud.wafflecommons.pixelbrainreader.data.modes.ContextMode
 import cloud.wafflecommons.pixelbrainreader.data.modes.ModeResolver
 import cloud.wafflecommons.pixelbrainreader.data.modes.ModesConfig
@@ -76,8 +78,16 @@ class GameSessionController @Inject constructor(
     private val games: GamesRepository,
     private val platform: GamePlatform,
     private val modesRepository: ModesRepository,
-    private val dashboardRepository: DailyDashboardRepository
+    private val dashboardRepository: DailyDashboardRepository,
+    private val pictureSource: GamePictureSource,
+    private val notificationPicture: GameNotificationPicture
 ) {
+    /**
+     * Orders start, stop, check, Keep playing and restore (13.4). Not reentrant: under it only the
+     * private helpers run, never one of those five.
+     */
+    private val lock = Mutex()
+
     val running: Flow<RunningGame?> = preferences.gameSession.map(RunningGame::decode)
 
     /** The running session, read as stored (it takes no lock). */
