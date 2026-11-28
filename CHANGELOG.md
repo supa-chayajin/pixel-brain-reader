@@ -95,7 +95,8 @@ owner's interviews of 27 and 28 November, planned in
 - The device tests use Espresso 3.7.0 (Android 16 removed what 3.6.1 called); the app's own
   dependencies are unchanged. Approved by the owner (settled decision #9).
 - Checked on the emulator against the sandbox vault (the Feeds tab with a real feed, Settings and
-  its search, drag to reorder) before the Fold.
+  its search, drag to reorder), then on the Fold: the signed APK installed in place over 13.3.0,
+  and the owner's check passed. The read-only tablet wasn't checked.
 
 ## [13.3.0] — 2026-11-27
 
