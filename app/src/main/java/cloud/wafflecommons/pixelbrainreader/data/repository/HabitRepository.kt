@@ -164,13 +164,16 @@ class HabitRepository @Inject constructor(
         }
     }
 
+    /** config.json as the import reads it (Gson: absent keys stay null, see [HabitConfigDto]). */
+    private fun parseConfigs(content: String): List<HabitConfigDto>? =
+        gson.fromJson(content, object : TypeToken<List<HabitConfigDto>>() {}.type)
+
     suspend fun importConfigFromJson() = withContext(Dispatchers.IO) {
         try {
             val content = fileRepository.readFile(configFile)
             if (content.isNullOrBlank()) return@withContext
 
-            val type = object : TypeToken<List<HabitConfigDto>>() {}.type
-            val configs: List<HabitConfigDto> = gson.fromJson(content, type) ?: return@withContext
+            val configs: List<HabitConfigDto> = parseConfigs(content) ?: return@withContext
             val entities = configs.map { it.toEntity() }
             // Unchanged → no delete + re-insert, so no invalidation of every habit observer.
             if (entities.toSet() == habitDao.getAllConfigs().toSet()) return@withContext
@@ -186,34 +189,35 @@ class HabitRepository @Inject constructor(
         }
     }
 
+    /** Every habit config as config.json holds it. */
+    private suspend fun configDtos(): List<HabitConfigDto> = habitDao.getAllConfigs()
+        .map { entity ->
+            HabitConfigDto(
+                id = entity.id,
+                title = entity.title,
+                description = entity.description,
+                frequency = entity.frequency,
+                type = entity.type,
+                targetValue = entity.targetValue,
+                unit = entity.unit,
+                color = entity.color,
+                icon = entity.icon,
+                autoSource = entity.autoSource,
+                createdDate = entity.createdDate,
+                archived = entity.archived,
+                sortOrder = entity.sortOrder,
+                scheduleMode = entity.scheduleMode,
+                intervalCount = entity.intervalCount,
+                intervalUnit = entity.intervalUnit,
+                custody = entity.custody.ifEmpty { null }
+            )
+        }
+
     suspend fun exportConfigToJson() = withContext(Dispatchers.IO) {
         try {
             fileRepository.createLocalFolder(habitsDir)
-
-            val dtos = habitDao.getAllConfigs()
-                .map { entity ->
-                    HabitConfigDto(
-                        id = entity.id,
-                        title = entity.title,
-                        description = entity.description,
-                        frequency = entity.frequency,
-                        type = entity.type,
-                        targetValue = entity.targetValue,
-                        unit = entity.unit,
-                        color = entity.color,
-                        icon = entity.icon,
-                        autoSource = entity.autoSource,
-                        createdDate = entity.createdDate,
-                        archived = entity.archived,
-                        sortOrder = entity.sortOrder,
-                        scheduleMode = entity.scheduleMode,
-                        intervalCount = entity.intervalCount,
-                        intervalUnit = entity.intervalUnit,
-                        custody = entity.custody.ifEmpty { null }
-                    )
-                }
-
-            fileRepository.saveFileLocally(configFile, gson.toJson(dtos))
+            // 13.4: a config.json that no longer parses is moved aside, never overwritten.
+            VaultListFiles.replace(fileRepository, configFile, gson.toJson(configDtos()), ::parseConfigs)
             Log.d("HabitRepository", "Exported configs to JSON successfully")
         } catch (e: CancellationException) {
             throw e
@@ -223,19 +227,31 @@ class HabitRepository @Inject constructor(
     }
 
     /**
-     * Settings "Export all to vault": writes habits + rooms + chores JSON, then runs a full
-     * commit → pull → push. Throws on any failure so the Settings screen reports it — the previous
-     * push-only version ignored the push result and failed silently whenever the remote was ahead.
+     * Repair's "Write them back to the vault" (13.4, S7): the habits' config.json, then the home's
+     * rooms.json and chores.json, from Room, then a full commit → pull → push. A file that no longer
+     * parses is moved aside first; a file whose items the app holds none of is left as it is, and the
+     * files left so are returned (Repair says to reload from the vault first). Throws on any failure
+     * (a write, a file that couldn't be kept aside, the sync) so Repair reports it.
      */
-    suspend fun performBulkConfigSync() = withContext(Dispatchers.IO) {
-        exportConfigToJson()
-        choreRepository.exportHomeConfigToJson()
+    suspend fun performBulkConfigSync(): List<VaultListFile> = withContext(Dispatchers.IO) {
+        val left = buildList {
+            if (!writeBackConfig()) add(VaultListFile.HABITS)
+            addAll(choreRepository.writeBackHomeConfig())
+        }
 
         val (owner, repo) = secretManager.getRepoInfo()
         if (owner.isNullOrBlank() || repo.isNullOrBlank()) {
             throw IllegalStateException("Repository is not configured")
         }
         fileRepository.syncRepository(owner, repo).getOrThrow()
+        left
+    }
+
+    /** config.json from Room for Repair: false when it was left as it is ([VaultListFiles.writeBack]). */
+    private suspend fun writeBackConfig(): Boolean {
+        val dtos = configDtos()
+        fileRepository.createLocalFolder(habitsDir)
+        return VaultListFiles.writeBack(fileRepository, configFile, dtos.size, gson.toJson(dtos), ::parseConfigs)
     }
 
     // --- Operations ---

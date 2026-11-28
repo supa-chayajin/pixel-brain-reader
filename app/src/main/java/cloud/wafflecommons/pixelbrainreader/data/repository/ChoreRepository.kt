@@ -134,20 +134,40 @@ class ChoreRepository @Inject constructor(
         try {
             fileRepository.createLocalFolder(homeDir)
 
-            // 1. Export Rooms (via DTO so the on-disk schema is decoupled from Room).
+            // 1. Export Rooms (via DTO so the on-disk schema is decoupled from Room). 13.4: a file
+            // that no longer parses is moved aside, never overwritten.
             val roomDtos = homeRoomDao.getAllRoomsAsFlow().first().map { it.toDto() }
-            fileRepository.saveFileLocally(roomsFile, gson.toJson(roomDtos))
+            VaultListFiles.replace(fileRepository, roomsFile, gson.toJson(roomDtos), ::parseRooms)
             Log.d("ChoreRepository", "Exported rooms.json successfully (${roomDtos.size} rooms)")
 
             // 2. Export Chores
             val choreDtos = choreDao.getAllChoresAsFlow().first().map { it.toDto() }
-            fileRepository.saveFileLocally(choresFile, gson.toJson(choreDtos))
+            VaultListFiles.replace(fileRepository, choresFile, gson.toJson(choreDtos), ::parseChores)
             Log.d("ChoreRepository", "Exported chores.json successfully (${choreDtos.size} chores)")
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             Log.e("ChoreRepository", "Failed to export home config to JSON", e)
             throw e
+        }
+    }
+
+    /**
+     * Repair's write-back of the home (13.4, S7): rooms.json and chores.json from Room, each on its
+     * own (see [VaultListFiles.writeBack]: an unreadable file moved aside first, a file whose items
+     * the app holds none of left as it is). The files left so; throws when a write fails.
+     */
+    suspend fun writeBackHomeConfig(): List<VaultListFile> = withContext(Dispatchers.IO) {
+        val roomDtos = homeRoomDao.getAllRoomsAsFlow().first().map { it.toDto() }
+        val choreDtos = choreDao.getAllChoresAsFlow().first().map { it.toDto() }
+        fileRepository.createLocalFolder(homeDir)
+        buildList {
+            if (!VaultListFiles.writeBack(fileRepository, roomsFile, roomDtos.size, gson.toJson(roomDtos), ::parseRooms)) {
+                add(VaultListFile.ROOMS)
+            }
+            if (!VaultListFiles.writeBack(fileRepository, choresFile, choreDtos.size, gson.toJson(choreDtos), ::parseChores)) {
+                add(VaultListFile.CHORES)
+            }
         }
     }
 
@@ -200,6 +220,14 @@ class ChoreRepository @Inject constructor(
         Log.d("ChoreRepository", "Imported rooms=${roomsToWrite?.size} chores=${choresToWrite?.size} from JSON")
     }
 
+    /** rooms.json as the import reads it. */
+    private fun parseRooms(content: String): List<HomeRoomDto>? =
+        gson.fromJson(content, object : TypeToken<List<HomeRoomDto>>() {}.type)
+
+    /** chores.json as the import reads it. */
+    private fun parseChores(content: String): List<ChoreDto>? =
+        gson.fromJson(content, object : TypeToken<List<ChoreDto>>() {}.type)
+
     /** Parsed rooms.json, or null when it is absent/blank (Room's rooms are then left as they are). */
     private suspend fun readRoomDtos(): List<HomeRoomDto>? {
         val content = fileRepository.readFile(roomsFile)
@@ -208,8 +236,7 @@ class ChoreRepository @Inject constructor(
             return null
         }
         return try {
-            val type = object : TypeToken<List<HomeRoomDto>>() {}.type
-            gson.fromJson<List<HomeRoomDto>>(content, type) ?: emptyList()
+            parseRooms(content) ?: emptyList()
         } catch (e: JsonSyntaxException) {
             Log.e("ChoreRepository", "JSON Syntax Error in rooms.json", e)
             throw e
@@ -224,8 +251,7 @@ class ChoreRepository @Inject constructor(
             return null
         }
         return try {
-            val type = object : TypeToken<List<ChoreDto>>() {}.type
-            gson.fromJson<List<ChoreDto>>(content, type) ?: emptyList()
+            parseChores(content) ?: emptyList()
         } catch (e: JsonSyntaxException) {
             Log.e("ChoreRepository", "JSON Syntax Error in chores.json", e)
             throw e
