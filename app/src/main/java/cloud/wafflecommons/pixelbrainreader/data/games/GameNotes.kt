@@ -38,49 +38,90 @@ internal object PageSections {
         heading: String,
         isHeading: (trimmedLine: String) -> Boolean,
         lines: List<String>,
-        after: ((trimmedLine: String) -> Boolean)? = null
+        owns: (trimmedLine: String) -> Boolean,
+        after: ((trimmedLine: String) -> Boolean)? = null,
+        before: ((trimmedLine: String) -> Boolean)? = null
     ): String {
         val all = content.split("\n")
-        val start = all.indexOfFirst { isHeading(it.trim()) }
-        if (start < 0) {
-            if (lines.isEmpty()) return content
-            val anchor = if (after == null) -1 else all.indexOfFirst { after(it.trim()) }
-            if (anchor >= 0) {
-                val end = sectionEnd(all, anchor)
-                if (end < all.size) {
-                    // Between the anchor's section and the owner's next one, a blank line before the heading.
-                    val before = all.subList(0, end)
-                    val gap = if (before.last().isBlank()) emptyList() else listOf("")
-                    return (before + gap + listOf(heading, "") + lines + "" + all.subList(end, all.size)).joinToString("\n")
-                }
-            }
-            return content.trimEnd('\n') + "\n\n" + heading + "\n\n" + lines.joinToString("\n") + "\n"
+        val start = all.indexOfFirst { isHeading(it.trimEnd('\r').trim()) }
+        if (start < 0) return placed(content, all, heading, lines, after, before)
+
+        val end = (start + 1 until all.size).firstOrNull { isHeadingLine(all[it]) } ?: all.size
+        val body = all.subList(start + 1, end)
+        fun owned(line: String): Boolean = line.isBlank() || owns(line.trimEnd('\r').trim())
+        val first = body.indexOfFirst { !owned(it) }
+        // The owner's lines, from the first to the last; the section's own lines among them go (they
+        // are rewritten above), the blank lines between two of the owner's stay as written.
+        val foreign = if (first < 0) {
+            emptyList()
+        } else {
+            body.subList(first, body.indexOfLast { !owned(it) } + 1).filter { it.isBlank() || !owned(it) }
         }
-        val end = sectionEnd(all, start)
-        val before = all.subList(0, start)
         val rest = all.subList(end, all.size)
+        val above = all.subList(0, start)
         if (rest.isEmpty()) {
-            // The section closes the note: the note ends right after it, or right after what preceded it.
-            val head = before.joinToString("\n").trimEnd('\n')
-            return if (lines.isEmpty()) "$head\n" else head + "\n\n" + heading + "\n\n" + lines.joinToString("\n") + "\n"
+            // The section closes the note: the note ends right after it (and the owner's lines kept).
+            val head = above.joinToString("\n").trimEnd('\n')
+            return when {
+                lines.isEmpty() && foreign.isEmpty() -> "$head\n"
+                lines.isEmpty() -> head + "\n\n" + foreign.joinToString("\n") + "\n"
+                else -> head + "\n\n" + heading + "\n\n" + lines.joinToString("\n") +
+                    (if (foreign.isEmpty()) "" else "\n\n" + foreign.joinToString("\n")) + "\n"
+            }
         }
         val section = if (lines.isEmpty()) emptyList() else listOf(heading, "") + lines + ""
-        return (before + section + rest).joinToString("\n")
+        val kept = if (foreign.isEmpty()) emptyList() else foreign + ""
+        return (above + section + kept + rest).joinToString("\n")
     }
 
-    /** The first line after [start] that opens another section (`## ` after spaces, or `# `); the end otherwise. */
-    private fun sectionEnd(all: List<String>, start: Int): Int =
+    /** A section that isn't there yet: before [before]'s line, after [after]'s section, or at the end. */
+    private fun placed(
+        content: String,
+        all: List<String>,
+        heading: String,
+        lines: List<String>,
+        after: ((trimmedLine: String) -> Boolean)?,
+        before: ((trimmedLine: String) -> Boolean)?
+    ): String {
+        if (lines.isEmpty()) return content
+        val next = if (before == null) -1 else all.indexOfFirst { before(it.trimEnd('\r').trim()) }
+        if (next >= 0) {
+            val head = all.subList(0, next)
+            val gap = if (head.isNotEmpty() && head.last().isNotBlank()) listOf("") else emptyList()
+            return (head + gap + listOf(heading, "") + lines + "" + all.subList(next, all.size)).joinToString("\n")
+        }
+        val anchor = if (after == null) -1 else all.indexOfFirst { after(it.trimEnd('\r').trim()) }
+        if (anchor >= 0) {
+            val end = anchorEnd(all, anchor)
+            if (end < all.size) {
+                // Between the anchor's section and the owner's next one, a blank line before the heading.
+                val head = all.subList(0, end)
+                val gap = if (head.last().isBlank()) emptyList() else listOf("")
+                return (head + gap + listOf(heading, "") + lines + "" + all.subList(end, all.size)).joinToString("\n")
+            }
+        }
+        return content.trimEnd('\n') + "\n\n" + heading + "\n\n" + lines.joinToString("\n") + "\n"
+    }
+
+    /** Where the anchor's section ends, as 13.3 placed a section after it: the next `## ` (after spaces) or `# ` line. */
+    private fun anchorEnd(all: List<String>, start: Int): Int =
         (start + 1 until all.size).firstOrNull { all[it].trimStart().startsWith("## ") || all[it].startsWith("# ") } ?: all.size
 }
 
 /**
  * The `## 🏆 Trophies` section of a game page (D12, pure): rewritten at each sync like a daily
  * note's 🩺 Health, with the EARNED trophies only, dated, so the note shows no spoiler in Obsidian.
- * The heading is matched whole; everything above it, and any section after it, stays as written.
+ * The heading is matched whole; only the section's own lines ([isDerivedLine]) are rewritten, and
+ * any other line the owner writes in it, or below it, stays (13.4). Everything above it, and any
+ * section after it, stays as written.
  */
 object TrophySection {
 
     const val HEADING = "## 🏆 Trophies"
+
+    private val SUMMARY = Regex("^\\*[0-9]+ of [0-9]+ trophies · [0-9]+ %\\*$")
+    private val ENTRY_END = Regex(" — [0-9]{4}-[0-9]{2}-[0-9]{2}( · .*)?$")
+    private val ENTRY_STARTS = listOf("- 🏆 ", "- 🥇 ", "- 🥈 ", "- 🥉 ")
 
     /** The section's lines for the page's sets, names and titles made [oneLine]; empty when the page has no set. */
     fun lines(sets: List<TrophySetFile>, zone: ZoneId): List<String> {
@@ -97,8 +138,19 @@ object TrophySection {
         }
     }
 
-    /** [content] with its section replaced by [lines] (appended when absent, removed when [lines] is empty). */
-    fun apply(content: String, lines: List<String>): String = PageSections.apply(content, HEADING, { it == HEADING }, lines)
+    /**
+     * A line the section writes itself (13.4), [trimmed]: its summary `*N of M trophies · P %*`, or an
+     * earned trophy `- <grade icon> <name> — yyyy-MM-dd`, with ` · <set>` when the page has several.
+     */
+    fun isDerivedLine(trimmed: String): Boolean =
+        SUMMARY.matches(trimmed) || (ENTRY_STARTS.any { trimmed.startsWith(it) } && ENTRY_END.containsMatchIn(trimmed))
+
+    /**
+     * [content] with its section's own lines replaced by [lines] (placed right before an existing 🎖️
+     * section, else appended, when absent; removed when [lines] is empty), the owner's lines kept.
+     */
+    fun apply(content: String, lines: List<String>): String =
+        PageSections.apply(content, HEADING, { it == HEADING }, lines, owns = ::isDerivedLine, before = AchievementSection::isHeading)
 
     fun gradeIcon(grade: String): String = when (grade.lowercase()) {
         "platinum" -> "🏆"
@@ -114,19 +166,21 @@ object TrophySection {
 /**
  * Trophy markers (D3, pure): a checklist line ending with `<!--trophy:<set>#<number>-->` waits for
  * that trophy. When it is earned the sync ticks the line and adds the date (` ✅ yyyy-MM-dd`, the
- * Obsidian Tasks done date); a ticked line is never unticked. In the app an unticked marked line
- * shows as ??? until the owner reveals the page's checklists.
+ * Obsidian Tasks done date); a ticked line is never unticked, and a number too large to be a trophy's
+ * leaves its line as written (13.4). In the app an unticked marked line shows as ??? until the owner
+ * reveals the page's checklists.
  */
 object TrophyMarkers {
 
-    private val LINE = Regex("^(\\s*[-*+]\\s+\\[)([ xX])(\\]\\s+)(.*?)(\\s*<!--\\s*trophy:([^#\\s>]+)#(\\d+)\\s*-->\\s*)$")
+    private val LINE = Regex("^(\\s*[-*+]\\s+\\[)([ xX])(\\]\\s+)(.*?)(\\s*<!--\\s*trophy:([^#\\s>]+)#([0-9]+)\\s*-->\\s*)$")
 
     /** [content] with every waiting line whose trophy [earnedOn] dates ticked. */
     fun tick(content: String, earnedOn: (set: String, id: Int) -> LocalDate?): String =
         content.split("\n").joinToString("\n") { line ->
             val m = LINE.matchEntire(line.removeSuffix("\r")) ?: return@joinToString line
             if (m.groupValues[2] != " ") return@joinToString line
-            val day = earnedOn(m.groupValues[6], m.groupValues[7].toInt()) ?: return@joinToString line
+            val number = m.groupValues[7].toIntOrNull() ?: return@joinToString line
+            val day = earnedOn(m.groupValues[6], number) ?: return@joinToString line
             val text = m.groupValues[4].trimEnd()
             val dated = if (text.contains("✅")) text else "$text ✅ $day"
             val cr = if (line.endsWith("\r")) "\r" else ""
@@ -149,17 +203,25 @@ object TrophyMarkers {
  * The `## 🎖️ Achievements` section of a game page (13.3, XB2, pure): Xbox's own section beside 🏆,
  * rewritten at each sync with the EARNED achievements only, dated, with their gamerscore. The
  * heading is matched whole, with or without the emoji's variation selector (an editor may drop it),
- * and written with it. A page without the section gets it right after its 🏆 section when another
- * section follows that one, else at the end.
+ * and written with it. Only the section's own lines ([isDerivedLine]) are rewritten; the owner's
+ * stay (13.4). A page without the section gets it right after its 🏆 section when another section
+ * follows that one, else at the end.
  */
 object AchievementSection {
 
     /** U+1F396 U+FE0F written as escapes, so no editor drops the variation selector from the source. */
-    const val HEADING = "## \uD83C\uDF96\uFE0F Achievements"
-    const val ICON = "\uD83C\uDF96\uFE0F"
+    const val HEADING = "## 🎖️ Achievements"
+    const val ICON = "🎖️"
 
     /** [HEADING] without U+FE0F. */
-    private const val BARE_HEADING = "## \uD83C\uDF96 Achievements"
+    private const val BARE_HEADING = "## 🎖 Achievements"
+
+    /** An entry's start with [ICON], and without its variation selector. */
+    private const val ENTRY_START = "- $ICON "
+    private const val BARE_ENTRY_START = "- 🎖 "
+
+    private val SUMMARY = Regex("^\\*[0-9]+ of [0-9]+ achievements · [0-9]+ of [0-9]+ G · [0-9]+ %\\*$")
+    private val ENTRY_END = Regex(" — [0-9]{4}-[0-9]{2}-[0-9]{2} · [0-9]+ G( · .*)?$")
 
     fun isHeading(trimmedLine: String): Boolean = trimmedLine == HEADING || trimmedLine == BARE_HEADING
 
@@ -189,9 +251,18 @@ object AchievementSection {
         }
     }
 
-    /** [content] with its section replaced by [lines] (placed when absent, removed when [lines] is empty). */
+    /**
+     * A line the section writes itself (13.4), [trimmed]: its summary, or an earned achievement
+     * `- 🎖️ <name> — yyyy-MM-dd · N G`, with ` · <title>` when the page holds several (the icon with
+     * or without its variation selector).
+     */
+    fun isDerivedLine(trimmed: String): Boolean =
+        SUMMARY.matches(trimmed) ||
+            ((trimmed.startsWith(ENTRY_START) || trimmed.startsWith(BARE_ENTRY_START)) && ENTRY_END.containsMatchIn(trimmed))
+
+    /** [content] with its section's own lines replaced by [lines] (placed when absent, removed when [lines] is empty), the owner's lines kept. */
     fun apply(content: String, lines: List<String>): String =
-        PageSections.apply(content, HEADING, ::isHeading, lines, after = { it == TrophySection.HEADING })
+        PageSections.apply(content, HEADING, ::isHeading, lines, owns = ::isDerivedLine, after = { it == TrophySection.HEADING })
 
     private fun earnedOn(achievement: AchievementRecord, zone: ZoneId): LocalDate? =
         achievement.earnedAt?.let { runCatching { Instant.parse(it).atZone(zone).toLocalDate() }.getOrNull() }

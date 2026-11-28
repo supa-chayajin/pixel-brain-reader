@@ -101,9 +101,15 @@ object GameMapEdits {
     /** The address an entry opens, or null when the app can't read it. */
     private fun urlOf(item: FrontmatterLines.ListItem): String? = GameMaps.parse(listOf(item.value)).firstOrNull()?.url
 
-    private fun write(content: String, items: List<FrontmatterLines.ListItem>, lines: List<String>, today: LocalDate): MapEdit {
+    /**
+     * [content] with `game_maps` written as [lines] ([items] the entries read from it). A list that
+     * doesn't read back as written is never saved (13.4): the edit is refused as [MapEditResult.FAILED]
+     * rather than leave the owner's entries broken. Internal for that test.
+     */
+    internal fun write(content: String, items: List<FrontmatterLines.ListItem>, lines: List<String>, today: LocalDate): MapEdit {
         if (lines == items.map { it.line }) return MapEdit.Saved(content)
         var next = FrontmatterLines.setListLines(content, GameMaps.KEY, lines)
+        if (FrontmatterLines.listItems(next, GameMaps.KEY).map { it.line } != lines) return MapEdit.Refused(MapEditResult.FAILED)
         if (FrontmatterLines.get(next, DATE_UPDATED) != null) {
             next = FrontmatterLines.set(next, DATE_UPDATED, VaultSchema.singleQuoted(today.toString()))
         }

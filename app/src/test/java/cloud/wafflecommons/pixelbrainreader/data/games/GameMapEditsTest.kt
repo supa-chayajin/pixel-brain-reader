@@ -271,4 +271,33 @@ class GameMapEditsTest {
         assertEquals(0, GameMapEdits.unreadable("---\ngame_maps: []\n---\n"))
         assertEquals(0, GameMapEdits.unreadable("# No frontmatter\n"))
     }
+
+    // --- 13.4 ------------------------------------------------------------------------------
+
+    @Test
+    fun `an inline list with a quoted comma keeps its entry through an edit`() {
+        val content = "---\ngame_template: other\ngame_maps: [\"Bosses, NPCs | https://glass.example.com/map\", https://tin.example.com/x]\n---\n# Glass Tower\n"
+        val maps = GamePages.parse("30_Areas/Games/Glass_Tower/Glass_Tower.md", content)!!.maps
+        assertEquals(listOf("https://glass.example.com/map", "https://tin.example.com/x"), maps.map { it.url })
+        assertEquals("Bosses, NPCs", maps.first().label)
+        assertEquals(0, GameMapEdits.unreadable(content))
+        assertEquals(
+            "---\ngame_template: other\ngame_maps:\n  - \"Bosses, NPCs | https://glass.example.com/map\"\n  - \"https://tin.example.com/x\"\n" +
+                "  - \"https://bay.example.org/map\"\n---\n# Glass Tower\n",
+            saved(GameMapEdits.add(content, "https://bay.example.org/map", null, today))
+        )
+    }
+
+    @Test
+    fun `an edit whose list doesn't read back is refused`() {
+        val items = FrontmatterLines.listItems(page, GameMaps.KEY)
+        // A blank line ends a block list: the entry after it would be lost at the next read.
+        val broken = items.map { it.line } + "" + "  - \"https://two.example.org/Maps\""
+        assertEquals(MapEdit.Refused(MapEditResult.FAILED), GameMapEdits.write(page, items, broken, today))
+        // A list that reads back as written is saved, as the edits write it.
+        assertEquals(
+            saved(GameMapEdits.add(page, "https://two.example.org/Maps", null, today)),
+            saved(GameMapEdits.write(page, items, items.map { it.line } + "  - \"https://two.example.org/Maps\"", today))
+        )
+    }
 }

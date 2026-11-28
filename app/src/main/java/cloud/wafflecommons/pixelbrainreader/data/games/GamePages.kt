@@ -162,20 +162,41 @@ object GamePages {
     }
 
     /**
+     * A sync's correction of a page's `started` (13.4): [start] written (`'yyyy-MM-dd'`) when the key
+     * is missing or blank, or when it reads exactly [sameAs] (what the page's creation wrote, the
+     * title's last played day) and [start] is earlier; any other date is the owner's and stays.
+     * `date_updated` doesn't move: the owner changed nothing.
+     */
+    fun withEarlierStart(content: String, start: LocalDate, sameAs: LocalDate?): String {
+        val current = FrontmatterLines.get(content, "started")?.trim()
+        val write = current.isNullOrEmpty() || (sameAs != null && current == sameAs.toString() && start.isBefore(sameAs))
+        return if (write) FrontmatterLines.set(content, "started", VaultSchema.singleQuoted(start.toString())) else content
+    }
+
+    /**
      * The page's own text for the app's game page (RFC-009 §4.2): the note without its frontmatter,
-     * its title, its checklists (tickable cards there) and the derived 🏆 and 🎖️ sections (the
-     * trophy and achievement cards). A heading left with nothing under it goes too. Blank when the
-     * page holds only checklists.
+     * its title, its checklists (tickable cards there) and the derived 🏆 and 🎖️ sections' own lines
+     * (the trophy and achievement cards). A line the owner wrote inside a derived section is shown as
+     * written (13.4: the sync keeps it too). A heading left with nothing under it goes too. Blank when
+     * the page holds only checklists.
      */
     fun prose(content: String): String {
         val kept = mutableListOf<String>()
-        var inDerived = false
+        var derived: ((String) -> Boolean)? = null
         var titleDropped = false
         bodyLines(content).forEach { raw ->
             val line = raw.trimEnd('\r')
             val trimmed = line.trim()
-            if (trimmed.startsWith("#")) inDerived = trimmed == TrophySection.HEADING || AchievementSection.isHeading(trimmed)
-            if (inDerived) return@forEach
+            if (isHeadingLine(line)) {
+                derived = when {
+                    trimmed == TrophySection.HEADING -> TrophySection::isDerivedLine
+                    AchievementSection.isHeading(trimmed) -> AchievementSection::isDerivedLine
+                    else -> null
+                }
+                if (derived != null) return@forEach
+            }
+            val owns = derived
+            if (owns != null && (trimmed.isEmpty() || owns(trimmed))) return@forEach
             if (!titleDropped && trimmed.startsWith("# ")) {
                 titleDropped = true
                 return@forEach

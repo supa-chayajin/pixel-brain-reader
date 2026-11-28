@@ -181,4 +181,23 @@ class FrontmatterLinesTest {
             FrontmatterLines.setListLines("---\r\na: 1\r\n---\r\n", "k", listOf("  - x"))
         )
     }
+
+    // --- 13.4: inline lists split outside quotes ------------------------------------------------
+
+    @Test
+    fun `inline lists split only outside quotes`() {
+        val content = "---\nk: [\"a, b\", c, 'it''s, fine', \"say \\\"x, y\\\"\", 'unclosed, still one]\n---\n"
+        val expected = listOf("a, b", "c", "it's, fine", "say \"x, y\"", "'unclosed, still one")
+        assertEquals(expected, FrontmatterLines.getList(content, "k"))
+        assertEquals(expected, FrontmatterLines.listItems(content, "k").map { it.value })
+        // Empty items still go, and a plain list reads as before.
+        assertEquals(listOf("a", "b"), FrontmatterLines.getList("---\ntags: [a, , \"b\",]\n---\n", "tags"))
+    }
+
+    @Test
+    fun `an apostrophe inside an unquoted item is no quote`() {
+        assertEquals(listOf("Lantern's Bay", "Tin Orchard"), FrontmatterLines.getList("---\naliases: [Lantern's Bay, Tin Orchard]\n---\n", "aliases"))
+        assertEquals(listOf("a 'b'", "c"), FrontmatterLines.getList("---\nk: [a 'b', c]\n---\n", "k"))
+        assertEquals(listOf("quoted", "plain's"), FrontmatterLines.getList("---\nk: ['quoted', plain's]\n---\n", "k"))
+    }
 }

@@ -68,7 +68,7 @@ object FrontmatterLines {
         val idx = keyLine(lines, block, key) ?: return emptyList()
         val inline = KEY_LINE.find(lines[idx].trimEnd('\r'))!!.groupValues[2].trim()
         INLINE_LIST.find(inline)?.let { match ->
-            return match.groupValues[1].split(',').map { unquote(it.trim()) }.filter { it.isNotEmpty() }
+            return splitInline(match.groupValues[1]).map { unquote(it.trim()) }.filter { it.isNotEmpty() }
         }
         if (inline.isNotEmpty()) return listOf(unquote(inline))
         return continuation(lines, block, idx)
@@ -118,7 +118,7 @@ object FrontmatterLines {
         val idx = keyLine(lines, block, key) ?: return emptyList()
         val inline = KEY_LINE.find(lines[idx].trimEnd('\r'))!!.groupValues[2].trim()
         INLINE_LIST.find(inline)?.let { match ->
-            return match.groupValues[1].split(',').map { unquote(it.trim()) }.filter { it.isNotEmpty() }.map(::newItem)
+            return splitInline(match.groupValues[1]).map { unquote(it.trim()) }.filter { it.isNotEmpty() }.map(::newItem)
         }
         if (inline.isNotEmpty()) return listOfNotNull(unquote(inline).takeIf { it.isNotEmpty() }?.let(::newItem))
         return continuation(lines, block, idx)
@@ -187,6 +187,57 @@ object FrontmatterLines {
         // …or before the first present standard key that comes after it.
         val after = VaultSchema.STANDARD_KEYS.drop(order + 1).mapNotNull { keyLine(lines, block, it) }.minOrNull()
         return after ?: block.close
+    }
+
+    /**
+     * An inline list's items (13.4): split on the commas outside quotes. A quote opens only at an
+     * item's start (after spaces), so an apostrophe inside a word is no quote; inside `"…"` a
+     * backslash and the character after it are one unit, inside `'…'` a doubled `''` is one; an
+     * unclosed quote runs to the end.
+     */
+    private fun splitInline(inner: String): List<String> {
+        val items = mutableListOf<String>()
+        val item = StringBuilder()
+        var quote: Char? = null
+        var atStart = true
+        var i = 0
+        while (i < inner.length) {
+            val ch = inner[i]
+            when (quote) {
+                '"' -> {
+                    item.append(ch)
+                    if (ch == '\\' && i + 1 < inner.length) {
+                        item.append(inner[i + 1])
+                        i++
+                    } else if (ch == '"') {
+                        quote = null
+                    }
+                }
+                '\'' -> {
+                    item.append(ch)
+                    if (ch == '\'') {
+                        if (i + 1 < inner.length && inner[i + 1] == '\'') {
+                            item.append('\'')
+                            i++
+                        } else {
+                            quote = null
+                        }
+                    }
+                }
+                else -> if (ch == ',') {
+                    items += item.toString()
+                    item.setLength(0)
+                    atStart = true
+                } else {
+                    if (atStart && (ch == '"' || ch == '\'')) quote = ch
+                    if (!ch.isWhitespace()) atStart = false
+                    item.append(ch)
+                }
+            }
+            i++
+        }
+        items += item.toString()
+        return items
     }
 
     private fun unquote(raw: String): String {

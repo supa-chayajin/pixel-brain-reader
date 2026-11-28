@@ -213,9 +213,19 @@ fun GamePageScreen(
         )
 
         state.checklists.forEach { section ->
-            SectionCard(title = section.heading.ifBlank { "Checklist" }, icon = Icons.Rounded.Checklist) {
+            // 13.4: a spoiler shown here can be hidden again, like the awards' ones.
+            val showingHidden = section.items.any { it.masked && shown(checklistKey(it.index)) }
+            SectionCard(
+                title = section.heading.ifBlank { "Checklist" },
+                icon = Icons.Rounded.Checklist,
+                trailing = {
+                    if (showingHidden) TextButton(onClick = { hideAll() }, shapes = ButtonDefaults.shapes()) { Text("Hide") }
+                }
+            ) {
                 section.items.forEach { item ->
-                    val key = "c:${item.line}"
+                    // 13.4 (the audit's checklist-duplicate-line-tick): keyed and ticked by the line's
+                    // own place, so a line written twice reveals and ticks only the copy tapped.
+                    val key = checklistKey(item.index)
                     val hidden = item.masked && !shown(key)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -381,6 +391,16 @@ private const val SESSIONS_SHOWN = 60
 
 /** The floating toolbar's room under the last card, and the snackbar's lift above it. */
 private val TOOLBAR_ROOM = 88.dp
+
+/** A row's least height, the size of a touch target (13.4: rows a tap can't miss). */
+private val TOUCH_ROW = 48.dp
+
+/** A checklist line's reveal key: its place in the page (13.4), never its text. */
+private fun checklistKey(index: Int): String = "c:$index"
+
+private fun trophyKey(line: TrophyLine): String = "t:${line.set}#${line.trophy.id}"
+
+private fun achievementKey(line: AchievementLine): String = "a:${line.titleId}#${line.record.id}"
 
 /** Which console measured a session (13.3): none for a manual one. */
 private fun consoleOf(record: GameSessionRecord): String? = when (record.source) {

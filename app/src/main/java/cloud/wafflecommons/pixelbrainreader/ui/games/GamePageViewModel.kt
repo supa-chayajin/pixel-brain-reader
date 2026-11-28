@@ -237,8 +237,54 @@ class GamePageViewModel @Inject constructor(
         viewModelScope.launch { games.setState(path, state, clock.today.value) }
     }
 
-    fun toggle(line: String) {
-        viewModelScope.launch { games.editPage(path) { content -> GameChecklists.toggle(content, line) ?: content } }
+    /**
+     * Ticks or unticks [item]'s own line (13.4, the audit's checklist-duplicate-line-tick): the line
+     * at its index, read from disk, and only while it is still the one shown, so the same text under
+     * another heading is never the one ticked; a page changed meanwhile is left as it is.
+     */
+    fun toggle(item: ChecklistItem) {
+        viewModelScope.launch { games.editPage(path) { content -> GameChecklists.toggle(content, item.index, item.line) ?: content } }
+    }
+
+    // --- The owner's picture (13.4, P5): the page's own file, named in its frontmatter ----------
+
+    /** [uri]'s image (the photo picker's) as this game's picture: re-encoded on the phone, kept beside the page. */
+    fun setCover(uri: Uri) {
+        if (_state.value.coverBusy) return
+        _state.update { it.copy(coverBusy = true) }
+        viewModelScope.launch {
+            val message = try {
+                val jpeg = photoReader.prepareCover(uri)
+                coverMessage(games.setCover(path, jpeg, clock.today.value), done = "Picture saved")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: IOException) {
+                "That image can't be read"
+            } catch (e: Exception) {
+                COVER_NOT_SAVED
+            } finally {
+                _state.update { it.copy(coverBusy = false) }
+            }
+            _messages.send(message)
+        }
+    }
+
+    /** The game's own picture taken away: the console's shows again, or the initials. */
+    fun removeCover() {
+        if (_state.value.coverBusy) return
+        _state.update { it.copy(coverBusy = true) }
+        viewModelScope.launch {
+            val message = try {
+                coverMessage(games.removeCover(path, clock.today.value), done = "Picture removed", failed = COVER_NOT_REMOVED)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                COVER_NOT_REMOVED
+            } finally {
+                _state.update { it.copy(coverBusy = false) }
+            }
+            _messages.send(message)
+        }
     }
 
     // --- Maps (13.3, ME1): each edit reads the page from disk and names the map by its address ---

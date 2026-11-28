@@ -19,7 +19,8 @@ fun interface GameTimelineSource {
  */
 object GameTimeline {
 
-    private val TIMED = Regex("^\\s*-\\s+(\\d{1,2}):(\\d{2})\\s+(.*)$")
+    private val TIMED = Regex("^\\s*-\\s+([0-9]{1,2}):([0-9]{2})\\s+(.*)$")
+    private val MARKER = Regex("<!--\\s*game:(.*?)-->")
 
     /** True when a Timeline line's text carries a game marker: it is derived, never board content. */
     fun isGameLine(text: String): Boolean = DailyMarkers.isGameLine(text)
@@ -46,11 +47,15 @@ object GameTimeline {
         val heading = all.indexOfFirst(::isTimelineHeading)
         if (heading < 0) return content
         var end = (heading + 1 until all.size).firstOrNull { all[it].trimStart().startsWith("## ") || all[it].startsWith("# ") } ?: all.size
+        val cr = if ((heading until end).any { all[it].endsWith("\r") }) "\r" else ""
 
         // Drop the derived lines this note holds.
         var i = heading + 1
         while (i < end) {
-            if (TIMED.matches(all[i]) && isGameLine(all[i])) {
+            val line = all[i].trimEnd('\r')
+            val derived = TIMED.matches(line) && isGameLine(line) &&
+                (knownKeys == null || keyOf(line)?.let { it in knownKeys } ?: true)
+            if (derived) {
                 all.removeAt(i)
                 end--
             } else {
@@ -66,8 +71,8 @@ object GameTimeline {
             end--
         }
         lines.sortedBy { it.time }.forEach { line ->
-            val rendered = "- ${line.time.format(HH_MM)} ${line.text}"
-            val timed = (heading + 1 until end).filter { TIMED.matches(all[it]) }
+            val rendered = "- ${line.time.format(HH_MM)} ${line.text}$cr"
+            val timed = (heading + 1 until end).filter { TIMED.matches(all[it].trimEnd('\r')) }
             val after = timed.firstOrNull { (timeOf(all[it]) ?: LocalTime.MIN) > line.time }
             val at = after ?: timed.lastOrNull()?.plus(1) ?: firstBodyLine(all, heading, end)
             all.add(at, rendered)
@@ -76,7 +81,7 @@ object GameTimeline {
         return all.joinToString("\n")
     }
 
-    private fun timeOf(line: String): LocalTime? = TIMED.matchEntire(line)?.let { m ->
+    private fun timeOf(line: String): LocalTime? = TIMED.matchEntire(line.trimEnd('\r'))?.let { m ->
         runCatching { LocalTime.of(m.groupValues[1].toInt(), m.groupValues[2].toInt()) }.getOrNull()
     }
 
@@ -100,7 +105,7 @@ data class GameHistoryEntry(val date: LocalDate, val time: LocalTime, val page: 
 /** Reads the game sessions a daily note's own Timeline lines name (pure); derived game lines are left out. */
 object GameHistory {
 
-    private val TIMED = Regex("^\\s*-\\s+(\\d{1,2}):(\\d{2})\\s+(.*)$")
+    private val TIMED = Regex("^\\s*-\\s+([0-9]{1,2}):([0-9]{2})\\s+(.*)$")
 
     fun entries(date: LocalDate, content: String, pages: List<GamePage>): List<GameHistoryEntry> {
         val lines = content.split("\n")

@@ -3,6 +3,7 @@ package cloud.wafflecommons.pixelbrainreader.data.games
 import cloud.wafflecommons.pixelbrainreader.data.utils.TimelineLine
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
@@ -129,7 +130,7 @@ class GameNotesTest {
 
     @Test
     fun `a section followed by the owner's own section keeps that section`() {
-        val page = "# G\n\n## 🏆 Trophies\n\n*old*\n\n## My notes\n\nKeep me.\n"
+        val page = "# G\n\n## 🏆 Trophies\n\n*0 of 1 trophies · 0 %*\n\n## My notes\n\nKeep me.\n"
         val updated = TrophySection.apply(page, listOf("*1 of 1 trophies · 100 %*"))
         assertEquals("# G\n\n## 🏆 Trophies\n\n*1 of 1 trophies · 100 %*\n\n## My notes\n\nKeep me.\n", updated)
         assertEquals("# G\n\n## My notes\n\nKeep me.\n", TrophySection.apply(page, emptyList()))
@@ -273,7 +274,7 @@ class GameNotesTest {
     @Test
     fun `a heading without the variation selector is found and rewritten`() {
         val bare = "## 🎖 Achievements"
-        val page = "# G\n\n$bare\n\n*old*\n\n## My notes\n\nKeep me.\n"
+        val page = "# G\n\n$bare\n\n*0 of 1 achievements · 0 of 10 G · 0 %*\n\n## My notes\n\nKeep me.\n"
         assertEquals(
             "# G\n\n$heading\n\n*1 of 1 achievements · 10 of 10 G · 100 %*\n\n## My notes\n\nKeep me.\n",
             AchievementSection.apply(page, listOf("*1 of 1 achievements · 10 of 10 G · 100 %*"))
@@ -304,7 +305,7 @@ class GameNotesTest {
         // Achievements first: the trophies come after them, both kept.
         val achievementsFirst = AchievementSection.apply(base, achievementLines)
         val then = TrophySection.apply(achievementsFirst, trophyLines)
-        assertEquals(achievementsFirst + "\n" + TrophySection.HEADING + "\n\n" + trophyLines.joinToString("\n") + "\n", then)
+        assertEquals(both, then)
         assertEquals(then, AchievementSection.apply(then, achievementLines))
         // Removing the trophies keeps the achievements.
         assertEquals(base + "\n$heading\n\n" + achievementLines.joinToString("\n") + "\n", TrophySection.apply(both, emptyList()))
