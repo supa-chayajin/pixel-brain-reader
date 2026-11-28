@@ -13,6 +13,7 @@ import cloud.wafflecommons.pixelbrainreader.data.games.GameSessionRecord
 import cloud.wafflecommons.pixelbrainreader.data.games.GameState
 import cloud.wafflecommons.pixelbrainreader.data.games.GameTemplate
 import cloud.wafflecommons.pixelbrainreader.data.games.GamesRepository
+import cloud.wafflecommons.pixelbrainreader.data.games.LinksRead
 import cloud.wafflecommons.pixelbrainreader.data.games.NewGamePage
 import cloud.wafflecommons.pixelbrainreader.data.games.XboxSnapshot
 import cloud.wafflecommons.pixelbrainreader.data.games.XboxTitleState
@@ -27,6 +28,7 @@ import io.mockk.slot
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -40,6 +42,9 @@ class XboxSyncTest {
 
     private val zone = ZoneId.of("Europe/Paris")
     private val now = Instant.parse("2026-11-27T22:40:00Z").toEpochMilli()
+
+    /** The writes happen when the sync starts (13.4: the day of the writes is the clock's). */
+    private val clock: () -> Long = { now }
     private val xuid = "2533274800000001"
     private val xbl = XboxSession("UHS", "XSTS", xuid, expiresAt = now + 8 * 3_600_000L)
     private val ring = "1915865634"
@@ -79,6 +84,7 @@ class XboxSyncTest {
     private val games: GamesRepository = mockk(relaxed = true) {
         coEvery { pages() } returns listOf(page)
         coEvery { links() } returns GameLinks()
+        coEvery { linksRead() } returns LinksRead(GameLinks(), readable = true)
         coEvery { updateLinks(any()) } returns GameLinks()
         coEvery { xboxSnapshot() } returns null
         coEvery { saveXboxSnapshot(any()) } returns true
@@ -105,7 +111,7 @@ class XboxSyncTest {
 
     @Test
     fun `the first sync records a baseline and no session`() = runTest {
-        val result = sync.sync(now, zone)
+        val result = sync.sync(now, zone, writeClock = clock)
 
         assertTrue(result.isSuccess)
         assertEquals(1, result.getOrThrow().titles)
@@ -129,7 +135,7 @@ class XboxSyncTest {
         val added = slot<List<GameSessionRecord>>()
         coEvery { games.addSessions(capture(added)) } returns setOf(LocalDate.of(2026, 11, 27))
 
-        assertTrue(sync.sync(now, zone).isSuccess)
+        assertTrue(sync.sync(now, zone, writeClock = clock).isSuccess)
 
         val session = added.captured.single()
         assertEquals(120, session.minutes)
@@ -143,9 +149,12 @@ class XboxSyncTest {
             games.addSessions(any())
             games.saveXboxSnapshot(any())
         }
-        // Today's line waits for the burn, on a board that now exists: only a past day's note is edited here.
+        // Today's note gets its line at once (13.4: the sync may run after the 23:50 burn); no past day here.
         coVerify(exactly = 0) { games.applyPastDay(any(), any()) }
-        coVerify { dashboard.ensureDay(LocalDate.of(2026, 11, 27)) }
+        coVerifyOrder {
+            dashboard.ensureDay(LocalDate.of(2026, 11, 27))
+            dashboard.burnToDisk(LocalDate.of(2026, 11, 27))
+        }
     }
 
     @Test
@@ -156,7 +165,7 @@ class XboxSyncTest {
             titles = listOf(XboxTitleState(ring, "RING OF ASH", achievementSource = 2, minutesPlayed = 100))
         )
 
-        val result = sync.sync(now, zone, baseline = true)
+        val result = sync.sync(now, zone, baseline = true, writeClock = clock)
 
         assertTrue(result.isSuccess)
         assertEquals(0, result.getOrThrow().sessions)
@@ -175,7 +184,7 @@ class XboxSyncTest {
         // The nightly runs and Sync now pass no baseline: the same snapshot gives the play since as a session.
         val added = slot<List<GameSessionRecord>>()
         coEvery { games.addSessions(capture(added)) } returns setOf(LocalDate.of(2026, 11, 27))
-        assertTrue(sync.sync(now, zone).isSuccess)
+        assertTrue(sync.sync(now, zone, writeClock = clock).isSuccess)
         assertEquals(1120, added.captured.single().minutes)
         coVerify(exactly = 1) { account.baselineSaved() }
     }
@@ -190,20 +199,20 @@ class XboxSyncTest {
         )
         coEvery { client.titleHistory(any()) } throws XboxException(XboxException.Kind.RATE_LIMITED, "Xbox asked to wait.")
 
-        assertTrue(sync.sync(now, zone).isFailure)
+        assertTrue(sync.sync(now, zone, writeClock = clock).isFailure)
         coVerify(exactly = 0) { games.saveXboxSnapshot(any()) }
         coVerify(exactly = 0) { account.baselineSaved() }
 
         // The nightly run (no baseline passed) is the baseline: the month since the Disconnect is no session.
         coEvery { client.titleHistory(any()) } returns XboxTitleList(listOf(title(ring, "RING OF ASH")), full = false)
         coEvery { games.saveXboxSnapshot(any()) } returns false
-        assertTrue(sync.sync(now, zone).isSuccess)
+        assertTrue(sync.sync(now, zone, writeClock = clock).isSuccess)
         coVerify { games.addSessions(emptyList()) }
         // A snapshot that couldn't be written ends nothing: the next run is a baseline again.
         coVerify(exactly = 0) { account.baselineSaved() }
 
         coEvery { games.saveXboxSnapshot(any()) } returns true
-        assertTrue(sync.sync(now, zone).isSuccess)
+        assertTrue(sync.sync(now, zone, writeClock = clock).isSuccess)
         coVerify(exactly = 0) { games.addSessions(match { it.isNotEmpty() }) }
         coVerifyOrder {
             games.saveXboxSnapshot(any())
@@ -222,11 +231,11 @@ class XboxSyncTest {
         val saved = mutableListOf<XboxSnapshot>()
         coEvery { games.saveXboxSnapshot(capture(saved)) } returns true
 
-        assertTrue(sync.sync(now, zone, baseline = true).isSuccess)
+        assertTrue(sync.sync(now, zone, baseline = true, writeClock = clock).isSuccess)
         assertNull(saved.last().titles.single().minutesPlayed)
 
         // An ordinary run keeps the last count for a title it couldn't read: no play is lost or made up.
-        assertTrue(sync.sync(now, zone).isSuccess)
+        assertTrue(sync.sync(now, zone, writeClock = clock).isSuccess)
         assertEquals(100L, saved.last().titles.single().minutesPlayed)
     }
 
@@ -238,7 +247,7 @@ class XboxSyncTest {
         )
         coEvery { games.addSessions(any()) } returns null
 
-        val result = sync.sync(now, zone)
+        val result = sync.sync(now, zone, writeClock = clock)
 
         assertTrue(result.isFailure)
         coVerify(exactly = 0) { games.saveXboxSnapshot(any()) }
@@ -250,7 +259,7 @@ class XboxSyncTest {
         coEvery { account.session(any(), any()) } throws
             XboxException(XboxException.Kind.SIGN_IN_EXPIRED, "The Xbox sign-in has expired: Connect again.")
 
-        val result = sync.sync(now, zone)
+        val result = sync.sync(now, zone, writeClock = clock)
 
         assertTrue(result.isFailure)
         coVerify { account.setStatus(match { !it.ok && it.needsSignIn && it.message == "The Xbox sign-in has expired: Connect again." }) }
@@ -266,7 +275,7 @@ class XboxSyncTest {
     fun `a read-only device never syncs`() = runTest {
         VaultWriteGate.readOnly = true
 
-        assertTrue(sync.sync(now, zone).isFailure)
+        assertTrue(sync.sync(now, zone, writeClock = clock).isFailure)
 
         coVerify(exactly = 0) { account.session(any(), any()) }
         coVerify(exactly = 0) { client.titleHistory(any()) }
@@ -278,7 +287,7 @@ class XboxSyncTest {
     fun `without a sign-in nothing runs and no status is written`() = runTest {
         coEvery { account.isConnected() } returns false
 
-        val error = sync.sync(now, zone).exceptionOrNull() as XboxException
+        val error = sync.sync(now, zone, writeClock = clock).exceptionOrNull() as XboxException
 
         assertEquals(XboxException.Kind.NOT_CONFIGURED, error.kind)
         coVerify(exactly = 0) { client.titleHistory(any()) }
@@ -303,7 +312,7 @@ class XboxSyncTest {
         val change = slot<(GameLinks) -> GameLinks>()
         coEvery { games.updateLinks(capture(change)) } returns GameLinks()
 
-        val result = sync.sync(now, zone)
+        val result = sync.sync(now, zone, writeClock = clock)
 
         assertTrue(result.isSuccess)
         assertEquals(1, result.getOrThrow().pagesCreated)
@@ -347,13 +356,13 @@ class XboxSyncTest {
             listOf(title(ring, "RING OF ASH", lastPlayed = "2026-11-27T21:00:00Z"), title(bricks, "Brick Wars", lastPlayed = "2026-11-26T21:00:00Z")),
             full = false
         )
-        coEvery { games.links() } returns GameLinks(xbox = ConsoleLinks(links = mapOf(bricks to "30_Areas/Games/Brick_Wars/Brick_Wars.md")))
+        coEvery { games.linksRead() } returns LinksRead(GameLinks(xbox = ConsoleLinks(links = mapOf(bricks to "30_Areas/Games/Brick_Wars/Brick_Wars.md"))), readable = true)
         coEvery { client.achievements(any(), ring, any()) } throws XboxException(XboxException.Kind.API, "The Xbox network answered HTTP 500.")
         coEvery { client.achievements(any(), bricks, any()) } returns listOf(
             FetchedAchievement("1", "First Brick", "", 10, secret = false, earned = true, unlockedAt = Instant.parse("2026-11-02T20:10:00Z"))
         )
 
-        val result = sync.sync(now, zone)
+        val result = sync.sync(now, zone, writeClock = clock)
 
         assertTrue(result.isSuccess)
         assertEquals(1, result.getOrThrow().achievementSets)
@@ -373,14 +382,14 @@ class XboxSyncTest {
                 AchievementRecord("2", "Secret Ending", "", 50, secret = true)
             )
         )
-        coEvery { games.links() } returns GameLinks(xbox = ConsoleLinks(links = mapOf(ring to page.path)))
+        coEvery { games.linksRead() } returns LinksRead(GameLinks(xbox = ConsoleLinks(links = mapOf(ring to page.path))), readable = true)
         coEvery { games.achievementSet(ring) } returns file
         // titlehub counts one more earned: the title moved, its achievements are asked again, and both lists come back empty.
         coEvery { client.titleHistory(any()) } returns
             XboxTitleList(listOf(title(ring, "RING OF ASH", earned = 2, score = 70, source = 1)), full = false)
         coEvery { client.achievements(any(), ring, 1) } returns emptyList()
 
-        val result = sync.sync(now, zone)
+        val result = sync.sync(now, zone, writeClock = clock)
 
         assertTrue(result.isSuccess)
         assertEquals(0, result.getOrThrow().achievementSets)
@@ -398,12 +407,12 @@ class XboxSyncTest {
             listOf(title(ring, "RING OF ASH", lastPlayed = "2026-11-27T21:00:00Z"), title(bricks, "Brick Wars", lastPlayed = "2026-11-26T21:00:00Z")),
             full = false
         )
-        coEvery { games.links() } returns GameLinks(xbox = ConsoleLinks(links = mapOf(bricks to "30_Areas/Games/Brick_Wars/Brick_Wars.md")))
+        coEvery { games.linksRead() } returns LinksRead(GameLinks(xbox = ConsoleLinks(links = mapOf(bricks to "30_Areas/Games/Brick_Wars/Brick_Wars.md"))), readable = true)
         // Ring of Ash, played last, is asked first.
         coEvery { client.achievements(any(), ring, any()) } throws
             XboxException(XboxException.Kind.RATE_LIMITED, "The Xbox network asks to wait (too many requests).")
 
-        val result = sync.sync(now, zone)
+        val result = sync.sync(now, zone, writeClock = clock)
 
         assertTrue(result.isSuccess)
         coVerify(exactly = 0) { client.achievements(any(), bricks, any()) }
@@ -419,14 +428,14 @@ class XboxSyncTest {
         coEvery { client.titleHistory(xbl) } throws XboxException(XboxException.Kind.TOKEN_EXPIRED, "The Xbox network refused the sign-in token.")
         coEvery { client.titleHistory(renewed) } returns XboxTitleList(listOf(title(ring, "RING OF ASH")), full = false)
 
-        assertTrue(sync.sync(now, zone).isSuccess)
+        assertTrue(sync.sync(now, zone, writeClock = clock).isSuccess)
 
         coVerify(exactly = 1) { account.session(any(), true) }
         coVerify { client.titleHistory(renewed) }
 
         // Refused again after the renewal: the sign-in has ended, and nothing more is written.
         coEvery { client.titleHistory(renewed) } throws XboxException(XboxException.Kind.TOKEN_EXPIRED, "The Xbox network refused the sign-in token.")
-        val again = sync.sync(now, zone).exceptionOrNull() as XboxException
+        val again = sync.sync(now, zone, writeClock = clock).exceptionOrNull() as XboxException
         assertEquals(XboxException.Kind.SIGN_IN_EXPIRED, again.kind)
         coVerify(exactly = 1) { games.saveXboxSnapshot(any()) }
         coVerify { account.setStatus(match { it.needsSignIn }) }
@@ -442,11 +451,11 @@ class XboxSyncTest {
             complete = false,
             titles = listOf(XboxTitleState(ring, "RING OF ASH", achievementSource = 2, minutesPlayed = 1220), old)
         )
-        coEvery { games.links() } returns GameLinks(xbox = ConsoleLinks(hidden = listOf("987654321")))
+        coEvery { games.linksRead() } returns LinksRead(GameLinks(xbox = ConsoleLinks(hidden = listOf("987654321"))), readable = true)
         // The history came back full: older titles fell off it.
         coEvery { client.titleHistory(any()) } returns XboxTitleList(listOf(title(ring, "RING OF ASH")), full = true)
 
-        assertTrue(sync.sync(now, zone).isSuccess)
+        assertTrue(sync.sync(now, zone, writeClock = clock).isSuccess)
 
         coVerify {
             games.saveXboxSnapshot(match { s -> !s.complete && s.titles.map { it.titleId } == listOf(ring, "987654321") && s.titles[1] == old })
@@ -464,14 +473,14 @@ class XboxSyncTest {
                 AchievementRecord("3", "Lord of Ash", "", 30, earnedAt = "2026-11-01T19:00:00Z")
             )
         )
-        coEvery { games.links() } returns GameLinks(xbox = ConsoleLinks(links = mapOf(ring to page.path)))
+        coEvery { games.linksRead() } returns LinksRead(GameLinks(xbox = ConsoleLinks(links = mapOf(ring to page.path))), readable = true)
         coEvery { games.achievementSet(ring) } returns file
         // titlehub counts what the file holds: nothing to read again.
         coEvery { client.titleHistory(any()) } returns XboxTitleList(listOf(title(ring, "RING OF ASH", earned = 2, score = 40)), full = false)
         val change = slot<(String) -> String>()
         coEvery { games.editPage(page.path, capture(change)) } returns true
 
-        val result = sync.sync(now, zone)
+        val result = sync.sync(now, zone, writeClock = clock)
 
         assertTrue(result.isSuccess)
         assertEquals(1, result.getOrThrow().pages)
@@ -486,5 +495,230 @@ class XboxSyncTest {
                 "- $icon Lord of Ash — 2026-11-01 · 30 G\n- $icon First Steps — 2026-11-02 · 10 G\n",
             change.captured(before)
         )
+    }
+
+    // --- 13.4 ------------------------------------------------------------------------------
+
+    private val tower = "1915865690"
+    private val lastSync = XboxSnapshot(
+        "2026-11-26T22:40:00Z",
+        titles = listOf(XboxTitleState(ring, "RING OF ASH", achievementSource = 2, minutesPlayed = 1100))
+    )
+
+    @Test
+    fun `an images-eds address becomes images-eds-ssl`() = runTest {
+        coEvery { games.xboxSnapshot() } returns XboxSnapshot(
+            "2026-11-26T22:40:00Z",
+            titles = listOf(XboxTitleState(bricks, "Brick Wars", imageUrl = "https://store-images.s-microsoft.com/image/apps.kept"))
+        )
+        coEvery { client.titleHistory(any()) } returns XboxTitleList(
+            listOf(
+                title(ring, "RING OF ASH").copy(displayImage = "http://images-eds.xboxlive.com/image?url=AbC%2F&format=png"),
+                // A cleartext address on another host is no picture: the one kept stays.
+                title(bricks, "Brick Wars").copy(displayImage = "http://example.com/icon.png")
+            ),
+            full = false
+        )
+
+        assertTrue(sync.sync(now, zone, writeClock = clock).isSuccess)
+
+        coVerify {
+            games.saveXboxSnapshot(match { s ->
+                s.titles.first { it.titleId == ring }.imageUrl == "https://images-eds-ssl.xboxlive.com/image?url=AbC%2F&format=png" &&
+                    s.titles.first { it.titleId == bricks }.imageUrl == "https://store-images.s-microsoft.com/image/apps.kept"
+            })
+        }
+    }
+
+    @Test
+    fun `an unreadable links json keeps the play and says so`() = runTest {
+        coEvery { games.xboxSnapshot() } returns lastSync
+        coEvery { games.linksRead() } returns LinksRead(GameLinks(), readable = false)
+        val added = slot<List<GameSessionRecord>>()
+        coEvery { games.addSessions(capture(added)) } returns setOf(LocalDate.of(2026, 11, 27))
+
+        val result = sync.sync(now, zone, writeClock = clock)
+
+        assertEquals(XboxException.Kind.LINKS_UNREADABLE, (result.exceptionOrNull() as XboxException).kind)
+        assertEquals(120, added.captured.single().minutes)
+        coVerify { games.saveXboxSnapshot(any()) }
+        coVerify(exactly = 0) { games.createPages(any()) }
+        coVerify(exactly = 0) { games.updateLinks(any()) }
+        coVerify(exactly = 0) { games.editPage(any(), any()) }
+        coVerify(exactly = 0) { client.achievements(any(), any(), any()) }
+        coVerify {
+            account.setStatus(match {
+                !it.ok && it.kind == XboxException.Kind.LINKS_UNREADABLE && it.message == GamesRepository.LINKS_UNREADABLE_MESSAGE &&
+                    !it.needsOwner && !it.needsSignIn
+            })
+        }
+    }
+
+    @Test
+    fun `planned titles read their achievements first`() = runTest {
+        // Brick Wars, linked by hand and played last; Glass Tower, about to get its page, played a week ago.
+        coEvery { client.titleHistory(any()) } returns XboxTitleList(
+            listOf(
+                title(bricks, "Brick Wars", earned = 1, score = 10, lastPlayed = "2026-11-27T21:00:00Z"),
+                title(tower, "Glass Tower", earned = 1, score = 10, lastPlayed = "2026-11-20T21:00:00Z")
+            ),
+            full = false
+        )
+        coEvery { games.linksRead() } returns
+            LinksRead(GameLinks(xbox = ConsoleLinks(links = mapOf(bricks to "30_Areas/Games/Brick_Wars/Brick_Wars.md"))), readable = true)
+        coEvery { client.achievements(any(), any(), any()) } returns
+            listOf(FetchedAchievement("1", "Ground Floor", "", 10, secret = false, earned = true, unlockedAt = Instant.parse("2026-03-01T12:00:00Z")))
+        val written = slot<List<NewGamePage>>()
+        coEvery { games.createPages(capture(written)) } answers { firstArg<List<NewGamePage>>().mapNotNull { GamePages.parse(it.plan.path, it.content) } }
+
+        assertTrue(sync.sync(now, zone, writeClock = clock).isSuccess)
+
+        coVerifyOrder {
+            client.achievements(any(), tower, any())
+            client.achievements(any(), bricks, any())
+        }
+        // Its page starts on its first unlock, read in this sync.
+        assertTrue(written.captured.single().content.contains("\nstarted: '2026-03-01'\n"))
+    }
+
+    @Test
+    fun `a created page's start waits for its achievements`() = runTest {
+        coEvery { client.titleHistory(any()) } returns XboxTitleList(
+            listOf(title(tower, "Glass Tower", earned = 3, score = 30, lastPlayed = "2026-11-27T21:00:00Z")),
+            full = false
+        )
+        // Its achievements couldn't be read: the start isn't guessed from the last played day.
+        coEvery { client.achievements(any(), tower, any()) } throws XboxException(XboxException.Kind.API, "The Xbox network answered HTTP 500.")
+        val written = slot<List<NewGamePage>>()
+        coEvery { games.createPages(capture(written)) } answers { firstArg<List<NewGamePage>>().mapNotNull { GamePages.parse(it.plan.path, it.content) } }
+
+        assertTrue(sync.sync(now, zone, writeClock = clock).isSuccess)
+        assertFalse(written.captured.single().content.contains("started:"))
+
+        // A title without an earned achievement starts on its last played day, as before.
+        coEvery { client.titleHistory(any()) } returns XboxTitleList(
+            listOf(title(tower, "Glass Tower", lastPlayed = "2026-11-27T21:00:00Z")),
+            full = false
+        )
+        assertTrue(sync.sync(now, zone, writeClock = clock).isSuccess)
+        assertTrue(written.captured.single().content.contains("\nstarted: '2026-11-27'\n"))
+    }
+
+    @Test
+    fun `an exact page's start moves to its first unlock once`() = runTest {
+        val towerPage = GamePage(
+            "30_Areas/Games/Glass_Tower/Glass_Tower.md", "Glass Tower", emptyList(), GameTemplate.OTHER, GameState.BACKLOG,
+            LocalDate.of(2026, 11, 27), null, exactName = true
+        )
+        coEvery { games.pages() } returns listOf(page, towerPage)
+        coEvery { games.linksRead() } returns LinksRead(GameLinks(xbox = ConsoleLinks(links = mapOf(tower to towerPage.path))), readable = true)
+        coEvery { client.titleHistory(any()) } returns XboxTitleList(
+            listOf(title(tower, "Glass Tower", earned = 1, score = 10, lastPlayed = "2026-11-27T21:00:00Z")),
+            full = false
+        )
+        coEvery { client.achievements(any(), tower, 2) } returns
+            listOf(FetchedAchievement("1", "Ground Floor", "", 10, secret = false, earned = true, unlockedAt = Instant.parse("2026-03-01T12:00:00Z")))
+        val edits = mutableListOf<(String) -> String>()
+        coEvery { games.editPage(towerPage.path, capture(edits)) } returns true
+
+        assertTrue(sync.sync(now, zone, writeClock = clock).isSuccess)
+
+        // The page as the sync made it: started on its last played day.
+        val created = "---\ntitle: \"Glass Tower\"\ngame_template: other\ngame_match: exact\nstarted: '2026-11-27'\n---\n# Glass Tower\n"
+        // The start's edit comes first, before the page's section.
+        val startEdit = edits.first()
+        val moved = startEdit(created)
+        assertEquals(created.replace("started: '2026-11-27'", "started: '2026-03-01'"), moved)
+        // Once moved it stays, and an owner's date is never touched.
+        assertEquals(moved, startEdit(moved))
+        val owners = created.replace("started: '2026-11-27'", "started: '2026-10-15'")
+        assertEquals(owners, startEdit(owners))
+        // A page the owner made (no exact mark) keeps its start: no edit of it.
+        coEvery { games.pages() } returns listOf(page, towerPage.copy(exactName = false))
+        edits.clear()
+        assertTrue(sync.sync(now, zone, writeClock = clock).isSuccess)
+        assertTrue(edits.isEmpty())
+    }
+
+    @Test
+    fun `a sync writing after the burn burns today`() = runTest {
+        coEvery { games.xboxSnapshot() } returns lastSync
+        coEvery { games.addSessions(any()) } returns setOf(LocalDate.of(2026, 11, 27))
+        // Started at 23:40, writing at 23:55: the 23:50 burn has already run.
+        assertTrue(sync.sync(now, zone, writeClock = { now + 15 * 60_000L }).isSuccess)
+        coVerifyOrder {
+            games.addSessions(any())
+            dashboard.ensureDay(LocalDate.of(2026, 11, 27))
+            dashboard.burnToDisk(LocalDate.of(2026, 11, 27))
+            games.saveXboxSnapshot(any())
+        }
+        coVerify(exactly = 0) { games.applyPastDay(any(), any()) }
+        // Writing after midnight: the evening is a past day.
+        assertTrue(sync.sync(now, zone, writeClock = { now + 25 * 60_000L }).isSuccess)
+        coVerify { games.applyPastDay(LocalDate.of(2026, 11, 27), LocalDate.of(2026, 11, 28)) }
+    }
+
+    @Test
+    fun `a newcomer seen without its minutes keeps the previous sync's time`() = runTest {
+        coEvery { games.xboxSnapshot() } returns lastSync
+        coEvery { client.titleHistory(any()) } returns XboxTitleList(
+            listOf(title(ring, "RING OF ASH"), title(bricks, "Brick Wars", lastPlayed = "2026-11-27T21:00:00Z")),
+            full = false
+        )
+        // Its batch met a 429: no minutes for the new title.
+        coEvery { client.minutesPlayed(any(), any()) } returns mapOf(ring to 1220L)
+        val saved = mutableListOf<XboxSnapshot>()
+        coEvery { games.saveXboxSnapshot(capture(saved)) } returns true
+
+        assertTrue(sync.sync(now, zone, writeClock = clock).isSuccess)
+
+        val newcomer = saved.last().titles.first { it.titleId == bricks }
+        assertNull(newcomer.minutesPlayed)
+        assertEquals("2026-11-26T22:40:00Z", newcomer.newcomerSince)
+        // A title seen before, or a baseline, keeps none.
+        assertNull(saved.last().titles.first { it.titleId == ring }.newcomerSince)
+        assertTrue(sync.sync(now, zone, baseline = true, writeClock = clock).isSuccess)
+        assertNull(saved.last().titles.first { it.titleId == bricks }.newcomerSince)
+    }
+
+    @Test
+    fun `a title hidden or linked during the sync gets no page`() = runTest {
+        coEvery { client.titleHistory(any()) } returns XboxTitleList(
+            listOf(title(ring, "RING OF ASH"), title(bricks, "Brick Wars", lastPlayed = "2026-11-27T20:00:00Z")),
+            full = false
+        )
+        val written = mutableListOf<List<NewGamePage>>()
+        coEvery { games.createPages(capture(written)) } returns emptyList()
+        // Planned from the links read first, hidden from the fold while the achievements were read.
+        coEvery { games.linksRead() } returnsMany
+            listOf(LinksRead(GameLinks(), true), LinksRead(GameLinks(xbox = ConsoleLinks(hidden = listOf(bricks))), true))
+        assertTrue(sync.sync(now, zone, writeClock = clock).isSuccess)
+        assertTrue(written.last().isEmpty())
+        // Linked to a page by hand meanwhile.
+        coEvery { games.linksRead() } returnsMany
+            listOf(LinksRead(GameLinks(), true), LinksRead(GameLinks(xbox = ConsoleLinks(links = mapOf(bricks to page.path))), true))
+        assertTrue(sync.sync(now, zone, writeClock = clock).isSuccess)
+        assertTrue(written.last().isEmpty())
+        // Nothing meanwhile: the page is made.
+        coEvery { games.linksRead() } returns LinksRead(GameLinks(), true)
+        assertTrue(sync.sync(now, zone, writeClock = clock).isSuccess)
+        assertEquals(listOf("30_Areas/Games/Brick_Wars/Brick_Wars.md"), written.last().map { it.plan.path })
+    }
+
+    @Test
+    fun `the syncing flag is up while a sync runs`() = runTest {
+        var during: Boolean? = null
+        coEvery { games.addSessions(any()) } answers {
+            during = sync.syncing.value
+            emptySet()
+        }
+        assertFalse(sync.syncing.value)
+        assertTrue(sync.sync(now, zone, writeClock = clock).isSuccess)
+        assertEquals(true, during)
+        assertFalse(sync.syncing.value)
+        // A failed sync takes it down too.
+        coEvery { client.titleHistory(any()) } throws XboxException(XboxException.Kind.NETWORK, "No connection to the Xbox network.")
+        assertTrue(sync.sync(now, zone, writeClock = clock).isFailure)
+        assertFalse(sync.syncing.value)
     }
 }

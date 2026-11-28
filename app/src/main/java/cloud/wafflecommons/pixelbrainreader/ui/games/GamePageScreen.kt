@@ -410,6 +410,99 @@ private fun consoleOf(record: GameSessionRecord): String? = when (record.source)
 }
 
 /**
+ * A session's line on the page: "today · 21:00 · 2 h 35 · PlayStation". 13.4 (G1): play measured
+ * across a gap no console dates says since when instead, "since 20 Nov · 6 h · PlayStation" (it
+ * counts in the hours and has no day of its own).
+ */
+private fun sessionLine(record: GameSessionRecord, today: LocalDate, zone: ZoneId = ZoneId.systemDefault()): String {
+    val duration = GameTimeline.duration(record.minutes)
+    val since = record.since?.let { runCatching { Instant.parse(it).atZone(zone).toLocalDate() }.getOrNull() }
+    if (since != null) return listOfNotNull("since ${dayLabel(since, today)}", duration, consoleOf(record)).joinToString(" · ")
+    val date = runCatching { LocalDate.parse(record.date) }.getOrNull()
+    return listOfNotNull(date?.let { dayLabel(it, today) }, record.start, duration, consoleOf(record)).joinToString(" · ")
+}
+
+/**
+ * The game's first card (13.4, P3): its square picture in the game's own shape (the owner's, else a
+ * console's, else its initials, P5–P7), its facts beside it (hours, trophies, achievements, dates),
+ * then the state chips, the console's play time and, on a writing device, the owner's own picture:
+ * choose one with the system's photo picker, or remove it. A read-only device only shows the picture.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun GameHeaderCard(
+    page: GamePage,
+    state: GamePageUiState,
+    onSetState: (GameState) -> Unit,
+    onEditPlayedBefore: () -> Unit,
+    onChoosePicture: () -> Unit,
+    onRemovePicture: () -> Unit
+) {
+    val art = state.art ?: GameArtRules.initialsOnly(page.title)
+    val facts = listOfNotNull(
+        state.hours?.let { "${hours(it)} played" },
+        if (state.trophiesTotal > 0) "${state.trophiesEarned} of ${state.trophiesTotal} trophies" else null,
+        if (state.achievementsTotal > 0) {
+            "${state.achievementsEarned} of ${state.achievementsTotal} achievements · ${state.gamerscoreEarned} of ${state.gamerscoreTotal} G"
+        } else {
+            null
+        },
+        page.started?.let { "started ${dayLabel(it, state.today)}" },
+        page.finished?.let { "finished ${dayLabel(it, state.today)}" }
+    )
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.extraLarge,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 22.dp, vertical = 20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(18.dp), verticalAlignment = Alignment.CenterVertically) {
+                GamePicture(art, Modifier.size(if (isWideLayout()) GamePictureSizes.PageWide else GamePictureSizes.Page))
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(page.template.label, style = MaterialTheme.typography.titleLargeEmphasized)
+                    facts.forEach { fact ->
+                        Text(fact, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                GameState.entries.forEach { s ->
+                    FilterChip(
+                        selected = page.state == s,
+                        onClick = { if (page.state != s) onSetState(s) },
+                        enabled = !state.readOnly,
+                        label = { Text(s.label) }
+                    )
+                }
+            }
+            if (!state.readOnly) {
+                TextButton(onClick = onEditPlayedBefore, shapes = ButtonDefaults.shapes()) {
+                    Text(
+                        page.playedBefore?.let { typed ->
+                            "Console play time before the app: ${hours(typed)}" +
+                                if (state.measured) " (a console's own total replaces it)" else ""
+                        } ?: "Add the console's play time"
+                    )
+                }
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilledTonalButton(onClick = onChoosePicture, enabled = !state.coverBusy, shapes = ButtonDefaults.shapes()) {
+                        Icon(Icons.Rounded.AddPhotoAlternate, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+                        Spacer(Modifier.width(ButtonDefaults.IconSpacing))
+                        Text("Choose a picture")
+                    }
+                    if (state.hasOwnPicture) {
+                        OutlinedButton(onClick = onRemovePicture, enabled = !state.coverBusy, shapes = ButtonDefaults.shapes()) {
+                            Text("Remove the picture")
+                        }
+                    }
+                }
+                if (state.coverBusy) LinearWavyProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
+        }
+    }
+}
+
+/**
  * The page's maps (13.3, ME1): label · site, the main one first. Add, and per map Change, Make
  * main and Remove; a tap opens it in the map browser. A read-only device lists them, tappable,
  * with the notice and no controls, and shows no card for a game without a map (the page has its

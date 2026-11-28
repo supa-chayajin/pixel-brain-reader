@@ -162,4 +162,71 @@ class XboxSessionsTest {
         assertEquals(a.id, b.id)
         assertEquals(130, b.minutes)
     }
+
+    // --- 13.4: a long gap, and a newcomer read one sync late -------------------------------------
+
+    @Test
+    fun `a 10-day gap gives one undated session`() {
+        val previous = snapshot("2026-11-17T22:40:00Z", title(ring, 1100, "2026-11-17T20:00:00Z"))
+        val current = snapshot("2026-11-27T22:40:00Z", title(ring, 1100 + 600, "2026-11-27T21:13:45Z"))
+        val session = XboxSessionDiff.sessions(previous, current, zone, lastPlayedIsStart = false).single()
+        assertEquals("xbox:$ring:2026-11-17T22:40:00Z", session.id)
+        assertEquals(600, session.minutes)
+        // The last played day, no start, and since when the play may have run.
+        assertEquals("2026-11-27", session.date)
+        assertNull(session.start)
+        assertEquals("2026-11-17T22:40:00Z", session.since)
+        assertEquals(GameSessionRecord.SOURCE_XBOX, session.source)
+        // A day apart, the same kind of play is dated.
+        val dayLater = snapshot("2026-11-18T22:40:00Z", title(ring, 1100 + 120, "2026-11-18T21:00:00Z"))
+        val dated = XboxSessionDiff.sessions(previous, dayLater, zone, false).single()
+        assertNull(dated.since)
+        assertEquals("20:00", dated.start)
+    }
+
+    /** Seen first at 23:40 on the 26th, its minutes unread (a 429 on its batch), the list before it complete. */
+    private val seenWithout = snapshot(
+        "2026-11-26T22:40:00Z",
+        title(ring, 1100),
+        title(bricks, null, "2026-11-26T21:00:00Z", name = "Brick Wars").copy(newcomerSince = "2026-11-26T05:00:00Z")
+    )
+
+    @Test
+    fun `a newcomer read without minutes counts at the next sync when it fits`() {
+        val next = snapshot("2026-11-27T05:00:00Z", title(ring, 1100), title(bricks, 180, "2026-11-26T23:30:00Z", name = "Brick Wars"))
+        val session = XboxSessionDiff.sessions(seenWithout, next, zone, false).single()
+        assertEquals(bricks, session.titleId)
+        assertEquals(180, session.minutes)
+        // Three hours ending at 00:30 in Paris.
+        assertEquals("2026-11-26", session.date)
+        assertEquals("21:30", session.start)
+        assertEquals("xbox:$bricks:2026-11-26T22:40:00Z", session.id)
+        assertNull(session.since)
+        // Without the time kept (an older snapshot), its minutes are a baseline, as before.
+        val older = seenWithout.copy(titles = seenWithout.titles.map { it.copy(newcomerSince = null) })
+        assertTrue(XboxSessionDiff.sessions(older, next, zone, false).isEmpty())
+        // First seen two days before: it counts, undated (G1).
+        val longAgo = seenWithout.copy(
+            titles = listOf(title(ring, 1100), title(bricks, null, name = "Brick Wars").copy(newcomerSince = "2026-11-25T05:00:00Z"))
+        )
+        val undated = XboxSessionDiff.sessions(longAgo, next, zone, false).single()
+        assertNull(undated.start)
+        assertEquals("2026-11-25T05:00:00Z", undated.since)
+        assertEquals("2026-11-27", undated.date)
+        assertEquals(180, undated.minutes)
+    }
+
+    @Test
+    fun `a newcomer whose minutes don't fit is a baseline`() {
+        // Thirty hours of play in the 24 since it was first seen: older play is in them.
+        val tooMany = snapshot("2026-11-27T05:00:00Z", title(ring, 1100), title(bricks, 1800, "2026-11-26T23:30:00Z", name = "Brick Wars"))
+        assertTrue(XboxSessionDiff.sessions(seenWithout, tooMany, zone, false).isEmpty())
+        // Last played before it was first seen: older play too.
+        val older = snapshot("2026-11-27T05:00:00Z", title(ring, 1100), title(bricks, 180, "2026-11-25T21:00:00Z", name = "Brick Wars"))
+        assertTrue(XboxSessionDiff.sessions(seenWithout, older, zone, false).isEmpty())
+        // A time that doesn't read: a baseline.
+        val garbled = seenWithout.copy(titles = listOf(title(ring, 1100), title(bricks, null, name = "Brick Wars").copy(newcomerSince = "not a time")))
+        val next = snapshot("2026-11-27T05:00:00Z", title(ring, 1100), title(bricks, 180, "2026-11-26T23:30:00Z", name = "Brick Wars"))
+        assertTrue(XboxSessionDiff.sessions(garbled, next, zone, false).isEmpty())
+    }
 }

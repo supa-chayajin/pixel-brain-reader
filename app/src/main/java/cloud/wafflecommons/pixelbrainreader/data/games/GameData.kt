@@ -61,13 +61,23 @@ data class PsnTitleState(
     val earned: Int? = null,
     val defined: Int? = null,
     /** Its trophy set was asked for: a title without trophies isn't asked again at every sync. */
-    val trophyLookedUp: Boolean = false
-)
+    val trophyLookedUp: Boolean = false,
+    /**
+     * Every trophy list of the title (13.4: a collection's one title id can carry several), PSN's
+     * order, the first one [trophySet] too (what an older app reads). Empty for a title kept before
+     * 13.4: [allTrophySets] then falls back to [trophySet].
+     */
+    val trophySets: List<String> = emptyList()
+) {
+    /** The title's trophy lists: [trophySets], else its one [trophySet], else none. */
+    val allTrophySets: List<String> get() = trophySets.ifEmpty { listOfNotNull(trophySet) }
+}
 
 /**
- * PSN title → page path. [hidden] titles stay out of the "not in your library" fold. The Xbox titles
- * (13.3) sit apart in [xbox], so PSN's keys read and write exactly as 12.17 wrote them; the file
- * leaves [xbox] out while it is empty.
+ * PSN title → page path. [hidden] titles stay out of the "not in your library" fold; hiding a title
+ * keeps its link (13.4), so a hide made while the notes' mirror was empty can't delete a real one,
+ * and Unhide gives it back as it was. The Xbox titles (13.3) sit apart in [xbox], so PSN's keys read
+ * and write exactly as 12.17 wrote them; the file leaves [xbox] out while it is empty.
  */
 @Serializable
 data class GameLinks(
@@ -126,7 +136,11 @@ data class GameSessionsMonth(val sessions: List<GameSessionRecord> = emptyList()
  * A session: [SOURCE_PSN] from the play time PSN measured between two syncs, [SOURCE_XBOX] (13.3)
  * from the minutes Xbox measured between two syncs (both carry the console's title, and the page is
  * found through that console's links when shown), or [SOURCE_MANUAL] from a start and a stop on the
- * phone (it carries the page). The `source` values are persisted: never rename one.
+ * phone (it carries the page). The `source` values are persisted: never rename one. [since] (13.4,
+ * G1; persisted, never rename it): the earlier sync's instant (ISO) when the two syncs were more than
+ * [SessionDiff.UNDATED_GAP_SECONDS] apart, so no console said which day the play was. Such a record
+ * has no [start], its [date] is the title's last played day, it counts in the game's hours and
+ * writes no Timeline line.
  */
 @Serializable
 data class GameSessionRecord(
@@ -138,7 +152,8 @@ data class GameSessionRecord(
     val minutes: Int,
     val source: String,
     val titleId: String? = null,
-    val page: String? = null
+    val page: String? = null,
+    val since: String? = null
 ) {
     /** Measured by a console (XB5): PSN or Xbox. */
     val measured: Boolean get() = source == SOURCE_PSN || source == SOURCE_XBOX
@@ -191,7 +206,9 @@ data class XboxSnapshot(
  * One Xbox title as the last sync saw it. [minutesPlayed]: the cumulative `MinutesPlayed` stat,
  * null when unknown (never 0 for unknown). [lastPlayed] is an `Instant` string. [achievementSource]:
  * 2 for Xbox One and Series, 1 for Xbox 360, 0 without achievements. [visible] is false when the
- * owner hid the game on their Xbox profile.
+ * owner hid the game on their Xbox profile. [newcomerSince] (13.4; persisted, never rename it): a
+ * title first seen without its minutes while the previous list was complete keeps the previous
+ * sync's `syncedAt` here, read once at the next sync, so its first play still counts.
  */
 @Serializable
 data class XboxTitleState(
@@ -208,7 +225,8 @@ data class XboxTitleState(
     val totalAchievements: Int? = null,
     val totalGamerscore: Int? = null,
     val progress: Int? = null,
-    val visible: Boolean = true
+    val visible: Boolean = true,
+    val newcomerSince: String? = null
 )
 
 /** One Xbox title's achievements, with the owner's earned dates (13.3). Unearned names stay in this file. */

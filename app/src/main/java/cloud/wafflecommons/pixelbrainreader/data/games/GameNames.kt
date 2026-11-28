@@ -34,6 +34,36 @@ object GameNames {
         }
     }
 
+    /**
+     * True when some page answers to [title] by its names: [pageForTitle], or a name equal to it or
+     * (on a page not marked exact) the first words of it, a tie between two pages included. What a
+     * title needs to get no page of its own (XB4).
+     */
+    internal fun answered(title: String, pages: List<GamePage>): Boolean {
+        if (pageForTitle(title, pages) != null) return true
+        val name = normalize(title)
+        if (name.isEmpty()) return false
+        return pages.any { page ->
+            page.names.map(::normalize).any { it.isNotEmpty() && (name == it || (!page.exactName && name.startsWith("$it "))) }
+        }
+    }
+
+    /**
+     * The page [title] looks like (13.4, the owner's call): no page answers it, but it is the first
+     * whole words of a page's name or alias ("Glass Tower" beside a "Glass Tower Online" page: a
+     * console that listed the game again under a shorter name, or the base game of a sequel's page).
+     * The fold asks; nothing is linked on its own. The page whose such name is shortest wins, then by
+     * title; null when none.
+     */
+    fun lookalike(title: String, pages: List<GamePage>): GamePage? {
+        val name = normalize(title)
+        if (name.isEmpty() || answered(title, pages)) return null
+        val prefix = "$name "
+        return pages.mapNotNull { page ->
+            page.names.map(::normalize).filter { it.isNotEmpty() && it.startsWith(prefix) }.minOfOrNull { it.length }?.let { page to it }
+        }.minWithOrNull(compareBy<Pair<GamePage, Int>>({ it.second }, { it.first.title.lowercase() }))?.first
+    }
+
     /** The page a Timeline line names, anywhere in the line as whole words; null when none or tied. */
     fun pageInLine(line: String, pages: List<GamePage>): GamePage? {
         val text = " ${normalize(line)} "

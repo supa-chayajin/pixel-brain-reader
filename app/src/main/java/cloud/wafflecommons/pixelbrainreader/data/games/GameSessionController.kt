@@ -247,16 +247,169 @@ class GameSessionController @Inject constructor(
     }
 
     /**
+     * The notes of [days] follow their sessions again (13.4: the Games tab, once typed sessions of a
+     * page that's gone are linked to another), each the way a stop refreshes its day. Runs to its end
+     * once asked, whatever cancels the caller. [replacingKeys] (13.4 review): a gone page's key whose
+     * sessions were just linked to another page; its old lines go as the new page's come in.
+     */
+    suspend fun refreshDays(
+        days: Set<LocalDate>,
+        now: Long = System.currentTimeMillis(),
+        zone: ZoneId = ZoneId.systemDefault(),
+        replacingKeys: Set<String> = emptySet()
+    ) {
+        if (days.isEmpty() || VaultWriteGate.readOnly) return
+        val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
+        withContext(NonCancellable) { days.sorted().forEach { refreshDay(it, today, replacingKeys) } }
+    }
+
+    // --- Under the lock (13.4) ---------------------------------------------------------------
+
+    /**
+     * What a stop did: [Stopped] with the record it saved (none under a minute or on a read-only
+     * device), [NotRunning], or [Kept] running because its record couldn't be saved.
+     */
+    private sealed interface StopOutcome {
+        data class Stopped(val record: GameSessionRecord?) : StopOutcome
+        data object NotRunning : StopOutcome
+        data object Kept : StopOutcome
+    }
+
+    /**
+     * The stop itself, under the lock (13.4, the audit's check-worker-cancels-own-stop): the record
+     * is saved first; only then are the session, its check and its notifications cleared, and the
+     * check's job cancelled unless the check runs this ([fromCheck]: a job never cancels itself).
+     * The game night ends in every case, the save refused included.
+     */
+    private suspend fun stopLocked(now: Long, zone: ZoneId, endAt: Long?, fromCheck: Boolean): StopOutcome {
+        val rule = preferences.gameNightRule.first()
+        try {
+            val session = current() ?: run {
+                clearLocked(fromCheck)
+                return StopOutcome.NotRunning
+            }
+            if (VaultWriteGate.readOnly) {
+                clearLocked(fromCheck)
+                return StopOutcome.Stopped(null)
+            }
+            // E4: an unanswered question ends the session when it was due, whoever stops it.
+            val due = (GameSessionGuard.step(checkOf(session), now) as? GameSessionGuard.Step.End)?.at
+            val end = listOfNotNull(endAt, due).minOrNull() ?: now
+            val record = session.record(minOf(end, now), zone)
+            if (record != null && games.addSessions(listOf(record)) == null) return StopOutcome.Kept
+            clearLocked(fromCheck)
+            if (record != null) refreshDay(LocalDate.parse(record.date), Instant.ofEpochMilli(now).atZone(zone).toLocalDate())
+            return StopOutcome.Stopped(record)
+        } finally {
+            platform.endGameNight(rule)
+        }
+    }
+
+    /** No session any more: its prefs and notifications go, and its check's job unless [fromCheck]. */
+    private suspend fun clearLocked(fromCheck: Boolean) {
+        preferences.setGameSession(null)
+        preferences.setGameSessionCheck(null)
+        platform.cancelRunning()
+        platform.cancelAsk()
+        if (!fromCheck) platform.cancelCheck()
+    }
+
+    private suspend fun checkLocked(now: Long, zone: ZoneId, superseded: () -> Boolean) {
+        fun next(delayMs: Long) {
+            if (!superseded()) platform.scheduleCheck(delayMs, fromCheck = true)
+        }
+        val session = current() ?: run {
+            // A stop that went before: nothing of the session stays on screen (the ghost notification).
+            preferences.setGameSessionCheck(null)
+            platform.cancelAsk()
+            platform.cancelRunning()
+            return
+        }
+        val check = checkOf(session)
+        when (val step = GameSessionGuard.step(check, now)) {
+            is GameSessionGuard.Step.Wait -> {
+                val shown = shownFor(session)
+                platform.postRunning(session, shown.title, shown.hasMap, shown.icon)
+                preferences.setGameSessionCheck(check.encode())
+                next(step.at - now)
+            }
+            is GameSessionGuard.Step.Ask -> {
+                val shown = shownFor(session)
+                platform.postRunning(session, shown.title, shown.hasMap, shown.icon)
+                preferences.setGameSessionCheck(check.copy(askedAt = now).encode())
+                platform.postAsk(shown.title, session.startMillis, endsAt = check.nextAskAt, answerBy = step.answerBy, largeIcon = shown.icon)
+                next(step.answerBy - now)
+            }
+            is GameSessionGuard.Step.End -> {
+                val outcome = try {
+                    stopLocked(now, zone, endAt = step.at, fromCheck = true)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // Tried again later, as a refused save is; the worker logs the failure.
+                    next(RETRY_MS)
+                    throw e
+                }
+                if (outcome == StopOutcome.Kept) next(RETRY_MS)
+            }
+        }
+    }
+
+    /**
+     * The game night of a session started at [now]: on in Perso outside work hours, with the day
+     * whose shutdown banner it keeps away ([GameNight.dayToHide]).
+     */
+    private suspend fun gameNightLocked(now: Long, zone: ZoneId): GameNightOutcome {
+        val moment = LocalDateTime.ofInstant(Instant.ofEpochMilli(now), zone)
+        val config = modesRepository.currentConfig()
+        if (!GameNight.guards(modesRepository.currentVisibility().mode, ModeResolver.inWorkHours(config, moment))) return GameNightOutcome.NONE
+        GameNight.dayToHide(config, moment)?.let { preferences.setGameNightDay(it) }
+        if (!platform.canGuard()) return GameNightOutcome.NEEDS_ACCESS
+        val rule = platform.startGameNight(preferences.gameNightRule.first())
+        preferences.setGameNightRule(rule)
+        return if (rule != null) GameNightOutcome.ON else GameNightOutcome.NEEDS_ACCESS
+    }
+
+    /** What the session's notifications show: its page's title (the file name once the page is gone), its maps, its picture. */
+    private class Shown(val title: String, val hasMap: Boolean, val icon: Bitmap?)
+
+    private suspend fun shownFor(session: RunningGame): Shown {
+        val page = games.page(session.page)
+        return Shown(page?.title ?: fallbackTitle(session), page?.maps?.isNotEmpty() == true, largeIconOf(page, session))
+    }
+
+    /**
+     * The session notification's large icon (13.4, P1): the page's picture, or the initials of the
+     * file name once the page is gone; null on any failure (a picture is decoration).
+     */
+    private suspend fun largeIconOf(page: GamePage?, session: RunningGame): Bitmap? = try {
+        val art = page?.let { pictureSource.artFor(it) } ?: GameArtRules.initialsOnly(fallbackTitle(session))
+        notificationPicture.largeIcon(art)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        null
+    }
+
+    /**
      * The day's Timeline line follows its sessions: today's note is burned (made if the day has no
      * board yet); an earlier day within a week gets its marked lines edited (D11), never a re-burn;
-     * older days keep their sessions in the data file only.
+     * older days keep their sessions in the data file only. A note that can't follow is left for its
+     * next burn (13.4): the session is already saved, and the stop doesn't fail for it.
      */
-    private suspend fun refreshDay(day: LocalDate, today: LocalDate) {
-        if (day.isBefore(today)) {
-            games.applyPastDay(day, today)
-        } else if (day == today) {
-            dashboardRepository.ensureDay(day)
-            dashboardRepository.burnToDisk(day)
+    private suspend fun refreshDay(day: LocalDate, today: LocalDate, replacingKeys: Set<String> = emptySet()) {
+        try {
+            if (day.isBefore(today)) {
+                games.applyPastDay(day, today, replacingKeys)
+            } else if (day == today) {
+                dashboardRepository.ensureDay(day)
+                dashboardRepository.burnToDisk(day)
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // The type and frames only: a message can hold a note's path.
+            Log.w(TAG, "A game day's note couldn't follow its sessions: " + AppScopeErrors.describe(e))
         }
     }
 

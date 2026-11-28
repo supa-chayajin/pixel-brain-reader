@@ -66,4 +66,55 @@ class GameNamesTest {
         // A Timeline line still names it anywhere, as whole words.
         assertEquals(tower, GameNames.pageInLine("Glass Tower with friends", listOf(tower)))
     }
+
+    // --- 13.4 ------------------------------------------------------------------------------
+
+    @Test
+    fun `a zero-width space inside a word still matches the page`() {
+        val tower = page("Glass Tower")
+        assertEquals("glass tower", GameNames.normalize("Gla\u200Bss\u00AD Tow\u2060er\u202E"))
+        assertEquals(tower, GameNames.pageForTitle("GLA\u200BSS TOWER", listOf(tower)))
+        assertEquals(tower, GameNames.pageInLine("Evening at Glass\uFEFF Tower", listOf(tower)))
+        // A joiner isn't invisible: it still parts two words, as before.
+        assertEquals("glass tower", GameNames.normalize("Glass\u200DTower"))
+    }
+
+    @Test
+    fun `a title that is the first words of a page's name looks like it`() {
+        val online = page("Lantern Bay Online").copy(exactName = true)
+        val sequel = page("Glass Tower 2")
+        val pages = listOf(online, sequel, page("Tin Orchard"))
+        // A console that listed the game again under a shorter name, or the base game beside its sequel's page.
+        assertEquals(online, GameNames.lookalike("LANTERN BAY™", pages))
+        assertEquals(sequel, GameNames.lookalike("Glass Tower", pages))
+        // Whole words only.
+        assertNull(GameNames.lookalike("Lantern", listOf(page("Lanterns of the Bay"))))
+        assertNull(GameNames.lookalike("Coral Reef", pages))
+        assertNull(GameNames.lookalike("™", pages))
+        // The page whose such name is shortest, an alias too.
+        val aliased = page("Glass Tower Deluxe Edition", "Glass Tower Deluxe")
+        assertEquals(aliased, GameNames.lookalike("Glass Tower", listOf(page("Glass Tower Deluxe Edition Plus"), aliased)))
+    }
+
+    @Test
+    fun `a page that answers the title is never a lookalike`() {
+        val tower = page("Glass Tower")
+        val sequel = page("Glass Tower 2")
+        assertNull(GameNames.lookalike("Glass Tower", listOf(tower, sequel)))
+        // A page the sync made answers its exact name too.
+        assertNull(GameNames.lookalike("GLASS TOWER", listOf(tower.copy(exactName = true), sequel)))
+        // Two pages tied on the name still answer it.
+        assertNull(GameNames.lookalike("Glass Tower", listOf(tower, tower.copy(path = "other.md"), sequel)))
+    }
+
+    @Test
+    fun `a sequel still links by the prefix rule`() {
+        val tower = page("Glass Tower")
+        assertEquals(tower, GameNames.pageForTitle("Glass Tower 2", listOf(tower)))
+        assertNull(GameNames.lookalike("Glass Tower 2", listOf(tower)))
+        // A page the sync made for the short name answers its exact names only: the sequel looks like nothing.
+        val exact = tower.copy(exactName = true)
+        assertNull(GameNames.pageForTitle("Glass Tower 2", listOf(exact)))
+        assertNull(GameNames.lookalike("Glass Tower 2", listOf(exact)))
+    }
 }

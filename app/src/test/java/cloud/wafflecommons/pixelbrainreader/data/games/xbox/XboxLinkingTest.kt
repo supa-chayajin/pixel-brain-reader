@@ -111,4 +111,23 @@ class XboxLinkingTest {
         assertEquals(listOf(listOf("1234567890"), listOf(legacy, modern)), plans.map { it.titleIds })
         assertTrue(plans.all { it.console == GameConsole.XBOX })
     }
+
+    @Test
+    fun `a chain of siblings links to a fixed point`() {
+        // T1's modern id is T2, T2's is T3; only T3's name matches a page, and the history lists them T1, T2, T3.
+        val t1 = "1480000011"
+        val t2 = "1480000012"
+        val t3 = "1915865699"
+        val current = snapshot(
+            title(t1, "Lantern Bay Classic", modernId = t2),
+            title(t2, "Lantern Bay HD", modernId = t3),
+            title(t3, "Lantern Bay")
+        )
+        // A page the sync made: it answers its exact name only.
+        val bay = GamePage("30_Areas/Games/Lantern_Bay/Lantern_Bay.md", "Lantern Bay", emptyList(), GameTemplate.OTHER, GameState.BACKLOG, null, null, exactName = true)
+        val links = XboxLinking.autoLinked(GameLinks(), current, listOf(bay))
+        assertEquals(listOf(bay.path, bay.path, bay.path), listOf(t1, t2, t3).map { links.consolePage(GameConsole.XBOX, it) })
+        // So none is left to get a page of its own.
+        assertTrue(XboxLinking.candidates(links, current).isEmpty())
+    }
 }

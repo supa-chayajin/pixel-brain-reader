@@ -2,15 +2,19 @@ package cloud.wafflecommons.pixelbrainreader.data.games
 
 import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.FileContentDao
+import cloud.wafflecommons.pixelbrainreader.data.repository.AssetRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.FileRepository
 import cloud.wafflecommons.pixelbrainreader.data.sync.VaultPushScheduler
+import cloud.wafflecommons.pixelbrainreader.data.utils.VaultFileIndex
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.After
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -18,14 +22,20 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import java.io.File
+import java.nio.file.Files
 import java.time.LocalDate
 import java.time.LocalTime
+import java.time.YearMonth
+import java.time.ZoneId
 
 /** The games data in an in-memory vault: disk first, corrupt files kept aside, the read-only gate. */
 class GamesRepositoryTest {
 
     private val disk = mutableMapOf<String, String>()
     private val movedAside = mutableListOf<String>()
+
+    /** A real folder for what the repository lists (the sessions folder, a path's case): never the vault. */
+    private val root: File = Files.createTempDirectory("games-repository").toFile()
     private val files: FileRepository = mockk {
         coEvery { readFile(any()) } answers { disk[firstArg()] }
         coEvery { saveFileLocally(any(), any()) } answers { disk[firstArg()] = secondArg() }
@@ -36,6 +46,7 @@ class GamesRepositoryTest {
             disk.remove(path)
             File("aside")
         }
+        every { getLocalFile(any()) } answers { File(root, firstArg<String>()) }
     }
     private val dao: FileContentDao = mockk {
         coEvery { pathsContaining(any()) } answers { disk.filter { it.value.contains(firstArg<String>()) }.keys.toList() }
@@ -57,6 +68,7 @@ class GamesRepositoryTest {
     @After
     fun tearDown() {
         VaultWriteGate.readOnly = false
+        root.deleteRecursively()
     }
 
     private fun record(id: String, date: String, start: String, minutes: Int) =
@@ -85,11 +97,10 @@ class GamesRepositoryTest {
 
     @Test
     fun `an unreadable file is moved aside, never overwritten in place`() = runTest {
-        disk[GameFiles.LINKS] = "{not json"
-        val links = repository.updateLinks { it.link("PPSA1", pagePath) }
-        assertEquals(pagePath, links!!.pageOf("PPSA1"))
-        assertEquals(listOf(GameFiles.LINKS), movedAside)
-        assertEquals(pagePath, repository.links().pageOf("PPSA1"))
+        disk[GameFiles.sessions("2026-11")] = "{not json"
+        assertEquals(setOf(LocalDate.of(2026, 11, 14)), repository.addSessions(listOf(record("a", "2026-11-14", "21:00", 60))))
+        assertEquals(listOf(GameFiles.sessions("2026-11")), movedAside)
+        assertEquals(listOf("a"), repository.sessions(YearMonth.of(2026, 11)).map { it.id })
     }
 
     @Test
@@ -115,6 +126,18 @@ class GamesRepositoryTest {
         // Today is the burn's, and older than a week is left alone.
         assertFalse(repository.applyPastDay(LocalDate.of(2026, 11, 14), today = LocalDate.of(2026, 11, 14)))
         assertFalse(repository.applyPastDay(LocalDate.of(2026, 11, 1), today = LocalDate.of(2026, 11, 14)))
+    }
+
+    @Test
+    fun `a relinked page's old line goes when its day is edited again`() = runTest {
+        // 13.4 review: the sessions of a page that's gone, linked to Ring since; the old line names no page.
+        repository.addSessions(listOf(record("a", "2026-11-13", "21:00", 60)))
+        val note = GamesRepository.journalPath(LocalDate.of(2026, 11, 13))
+        disk[note] = "# 2026-11-13\n\n## 🗓️ Timeline\n\n- 21:00 🎮 Old Name · 1 h <!--game:Old_Name-->\n\n## 📝 Journal\n\n*No tasks*\n"
+        assertTrue(repository.applyPastDay(LocalDate.of(2026, 11, 13), today = LocalDate.of(2026, 11, 14), replacingKeys = setOf("Old_Name")))
+        val content = disk.getValue(note)
+        assertFalse(content.contains("<!--game:Old_Name-->"))
+        assertEquals(1, content.lines().count { it.contains("<!--game:Ring-->") })
     }
 
     @Test
@@ -310,4 +333,3 @@ class GamesRepositoryTest {
         assertEquals(105, line.minutes)
     }
 }
-

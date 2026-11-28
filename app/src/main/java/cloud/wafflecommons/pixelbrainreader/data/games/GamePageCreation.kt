@@ -104,7 +104,8 @@ object GamePageCreation {
         pages: List<GamePage>,
         takenPaths: Collection<String>,
         console: GameConsole,
-        limit: Int = MAX_PER_SYNC
+        limit: Int = MAX_PER_SYNC,
+        holdLookalikes: Boolean = true
     ): List<PagePlan> {
         val layout = layout(pages) ?: return emptyList()
         val taken = takenPaths.mapTo(HashSet()) { it.lowercase() }
@@ -114,6 +115,7 @@ object GamePageCreation {
             if (out.size >= limit) break
             val title = group.map { pageTitle(it.name) }.firstOrNull { it.isNotEmpty() } ?: continue
             if (answered(title, pages)) continue
+            if (holdLookalikes && GameNames.lookalike(title, pages) != null) continue
             val key = keyOf(title, layout.separator)
             if (key.isEmpty()) continue
             val path = pathOf(layout, key)
@@ -126,6 +128,37 @@ object GamePageCreation {
             out += PagePlan(path, title, aliases, group.map { it.titleId }.distinct(), console)
         }
         return out
+    }
+
+    /**
+     * The page for one title (13.4: the fold's "Create a page"), a held-back lookalike included; null
+     * when a page answers it, its path is taken, or there is no layout.
+     */
+    fun planOne(candidate: PageCandidate, pages: List<GamePage>, takenPaths: Collection<String>, console: GameConsole): PagePlan? =
+        plan(listOf(candidate), pages, takenPaths, console, limit = 1, holdLookalikes = false).firstOrNull()
+
+    /**
+     * [newPages] checked again under the git lock (13.4), against what was read there: a page is kept
+     * only when none of its titles is now linked or hidden (the owner may have linked or hidden one
+     * during the sync), its path isn't a note of [takenPaths] ignoring case, its own folder isn't
+     * there with another case, no page of [pages] now answers its title, and it looks like none.
+     */
+    fun recheck(
+        newPages: List<NewGamePage>,
+        links: GameLinks,
+        console: GameConsole,
+        pages: List<GamePage>,
+        takenPaths: Collection<String>
+    ): List<NewGamePage> {
+        val taken = takenPaths.mapTo(HashSet()) { it.lowercase() }
+        return newPages.filter { page ->
+            val plan = page.plan
+            plan.titleIds.none { links.consolePage(console, it) != null || links.isHidden(console, it) } &&
+                plan.path.lowercase() !in taken &&
+                !(inOwnFolder(plan.path) && folderTakenWithAnotherCase(plan.path.substringBeforeLast('/') + "/", takenPaths)) &&
+                !answered(plan.title, pages) &&
+                GameNames.lookalike(plan.title, pages) == null
+        }
     }
 
     /**
@@ -164,13 +197,12 @@ object GamePageCreation {
         if (aliases.isEmpty()) content else FrontmatterLines.setList(content, "aliases", aliases.map(VaultSchema::doubleQuoted))
 
     /** Some page answers to [title], by its names (the prefix rule included), a tie between two pages too. */
-    private fun answered(title: String, pages: List<GamePage>): Boolean {
-        if (GameNames.pageForTitle(title, pages) != null) return true
-        val name = GameNames.normalize(title)
-        if (name.isEmpty()) return false
-        return pages.any { page ->
-            page.names.map(GameNames::normalize).any { it.isNotEmpty() && (name == it || (!page.exactName && name.startsWith("$it "))) }
-        }
+    private fun answered(title: String, pages: List<GamePage>): Boolean = GameNames.answered(title, pages)
+
+    /** A plan in a folder named like its file (`<root>/<Key>/<Key>.md`), the owner's own-folder layout. */
+    private fun inOwnFolder(path: String): Boolean {
+        val folder = path.substringBeforeLast('/', "")
+        return folder.isNotEmpty() && folder.substringAfterLast('/') == path.substringAfterLast('/').removeSuffix(".md")
     }
 
     private fun folderTakenWithAnotherCase(folder: String, takenPaths: Collection<String>): Boolean {

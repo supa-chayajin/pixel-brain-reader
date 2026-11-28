@@ -9,6 +9,7 @@ import cloud.wafflecommons.pixelbrainreader.data.games.GameConsole
 import cloud.wafflecommons.pixelbrainreader.data.games.GameLinks
 import cloud.wafflecommons.pixelbrainreader.data.games.GamePage
 import cloud.wafflecommons.pixelbrainreader.data.games.GamePageCreation
+import cloud.wafflecommons.pixelbrainreader.data.games.GamePages
 import cloud.wafflecommons.pixelbrainreader.data.games.GamesRepository
 import cloud.wafflecommons.pixelbrainreader.data.games.PagePlan
 import cloud.wafflecommons.pixelbrainreader.data.games.XboxSnapshot
@@ -17,6 +18,9 @@ import cloud.wafflecommons.pixelbrainreader.data.repository.DailyDashboardReposi
 import cloud.wafflecommons.pixelbrainreader.data.sync.GitSyncCoordinator
 import cloud.wafflecommons.pixelbrainreader.di.AppScopeErrors
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.time.Instant
@@ -34,7 +38,9 @@ data class XboxSyncSummary(val titles: Int, val sessions: Int, val achievementSe
  * the writes run in one block under the git lock, like the other background writers, so none lands
  * in the middle of a pull. A failure writes nothing but the status line ("Xbox paused: …"), and
  * never touches the vault sync. A played title no page claims gets a page (XB4), linked and given
- * its achievements in the same sync. Nothing runs on a read-only device.
+ * its achievements in the same sync. Nothing runs on a read-only device. Since 13.4 an unreadable
+ * links.json links, hides and creates nothing (the play is still kept), the day is the one the writes
+ * happen on, and a created page's `started` waits for its achievements.
  */
 @Singleton
 class XboxSync @Inject constructor(
@@ -57,7 +63,8 @@ class XboxSync @Inject constructor(
     suspend fun sync(
         now: Long = System.currentTimeMillis(),
         zone: ZoneId = ZoneId.systemDefault(),
-        baseline: Boolean = false
+        baseline: Boolean = false,
+        writeClock: () -> Long = System::currentTimeMillis
     ): Result<XboxSyncSummary> {
         if (VaultWriteGate.readOnly) {
             return Result.failure(XboxException(XboxException.Kind.NOT_CONFIGURED, "Read-only device: Xbox syncs on your phone."))
@@ -67,7 +74,7 @@ class XboxSync @Inject constructor(
         }
         return running.withLock {
             try {
-                val summary = run(now, zone, baseline || account.baselinePending())
+                val summary = run(now, zone, baseline || account.baselinePending(), writeClock)
                 account.setStatus(XboxStatus(true, now))
                 Result.success(summary)
             } catch (e: CancellationException) {
@@ -86,7 +93,8 @@ class XboxSync @Inject constructor(
         }
     }
 
-    private suspend fun run(now: Long, zone: ZoneId, baseline: Boolean): XboxSyncSummary {
+    private suspend fun run(now: Long, zone: ZoneId, baseline: Boolean, writeClock: () -> Long): XboxSyncSummary {
+        // The new pages' own dates are the sync's start day; the writes below use the day they happen on.
         val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
 
         // --- 1. Read (network; nothing written) ---------------------------------------------
@@ -107,25 +115,36 @@ class XboxSync @Inject constructor(
 
         // A played title no page claims gets one (XB4): where the owner's game pages already are.
         val pages = games.pages()
-        val claimed = XboxLinking.autoLinked(games.links(), seen, pages)
+        val linksAtStart = games.linksRead()
+        // An unreadable links.json is never acted on (13.4): no link, no page, no section.
+        val claimed = if (linksAtStart.readable) XboxLinking.autoLinked(linksAtStart.links, seen, pages) else linksAtStart.links
         val layout = GamePageCreation.layout(pages)
-        val plans = GamePageCreation.plan(
-            candidates = XboxLinking.candidates(claimed, seen),
-            pages = pages,
-            takenPaths = layout?.let { games.notePathsUnder(it.root) }.orEmpty(),
-            console = GameConsole.XBOX
-        )
+        val plans = if (!linksAtStart.readable) {
+            emptyList()
+        } else {
+            GamePageCreation.plan(
+                candidates = XboxLinking.candidates(claimed, seen),
+                pages = pages,
+                takenPaths = layout?.let { games.notePathsUnder(it.root) }.orEmpty(),
+                console = GameConsole.XBOX
+            )
+        }
         // The achievements of the titles about to get a page come with this sync.
         val links = plans.fold(claimed) { acc, plan -> plan.titleIds.fold(acc) { a, id -> a.linkConsole(GameConsole.XBOX, id, plan.path) } }
 
-        // Achievements of the linked titles that moved since the last sync (or were never saved),
-        // the games played last first, a few a sync: a large library fills in over several nights.
+        // Achievements of the linked titles that moved since the last sync (or were never saved): the
+        // titles about to get a page first (13.4: their `started` comes from them), then the games
+        // played last, a few a sync: a large library fills in over several nights.
+        val planned = plans.flatMapTo(HashSet()) { it.titleIds }
         val files = mutableListOf<AchievementSetFile>()
         val due = seen.titles
             .filter { links.consolePage(GameConsole.XBOX, it.titleId) != null }
             .map { it to games.achievementSet(it.titleId) }
             .filter { (title, saved) -> XboxAchievements.moved(title, saved) }
-            .sortedWith(compareBy(nullsLast(reverseOrder<Instant>())) { XboxTimes.instant(it.first.lastPlayed) })
+            .sortedWith(
+                compareBy<Pair<XboxTitleState, AchievementSetFile?>> { it.first.titleId !in planned }
+                    .then(compareBy(nullsLast(reverseOrder<Instant>())) { XboxTimes.instant(it.first.lastPlayed) })
+            )
             .take(MAX_ACHIEVEMENT_TITLES)
         for ((title, saved) in due) {
             val fetched = try {
@@ -167,38 +186,64 @@ class XboxSync @Inject constructor(
         // --- 2. Write (the vault, under the git lock) ----------------------------------------
         var pagesTouched = 0
         var created = emptyList<GamePage>()
+        var linksUnreadable = !linksAtStart.readable
         gitSyncCoordinator.mutex.withLock {
-            created = games.createPages(newPages)
-            // Read again: the pages just created, and any made meanwhile.
-            val pagesNow = games.pages()
-            val createdPaths = created.mapTo(HashSet()) { it.path }
-            // Linked again from the file on disk: a link the owner made during the sync is kept, and a
-            // created page takes its titles unless one was linked or hidden meanwhile.
-            games.updateLinks { onDisk ->
-                newPages.filter { it.plan.path in createdPaths }.fold(XboxLinking.autoLinked(onDisk, current, pagesNow)) { acc, page ->
-                    page.plan.titleIds.fold(acc) { a, id ->
-                        if (a.consolePage(GameConsole.XBOX, id) == null && !a.isHidden(GameConsole.XBOX, id)) {
-                            a.linkConsole(GameConsole.XBOX, id, page.plan.path)
-                        } else {
-                            a
+            // The day the writes happen on: a sync that waited past the 23:50 burn, or past midnight.
+            val writeDay = Instant.ofEpochMilli(writeClock()).atZone(zone).toLocalDate()
+            var pagesNow: List<GamePage>? = null
+            val linksNow = games.linksRead()
+            if (linksNow.readable) {
+                // The plans checked again against what is there now: a title linked or hidden during
+                // the sync, a page made meanwhile, a path taken with another case.
+                val pagesBefore = games.pages()
+                val taken = layout?.let { games.notePathsUnder(it.root) }.orEmpty()
+                val toCreate = GamePageCreation.recheck(newPages, linksNow.links, GameConsole.XBOX, pagesBefore, taken)
+                created = games.createPages(toCreate)
+                // Read again: the pages just created, and any made meanwhile.
+                val fresh = games.pages()
+                pagesNow = fresh
+                val createdPaths = created.mapTo(HashSet()) { it.path }
+                // Linked again from the file on disk: a link the owner made during the sync is kept, and a
+                // created page takes its titles unless one was linked or hidden meanwhile.
+                games.updateLinks { onDisk ->
+                    toCreate.filter { it.plan.path in createdPaths }.fold(XboxLinking.autoLinked(onDisk, current, fresh)) { acc, page ->
+                        page.plan.titleIds.fold(acc) { a, id ->
+                            if (a.consolePage(GameConsole.XBOX, id) == null && !a.isHidden(GameConsole.XBOX, id)) {
+                                a.linkConsole(GameConsole.XBOX, id, page.plan.path)
+                            } else {
+                                a
+                            }
                         }
                     }
                 }
+            } else {
+                linksUnreadable = true
             }
-            files.forEach { games.saveAchievementSet(it) }
-            // Every run: a page linked by hand since gets its section without waiting for a new achievement.
-            pagesTouched = refreshPages(pagesNow, games.links(), zone)
+            val savedFiles = files.filter { games.saveAchievementSet(it) }
+            val linksAfter = games.linksRead()
+            if (linksAfter.readable) {
+                val shown = pagesNow ?: games.pages()
+                // A page the sync made keeps the start its achievements show (13.4), once.
+                fillStarts(savedFiles, shown, linksAfter.links, current, zone)
+                // Every run: a page linked by hand since gets its section without waiting for a new achievement.
+                pagesTouched = refreshPages(shown, linksAfter.links, zone)
+            } else {
+                linksUnreadable = true
+            }
             // Without its sessions saved, the snapshot isn't either: the next run replays from the same
             // baseline (the sessions are keyed on it), so no play is lost or counted twice.
             val days = games.addSessions(sessions)
                 ?: throw XboxException(XboxException.Kind.API, "The sessions couldn't be saved; the next sync tries again.")
-            days.filter { it.isBefore(today) }.forEach { games.applyPastDay(it, today) }
-            // Today's line comes with the next burn (23:50 after the evening run), even on a day with
-            // nothing else on the board.
-            if (today in days) dashboardRepository.ensureDay(today)
+            days.filter { it.isBefore(writeDay) }.forEach { games.applyPastDay(it, writeDay) }
+            // Today's line goes in at once (13.4): this sync may run after the 23:50 burn.
+            if (writeDay in days) {
+                dashboardRepository.ensureDay(writeDay)
+                dashboardRepository.burnToDisk(writeDay)
+            }
             // The baseline ends with its snapshot on disk, not before: the count starts from this one.
             if (games.saveXboxSnapshot(current) && baseline) account.baselineSaved()
         }
+        if (linksUnreadable) throw XboxException(XboxException.Kind.LINKS_UNREADABLE, GamesRepository.LINKS_UNREADABLE_MESSAGE)
         return XboxSyncSummary(current.titles.size, sessions.size, files.size, pagesTouched, created.size)
     }
 
@@ -236,14 +281,34 @@ class XboxSync @Inject constructor(
      * earned achievement (this sync's files, else the saved ones) and their last played days.
      */
     private suspend fun startedOf(plan: PagePlan, current: XboxSnapshot, read: Map<String, AchievementSetFile>, zone: ZoneId): LocalDate? {
+        val files = plan.titleIds.associateWith { id -> read[id] ?: games.achievementSet(id) }
+        val earnedSomething = plan.titleIds.any { id -> (current.titles.firstOrNull { it.titleId == id }?.currentAchievements ?: 0) > 0 }
+        if (files.values.all { it == null } && earnedSomething) return null
         val moments = plan.titleIds.flatMap { id ->
-            val file = read[id] ?: games.achievementSet(id)
-            val firstUnlock = file?.achievements?.mapNotNull { XboxTimes.instant(it.earnedAt) }?.minOrNull()
+            val firstUnlock = files[id]?.achievements?.mapNotNull { XboxTimes.instant(it.earnedAt) }?.minOrNull()
             val lastPlayed = current.titles.firstOrNull { it.titleId == id }?.let { XboxTimes.instant(it.lastPlayed) }
             listOfNotNull(firstUnlock, lastPlayed)
         }
-        return moments.minOrNull()?.atZone(zone)?.toLocalDate()
+        return moments.minOrNull()?.let { dayOf(it, zone) }
     }
+
+    /**
+     * 13.4: each page the sync made (`game_match: exact`) whose title's achievements file was just
+     * saved gets the earliest of its first unlock and its last played day as `started`, when it has
+     * none yet or still the last played day its creation wrote; an owner's date stays.
+     */
+    private suspend fun fillStarts(saved: List<AchievementSetFile>, pages: List<GamePage>, links: GameLinks, current: XboxSnapshot, zone: ZoneId) {
+        val byPath = pages.associateBy { it.path }
+        saved.forEach { file ->
+            val page = links.consolePage(GameConsole.XBOX, file.titleId)?.let(byPath::get)?.takeIf { it.exactName } ?: return@forEach
+            val firstUnlock = file.achievements.mapNotNull { XboxTimes.instant(it.earnedAt) }.minOrNull()?.let { dayOf(it, zone) }
+            val lastPlayed = current.titles.firstOrNull { it.titleId == file.titleId }?.let { XboxTimes.instant(it.lastPlayed) }?.let { dayOf(it, zone) }
+            val start = listOfNotNull(firstUnlock, lastPlayed).minOrNull() ?: return@forEach
+            games.editPage(page.path) { GamePages.withEarlierStart(it, start, sameAs = lastPlayed) }
+        }
+    }
+
+    private fun dayOf(instant: Instant, zone: ZoneId): LocalDate? = runCatching { instant.atZone(zone).toLocalDate() }.getOrNull()
 
     /** Each linked page's 🎖️ section and achievement markers, from its titles' files. */
     private suspend fun refreshPages(pages: List<GamePage>, links: GameLinks, zone: ZoneId): Int {

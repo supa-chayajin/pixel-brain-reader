@@ -112,6 +112,12 @@ class PsnException(val kind: Kind, message: String) : Exception(message) {
         NETWORK,
         API,
         /** No PSN client in this build (`local.properties`), or nothing connected. */
-        NOT_CONFIGURED
+        NOT_CONFIGURED,
+
+        /**
+         * 13.4: links.json can't be read. The sync kept the play (sessions, trophy files, snapshot)
+         * and linked, hid and created nothing; the owner fixes the file on the desktop.
+         */
+        LINKS_UNREADABLE
     }
 }

@@ -38,18 +38,24 @@ object GameTimeline {
 
     fun timelineLines(lines: List<GameDayLine>): List<TimelineLine> = lines.map { TimelineLine(it.start, text(it)) }
 
+    /** The page key a game line's `<!--game:<key>-->` marker names, trimmed; null without one (13.4). */
+    fun keyOf(text: String): String? = MARKER.find(text)?.groupValues?.get(1)?.trim()?.takeIf { it.isNotEmpty() }
+
     /**
      * [content] (a past day's note) with its Timeline's game lines replaced by [lines], in time order
-     * among the other entries. Nothing else moves; a note without a Timeline section is unchanged.
+     * among the other entries. Nothing else moves; a note without a Timeline section is unchanged. With
+     * [knownKeys] (13.4: the current pages' keys), a game line is replaced only when its marker names
+     * one of them (or none): the line of a page renamed or deleted since stays, as the day's history.
+     * A Windows note (CRLF) is matched without its `\r` and its new lines get one too.
      */
-    fun applyToNote(content: String, lines: List<TimelineLine>): String {
+    fun applyToNote(content: String, lines: List<TimelineLine>, knownKeys: Set<String>? = null): String {
         val all = content.split("\n").toMutableList()
         val heading = all.indexOfFirst(::isTimelineHeading)
         if (heading < 0) return content
         var end = (heading + 1 until all.size).firstOrNull { all[it].trimStart().startsWith("## ") || all[it].startsWith("# ") } ?: all.size
         val cr = if ((heading until end).any { all[it].endsWith("\r") }) "\r" else ""
 
-        // Drop the derived lines this note holds.
+        // Drop the derived lines this note holds (a line of a page that's gone stays, with knownKeys).
         var i = heading + 1
         while (i < end) {
             val line = all[i].trimEnd('\r')

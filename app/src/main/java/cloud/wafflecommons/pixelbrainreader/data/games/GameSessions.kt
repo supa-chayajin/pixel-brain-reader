@@ -27,12 +27,17 @@ object PsnDuration {
  * Sessions from two PSN syncs (pure): a title's play time now, minus what the previous sync saw,
  * is a session (RFC-009 §4.3). The first sync only records the baseline. A title PSN lists for the
  * first time counts whole only when it was first played after the previous sync (otherwise it was
- * just beyond the last page). A play time that went down is ignored.
+ * just beyond the last page). A play time that went down is ignored. Two syncs more than
+ * [UNDATED_GAP_SECONDS] apart (13.4, G1: the owner's answer) can't say which day the play was: the
+ * record keeps its minutes for the hours, has no start and carries [GameSessionRecord.since].
  */
 object SessionDiff {
 
     /** Play under a minute is noise (a launch, an update screen). */
     const val MIN_SECONDS = 60L
+
+    /** G1: more than 30 hours between two syncs, and the play since has no day of its own. */
+    const val UNDATED_GAP_SECONDS = 30 * 3600L
 
     /**
      * [lastPlayedIsStart] says which end of the latest session PSN's `lastPlayedDateTime` marks;
@@ -47,6 +52,9 @@ object SessionDiff {
         if (previous == null || previous.syncedAt.isBlank()) return emptyList()
         val before = previous.titles.associateBy { it.titleId }
         val previousSync = instant(previous.syncedAt) ?: return emptyList()
+        val currentSync = instant(current.syncedAt)
+        // G1: an unreadable sync time keeps the records dated, as before 13.4.
+        val undated = currentSync != null && Duration.between(previousSync, currentSync).seconds > UNDATED_GAP_SECONDS
         return current.titles.mapNotNull { title ->
             val old = before[title.titleId]
             val added = when {
@@ -55,15 +63,24 @@ object SessionDiff {
                 else -> 0L
             }
             if (added < MIN_SECONDS) return@mapNotNull null
-            val last = instant(title.lastPlayed) ?: instant(current.syncedAt) ?: return@mapNotNull null
+            val last = instant(title.lastPlayed) ?: currentSync ?: return@mapNotNull null
+            // Keyed on the PREVIOUS sync: a run whose snapshot failed to save is replayed from the
+            // same baseline, and its session replaces this one instead of adding a second.
+            val id = "psn:${title.titleId}:${previous.syncedAt}"
+            val minutes = ((added + 30) / 60).toInt()
+            if (undated) {
+                val day = runCatching { last.atZone(zone).toLocalDate() }.getOrNull() ?: return@mapNotNull null
+                return@mapNotNull GameSessionRecord(
+                    id = id, date = day.toString(), start = null, minutes = minutes,
+                    source = GameSessionRecord.SOURCE_PSN, titleId = title.titleId, since = previousSync.toString()
+                )
+            }
             val start = (if (lastPlayedIsStart) last else last.minusSeconds(added)).atZone(zone).toLocalDateTime()
             GameSessionRecord(
-                // Keyed on the PREVIOUS sync: a run whose snapshot failed to save is replayed from
-                // the same baseline, and its session replaces this one instead of adding a second.
-                id = "psn:${title.titleId}:${previous.syncedAt}",
+                id = id,
                 date = start.toLocalDate().toString(),
                 start = start.toLocalTime().format(HH_MM),
-                minutes = ((added + 30) / 60).toInt(),
+                minutes = minutes,
                 source = GameSessionRecord.SOURCE_PSN,
                 titleId = title.titleId
             )
@@ -81,13 +98,14 @@ data class GameDayLine(val page: GamePage, val start: LocalTime, val minutes: In
  * one (the owner pressed it), else the earliest a console measured; the length is what the consoles
  * measured when they measured anything — PSN's and Xbox's add up, the same game played on both the
  * same day being one line (XB5) — else the manual sessions'. Sessions whose page is unknown are
- * left out.
+ * left out, and so are the undated ones (13.4, G1: [GameSessionRecord.since]): no Timeline line ever
+ * shows play no console placed on a day.
  */
 object GameDays {
 
     fun lines(date: LocalDate, sessions: List<GameSessionRecord>, pageOf: (GameSessionRecord) -> GamePage?): List<GameDayLine> {
         val day = date.toString()
-        return sessions.filter { it.date == day }
+        return sessions.filter { it.date == day && it.since == null }
             .mapNotNull { record -> pageOf(record)?.let { it to record } }
             .groupBy({ it.first.path }, { it })
             .mapNotNull { (_, pairs) ->
@@ -218,6 +236,128 @@ object ManualSessions {
         val page = old.page ?: return null
         val date = runCatching { LocalDate.parse(old.date) }.getOrNull() ?: return null
         return record(page, date, start, minutes, zone)
+    }
+}
+
+/**
+ * How a session joins its month (13.4, pure). A record replaces another with its id, except that a
+ * manual one does so only on its own page; a manual record also replaces a manual record of the same
+ * page, day and start minute, whatever its id (typing a session twice, a phone-started one
+ * included). Nothing else is replaced: two games' sessions of one minute are both kept.
+ */
+object GameSessionMerge {
+
+    data class Merged(val sessions: List<GameSessionRecord>, val replacedDates: Set<String>)
+
+    /** A month's order: by day, start (none first), id. */
+    val ORDER: Comparator<GameSessionRecord> = compareBy({ it.date }, { it.start ?: "" }, { it.id })
+
+    /** [existing] with each of [incoming] in its place, and the days the records it replaced were on (when another day). */
+    fun merge(existing: List<GameSessionRecord>, incoming: List<GameSessionRecord>): Merged {
+        val out = existing.toMutableList()
+        val dates = mutableSetOf<String>()
+        incoming.forEach { record ->
+            out.filter { replaces(record, it) }.forEach { old -> if (old.date != record.date) dates += old.date }
+            out.removeAll { replaces(record, it) }
+            out += record
+        }
+        return Merged(out.sortedWith(ORDER), dates)
+    }
+
+    fun replaces(record: GameSessionRecord, old: GameSessionRecord): Boolean {
+        val manual = record.source == GameSessionRecord.SOURCE_MANUAL
+        if (record.id == old.id && (!manual || record.page == old.page)) return true
+        return manual && old.source == GameSessionRecord.SOURCE_MANUAL && record.page != null && record.page == old.page &&
+            record.date == old.date && record.start != null && record.start == old.start
+    }
+
+    /** The previous sync's instant a console id carries (`psn:<title>:<instant>`, `xbox:<title>:<instant>`); null for any other id. */
+    fun baselineOf(id: String): Instant? {
+        val parts = id.split(':', limit = 3)
+        if (parts.size != 3 || (parts[0] != "psn" && parts[0] != "xbox")) return null
+        return runCatching { Instant.parse(parts[2]) }.getOrNull()
+    }
+}
+
+/** Manual sessions whose page is gone (renamed or deleted on the desktop), for the fold's "Link to a page". */
+data class OrphanedPage(val oldPath: String, val name: String, val minutes: Int, val sessions: Int, val lastDate: LocalDate?)
+
+/**
+ * The typed and phone-started sessions no page claims any more (13.4, pure): their path is no
+ * page's, nor the old path of a page moved elsewhere under the same file name ([movedTo], what the
+ * repository's resolver follows too).
+ */
+object OrphanedSessions {
+
+    /** None while [pages] is empty (a mirror still filling); a path that resolves by its unique file name (a move) isn't orphaned. */
+    fun of(sessions: List<GameSessionRecord>, pages: List<GamePage>): List<OrphanedPage> {
+        if (pages.isEmpty()) return emptyList()
+        val paths = pages.mapTo(HashSet()) { it.path }
+        return sessions.asSequence()
+            .filter { it.source == GameSessionRecord.SOURCE_MANUAL }
+            .mapNotNull { record -> record.page?.let { it to record } }
+            .filter { (path, _) -> path !in paths && movedTo(path, pages) == null }
+            .groupBy({ it.first }, { it.second })
+            .map { (path, records) ->
+                OrphanedPage(
+                    oldPath = path,
+                    name = keyOfPath(path).replace('_', ' '),
+                    minutes = records.sumOf { it.minutes },
+                    sessions = records.size,
+                    lastDate = records.mapNotNull { runCatching { LocalDate.parse(it.date) }.getOrNull() }.maxOrNull()
+                )
+            }
+            .sortedWith(compareBy<OrphanedPage, LocalDate?>(nullsLast(reverseOrder())) { it.lastDate }.thenBy { it.name.lowercase() }.thenBy { it.oldPath })
+    }
+
+    /** The one page whose file name is [oldPath]'s (a page moved to another folder); null when none or several. */
+    internal fun movedTo(oldPath: String, pages: List<GamePage>): GamePage? {
+        val key = keyOfPath(oldPath)
+        return pages.filter { it.key == key }.singleOrNull()
+    }
+
+    /** A page path's file name without `.md`: what [GamePage.key] is. */
+    internal fun keyOfPath(path: String): String = path.substringAfterLast('/').removeSuffix(".md")
+}
+
+/** The game played last (13.4, pure): the session picker's default, the tile's game, the tab's mark. */
+object LastPlayed {
+
+    /**
+     * The game played last: today's GameSessionController.defaultPage rules over data already loaded
+     * (the latest of [sessions] and both consoles' last-played times, else the first game being
+     * played, else the first page). A record without a start (an undated one) counts at midnight of
+     * its date. Null without pages.
+     */
+    fun page(
+        pages: List<GamePage>,
+        links: GameLinks,
+        sessions: List<GameSessionRecord>,
+        psn: PsnSnapshot?,
+        xbox: XboxSnapshot?,
+        zone: ZoneId,
+        resolve: (GameSessionRecord) -> GamePage?
+    ): GamePage? {
+        if (pages.isEmpty()) return null
+        val byPath = pages.associateBy { it.path }
+        val fromSessions = sessions.mapNotNull { record ->
+            val page = resolve(record) ?: return@mapNotNull null
+            val day = runCatching { LocalDate.parse(record.date) }.getOrNull() ?: return@mapNotNull null
+            val time = record.start?.let { runCatching { LocalTime.parse(it) }.getOrNull() } ?: LocalTime.MIDNIGHT
+            page to day.atTime(time)
+        }
+        val fromPsn = psn?.titles.orEmpty().mapNotNull { title ->
+            val page = links.pageOf(title.titleId)?.let(byPath::get) ?: return@mapNotNull null
+            val at = title.lastPlayed?.let { runCatching { Instant.parse(it).atZone(zone).toLocalDateTime() }.getOrNull() } ?: return@mapNotNull null
+            page to at
+        }
+        val fromXbox = xbox?.titles.orEmpty().mapNotNull { title ->
+            val page = links.consolePage(GameConsole.XBOX, title.titleId)?.let(byPath::get) ?: return@mapNotNull null
+            val at = title.lastPlayed?.let { runCatching { Instant.parse(it).atZone(zone).toLocalDateTime() }.getOrNull() } ?: return@mapNotNull null
+            page to at
+        }
+        return (fromSessions + fromPsn + fromXbox).maxByOrNull { it.second }?.first
+            ?: pages.firstOrNull { it.state == GameState.PLAYING } ?: pages.first()
     }
 }
 

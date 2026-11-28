@@ -231,6 +231,12 @@ class XboxException(val kind: Kind, message: String) : Exception(message) {
         TOKEN_EXPIRED,
         RATE_LIMITED,
         NETWORK,
-        API
+        API,
+
+        /**
+         * 13.4: links.json can't be read. The sync kept the play (sessions, achievement files,
+         * snapshot) and linked, hid and created nothing; the owner fixes the file on the desktop.
+         */
+        LINKS_UNREADABLE
     }
 }

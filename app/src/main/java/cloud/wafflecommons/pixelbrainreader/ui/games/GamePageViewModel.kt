@@ -169,7 +169,8 @@ class GamePageViewModel @Inject constructor(
             val links = games.links()
             val snapshot = games.snapshot()
             val titles = links.titlesOf(path).mapNotNull { id -> snapshot?.titles?.firstOrNull { it.titleId == id } }
-            val sets: List<TrophySetFile> = titles.mapNotNull { it.trophySet }.distinct().mapNotNull { games.trophySet(it) }
+            // 13.4: every trophy list of each title (a collection carries one per game), not its first.
+            val sets: List<TrophySetFile> = titles.flatMap { it.allTrophySets }.distinct().mapNotNull { games.trophySet(it) }
             val zone = ZoneId.systemDefault()
             val trophies = sets.flatMap { set ->
                 set.trophies.map { t ->

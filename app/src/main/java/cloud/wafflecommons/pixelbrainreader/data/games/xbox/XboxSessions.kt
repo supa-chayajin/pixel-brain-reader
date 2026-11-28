@@ -2,6 +2,7 @@ package cloud.wafflecommons.pixelbrainreader.data.games.xbox
 
 import cloud.wafflecommons.pixelbrainreader.data.games.GameSessionRecord
 import cloud.wafflecommons.pixelbrainreader.data.games.HH_MM
+import cloud.wafflecommons.pixelbrainreader.data.games.SessionDiff
 import cloud.wafflecommons.pixelbrainreader.data.games.XboxSnapshot
 import java.time.Duration
 import java.time.Instant
@@ -44,7 +45,10 @@ object XboxTimes {
  * are never 0: a title whose minutes become known is a baseline too, never one giant session. A
  * title the history lists for the first time (Xbox gives no first-played date) counts whole only
  * when it can only be new: the previous list was complete, it was played after the previous sync,
- * and its minutes fit in the time between the two syncs. A count that went down is ignored.
+ * and its minutes fit in the time between the two syncs. 13.4: such a newcomer seen once without its
+ * minutes ([cloud.wafflecommons.pixelbrainreader.data.games.XboxTitleState.newcomerSince]) gets the
+ * same rule one sync late, from that time; and play between two syncs more than
+ * [SessionDiff.UNDATED_GAP_SECONDS] apart is kept undated (G1). A count that went down is ignored.
  */
 object XboxSessionDiff {
 
@@ -71,8 +75,17 @@ object XboxSessionDiff {
             val old = before[title.titleId]
             val oldMinutes = old?.minutesPlayed
             val lastPlayed = XboxTimes.instant(title.lastPlayed)
+            val newcomerSince = old?.newcomerSince?.let(XboxTimes::instant)
+            // Where the play since may have begun: the previous sync, or a newcomer's first sighting.
+            var since = previousSync
             val added = when {
                 oldMinutes != null -> minutes - oldMinutes
+                // A newcomer whose minutes weren't read the first time: the newcomer rule, from then.
+                old != null && newcomerSince != null -> {
+                    since = newcomerSince
+                    val fits = minutes <= (Duration.between(newcomerSince, currentSync).seconds + 60) / 60
+                    if ((lastPlayed ?: Instant.EPOCH) > newcomerSince && fits) minutes else 0L
+                }
                 // Known now, unknown before: a baseline.
                 old != null -> 0L
                 // Newcomers: only when nothing older could have been cut off the last list,
@@ -85,17 +98,27 @@ object XboxSessionDiff {
             }
             if (added < MIN_MINUTES) return@mapNotNull null
             val last = lastPlayed ?: currentSync
+            // Keyed on the PREVIOUS sync: a run whose snapshot failed to save is replayed from the
+            // same baseline, and its session replaces this one instead of adding a second.
+            val id = "xbox:${title.titleId}:${previous.syncedAt}"
+            val length = added.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+            // G1: no console says which day play spread over more than 30 hours was.
+            if (Duration.between(since, currentSync).seconds > SessionDiff.UNDATED_GAP_SECONDS) {
+                val day = runCatching { last.atZone(zone).toLocalDate() }.getOrNull() ?: return@mapNotNull null
+                return@mapNotNull GameSessionRecord(
+                    id = id, date = day.toString(), start = null, minutes = length,
+                    source = GameSessionRecord.SOURCE_XBOX, titleId = title.titleId, since = since.toString()
+                )
+            }
             // A count no clock can hold (garbage from the service) gives no session rather than an error.
             val start = runCatching {
                 (if (lastPlayedIsStart) last else last.minusSeconds(Math.multiplyExact(added, 60L))).atZone(zone).toLocalDateTime()
             }.getOrNull() ?: return@mapNotNull null
             GameSessionRecord(
-                // Keyed on the PREVIOUS sync: a run whose snapshot failed to save is replayed from
-                // the same baseline, and its session replaces this one instead of adding a second.
-                id = "xbox:${title.titleId}:${previous.syncedAt}",
+                id = id,
                 date = start.toLocalDate().toString(),
                 start = start.toLocalTime().format(HH_MM),
-                minutes = added.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
+                minutes = length,
                 source = GameSessionRecord.SOURCE_XBOX,
                 titleId = title.titleId
             )

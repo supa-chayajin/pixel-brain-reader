@@ -30,11 +30,19 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
+ * `links.json` as read (13.4): [readable] is false when the file exists but doesn't parse or
+ * couldn't be read, and [links] is then empty. Nothing is linked, hidden or created from such a read.
+ */
+data class LinksRead(val links: GameLinks, val readable: Boolean)
+
+/**
  * Games' vault side (RFC-009, 12.17): the game pages, the data files of [GameFiles], the day's
  * Timeline lines and a past day's edit (D11); since 13.3 also the Xbox files, a page's maps and the
- * pages the syncs create for played games. Every write reads the disk first, moves an unreadable
- * file aside rather than overwrite it, goes through the vault's writers (the read-only gate) and
- * asks for a push. [changes] ticks after each write so screens read again.
+ * pages the syncs create for played games; since 13.4 the owner's game pictures (P5). Every write
+ * reads the disk first, moves an unreadable file aside rather than overwrite it (except links.json,
+ * which is never rebuilt: the owner fixes it on the desktop), writes nothing over a file it couldn't
+ * read, goes through the vault's writers (the read-only gate) and asks for a push. [changes] ticks
+ * after each write so screens read again.
  */
 @Singleton
 class GamesRepository @Inject constructor(
@@ -156,8 +164,9 @@ class GamesRepository @Inject constructor(
     }
 
     /**
-     * Writes [pages], never over a file (each path is checked again under the lock); the pages
-     * written. Nothing on a read-only device.
+     * Writes [pages], never over a file (each path is checked again under the lock), nor beside a
+     * folder or file of its path that differs only by case (13.4: the desktops' clones can't hold
+     * both); the pages written. Nothing on a read-only device.
      */
     suspend fun createPages(pages: List<NewGamePage>): List<GamePage> {
         if (pages.isEmpty() || VaultWriteGate.refuses()) return emptyList()
@@ -165,14 +174,14 @@ class GamesRepository @Inject constructor(
             mutex.withLock {
                 val written = pages.mapNotNull { page ->
                     val path = page.plan.path
-                    val exists = try {
-                        fileRepository.fileExists(path)
+                    val taken = try {
+                        fileRepository.fileExists(path) || caseClash(path)
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
                         true
                     }
-                    if (exists || !save(path, page.content)) null else GamePages.parse(path, page.content)
+                    if (taken || !save(path, page.content)) null else GamePages.parse(path, page.content)
                 }
                 Log.i(TAG, "Game pages created: ${written.size} of ${pages.size}")
                 written
@@ -186,10 +195,22 @@ class GamesRepository @Inject constructor(
 
     suspend fun saveSnapshot(snapshot: PsnSnapshot): Boolean = replace(GameFiles.SNAPSHOT, PsnSnapshot.serializer(), snapshot)
 
-    suspend fun links(): GameLinks = load(GameFiles.LINKS, GameLinks.serializer()).value ?: GameLinks()
+    /** links.json and whether it could be read (13.4): an unreadable one gives empty links, never acted on. */
+    suspend fun linksRead(): LinksRead {
+        val loaded = load(GameFiles.LINKS, GameLinks.serializer())
+        return LinksRead(loaded.value ?: GameLinks(), readable = !loaded.unreadable && !loaded.failed)
+    }
 
+    /** The links, for display: empty when links.json can't be read ([linksRead] says so). */
+    suspend fun links(): GameLinks = linksRead().links
+
+    /**
+     * Applies [change] to links.json on disk; null when refused. An unreadable links.json (or one
+     * that couldn't be read) is never rebuilt from empty links nor moved aside (13.4): the owner's
+     * links and hides would go, and the syncs would create pages for every title linked by hand.
+     */
     suspend fun updateLinks(change: (GameLinks) -> GameLinks): GameLinks? =
-        update(GameFiles.LINKS, GameLinks.serializer(), GameLinks(), change)
+        update(GameFiles.LINKS, GameLinks.serializer(), GameLinks(), rebuildUnreadable = false, change = change)
 
     /** The owner's settings for Games; the app never writes them. */
     suspend fun config(): GamesConfig = load(GameFiles.CONFIG, GamesConfig.serializer()).value ?: GamesConfig()
@@ -258,6 +279,27 @@ class GamesRepository @Inject constructor(
             batch.mapNotNullTo(changed) { dateOf(it.date) }
             replaced.mapNotNullTo(changed) { dateOf(it) }
         }
+        // A replay's first copy in another month, from the previous sync's month (a day before, for
+        // a session that spanned it) to the latest a record can be dated.
+        val thisMonth = YearMonth.now(zone)
+        records.filter { it.measured }.forEach { record ->
+            val baseline = GameSessionMerge.baselineOf(record.id) ?: return@forEach
+            val own = record.date.take(7)
+            val recordMonth = runCatching { YearMonth.parse(own) }.getOrNull() ?: return@forEach
+            var month = runCatching { YearMonth.from(baseline.atZone(zone).toLocalDate().minusDays(1)) }.getOrNull() ?: return@forEach
+            val last = maxOf(recordMonth, thisMonth)
+            while (!month.isAfter(last)) {
+                if (month.toString() != own && sessions(month).any { it.id == record.id }) {
+                    var removed = emptyList<GameSessionRecord>()
+                    update(GameFiles.sessions(month.toString()), GameSessionsMonth.serializer(), GameSessionsMonth()) { file ->
+                        removed = file.sessions.filter { it.id == record.id }
+                        if (removed.isEmpty()) file else GameSessionsMonth(file.sessions.filterNot { it.id == record.id })
+                    } ?: return null
+                    removed.mapNotNullTo(changed) { dateOf(it.date) }
+                }
+                month = month.plusMonths(1)
+            }
+        }
         return changed
     }
 
@@ -322,10 +364,19 @@ class GamesRepository @Inject constructor(
 
     // --- The Timeline (RFC-009 §4.3) -------------------------------------------------------
 
-    /** A session's page: its own (manual), or its console title's link ([GameLinks.pageFor]: PSN's or Xbox's). */
+    /**
+     * A session's page: its own (manual), or its console title's link ([GameLinks.pageFor]: PSN's or
+     * Xbox's). A manual session whose page is gone follows the one page with its file name (13.4: a
+     * page moved to another folder on the desktop).
+     */
     fun resolver(pages: List<GamePage>, links: GameLinks): (GameSessionRecord) -> GamePage? {
         val byPath = pages.associateBy { it.path }
-        return { record -> links.pageFor(record)?.let(byPath::get) }
+        val byKey = pages.groupBy { it.key }
+        return { record ->
+            links.pageFor(record)?.let(byPath::get)
+                ?: record.page?.takeIf { record.source == GameSessionRecord.SOURCE_MANUAL && it !in byPath }
+                    ?.let { byKey[OrphanedSessions.keyOfPath(it)]?.singleOrNull() }
+        }
     }
 
     suspend fun dayLines(date: LocalDate): List<GameDayLine> {
@@ -339,12 +390,34 @@ class GamesRepository @Inject constructor(
     /**
      * A past day's note gets its game lines (D11): only its marked Timeline lines change, and the note
      * is never re-burned (Room's board for that day may be older than a desktop edit). Up to
-     * [PAST_DAYS] back; a day without a note keeps its sessions in the data file only.
+     * [PAST_DAYS] back; a day without a note keeps its sessions in the data file only. Refused (13.4)
+     * while the notes' mirror holds no game page, while links.json can't be read, or when the day has
+     * sessions and none of them finds its page: re-deriving the lines then would strip them. A line
+     * whose page is gone stays, as the day's history, unless its key is in [replacingKeys] (13.4
+     * review): a gone page whose sessions were just linked to another one, so its old line would
+     * double the new page's.
      */
-    suspend fun applyPastDay(date: LocalDate, today: LocalDate = LocalDate.now()): Boolean {
+    suspend fun applyPastDay(date: LocalDate, today: LocalDate = LocalDate.now(), replacingKeys: Set<String> = emptySet()): Boolean {
         if (!date.isBefore(today) || date.isBefore(today.minusDays(PAST_DAYS))) return false
-        val lines = linesFor(date)
-        return editPage(journalPath(date)) { GameTimeline.applyToNote(it, lines) }
+        val pages = pages()
+        if (pages.isEmpty()) {
+            Log.i(TAG, "Past day left as it is: no game page in the notes' mirror")
+            return false
+        }
+        val read = linksRead()
+        if (!read.readable) {
+            Log.i(TAG, "Past day left as it is: links.json can't be read")
+            return false
+        }
+        val sessions = sessions(YearMonth.from(date)).filter { it.date == date.toString() }
+        val resolve = resolver(pages, read.links)
+        if (sessions.isNotEmpty() && sessions.none { resolve(it) != null }) {
+            Log.i(TAG, "Past day left as it is: none of its ${sessions.size} sessions finds its page")
+            return false
+        }
+        val lines = GameTimeline.timelineLines(GameDays.lines(date, sessions, resolve))
+        val known = pages.mapTo(HashSet()) { it.key } + replacingKeys
+        return editPage(journalPath(date)) { GameTimeline.applyToNote(it, lines, knownKeys = known) }
     }
 
     // --- History (RFC-009 §4.3) --------------------------------------------------------------
@@ -371,7 +444,15 @@ class GamesRepository @Inject constructor(
 
     // --- File plumbing -----------------------------------------------------------------------
 
-    private class Loaded<T>(val value: T?, val unreadable: Boolean)
+    /** A data file as read (13.4): missing (no file, or a blank one), its text, or a read that failed while it exists. */
+    private sealed interface Raw {
+        data object Missing : Raw
+        data class Text(val value: String) : Raw
+        data object Failed : Raw
+    }
+
+    /** [unreadable]: the file exists and doesn't parse; [failed]: it exists and couldn't be read (the file itself may be fine). */
+    private class Loaded<T>(val value: T?, val unreadable: Boolean, val failed: Boolean)
 
     private suspend fun read(path: String): String? = try {
         fileRepository.readFile(path)
@@ -381,21 +462,50 @@ class GamesRepository @Inject constructor(
         null
     }
 
-    private suspend fun <T> load(path: String, serializer: KSerializer<T>): Loaded<T> = withContext(Dispatchers.IO) {
-        val raw = read(path)
-        if (raw.isNullOrBlank()) return@withContext Loaded(null, unreadable = false)
-        try {
-            Loaded(json.decodeFromString(serializer, raw), unreadable = false)
+    private suspend fun readRaw(path: String): Raw {
+        val text = read(path)
+        if (text != null) return if (text.isBlank()) Raw.Missing else Raw.Text(text)
+        val exists = try {
+            fileRepository.fileExists(path)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Log.w(TAG, "$path doesn't parse: ${e.message}")
-            Loaded(null, unreadable = true)
+            true
+        }
+        return if (exists) Raw.Failed else Raw.Missing
+    }
+
+    private suspend fun <T> load(path: String, serializer: KSerializer<T>): Loaded<T> = withContext(Dispatchers.IO) {
+        when (val raw = readRaw(path)) {
+            Raw.Missing -> Loaded(null, unreadable = false, failed = false)
+            Raw.Failed -> {
+                Log.w(TAG, "$path couldn't be read")
+                Loaded(null, unreadable = false, failed = true)
+            }
+            is Raw.Text -> try {
+                Loaded(json.decodeFromString(serializer, raw.value), unreadable = false, failed = false)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // The type only: a parser's message quotes the file, and the file names games and pages.
+                Log.w(TAG, "$path doesn't parse: ${e.javaClass.simpleName}")
+                Loaded(null, unreadable = true, failed = false)
+            }
         }
     }
 
-    /** Applies [change] to the file on disk (or [default] when absent); null when nothing could be saved. */
-    private suspend fun <T> update(path: String, serializer: KSerializer<T>, default: T, change: (T) -> T): T? {
+    /**
+     * Applies [change] to the file on disk (or [default] when absent); null when nothing could be
+     * saved. A file that couldn't be read is never written; an unreadable one is moved aside first,
+     * or (without [rebuildUnreadable]: links.json) left as it is and the change refused.
+     */
+    private suspend fun <T> update(
+        path: String,
+        serializer: KSerializer<T>,
+        default: T,
+        rebuildUnreadable: Boolean = true,
+        change: (T) -> T
+    ): T? {
         if (VaultWriteGate.refuses()) return null
         return withContext(Dispatchers.IO) {
             mutex.withLock {
@@ -440,6 +550,9 @@ class GamesRepository @Inject constructor(
         private val DAILY = Regex("^10_Journal/(\\d{4}-\\d{2}-\\d{2})\\.md$")
         private val MONTH_FILE = Regex("^([0-9]{4}-[0-9]{2})\\.json$")
         const val PAST_DAYS = 7L
+
+        /** The status line while links.json can't be read (13.4): the syncs keep the play and link nothing. */
+        const val LINKS_UNREADABLE_MESSAGE = "links.json can't be read: fix it on the desktop. Play time was kept."
 
         fun journalPath(date: LocalDate): String = "$JOURNAL/$date.md"
 

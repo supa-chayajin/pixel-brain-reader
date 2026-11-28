@@ -302,7 +302,7 @@ class GameNotesTest {
             TrophySection.apply(trophiesOnly, TrophySection.lines(listOf(more), zone)),
             moreTrophies.substringBefore("\n$heading")
         )
-        // Achievements first: the trophies come after them, both kept.
+        // Achievements first (13.4): the trophies go right before them, so the page reads 🏆 then 🎖️ as every other one.
         val achievementsFirst = AchievementSection.apply(base, achievementLines)
         val then = TrophySection.apply(achievementsFirst, trophyLines)
         assertEquals(both, then)

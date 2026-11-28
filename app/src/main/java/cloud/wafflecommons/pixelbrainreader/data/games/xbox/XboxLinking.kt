@@ -15,8 +15,22 @@ import cloud.wafflecommons.pixelbrainreader.data.games.XboxTitleState
  */
 object XboxLinking {
 
-    /** New Xbox links for titles no page claims yet: a linked sibling (modernTitleId either way) first, then the name; hidden titles left out. */
+    /**
+     * New Xbox links for titles no page claims yet: a linked sibling (modernTitleId either way) first,
+     * then the name; hidden titles left out. The two passes repeat until one adds nothing (13.4), so a
+     * chain of siblings follows the one its name linked, whatever the history's order.
+     */
     fun autoLinked(links: GameLinks, current: XboxSnapshot, pages: List<GamePage>): GameLinks {
+        var next = links
+        repeat(current.titles.size + 1) {
+            val passed = passes(next, current, pages)
+            if (passed == next) return next
+            next = passed
+        }
+        return next
+    }
+
+    private fun passes(links: GameLinks, current: XboxSnapshot, pages: List<GamePage>): GameLinks {
         var next = links
         current.titles.forEach { title ->
             if (!open(next, title.titleId)) return@forEach
