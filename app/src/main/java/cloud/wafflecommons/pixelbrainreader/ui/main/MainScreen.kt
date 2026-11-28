@@ -1051,11 +1051,11 @@ fun MainScreen(
                 )
             }
 
+            // The Navigation page (13.4, S3) keeps the 12.x route: the tabs' order, the modes each one
+            // shows in, the rail's names.
             composable("navbar_reorder") {
-                cloud.wafflecommons.pixelbrainreader.ui.settings.NavBarReorderScreen(
-                    order = navBarOrder,
-                    onOrderChange = { viewModel.setNavBarOrder(it) },
-                    onNavigateBack = { navController.popBackStack() }
+                cloud.wafflecommons.pixelbrainreader.ui.settings.NavigationSettingsScreen(
+                    onBack = { navController.popBackStack() }
                 )
             }
 

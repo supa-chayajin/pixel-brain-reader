@@ -23,5 +23,21 @@ object ModeTabs {
         return config.copy(hiddenTabs = if (ordered.isEmpty()) config.hiddenTabs - mode else config.hiddenTabs + (mode to ordered))
     }
 
+    /**
+     * [config] with [key] shown in the modes of [shown] and hidden in every other one (13.4, S3: a
+     * tab's "Shows in" on the Navigation page). Each mode's list keeps [KEYS]' order, a key this
+     * version doesn't know after them; a mode left hiding nothing is removed.
+     */
+    fun withShownIn(config: ModesConfig, key: String, shown: Set<ContextMode>): ModesConfig {
+        var hiddenTabs = config.hiddenTabs
+        ContextMode.entries.forEach { mode ->
+            val hidden = hiddenTabs[mode].orEmpty()
+            val next = if (mode in shown) hidden.filterNot { it == key } else (hidden + key).distinct()
+            val ordered = KEYS.filter { it in next } + next.filterNot { it in KEYS }
+            hiddenTabs = if (ordered.isEmpty()) hiddenTabs - mode else hiddenTabs + (mode to ordered)
+        }
+        return config.copy(hiddenTabs = hiddenTabs)
+    }
+
     fun hiddenIn(config: ModesConfig, mode: ContextMode): Set<String> = config.hiddenTabs[mode].orEmpty().toSet()
 }
