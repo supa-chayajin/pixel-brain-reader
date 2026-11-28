@@ -49,12 +49,12 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.ToggleButton
 import androidx.compose.material3.ToggleButtonDefaults
+import androidx.lifecycle.compose.LifecycleStartEffect
 import cloud.wafflecommons.pixelbrainreader.ui.components.connectedShapes
 import cloud.wafflecommons.pixelbrainreader.ui.components.ConnectedButtonRow
 import androidx.compose.foundation.layout.size
 import cloud.wafflecommons.pixelbrainreader.ui.components.switchThumb
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -630,10 +630,16 @@ private fun PageBrowser(url: String, onImport: (html: String, url: String) -> Un
     var progress by remember { mutableIntStateOf(0) }
     var reading by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    // The privacy ledger (13.0, X3): the page shown here is one call, from open to close.
-    DisposableEffect(url) {
+    // The privacy ledger (13.0, X3): the page shown here is one call while it shows. 13.4 review: as
+    // the map does, the span ends and the page pauses when the app leaves the screen, so a locked
+    // phone or another app leaves no span open to share every later call's bytes.
+    LifecycleStartEffect(url) {
         val token = PrivacyLedger.begin(PrivacyLedger.hostOf(url), NetPurpose.IMPORT)
-        onDispose { PrivacyLedger.end(token) }
+        holder.view?.onResume()
+        onStopOrDispose {
+            PrivacyLedger.end(token)
+            holder.view?.onPause()
+        }
     }
     BackHandler {
         val view = holder.view
