@@ -90,7 +90,11 @@ data class GameLinks(
     fun titlesOf(page: String): List<String> = links.filterValues { it == page }.keys.sorted()
     fun link(titleId: String, page: String): GameLinks = copy(links = links + (titleId to page), hidden = hidden - titleId)
     fun unlink(titleId: String): GameLinks = copy(links = links - titleId)
-    fun hide(titleId: String): GameLinks = copy(links = links - titleId, hidden = (hidden + titleId).distinct())
+    /** [titleId] hidden from the fold; its link, if any, is kept (13.4). */
+    fun hide(titleId: String): GameLinks = copy(hidden = (hidden + titleId).distinct())
+
+    /** [titleId] back in the fold (13.4); its link, if any, untouched. */
+    fun unhide(titleId: String): GameLinks = copy(hidden = hidden.filterNot { it == titleId })
 
     /** The page [console]'s title [titleId] is linked to; [GameConsole.PSN] is [pageOf]. */
     fun consolePage(console: GameConsole, titleId: String): String? = when (console) {
@@ -115,10 +119,16 @@ data class GameLinks(
         GameConsole.XBOX -> copy(xbox = xbox.copy(links = xbox.links + (titleId to page), hidden = xbox.hidden - titleId))
     }
 
-    /** [titleId] of [console] hidden from the fold; its link goes too. */
+    /** [titleId] of [console] hidden from the fold; its link, if any, is kept (13.4). */
     fun hideConsole(console: GameConsole, titleId: String): GameLinks = when (console) {
         GameConsole.PSN -> hide(titleId)
-        GameConsole.XBOX -> copy(xbox = xbox.copy(links = xbox.links - titleId, hidden = (xbox.hidden + titleId).distinct()))
+        GameConsole.XBOX -> copy(xbox = xbox.copy(hidden = (xbox.hidden + titleId).distinct()))
+    }
+
+    /** [titleId] of [console] back in the fold (13.4); its link, if any, untouched. */
+    fun unhideConsole(console: GameConsole, titleId: String): GameLinks = when (console) {
+        GameConsole.PSN -> unhide(titleId)
+        GameConsole.XBOX -> copy(xbox = xbox.copy(hidden = xbox.hidden.filterNot { it == titleId }))
     }
 
     /** A session's page: its own (manual), else its console title's link (by its `source`). */

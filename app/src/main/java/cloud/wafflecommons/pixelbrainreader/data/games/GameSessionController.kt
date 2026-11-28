@@ -423,32 +423,22 @@ class GameSessionController @Inject constructor(
     /**
      * The game played last (RFC-009 §4.3: the session picker's default and the tile's game): the
      * latest of the sessions kept here and the consoles' last-played times (PSN's, and Xbox's since
-     * 13.3), else the first game being played.
+     * 13.3), else the first game being played; the choice is [LastPlayed]'s (13.4).
      */
     suspend fun defaultPage(zone: ZoneId = ZoneId.systemDefault()): GamePage? {
         val pages = games.pages()
         if (pages.isEmpty()) return null
         val links = games.links()
-        val byPath = pages.associateBy { it.path }
-        val resolve = games.resolver(pages, links)
         val today = LocalDate.now(zone)
-        val fromSessions = games.sessionsBetween(today.minusDays(60), today).mapNotNull { record ->
-            val page = resolve(record) ?: return@mapNotNull null
-            val time = record.start?.let { runCatching { java.time.LocalTime.parse(it) }.getOrNull() } ?: java.time.LocalTime.MIDNIGHT
-            page to LocalDate.parse(record.date).atTime(time)
-        }
-        val fromPsn = games.snapshot()?.titles.orEmpty().mapNotNull { title ->
-            val page = links.pageOf(title.titleId)?.let(byPath::get) ?: return@mapNotNull null
-            val at = title.lastPlayed?.let { runCatching { Instant.parse(it).atZone(zone).toLocalDateTime() }.getOrNull() } ?: return@mapNotNull null
-            page to at
-        }
-        val fromXbox = games.xboxSnapshot()?.titles.orEmpty().mapNotNull { title ->
-            val page = links.consolePage(GameConsole.XBOX, title.titleId)?.let(byPath::get) ?: return@mapNotNull null
-            val at = title.lastPlayed?.let { runCatching { Instant.parse(it).atZone(zone).toLocalDateTime() }.getOrNull() } ?: return@mapNotNull null
-            page to at
-        }
-        return (fromSessions + fromPsn + fromXbox).maxByOrNull { it.second }?.first
-            ?: pages.firstOrNull { it.state == GameState.PLAYING } ?: pages.first()
+        return LastPlayed.page(
+            pages = pages,
+            links = links,
+            sessions = games.sessionsBetween(today.minusDays(60), today),
+            psn = games.snapshot(),
+            xbox = games.xboxSnapshot(),
+            zone = zone,
+            resolve = games.resolver(pages, links)
+        )
     }
 
     companion object {

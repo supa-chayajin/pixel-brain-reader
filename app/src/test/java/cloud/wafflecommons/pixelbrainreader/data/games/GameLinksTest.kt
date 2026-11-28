@@ -75,7 +75,8 @@ class GameLinksTest {
         links = links.hideConsole(GameConsole.XBOX, "1234567890")
         assertTrue(links.isHidden(GameConsole.XBOX, "1234567890"))
         assertFalse(links.isHidden(GameConsole.PSN, "1234567890"))
-        assertNull(links.consolePage(GameConsole.XBOX, "1234567890"))
+        // 13.4: a hidden title keeps its link, so Unhide gives it back as it was.
+        assertEquals(bricks, links.consolePage(GameConsole.XBOX, "1234567890"))
         // Hidden twice, listed once; linked again, back in the library.
         links = links.hideConsole(GameConsole.XBOX, "1234567890")
         assertEquals(listOf("1234567890"), links.xbox.hidden)
@@ -87,7 +88,7 @@ class GameLinksTest {
         val psnHidden = links.hideConsole(GameConsole.PSN, "PPSA00001_00")
         assertEquals(listOf("PPSA00001_00"), psnHidden.hidden)
         assertTrue(psnHidden.isHidden(GameConsole.PSN, "PPSA00001_00"))
-        assertNull(psnHidden.pageOf("PPSA00001_00"))
+        assertEquals(ring, psnHidden.pageOf("PPSA00001_00"))
         assertEquals(links.xbox, psnHidden.xbox)
         assertEquals(ring, psnHidden.linkConsole(GameConsole.PSN, "PPSA00001_00", ring).pageOf("PPSA00001_00"))
         assertEquals(GameSessionRecord.SOURCE_PSN, GameConsole.PSN.source)
@@ -106,5 +107,27 @@ class GameLinksTest {
         assertEquals("manual.md", links.pageFor(session(GameSessionRecord.SOURCE_MANUAL, titleId = null, page = "manual.md")))
         assertNull(links.pageFor(session(GameSessionRecord.SOURCE_XBOX, titleId = "999")))
         assertNull(links.pageFor(session(GameSessionRecord.SOURCE_MANUAL, titleId = null)))
+    }
+
+    @Test
+    fun `unhide brings a title back to the fold, its link untouched`() {
+        val hidden = GameLinks()
+            .link("PPSA00001_00", ring)
+            .linkConsole(GameConsole.XBOX, "1915865634", ring)
+            .hideConsole(GameConsole.PSN, "PPSA00001_00")
+            .hideConsole(GameConsole.XBOX, "1915865634")
+            .hideConsole(GameConsole.XBOX, "1234567890")
+        // The links stay through the hide: a session still finds its page.
+        assertEquals(ring, hidden.pageFor(GameSessionRecord("s", "2026-11-27", "20:00", 30, GameSessionRecord.SOURCE_XBOX, titleId = "1915865634")))
+        val back = hidden.unhideConsole(GameConsole.XBOX, "1915865634").unhideConsole(GameConsole.PSN, "PPSA00001_00")
+        assertFalse(back.isHidden(GameConsole.XBOX, "1915865634"))
+        assertFalse(back.isHidden(GameConsole.PSN, "PPSA00001_00"))
+        assertTrue(back.isHidden(GameConsole.XBOX, "1234567890"))
+        assertEquals(ring, back.consolePage(GameConsole.XBOX, "1915865634"))
+        assertEquals(ring, back.pageOf("PPSA00001_00"))
+        // Unhiding a title that isn't hidden changes nothing; a title hidden without a link has none after.
+        assertEquals(back, back.unhideConsole(GameConsole.XBOX, "999"))
+        assertNull(back.unhideConsole(GameConsole.XBOX, "1234567890").consolePage(GameConsole.XBOX, "1234567890"))
+        assertEquals(GameLinks(), GameLinks().hide("CUSA00002_00").unhide("CUSA00002_00"))
     }
 }
