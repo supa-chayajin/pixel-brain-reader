@@ -23,4 +23,8 @@ fun NavGraphBuilder.settingsPageDestinations(navController: NavHostController) {
 
     // S-g, Games
     composable(SettingsRoutes.GAMES) { GamesSettingsScreen(onBack = back, onOpen = { navController.navigate(it) }) }
+
+    // S-h, Privacy & safety
+    composable(SettingsRoutes.PRIVATE_JOURNAL) { PrivateJournalSettingsScreen(onBack = back) }
+    composable(SettingsRoutes.PERMISSIONS) { PermissionsScreen(onBack = back) }
 }
