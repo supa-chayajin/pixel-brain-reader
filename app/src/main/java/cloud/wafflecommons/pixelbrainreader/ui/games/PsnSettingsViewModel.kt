@@ -6,14 +6,10 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
-import cloud.wafflecommons.pixelbrainreader.data.games.GamePlatform
 import cloud.wafflecommons.pixelbrainreader.data.games.psn.PsnAccount
 import cloud.wafflecommons.pixelbrainreader.data.games.psn.PsnStatus
 import cloud.wafflecommons.pixelbrainreader.data.games.psn.PsnSync
 import cloud.wafflecommons.pixelbrainreader.data.games.psn.PsnSyncSummary
-import cloud.wafflecommons.pixelbrainreader.data.modes.ContextMode
-import cloud.wafflecommons.pixelbrainreader.data.modes.ModeAppearance
-import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
 import cloud.wafflecommons.pixelbrainreader.data.system.AppClock
 import cloud.wafflecommons.pixelbrainreader.data.workers.GamesSyncScheduler
 import cloud.wafflecommons.pixelbrainreader.di.ApplicationScope
@@ -23,8 +19,6 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -41,42 +35,32 @@ data class PsnSettingsUiState(
     val syncing: Boolean = false,
     /** The last action's result, in words. */
     val message: String? = null,
-    val dndGranted: Boolean = false,
     val readOnly: Boolean = VaultWriteGate.readOnly,
     /** AppClock's day (13.4): "Last sync" says its day from it, and follows midnight. */
-    val today: LocalDate,
-    /** The Personal mode as the owner named it in Modes settings (13.4). */
-    val personalLabel: String = ModeAppearance().label(ContextMode.PERSONAL)
+    val today: LocalDate
 ) {
     /** The page waits: its own action, or a sync, so a page reopened during a sync says "Syncing…". */
     val busy: Boolean get() = working || syncing
 }
 
 /**
- * Settings → Integrations → PlayStation Network (RFC-009 §7). The nightly slots are the Games sync's
- * (13.3): kept while PlayStation or Xbox is connected, so a PSN disconnect leaves Xbox's in place.
+ * Settings › Connections › Games › PlayStation (RFC-009 §7). The nightly slots are the Games sync's (13.3): kept
+ * while PlayStation or Xbox is connected, so a PSN disconnect leaves Xbox's in place.
  * 13.4 (the audit's settings-sync-cancelled-by-back): the first sync and Sync now run in the app's
  * scope, so Back only stops this page waiting for them; the sync itself (and the schedule set
- * before it) runs to its end, and the page shows it while it runs ([PsnSync.syncing]).
+ * before it) runs to its end, and the page shows it while it runs ([PsnSync.syncing]). Game night
+ * and its Do Not Disturb access are on the Games page since 13.4 (S8).
  */
 @HiltViewModel
 class PsnSettingsViewModel @Inject constructor(
     private val account: PsnAccount,
     private val psnSync: PsnSync,
-    private val platform: GamePlatform,
     private val scheduler: GamesSyncScheduler,
-    private val modesRepository: ModesRepository,
     private val clock: AppClock,
     @param:ApplicationScope private val appScope: CoroutineScope
 ) : ViewModel() {
 
-    private val _state = MutableStateFlow(
-        PsnSettingsUiState(
-            configured = account.configured,
-            today = clock.today.value,
-            personalLabel = modesRepository.visibility.value.appearance.label(ContextMode.PERSONAL)
-        )
-    )
+    private val _state = MutableStateFlow(PsnSettingsUiState(configured = account.configured, today = clock.today.value))
     val state: StateFlow<PsnSettingsUiState> = _state.asStateFlow()
 
     /** What the owner pastes: kept in the screen only until Connect, never saved. */
@@ -94,10 +78,6 @@ class PsnSettingsViewModel @Inject constructor(
             }
         }
         viewModelScope.launch { clock.today.collect { day -> _state.update { it.copy(today = day) } } }
-        viewModelScope.launch {
-            modesRepository.visibility.map { it.appearance.label(ContextMode.PERSONAL) }.distinctUntilChanged()
-                .collect { label -> _state.update { it.copy(personalLabel = label) } }
-        }
         refresh()
     }
 
@@ -108,7 +88,6 @@ class PsnSettingsViewModel @Inject constructor(
                 it.copy(
                     connected = tokens != null,
                     expiresInDays = tokens?.let { t -> (t.refreshExpiresAt - System.currentTimeMillis()).coerceAtLeast(0) / 86_400_000L },
-                    dndGranted = platform.canGuard(),
                     readOnly = VaultWriteGate.readOnly
                 )
             }

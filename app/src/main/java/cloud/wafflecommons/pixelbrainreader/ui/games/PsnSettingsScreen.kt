@@ -5,16 +5,13 @@ package cloud.wafflecommons.pixelbrainreader.ui.games
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.provider.Settings
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.DoNotDisturbOn
 import androidx.compose.material.icons.rounded.SportsEsports
-import androidx.compose.material.icons.rounded.VideogameAsset
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -43,15 +40,16 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import cloud.wafflecommons.pixelbrainreader.data.games.psn.PsnClient
 import cloud.wafflecommons.pixelbrainreader.ui.components.EmptyHint
-import cloud.wafflecommons.pixelbrainreader.ui.components.FormScaffold
 import cloud.wafflecommons.pixelbrainreader.ui.components.ReadOnlyNotice
 import cloud.wafflecommons.pixelbrainreader.ui.components.SectionCard
+import cloud.wafflecommons.pixelbrainreader.ui.settings.SettingsPage
+import cloud.wafflecommons.pixelbrainreader.ui.settings.SettingsPageScaffold
 
 /**
  * PlayStation Network (RFC-009 §7): connect with an NPSSO (used once, never kept), see the last sync
- * and when the sign-in expires, sync now, disconnect; and the Do Not Disturb access a game night needs.
- * 13.4: the last sync says its day, the mode is called by the owner's own name for it, and Connect
- * clears the clipboard when it still holds the NPSSO.
+ * and when the sign-in expires, sync now, disconnect. 13.4: the last sync says its day, and Connect
+ * clears the clipboard when it still holds the NPSSO; the page is Settings › Games › PlayStation, and
+ * the Do Not Disturb access a game night needs is on the Games page (S8).
  */
 @Composable
 fun PsnSettingsScreen(onBack: () -> Unit, viewModel: PsnSettingsViewModel = hiltViewModel()) {
@@ -59,16 +57,17 @@ fun PsnSettingsScreen(onBack: () -> Unit, viewModel: PsnSettingsViewModel = hilt
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     var confirmDisconnect by remember { mutableStateOf(false) }
-    // Back from the system's Do Not Disturb page: read the access again.
+    // Back from the browser's sign-in: read the sign-in again.
     LaunchedEffect(lifecycle) { lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) { viewModel.refresh() } }
 
     fun open(url: String) = context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
 
-    FormScaffold(title = "PlayStation Network", icon = Icons.Rounded.VideogameAsset, onBack = onBack) {
+    // 13.4 (S-g, S-k): the Settings frame, its pill "Games"; Game night moved to Settings › Games.
+    SettingsPageScaffold(page = SettingsPage.PSN, onBack = onBack) {
         if (state.readOnly) ReadOnlyNotice()
         if (!state.configured) {
             EmptyHint("This build has no PlayStation client: add psnClientId and psnClientSecret to local.properties, then build again. Games works by hand without it.")
-            return@FormScaffold
+            return@SettingsPageScaffold
         }
         if (state.busy) LinearWavyProgressIndicator(modifier = Modifier.fillMaxWidth())
         state.message?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
@@ -130,24 +129,6 @@ fun PsnSettingsScreen(onBack: () -> Unit, viewModel: PsnSettingsViewModel = hilt
                     shapes = ButtonDefaults.shapes(),
                     enabled = !state.busy && viewModel.pasted.isNotBlank()
                 ) { Text("Connect") }
-            }
-        }
-
-        SectionCard(
-            title = "Game night",
-            icon = Icons.Rounded.DoNotDisturbOn,
-            subtitle = if (state.dndGranted) {
-                "Allowed. A session started in ${state.personalLabel} mode, outside work hours, turns on the \"Game night\" mode; " +
-                    "set its exceptions in Settings › Modes."
-            } else {
-                "A session started in ${state.personalLabel} mode, outside work hours, turns on the app's \"Game night\" mode. " +
-                    "It needs Do Not Disturb access."
-            }
-        ) {
-            if (!state.dndGranted && !state.readOnly) {
-                OutlinedButton(onClick = {
-                    context.startActivity(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                }, shapes = ButtonDefaults.shapes()) { Text("Allow Do Not Disturb access") }
             }
         }
     }

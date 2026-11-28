@@ -7,6 +7,7 @@ import cloud.wafflecommons.pixelbrainreader.R
 import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.games.GameSessionController
 import cloud.wafflecommons.pixelbrainreader.data.games.GamesRepository
+import cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
 import cloud.wafflecommons.pixelbrainreader.di.ApplicationScope
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
@@ -14,15 +15,17 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
  * Quick Settings tile (RFC-009 §4.3): starts a session on the game played last, or stops the running
  * one. A long-press opens the Games tab. Unavailable on a read-only device. On a locked phone, a
- * start waits for an unlock, as the mission-log tile does (13.4, the owner's G2); a stop stays one
- * tap. Both run in the app's scope, so the tile going away never cuts them; the tile renders again
- * once they are done (a tile already gone just doesn't).
+ * start waits for an unlock, as the mission-log tile does (13.4, the owner's G2), unless the owner
+ * turned that off in Settings › Games ("Unlock to start a session", S8); a stop stays one tap. Both
+ * run in the app's scope, so the tile going away never cuts them; the tile renders again once they
+ * are done (a tile already gone just doesn't).
  */
 @AndroidEntryPoint
 class GameTileService : TileService() {
@@ -30,6 +33,8 @@ class GameTileService : TileService() {
     @Inject lateinit var controller: GameSessionController
 
     @Inject lateinit var games: GamesRepository
+
+    @Inject lateinit var preferences: UserPreferencesRepository
 
     @Inject @ApplicationScope lateinit var appScope: CoroutineScope
 
@@ -46,7 +51,7 @@ class GameTileService : TileService() {
         scope.launch {
             when {
                 controller.current() != null -> renderAfter(appScope.launch { controller.stop() })
-                isLocked -> unlockAndRun {
+                isLocked && preferences.gameTileUnlock.first() -> unlockAndRun {
                     val starting = startLastPlayed()
                     scope.launch { renderAfter(starting) }
                 }

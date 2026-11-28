@@ -28,4 +28,4 @@ fun GameNightDialog(personalLabel: String, onGrant: () -> Unit, onDismiss: () ->
 /** The dialog's text with the mode's and the app's own names (pure, so a JVM test reads it). */
 internal fun gameNightText(personalLabel: String, appName: String): String =
     "On a $personalLabel evening, a game session turns on the app's own \"Game night\" mode, with the exceptions " +
-        "you choose in Settings › Modes. Allow $appName in Do Not Disturb access to use it. The session runs either way."
+        "you choose in Android's Modes. Allow $appName in Do Not Disturb access to use it. The session runs either way."

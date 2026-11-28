@@ -20,4 +20,7 @@ fun NavGraphBuilder.settingsPageDestinations(navController: NavHostController) {
     composable(SettingsRoutes.MODES_SCHEDULE) { ScheduleScreen(onBack = back) }
     composable(SettingsRoutes.MODES_CUSTODY) { CustodyScreen(onBack = back) }
     composable(SettingsRoutes.MODES_DATES) { LeaveDatesScreen(onBack = back) }
+
+    // S-g, Games
+    composable(SettingsRoutes.GAMES) { GamesSettingsScreen(onBack = back, onOpen = { navController.navigate(it) }) }
 }

@@ -378,6 +378,16 @@ class UserPreferencesRepository @Inject constructor(
         }
     }
 
+    // --- The Games tile on a locked phone (13.4, G2 and S8): ask for an unlock before a start. On by default; device-only ---
+    private val KEY_GAME_TILE_UNLOCK = booleanPreferencesKey("game_tile_unlock")
+
+    /** Whether a start from the Games tile on a locked phone asks for an unlock first; absent = true. */
+    val gameTileUnlock: Flow<Boolean> = setting { it[KEY_GAME_TILE_UNLOCK] ?: true }
+
+    suspend fun setGameTileUnlock(required: Boolean) {
+        context.dataStore.edit { preferences -> preferences[KEY_GAME_TILE_UNLOCK] = required }
+    }
+
     // 13.3: the last Xbox sync's outcome (`XboxStatus`: "ok|millis" or "paused|kind|millis|message"). Device-only.
     private val KEY_XBOX_STATUS = stringPreferencesKey("xbox_status")
 
