@@ -24,6 +24,7 @@ class ReadOnlyScreensGuardTest {
         "ui/homeconfig/HomeConfigScreen.kt",
         "ui/modes/ModesSettingsScreen.kt",
         "ui/settings/SettingsScreen.kt",
+        "ui/settings/FeedsScreen.kt",
         // The toolkit
         "ui/work/MissionLogScreen.kt",
         "ui/work/BoardScreen.kt",
@@ -49,7 +50,6 @@ class ReadOnlyScreensGuardTest {
 
     /** Pages that handled it before 12.15 in their own words, and controls that only hide. */
     private val ownWords = listOf(
-        "ui/settings/FeedsScreen.kt",
         "ui/settings/MoodTagSettingsScreen.kt",
         "ui/meetings/MeetingPrepScreen.kt",
         "ui/work/ExplainErrorScreen.kt",
