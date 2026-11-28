@@ -21,8 +21,9 @@ enum class DailySection(val key: String, val label: String, val description: Str
     // 12.11.0. Added by an update, so it joins a saved order at its end and stays in "More today"
     // until the owner places it. Never rename a key: it is persisted.
     DUE("due", "Due today", "Objective milestones, your @moi actions and the chores due today or overdue"),
-    // 12.12.0, like DUE: it arrives in "More today" until the owner places it.
-    WATCH("watch", "Tech watch", "The latest headlines of your feeds, grouped by feed");
+    // 12.12.0, like DUE: it arrives in "More today" until the owner places it. 13.4.0 (F5): titled
+    // Feeds like the tab, its key kept.
+    WATCH("watch", "Feeds", "The five newest unread headlines of the mode's feeds");
 
     companion object {
         /** Shown by default: what a busy day needs at a glance. Everything else is in the fold. */

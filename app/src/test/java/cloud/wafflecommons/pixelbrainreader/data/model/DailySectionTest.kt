@@ -87,4 +87,14 @@ class DailySectionTest {
         // The key is persisted: never renamed.
         assertEquals("watch", WATCH.key)
     }
+
+    @Test
+    fun `the watch block is called Feeds and keeps its key`() {
+        assertEquals("Feeds", WATCH.label)
+        assertEquals("watch", WATCH.key)
+        assertEquals("The five newest unread headlines of the mode's feeds", WATCH.description)
+        // Still read back from a saved order and a saved set under its old key.
+        assertEquals(WATCH, DailySection.orderFromKeys("watch,weather").first())
+        assertEquals(setOf(WATCH), DailySection.fromKeys(setOf("watch")))
+    }
 }

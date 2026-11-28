@@ -1135,6 +1135,8 @@ fun MainScreen(
                     onOpenMeetingPrep = { id -> navController.navigate(V11Routes.meetingPrep(id)) },
                     onOpenGame = { path -> navController.navigate(cloud.wafflecommons.pixelbrainreader.ui.games.GamesRoutes.game(path)) },
                     onOpenSyncConflicts = { navController.navigate(V11Routes.SYNC_CONFLICTS) },
+                    // 13.4 (F5): the Feeds block's See all opens the tab, as the bar does.
+                    onOpenFeeds = { navigateToTab(cloud.wafflecommons.pixelbrainreader.ui.feeds.FeedsRoutes.FEEDS) },
                     onOpenInbox = { navController.navigate(V11Routes.INBOX) }
                 )
             }

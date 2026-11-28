@@ -58,6 +58,7 @@ import androidx.compose.ui.graphics.toArgb
 import cloud.wafflecommons.pixelbrainreader.data.local.entity.ScratchNoteEntity
 import cloud.wafflecommons.pixelbrainreader.data.sync.SyncState
 import cloud.wafflecommons.pixelbrainreader.data.model.DailySection
+import cloud.wafflecommons.pixelbrainreader.data.watch.DailyFeeds
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import androidx.compose.ui.unit.sp
@@ -103,6 +104,8 @@ fun DailyNoteScreen(
     /** A game line's page (12.17, RFC-009). */
     onOpenGame: (String) -> Unit = {},
     onOpenSyncConflicts: () -> Unit = {},
+    /** The Feeds tab: the Feeds block's See all (13.4, F5). */
+    onOpenFeeds: () -> Unit = {},
     viewModel: DailyNoteViewModel = hiltViewModel(),
     modesViewModel: cloud.wafflecommons.pixelbrainreader.ui.modes.ModesViewModel = hiltViewModel(),
     guardStatus: cloud.wafflecommons.pixelbrainreader.ui.guard.GuardStatusViewModel = hiltViewModel(),
@@ -151,9 +154,9 @@ fun DailyNoteScreen(
     val dueToday by dueTodayViewModel.due.collectAsStateWithLifecycle()
     // Only today's page lists what is due today.
     val dueItems = dueToday?.takeIf { it.first == state.date }?.second.orEmpty()
-    // The tech watch is about now: today's page only.
+    // The feeds are about now: today's page only (13.4, F5: the five newest unread).
     val watch by watchViewModel.watch.collectAsStateWithLifecycle()
-    val watchFeeds = watch?.takeIf { it.first == state.date }?.second.orEmpty()
+    val watchDaily = watch?.takeIf { it.first == state.date }?.second ?: DailyFeeds()
     val visibility by modesViewModel.visibility.collectAsStateWithLifecycle()
     val countdowns by modesViewModel.countdowns.collectAsStateWithLifecycle()
     var showModeSheet by remember { mutableStateOf(false) }
@@ -531,7 +534,8 @@ fun DailyNoteScreen(
                             DailySection.SCRATCHPAD -> state.scratchNotes.isNotEmpty()
                             DailySection.PROJECTS -> dailyProjects.isNotEmpty()
                             DailySection.DUE -> dueItems.isNotEmpty()
-                            DailySection.WATCH -> watchFeeds.isNotEmpty()
+                            // Shown once the mode's feeds have headlines, all read included (it says so).
+                            DailySection.WATCH -> watchDaily.hasFeeds && watchDaily.anyCached
                             else -> true
                         }
                     }
@@ -648,24 +652,27 @@ fun DailyNoteScreen(
                                     val context = androidx.compose.ui.platform.LocalContext.current
                                     val readOnly = VaultWriteGate.readOnly
                                     WatchSection(
-                                        feeds = watchFeeds,
-                                        now = remember(watchFeeds) { System.currentTimeMillis() },
-                                        onRead = { headline ->
+                                        daily = watchDaily,
+                                        now = remember(watchDaily) { System.currentTimeMillis() },
+                                        onRead = { entry ->
                                             if (readOnly) {
-                                                // A read-only device imports nothing: the article opens outside the app.
+                                                // A read-only device imports nothing: the article opens outside the
+                                                // app, and is read on this device.
+                                                watchViewModel.openedOutside(entry)
                                                 runCatching {
-                                                    context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, headline.url.toUri()))
+                                                    context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, entry.url.toUri()))
                                                 }
                                             } else {
-                                                watchViewModel.read(headline)
+                                                watchViewModel.read(entry)
                                                 onOpenReader()
                                             }
                                         },
-                                        onImport = if (readOnly) null else { headline ->
-                                            if (watchViewModel.import(headline)) {
+                                        onImport = if (readOnly) null else { entry ->
+                                            if (watchViewModel.import(entry)) {
                                                 android.widget.Toast.makeText(context, "Importing to the inbox…", android.widget.Toast.LENGTH_SHORT).show()
                                             }
                                         },
+                                        onSeeAll = onOpenFeeds,
                                         modifier = Modifier.padding(bottom = 16.dp)
                                     )
                                 }
@@ -749,7 +756,8 @@ fun DailyNoteScreen(
                                     countdowns = countdowns.size,
                                     projects = dailyProjects.size,
                                     due = dueItems.size,
-                                    headlines = watchFeeds.sumOf { it.headlines.size }
+                                    // 13.4: the unread headlines.
+                                    headlines = watchDaily.unread
                                 ),
                                 expanded = moreExpanded,
                                 onToggle = { layoutViewModel.setMoreExpanded(!moreExpanded) }
