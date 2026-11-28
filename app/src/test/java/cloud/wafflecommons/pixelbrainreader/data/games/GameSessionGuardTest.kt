@@ -1,8 +1,11 @@
 package cloud.wafflecommons.pixelbrainreader.data.games
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.security.MessageDigest
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
@@ -62,7 +65,8 @@ class GameSessionGuardTest {
     @Test
     fun `a session typed by hand is keyed like a started one, so typing it twice replaces it`() {
         val record = ManualSessions.record(session.page, LocalDate.of(2026, 11, 15), LocalTime.of(21, 0), 95, zone)!!
-        assertEquals("manual:$start", record.id)
+        // 13.4: the page in the key, so another game's session of the same minute never shares it.
+        assertEquals("manual:$start:${ManualSessions.pageTag(session.page)}", record.id)
         assertEquals("2026-11-15", record.date)
         assertEquals("21:00", record.start)
         assertEquals(95, record.minutes)
@@ -81,8 +85,21 @@ class GameSessionGuardTest {
         assertEquals("21:30", fixed.start)
         assertEquals(150, fixed.minutes)
         assertEquals(session.page, fixed.page)
-        assertEquals("manual:${start + 30 * 60_000L}", fixed.id)
+        assertEquals(ManualSessions.idFor(session.page, start + 30 * 60_000L), fixed.id)
         assertNull(ManualSessions.edited(old.copy(page = null), LocalTime.of(21, 30), 150, zone))
+    }
+
+    @Test
+    fun `the page tag is the path's sha-256, 8 hex`() {
+        val tag = ManualSessions.pageTag(session.page)
+        val digest = MessageDigest.getInstance("SHA-256").digest(session.page.toByteArray(Charsets.UTF_8))
+        assertEquals(digest.joinToString("") { "%02x".format(it) }.take(8), tag)
+        assertEquals(8, tag.length)
+        assertTrue(tag.all { it in '0'..'9' || it in 'a'..'f' })
+        assertNotEquals(tag, ManualSessions.pageTag("30_Areas/Games/Glass_Tower/Glass_Tower.md"))
+        assertEquals("manual:$start:$tag", ManualSessions.idFor(session.page, start))
+        // A session started on the phone keeps its milliseconds, under the same key.
+        assertEquals("manual:${start + 123}:$tag", RunningGame(start + 123, session.page).record(start + 2 * hour, zone)!!.id)
     }
 
     @Test

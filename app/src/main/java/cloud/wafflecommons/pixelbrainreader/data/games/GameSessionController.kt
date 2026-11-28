@@ -1,14 +1,26 @@
 package cloud.wafflecommons.pixelbrainreader.data.games
 
+import android.graphics.Bitmap
+import android.util.Log
+import cloud.wafflecommons.pixelbrainreader.data.daily.Shutdown
 import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.modes.ContextMode
 import cloud.wafflecommons.pixelbrainreader.data.modes.ModeResolver
+import cloud.wafflecommons.pixelbrainreader.data.modes.ModesConfig
 import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.DailyDashboardRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
+import cloud.wafflecommons.pixelbrainreader.di.AppScopeErrors
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -21,6 +33,15 @@ object GameNight {
 
     /** In Perso, outside work hours: never in Off (custody evenings), never in Work or work hours. */
     fun guards(mode: ContextMode, inWorkHours: Boolean): Boolean = mode == ContextMode.PERSONAL && !inWorkHours
+
+    /**
+     * The day whose shutdown banner a game night started at [moment] keeps away (13.4): that day's,
+     * once its banner has begun ([Shutdown.startOf]); null after midnight or before work, when the
+     * day's banner is still hours away. D7 and D13 meant the evening's banner, hidden until morning,
+     * never the next evening's.
+     */
+    fun dayToHide(config: ModesConfig, moment: LocalDateTime): LocalDate? =
+        moment.toLocalDate().takeIf { !moment.isBefore(Shutdown.startOf(config, it)) }
 
     /** The shutdown banner stays away the rest of a day a game night started on. */
     fun hidesShutdown(gameNightDay: String?, today: LocalDate): Boolean = gameNightDay == today.toString()
@@ -40,6 +61,14 @@ enum class GameNightOutcome {
  * The manual game session (RFC-009 §4.3, D3): one at a time, kept on the phone, shown as a Live
  * Update; its stop writes a `manual` session. Starting one on a Perso evening starts a game night
  * (§4.5). Nothing on a read-only device.
+ *
+ * 13.4 (the audit's critical finding): [start], [stop], [check], [keepPlaying] and [restore] take
+ * one lock, so none of them interleaves with another (a Stop landing mid-check can't leave the
+ * notification posted again), and each runs to its end whatever cancels its caller: a tile or a page
+ * going away, or the check's own job being replaced. A stop saves the session before it clears
+ * anything and keeps it running when the save fails, so a later Stop or check saves it under the
+ * same id; the game night ends with every stop; and the check's own end never cancels the job it
+ * runs in (its next look is appended to that job, never a replacement of it).
  */
 @Singleton
 class GameSessionController @Inject constructor(
@@ -51,12 +80,16 @@ class GameSessionController @Inject constructor(
 ) {
     val running: Flow<RunningGame?> = preferences.gameSession.map(RunningGame::decode)
 
+    /** The running session, read as stored (it takes no lock). */
     suspend fun current(): RunningGame? = RunningGame.decode(preferences.gameSession.first())
 
     /**
-     * Starts [page]; a running session is stopped (and kept) first. [startedMinutesAgo] backdates the
-     * start for a session started once already playing (13.1: 10, 20 or 30 minutes); the game night
-     * follows the moment of the tap. Null on a read-only device.
+     * Starts [page]. [startedMinutesAgo] backdates the start for a session started once already
+     * playing (13.1: 10, 20 or 30 minutes, at most [MAX_EARLIER_MINUTES]). A running session is
+     * stopped and kept first, ending where this one begins (13.4: the overlap never counts for both
+     * games; one that began after that leaves no record). When that session can't be saved it keeps
+     * running and nothing new starts: null, as on a read-only device. The game night follows the
+     * moment of the tap; the notification goes out at once and gets the game's picture after.
      */
     suspend fun start(
         page: GamePage,
@@ -65,100 +98,102 @@ class GameSessionController @Inject constructor(
         startedMinutesAgo: Int = 0
     ): GameNightOutcome? {
         if (VaultWriteGate.refuses()) return null
-        if (current() != null) stop(now, zone)
-        val session = RunningGame(now - startedMinutesAgo.coerceIn(0, MAX_EARLIER_MINUTES) * 60_000L, page.path)
-        preferences.setGameSession(session.encode())
-        platform.postRunning(session, page.title, hasMap = page.maps.isNotEmpty())
-        val check = SessionCheck.first(session)
-        preferences.setGameSessionCheck(check.encode())
-        platform.scheduleCheck(check.nextAskAt - now)
-        val moment = LocalDateTime.ofInstant(Instant.ofEpochMilli(now), zone)
-        val config = modesRepository.currentConfig()
-        if (!GameNight.guards(modesRepository.currentVisibility().mode, ModeResolver.inWorkHours(config, moment))) return GameNightOutcome.NONE
-        preferences.setGameNightDay(moment.toLocalDate())
-        if (!platform.canGuard()) return GameNightOutcome.NEEDS_ACCESS
-        val rule = platform.startGameNight(preferences.gameNightRule.first())
-        preferences.setGameNightRule(rule)
-        return if (rule != null) GameNightOutcome.ON else GameNightOutcome.NEEDS_ACCESS
+        return withContext(NonCancellable) {
+            lock.withLock {
+                val startAt = now - startedMinutesAgo.coerceIn(0, MAX_EARLIER_MINUTES) * 60_000L
+                if (current() != null && stopLocked(now, zone, endAt = startAt, fromCheck = false) == StopOutcome.Kept) {
+                    return@withLock null
+                }
+                val session = RunningGame(startAt, page.path)
+                val hasMap = page.maps.isNotEmpty()
+                preferences.setGameSession(session.encode())
+                platform.postRunning(session, page.title, hasMap)
+                val check = SessionCheck.first(session)
+                preferences.setGameSessionCheck(check.encode())
+                platform.scheduleCheck(check.nextAskAt - now)
+                val outcome = gameNightLocked(now, zone)
+                // The picture never holds the notification back: it follows, once read.
+                largeIconOf(page, session)?.let { icon -> platform.postRunning(session, page.title, hasMap, largeIcon = icon) }
+                outcome
+            }
+        }
     }
 
     /**
-     * Stops the running session and keeps it, recorded as ending at [endAt] (now, or the time a
-     * "Still playing?" nobody answered was due); the game night ends with it.
+     * Stops the running session and keeps it. It is recorded as ending at the earlier of [endAt] and
+     * the time an unanswered "Still playing?" was due (13.4, E4: a Stop after the answer's deadline
+     * ends at the deadline, not when someone notices), or now when neither applies; the game night
+     * ends with it in every case. Saved before anything is cleared: a session that can't be saved
+     * keeps running, its notification too, and a later Stop or check saves it under the same id.
+     * The record; null when nothing ran, it lasted under a minute, or it was kept running.
      */
     suspend fun stop(
         now: Long = System.currentTimeMillis(),
         zone: ZoneId = ZoneId.systemDefault(),
-        endAt: Long = now
-    ): GameSessionRecord? {
-        val session = current()
-        preferences.setGameSession(null)
-        preferences.setGameSessionCheck(null)
-        platform.cancelRunning()
-        platform.cancelAsk()
-        platform.cancelCheck()
-        platform.endGameNight(preferences.gameNightRule.first())
-        if (session == null || VaultWriteGate.readOnly) return null
-        val record = session.record(minOf(endAt, now), zone) ?: return null
-        games.addSessions(listOf(record)) ?: return null
-        refreshDay(LocalDate.parse(record.date), Instant.ofEpochMilli(now).atZone(zone).toLocalDate())
-        return record
+        endAt: Long? = null
+    ): GameSessionRecord? = withContext(NonCancellable) {
+        lock.withLock { (stopLocked(now, zone, endAt, fromCheck = false) as? StopOutcome.Stopped)?.record }
     }
 
     /**
      * The running session's check (13.1, the check worker): asks "Still playing?" once it is due,
      * ends a session nobody answered for at the time the question was due, and otherwise waits.
-     * Each look also puts the session's notification back (gone after a reboot or a swipe).
+     * Each look also puts the session's notification back (gone after a reboot or a swipe). 13.4:
+     * the next look is appended to the job running this one, never a replacement of it, so the job
+     * ends by returning; an end that can't be saved is tried again [RETRY_MS] later.
      */
     suspend fun check(now: Long = System.currentTimeMillis(), zone: ZoneId = ZoneId.systemDefault()) {
         if (VaultWriteGate.readOnly) return
-        val session = current() ?: run {
-            preferences.setGameSessionCheck(null)
-            platform.cancelAsk()
-            return
-        }
-        val check = checkOf(session)
-        val page = games.page(session.page)
-        val title = page?.title ?: fallbackTitle(session)
-        val hasMap = page?.maps?.isNotEmpty() == true
-        when (val step = GameSessionGuard.step(check, now)) {
-            is GameSessionGuard.Step.Wait -> {
-                platform.postRunning(session, title, hasMap)
-                preferences.setGameSessionCheck(check.encode())
-                platform.scheduleCheck(step.at - now)
-            }
-            is GameSessionGuard.Step.Ask -> {
-                platform.postRunning(session, title, hasMap)
-                preferences.setGameSessionCheck(check.copy(askedAt = now).encode())
-                platform.postAsk(title, session.startMillis, endsAt = check.nextAskAt, answerBy = step.answerBy)
-                platform.scheduleCheck(step.answerBy - now)
-            }
-            is GameSessionGuard.Step.End -> stop(now, zone, endAt = step.at)
+        // 13.4 review: a job cancelled while it waited for the lock still runs its look but schedules
+        // none: start, restore or Keep playing replaced it and set the next one (a stop left no
+        // session), and a job the system stopped is run again by WorkManager.
+        val job = currentCoroutineContext()[Job]
+        withContext(NonCancellable) {
+            lock.withLock { checkLocked(now, zone, superseded = { job?.isCancelled == true }) }
         }
     }
 
-    /** "Keep playing" (13.1): the question goes away and comes back in an hour. */
+    /** "Keep playing" (13.1): the question goes away and comes back in an hour; with no session, it just goes. */
     suspend fun keepPlaying(now: Long = System.currentTimeMillis()) {
-        val session = current() ?: return
-        val next = GameSessionGuard.keep(checkOf(session), now)
-        preferences.setGameSessionCheck(next.encode())
-        platform.cancelAsk()
-        platform.scheduleCheck(next.nextAskAt - now)
+        withContext(NonCancellable) {
+            lock.withLock {
+                val session = current() ?: run {
+                    platform.cancelAsk()
+                    return@withLock
+                }
+                val next = GameSessionGuard.keep(checkOf(session), now)
+                preferences.setGameSessionCheck(next.encode())
+                platform.cancelAsk()
+                platform.scheduleCheck(next.nextAskAt - now)
+            }
+        }
     }
 
     /**
      * Puts a running session back when the app comes to the foreground (13.1): its notification
      * (gone after a reboot or a swipe) and its next check (a session started before 13.1 has none).
-     * An unanswered question isn't posted again: the Games tab shows it. Nothing when no session runs.
+     * An unanswered question isn't posted again: the Games tab shows it. With no session (13.4),
+     * whatever a stop left behind goes: the notifications, the check and the game night (each safe
+     * to repeat, and the app owns that mode, which nobody can turn on by hand).
      */
     suspend fun restore(now: Long = System.currentTimeMillis()) {
         if (VaultWriteGate.readOnly) return
-        val session = current() ?: return
-        val check = checkOf(session)
-        val page = games.page(session.page)
-        platform.postRunning(session, page?.title ?: fallbackTitle(session), hasMap = page?.maps?.isNotEmpty() == true)
-        preferences.setGameSessionCheck(check.encode())
-        platform.scheduleCheck((check.askedAt?.plus(GameSessionGuard.ANSWER_MS) ?: check.nextAskAt) - now)
+        withContext(NonCancellable) {
+            lock.withLock {
+                val session = current() ?: run {
+                    platform.cancelRunning()
+                    platform.cancelAsk()
+                    preferences.setGameSessionCheck(null)
+                    platform.endGameNight(preferences.gameNightRule.first())
+                    return@withLock
+                }
+                val check = checkOf(session)
+                val shown = shownFor(session)
+                platform.postRunning(session, shown.title, shown.hasMap, shown.icon)
+                preferences.setGameSessionCheck(check.encode())
+                platform.scheduleCheck((check.askedAt?.plus(GameSessionGuard.ANSWER_MS) ?: check.nextAskAt) - now)
+            }
+        }
     }
 
     /** The running session's check, for the Games tab's "Still playing?" line. */
@@ -264,7 +299,12 @@ class GameSessionController @Inject constructor(
     }
 
     companion object {
+        private const val TAG = "GameSession"
+
         /** "Started earlier" goes back at most an hour; longer is a past session. */
         const val MAX_EARLIER_MINUTES = 60
+
+        /** An end the check couldn't save is tried again a quarter of an hour later (13.4). */
+        const val RETRY_MS = 15 * 60_000L
     }
 }

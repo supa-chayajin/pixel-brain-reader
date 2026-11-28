@@ -1,5 +1,7 @@
 package cloud.wafflecommons.pixelbrainreader.data.games
 
+import java.security.MessageDigest
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -148,7 +150,7 @@ data class RunningGame(val startMillis: Long, val page: String) {
         if (minutes < 1) return null
         val start = LocalDateTime.ofInstant(Instant.ofEpochMilli(startMillis), zone)
         return GameSessionRecord(
-            id = "manual:$startMillis",
+            id = ManualSessions.idFor(page, startMillis),
             date = start.toLocalDate().toString(),
             start = start.toLocalTime().format(HH_MM),
             minutes = minutes,
@@ -170,19 +172,39 @@ data class RunningGame(val startMillis: Long, val page: String) {
 
 /**
  * A manual session typed or fixed by hand (13.1, pure): the record a started-and-stopped session
- * would have written, keyed the same way (`manual:<start millis>`), so typing a session that is
- * already there replaces it instead of counting it twice.
+ * would have written, keyed the same way (13.4: `manual:<start millis>:<page tag>`, the page in the
+ * key so two games' sessions of one minute never share an id). Typing a session twice replaces it,
+ * because the merge ([GameSessionMerge]) matches the page and the minute, a phone-started one
+ * included. A typed start is cut to the minute; a started one keeps its milliseconds. Older ids
+ * (`manual:<start millis>`) stay as they are: edits and deletes find a record by the id read.
  */
 object ManualSessions {
 
     /** Longest session that can be typed: a day. */
     const val MAX_MINUTES = 24 * 60
 
+    private const val HEX = "0123456789abcdef"
+
+    /** The first 8 lowercase hex characters of the SHA-256 of [page]'s path (UTF-8). */
+    fun pageTag(page: String): String {
+        val digest = MessageDigest.getInstance("SHA-256").digest(page.toByteArray(Charsets.UTF_8))
+        return buildString {
+            digest.take(4).forEach { byte ->
+                val b = byte.toInt() and 0xff
+                append(HEX[b shr 4])
+                append(HEX[b and 0x0f])
+            }
+        }
+    }
+
+    /** A manual session's id (13.4): `manual:<start millis>:<page tag>`. */
+    fun idFor(page: String, startMillis: Long): String = "manual:$startMillis:${pageTag(page)}"
+
     fun record(page: String, date: LocalDate, start: LocalTime, minutes: Int, zone: ZoneId): GameSessionRecord? {
         if (minutes !in 1..MAX_MINUTES) return null
         val startMillis = date.atTime(start.withSecond(0).withNano(0)).atZone(zone).toInstant().toEpochMilli()
         return GameSessionRecord(
-            id = "manual:$startMillis",
+            id = idFor(page, startMillis),
             date = date.toString(),
             start = start.format(HH_MM),
             minutes = minutes,

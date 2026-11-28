@@ -77,6 +77,21 @@ internal fun achievementLines(files: List<AchievementSetFile>, zone: ZoneId): Li
         )
     )
 
+/** What a picture's save says when it didn't go through (13.4, P5). */
+internal const val COVER_NOT_SAVED = "The picture couldn't be saved."
+
+/**
+ * What a cover edit says (13.4, P5), on the game's page and after a shared image: [done] once it
+ * went through, [failed] when it didn't, the read-only notice on a read-only device.
+ */
+internal fun coverMessage(result: CoverEditResult, done: String, failed: String = COVER_NOT_SAVED): String = when (result) {
+    CoverEditResult.SAVED -> done
+    CoverEditResult.READ_ONLY -> READ_ONLY_NOTICE
+    CoverEditResult.GONE -> "This game's page is gone."
+    CoverEditResult.NOTHING_TO_REMOVE -> "This game has no picture of its own."
+    CoverEditResult.FAILED -> failed
+}
+
 data class GamePageUiState(
     val loading: Boolean = true,
     val page: GamePage? = null,
@@ -170,13 +185,19 @@ class GamePageViewModel @Inject constructor(
             val achievements = achievementLines(files, zone)
             val earnedAchievements = achievements.filter { it.earnedOn != null }
             val resolve = games.resolver(pages, links)
-            val sessions = games.sessionsBetween(today.minusDays(DAYS), today).filter { resolve(it)?.path == path }
+            // 13.4: the typed hours count every month on disk (the last year's alone made them shrink day
+            // after day, and an older forgotten session never counted); the list keeps the last year.
+            val mine = games.allSessions().filter { resolve(it)?.path == path }
+            val year = today.minusDays(DAYS).toString()..today.toString()
+            val sessions = mine.filter { it.date in year }
             val days = sessions.map { it.date }.distinct().mapNotNull { runCatching { LocalDate.parse(it) }.getOrNull() }
                 .flatMap { day -> GameDays.lines(day, sessions, resolve).map { line -> day to line } }
                 .sortedByDescending { it.first }
             val psnSeconds = titles.sumOf { it.playSeconds }
             val xboxMinutes = xboxTitles.sumOf { it.minutesPlayed ?: 0L }
-            val manualMinutes = days.sumOf { d -> d.second.minutes }
+            val manualMinutes = GameDays.totals(mine, resolve)[path] ?: 0
+            // The picture is decoration: its own read, never an error (the initials then).
+            val art = pictures.artFor(page)
             _state.update {
                 it.copy(
                     loading = false,
@@ -254,7 +275,13 @@ class GamePageViewModel @Inject constructor(
     fun start(minutesAgo: Int = 0) {
         val page = _state.value.page ?: return
         viewModelScope.launch {
-            if (controller.start(page, startedMinutesAgo = minutesAgo) == GameNightOutcome.NEEDS_ACCESS) _state.update { it.copy(askAccess = true) }
+            val outcome = controller.start(page, startedMinutesAgo = minutesAgo)
+            if (outcome == GameNightOutcome.NEEDS_ACCESS) {
+                _state.update { it.copy(askAccess = true) }
+            } else if (outcome == null && !VaultWriteGate.readOnly && controller.current()?.page != page.path) {
+                // 13.4 review: the game being played couldn't be saved, so it keeps running and this one doesn't start.
+                _messages.send("The game being played couldn't be saved, so it keeps running")
+            }
         }
     }
 

@@ -46,6 +46,7 @@ class GamesRepositoryTest {
     private val repository = GamesRepository(files, dao, push)
 
     private val pagePath = "30_Areas/Games/Ring/Ring.md"
+    private val zone: ZoneId = ZoneId.of("Europe/Paris")
 
     @Before
     fun setUp() {

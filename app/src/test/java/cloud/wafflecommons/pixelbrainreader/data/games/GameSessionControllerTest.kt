@@ -1,5 +1,6 @@
 package cloud.wafflecommons.pixelbrainreader.data.games
 
+import android.graphics.Bitmap
 import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
 import cloud.wafflecommons.pixelbrainreader.data.modes.ContextMode
 import cloud.wafflecommons.pixelbrainreader.data.modes.ModesConfig
@@ -7,27 +8,40 @@ import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
 import cloud.wafflecommons.pixelbrainreader.data.modes.Visibility
 import cloud.wafflecommons.pixelbrainreader.data.repository.DailyDashboardRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
+import io.mockk.clearMocks
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import io.mockk.verifyOrder
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.yield
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import java.io.IOException
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZonedDateTime
 
 /** Starting and stopping a session by hand, and the game night it may start (D7, D13). */
+@OptIn(ExperimentalCoroutinesApi::class)
 class GameSessionControllerTest {
 
     private val zone = ZoneId.of("Europe/Paris")
     private val page = GamePage("30_Areas/Games/Ring/Ring.md", "Ring of Ash", emptyList(), GameTemplate.SOULS_LIKE, GameState.PLAYING, null, null)
+    private val tin = GamePage("30_Areas/Games/Tin_Orchard/Tin_Orchard.md", "Tin Orchard", emptyList(), GameTemplate.OTHER, GameState.PLAYING, null, null)
 
     /** Saturday 14 November 2026, 21:00, and Wednesday the 11th at 10:00 (work hours). */
     private val saturdayEvening = ZonedDateTime.of(2026, 11, 14, 21, 0, 0, 0, zone).toInstant().toEpochMilli()
@@ -98,6 +112,20 @@ class GameSessionControllerTest {
     }
 
     @Test
+    fun `a game night after midnight keeps that evening's shutdown banner`() = runTest {
+        // Friday 20 November 2026 at 00:20, in Perso: the game night turns on, and Friday's banner
+        // (from 17:30) is still to come, so no day is hidden.
+        val afterMidnight = ZonedDateTime.of(2026, 11, 20, 0, 20, 0, 0, zone).toInstant().toEpochMilli()
+        assertEquals(GameNightOutcome.ON, controller.start(page, afterMidnight, zone))
+        coVerify(exactly = 0) { preferences.setGameNightDay(any()) }
+        controller.stop(afterMidnight + hour, zone)
+        // The same Friday at 19:00, the banner already up: that evening's banner goes.
+        val evening = ZonedDateTime.of(2026, 11, 20, 19, 0, 0, 0, zone).toInstant().toEpochMilli()
+        assertEquals(GameNightOutcome.ON, controller.start(page, evening, zone))
+        coVerify(exactly = 1) { preferences.setGameNightDay(LocalDate.of(2026, 11, 20)) }
+    }
+
+    @Test
     fun `a stop keeps the session, ends the game night and writes today's note`() = runTest {
         controller.start(page, saturdayEvening, zone)
         val record = controller.stop(saturdayEvening + 95 * 60_000L, zone)!!
@@ -124,24 +152,23 @@ class GameSessionControllerTest {
         VaultWriteGate.readOnly = true
         assertNull(controller.start(page, saturdayEvening, zone))
         assertNull(controller.current())
-        verify(exactly = 0) { platform.postRunning(any(), any(), any()) }
+        verify(exactly = 0) { platform.postRunning(any(), any(), any(), any()) }
     }
 
     @Test
     fun `the game played last is the latest of the sessions and PSN's last-played times`() = runTest {
-        val other = GamePage("30_Areas/Games/Bricks/Bricks.md", "Brick Wars", emptyList(), GameTemplate.LEGO, GameState.BACKLOG, null, null)
-        coEvery { games.pages() } returns listOf(other, page)
-        coEvery { games.links() } returns GameLinks(links = mapOf("PPSA1" to other.path))
-        every { games.resolver(any(), any()) } returns { record: GameSessionRecord -> listOf(other, page).firstOrNull { it.path == record.page } }
+        coEvery { games.pages() } returns listOf(tin, page)
+        coEvery { games.links() } returns GameLinks(links = mapOf("PPSA1" to tin.path))
+        every { games.resolver(any(), any()) } returns { record: GameSessionRecord -> listOf(tin, page).firstOrNull { it.path == record.page } }
         val today = LocalDate.now(zone)
         coEvery { games.sessionsBetween(any(), any()) } returns listOf(
             GameSessionRecord("m1", today.minusDays(2).toString(), "21:00", 60, GameSessionRecord.SOURCE_MANUAL, page = page.path)
         )
-        // PSN saw Brick Wars yesterday: later than the manual session two days ago.
+        // PSN saw Tin Orchard yesterday: later than the manual session two days ago.
         val yesterday = today.minusDays(1).atTime(20, 0).atZone(zone).toInstant().toString()
-        coEvery { games.snapshot() } returns PsnSnapshot("x", listOf(PsnTitleState("PPSA1", "BRICK WARS", lastPlayed = yesterday)))
+        coEvery { games.snapshot() } returns PsnSnapshot("x", listOf(PsnTitleState("PPSA1", "TIN ORCHARD", lastPlayed = yesterday)))
         coEvery { games.xboxSnapshot() } returns null
-        assertEquals(other, controller.defaultPage(zone))
+        assertEquals(tin, controller.defaultPage(zone))
 
         coEvery { games.snapshot() } returns null
         assertEquals(page, controller.defaultPage(zone))
@@ -149,15 +176,14 @@ class GameSessionControllerTest {
 
     @Test
     fun `the game played last includes Xbox's last played times`() = runTest {
-        val other = GamePage("30_Areas/Games/Bricks/Bricks.md", "Brick Wars", emptyList(), GameTemplate.LEGO, GameState.BACKLOG, null, null)
-        coEvery { games.pages() } returns listOf(other, page)
-        coEvery { games.links() } returns GameLinks(links = mapOf("PPSA1" to other.path)).linkConsole(GameConsole.XBOX, "1915865634", page.path)
+        coEvery { games.pages() } returns listOf(tin, page)
+        coEvery { games.links() } returns GameLinks(links = mapOf("PPSA1" to tin.path)).linkConsole(GameConsole.XBOX, "1915865634", page.path)
         every { games.resolver(any(), any()) } returns { _: GameSessionRecord -> null }
         coEvery { games.sessionsBetween(any(), any()) } returns emptyList()
         val today = LocalDate.now(zone)
         fun at(daysAgo: Long, hour: Int) = today.minusDays(daysAgo).atTime(hour, 0).atZone(zone).toInstant().toString()
-        // PSN saw Brick Wars two days ago, Xbox Ring of Ash yesterday.
-        coEvery { games.snapshot() } returns PsnSnapshot("x", listOf(PsnTitleState("PPSA1", "BRICK WARS", lastPlayed = at(2, 20))))
+        // PSN saw Tin Orchard two days ago, Xbox Ring of Ash yesterday.
+        coEvery { games.snapshot() } returns PsnSnapshot("x", listOf(PsnTitleState("PPSA1", "TIN ORCHARD", lastPlayed = at(2, 20))))
         coEvery { games.xboxSnapshot() } returns XboxSnapshot(
             "y",
             titles = listOf(
@@ -169,11 +195,17 @@ class GameSessionControllerTest {
         assertEquals(page, controller.defaultPage(zone))
         // An Xbox time that doesn't read is left out.
         coEvery { games.xboxSnapshot() } returns XboxSnapshot("y", titles = listOf(XboxTitleState("1915865634", "Ring of Ash", lastPlayed = "yesterday")))
-        assertEquals(other, controller.defaultPage(zone))
+        assertEquals(tin, controller.defaultPage(zone))
         // A PSN link with the same id isn't an Xbox one.
-        coEvery { games.links() } returns GameLinks(links = mapOf("PPSA1" to other.path, "1915865634" to page.path))
+        coEvery { games.links() } returns GameLinks(links = mapOf("PPSA1" to tin.path, "1915865634" to page.path))
         coEvery { games.xboxSnapshot() } returns XboxSnapshot("y", titles = listOf(XboxTitleState("1915865634", "Ring of Ash", lastPlayed = at(1, 21))))
-        assertEquals(other, controller.defaultPage(zone))
+        assertEquals(tin, controller.defaultPage(zone))
+    }
+
+    @Test
+    fun `no game page gives no game played last`() = runTest {
+        coEvery { games.pages() } returns emptyList()
+        assertNull(controller.defaultPage(zone))
     }
 
     // --- 13.1 ------------------------------------------------------------------------------
@@ -186,7 +218,7 @@ class GameSessionControllerTest {
         val running = controller.current()!!
         assertEquals(saturdayEvening - 20 * 60_000L, running.startMillis)
         assertEquals(SessionCheck(running.startMillis, running.startMillis + 3 * hour), SessionCheck.decode(check.value))
-        verify { platform.scheduleCheck(3 * hour - 20 * 60_000L) }
+        verify { platform.scheduleCheck(3 * hour - 20 * 60_000L, false) }
         assertEquals("rule-1", rule.value)
         // Never more than an hour back.
         controller.start(page, saturdayEvening, zone, startedMinutesAgo = 600)
@@ -198,7 +230,8 @@ class GameSessionControllerTest {
         controller.start(page, saturdayEvening, zone)
         controller.check(saturdayEvening + 3 * hour, zone)
         verify { platform.postAsk(any(), saturdayEvening, endsAt = saturdayEvening + 3 * hour, answerBy = saturdayEvening + 4 * hour) }
-        verify { platform.scheduleCheck(hour) }
+        // The check's next look is appended to its own job, never a replacement of it.
+        verify { platform.scheduleCheck(hour, true) }
         assertEquals(saturdayEvening + 3 * hour, SessionCheck.decode(check.value)!!.askedAt)
 
         // Nobody answered: at 01:00 the session is kept as 21:00–00:00 and goes to Saturday's note.
@@ -221,7 +254,7 @@ class GameSessionControllerTest {
         assertNull(kept.askedAt)
         assertEquals(saturdayEvening + 4 * hour + 5 * 60_000L, kept.nextAskAt)
         verify { platform.cancelAsk() }
-        verify { platform.scheduleCheck(hour) }
+        verify { platform.scheduleCheck(hour, false) }
         assertEquals(RunningGame(saturdayEvening, page.path), controller.current())
     }
 
@@ -232,7 +265,7 @@ class GameSessionControllerTest {
         assertNull(check.value)
         verify { platform.cancelCheck() }
         controller.check(saturdayEvening + 3 * hour, zone)
-        verify(exactly = 0) { platform.postAsk(any(), any(), any(), any()) }
+        verify(exactly = 0) { platform.postAsk(any(), any(), any(), any(), any()) }
     }
 
     @Test
@@ -240,13 +273,13 @@ class GameSessionControllerTest {
         session.value = RunningGame(saturdayEvening, page.path).encode()
         controller.restore(saturdayEvening + hour)
         verify { platform.postRunning(RunningGame(saturdayEvening, page.path), any(), any()) }
-        verify { platform.scheduleCheck(2 * hour) }
+        verify { platform.scheduleCheck(2 * hour, false) }
         assertEquals(SessionCheck.first(RunningGame(saturdayEvening, page.path)), SessionCheck.decode(check.value))
         // An unanswered question isn't posted again: the tab shows it.
         check.value = SessionCheck(saturdayEvening, saturdayEvening + 3 * hour, saturdayEvening + 3 * hour).encode()
         controller.restore(saturdayEvening + 3 * hour + 10 * 60_000L)
-        verify(exactly = 0) { platform.postAsk(any(), any(), any(), any()) }
-        verify { platform.scheduleCheck(50 * 60_000L) }
+        verify(exactly = 0) { platform.postAsk(any(), any(), any(), any(), any()) }
+        verify { platform.scheduleCheck(50 * 60_000L, false) }
     }
 
     @Test
@@ -288,9 +321,11 @@ class GameSessionControllerTest {
         assertNull(controller.addPastSession(page, LocalDate.of(2026, 11, 15), java.time.LocalTime.of(21, 0), 60))
         assertNull(controller.editSession(old, java.time.LocalTime.of(21, 0), 30))
         assertEquals(false, controller.deleteSession(old))
+        controller.refreshDays(setOf(LocalDate.of(2026, 11, 15)))
         coVerify(exactly = 0) { games.addSessions(any()) }
         coVerify(exactly = 0) { games.replaceSession(any(), any()) }
         coVerify(exactly = 0) { games.removeSession(any(), any()) }
+        coVerify(exactly = 0) { games.applyPastDay(any(), any()) }
     }
 
     @Test
@@ -303,4 +338,3 @@ class GameSessionControllerTest {
         verify(exactly = 2) { platform.postRunning(any(), "Ring of Ash", true) }
     }
 }
-

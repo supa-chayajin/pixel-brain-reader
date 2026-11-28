@@ -43,8 +43,11 @@ import javax.inject.Singleton
 @Singleton
 class GamePlatform @Inject constructor(@param:ApplicationContext private val context: Context) {
 
-    /** The running session's Live Update; [hasMap] adds "Open the map" (13.2: the phone as a second screen). */
-    fun postRunning(session: RunningGame, title: String, hasMap: Boolean = false) {
+    /**
+     * The running session's Live Update; [hasMap] adds "Open the map" (13.2: the phone as a second
+     * screen); [largeIcon] is the game's picture (13.4, P1), shown as it is (never a tint from it).
+     */
+    fun postRunning(session: RunningGame, title: String, hasMap: Boolean = false, largeIcon: Bitmap? = null) {
         if (!notificationsAllowed()) return
         val manager = manager() ?: return
         val since = LocalTime.ofInstant(Instant.ofEpochMilli(session.startMillis), ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("HH:mm"))
@@ -74,8 +77,9 @@ class GamePlatform @Inject constructor(@param:ApplicationContext private val con
         manager.notify(ID_RUNNING, builder.build())
     }
 
+    /** Safe to repeat (13.4: a return to the app with no session calls it); a cancel creates no channel. */
     fun cancelRunning() {
-        manager()?.cancel(ID_RUNNING)
+        context.getSystemService(NotificationManager::class.java)?.cancel(ID_RUNNING)
     }
 
     /**
@@ -110,14 +114,20 @@ class GamePlatform @Inject constructor(@param:ApplicationContext private val con
     }
 
     fun cancelAsk() {
-        manager()?.cancel(ID_CHECK)
+        context.getSystemService(NotificationManager::class.java)?.cancel(ID_CHECK)
     }
 
-    /** The next look at the running session in [delayMs]: one unique job, a new one replacing it. */
-    fun scheduleCheck(delayMs: Long) {
+    /**
+     * The next look at the running session in [delayMs]: one unique job. From a start, Keep playing
+     * or a return to the app, the new job replaces the one waiting. From the check itself
+     * ([fromCheck], 13.4) it is appended instead: replacing would cancel the job running that very
+     * check (WorkManager cancels a replaced job's coroutine wherever it is), so a check never cancels
+     * itself and ends by returning; the appended job starts once it has.
+     */
+    fun scheduleCheck(delayMs: Long, fromCheck: Boolean = false) {
         WorkManager.getInstance(context).enqueueUniqueWork(
             CHECK_WORK,
-            ExistingWorkPolicy.REPLACE,
+            if (fromCheck) ExistingWorkPolicy.APPEND_OR_REPLACE else ExistingWorkPolicy.REPLACE,
             OneTimeWorkRequestBuilder<GameSessionCheckWorker>().setInitialDelay(delayMs.coerceAtLeast(0L), TimeUnit.MILLISECONDS).build()
         )
     }

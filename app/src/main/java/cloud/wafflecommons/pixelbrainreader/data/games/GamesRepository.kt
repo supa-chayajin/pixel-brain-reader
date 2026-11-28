@@ -2,20 +2,27 @@ package cloud.wafflecommons.pixelbrainreader.data.games
 
 import android.util.Log
 import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
+import cloud.wafflecommons.pixelbrainreader.data.games.xbox.XboxTimes
 import cloud.wafflecommons.pixelbrainreader.data.local.dao.FileContentDao
 import cloud.wafflecommons.pixelbrainreader.data.repository.FileRepository
 import cloud.wafflecommons.pixelbrainreader.data.sync.VaultPushScheduler
 import cloud.wafflecommons.pixelbrainreader.data.utils.TimelineLine
+import cloud.wafflecommons.pixelbrainreader.data.vault.FrontmatterLines
+import cloud.wafflecommons.pixelbrainreader.di.AppScopeErrors
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.Json
+import java.io.File
+import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
@@ -213,40 +220,88 @@ class GamesRepository @Inject constructor(
         return months.flatMap { sessions(it) }.filter { it.date in range }
     }
 
+    /** The months the sessions folder holds (its `yyyy-MM.json` files), sorted; read only. */
+    suspend fun sessionMonths(): List<YearMonth> = withContext(Dispatchers.IO) {
+        val names = try {
+            fileRepository.getLocalFile("${GameFiles.FOLDER}/sessions").listFiles()?.filter { it.isFile }?.map { it.name }.orEmpty()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            emptyList()
+        }
+        names.mapNotNull { name -> MONTH_FILE.matchEntire(name)?.groupValues?.get(1)?.let { runCatching { YearMonth.parse(it) }.getOrNull() } }
+            .distinct()
+            .sorted()
+    }
+
+    /** Every session of every month on disk (13.4: a game's typed hours count them all, not the last year's). */
+    suspend fun allSessions(): List<GameSessionRecord> = sessionMonths().flatMap { sessions(it) }
+
     /**
-     * Adds [records] to their months, a known id replaced; the dates they fall on, or null when a
-     * month couldn't be saved (a read-only device, a disk failure, an unreadable file kept aside).
+     * Adds [records] to their months by [GameSessionMerge]'s rule (13.4: a typed session replaces
+     * its own page's of the same minute, never another game's); the dates they fall on and the dates
+     * of the records they replaced, or null when a month couldn't be saved (a read-only device, a disk
+     * failure, an unreadable file kept aside). A console record replayed from the same previous sync
+     * may land in another month than its first copy: that copy is taken out (and its date returned).
      */
     suspend fun addSessions(records: List<GameSessionRecord>): Set<LocalDate>? {
         if (records.isEmpty()) return emptySet()
         if (VaultWriteGate.refuses()) return null
         val changed = mutableSetOf<LocalDate>()
         records.groupBy { it.date.take(7) }.forEach { (month, batch) ->
+            var replaced = emptySet<String>()
             update(GameFiles.sessions(month), GameSessionsMonth.serializer(), GameSessionsMonth()) { file ->
-                val byId = file.sessions.associateBy { it.id }.toMutableMap()
-                batch.forEach { byId[it.id] = it }
-                GameSessionsMonth(byId.values.sortedWith(compareBy({ it.date }, { it.start ?: "" }, { it.id })))
+                val merged = GameSessionMerge.merge(file.sessions, batch)
+                replaced = merged.replacedDates
+                GameSessionsMonth(merged.sessions)
             } ?: return null
-            batch.mapNotNullTo(changed) { runCatching { LocalDate.parse(it.date) }.getOrNull() }
+            batch.mapNotNullTo(changed) { dateOf(it.date) }
+            replaced.mapNotNullTo(changed) { dateOf(it) }
         }
         return changed
     }
 
     /**
      * Replaces [old] by [new] in their month (13.1: a session fixed by hand; both on the same day),
-     * in one write; false when [old] isn't there any more or the month couldn't be saved.
+     * in one write: [old] found by its id and its page (13.4), then [new] merged by
+     * [GameSessionMerge]'s rule; false when [old] isn't there any more or the month couldn't be saved.
      */
     suspend fun replaceSession(old: GameSessionRecord, new: GameSessionRecord): Boolean {
         if (VaultWriteGate.refuses()) return false
         if (old.date.take(7) != new.date.take(7)) return false
         var found = false
         val saved = update(GameFiles.sessions(old.date.take(7)), GameSessionsMonth.serializer(), GameSessionsMonth()) { file ->
-            found = file.sessions.any { it.id == old.id }
+            found = file.sessions.any { it.id == old.id && it.page == old.page }
             if (!found) return@update file
-            val kept = file.sessions.filterNot { it.id == old.id || it.id == new.id } + new
-            GameSessionsMonth(kept.sortedWith(compareBy({ it.date }, { it.start ?: "" }, { it.id })))
+            val kept = file.sessions.filterNot { it.id == old.id && it.page == old.page }
+            GameSessionsMonth(GameSessionMerge.merge(kept, listOf(new)).sessions)
         }
         return found && saved != null
+    }
+
+    /**
+     * The typed and phone-started sessions of [oldPath] moved to [newPath] (13.4: a page renamed or
+     * deleted on the desktop, linked again from the fold), in every month, disk first; the dates
+     * touched, or null when a month couldn't be saved.
+     */
+    suspend fun relinkManualSessions(oldPath: String, newPath: String): Set<LocalDate>? {
+        if (VaultWriteGate.refuses()) return null
+        if (oldPath == newPath) return emptySet()
+        fun GameSessionRecord.isOf(path: String) = source == GameSessionRecord.SOURCE_MANUAL && page == path
+        val touched = mutableSetOf<LocalDate>()
+        for (month in sessionMonths()) {
+            if (sessions(month).none { it.isOf(oldPath) }) continue
+            var dates = emptySet<String>()
+            update(GameFiles.sessions(month.toString()), GameSessionsMonth.serializer(), GameSessionsMonth()) { file ->
+                val moved = file.sessions.filter { it.isOf(oldPath) }
+                if (moved.isEmpty()) return@update file
+                val merged = GameSessionMerge.merge(file.sessions - moved.toSet(), moved.map { it.copy(page = newPath) })
+                dates = moved.mapTo(HashSet()) { it.date } + merged.replacedDates
+                GameSessionsMonth(merged.sessions)
+            } ?: return null
+            dates.mapNotNullTo(touched) { dateOf(it) }
+        }
+        return touched
     }
 
     /** Writes [hours] to the page's `played_before` (one frontmatter line, disk read first). */
@@ -373,10 +428,17 @@ class GamesRepository @Inject constructor(
         false
     }
 
+    private fun dateOf(raw: String): LocalDate? = runCatching { LocalDate.parse(raw) }.getOrNull()
+
+    private fun instantOf(raw: String?): Instant? = raw?.let { runCatching { Instant.parse(it) }.getOrNull() }
+
+    private fun dayOf(instant: Instant): LocalDate? = runCatching { instant.atZone(zone).toLocalDate() }.getOrNull()
+
     companion object {
         private const val TAG = "Games"
         private const val JOURNAL = "10_Journal"
         private val DAILY = Regex("^10_Journal/(\\d{4}-\\d{2}-\\d{2})\\.md$")
+        private val MONTH_FILE = Regex("^([0-9]{4}-[0-9]{2})\\.json$")
         const val PAST_DAYS = 7L
 
         fun journalPath(date: LocalDate): String = "$JOURNAL/$date.md"
