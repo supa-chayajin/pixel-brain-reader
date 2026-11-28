@@ -7,9 +7,95 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Planned: `documentation/plans/2026-11-10-dream-app-roadmap.md`. Next: the second brain's part two
-(a smaller embedder, days like this), the toolkit's last small wins, and the Wear OS companion
-(X1) once it has a plan.
+Planned: `documentation/plans/2026-11-28-13.4-the-pending-items.md`, in the owner's order: Games v2
+(builds and guides, gaming in Life Stats and the reviews, a Now playing widget, "Started earlier"),
+the small fixes, the second brain's part two, then work & modes. The Wear OS companion is v14.
+
+## [13.4.0] — 2026-11-28
+
+The Games, bulletproof and in pictures; a Feeds tab; Settings rebuilt by topic, with a search. The
+owner's interviews of 27 and 28 November, planned in
+`documentation/plans/2026-11-27-13.4-games-pictures-and-audit.md` and
+`documentation/plans/2026-11-28-13.4-feeds-and-settings.md`.
+
+### Added
+
+- **Game pictures everywhere (GP1–GP7):**
+  - Each game shows the owner's own picture, else the PlayStation's, else the Xbox's, else its
+    initials in the game's expressive shape. The owner's picture is a vault file beside the page,
+    "<page> (cover).jpg", named by the page's `game_cover` key and set or removed on the game's
+    page (the photo picker) or from an image share ("Game picture").
+  - One guarded loader for every game picture: https to the consoles' own image hosts only, every
+    hop checked, public addresses only, a size cap, and a new privacy ledger purpose, "Game
+    pictures". The pictures are cached on the device only.
+  - They show on a game's page (beside its facts), the session picker, the console lists, the open
+    map's header, Daily's game lines (on screen only) and the session notification.
+- **The Games tab as a grid of covers (GP4):** headings with their counts, a wide Now playing card,
+  the console folds as segmented rows with Link to a page and Hide (with Undo), and a loading
+  state, built to stay smooth with a few hundred pages.
+- **A Feeds tab (F1–F7):** a tab of its own at the end of the bar (nothing existing moves):
+  - One stream, newest first, under day headers, with an All chip and one per feed with its
+    unread count. Unread marks stay on the device; opening or importing a headline marks it read,
+    and Mark all read marks the current view. Pull to refresh reads the feeds.
+  - Each headline's picture comes from the feed, https only, through the same guarded loader
+    (ledger purpose "Feed pictures").
+  - The tab's dot lights when headlines arrived since it was last opened.
+  - Each feed picks the modes it shows in ("Shows in", in `feeds.json`'s new `modes`), and the
+    feeds page reorders them by drag.
+  - A feed's history is what it carried over the last 30 days, at most 500 headlines.
+- **Settings, rebuilt (S1–S11):**
+  - One page in eight topics, nothing folded: Your day, Modes, Life OS, the toolkit (under its own
+    name), Connections, AI & search, Privacy & safety, Vault & device. A search field finds any
+    setting and opens its page at it.
+  - Every page shares one frame, every list is segmented, and each entry is its own segment, so
+    the section's corners no longer cut the first and last entries' text.
+  - New pages: Gemini Nano, Knowledge vault, Health Connect, Google Calendar & Tasks, the Modes hub
+    and its short pages, Navigation (the tabs' order by drag, the modes each one shows in, the
+    rail's names), Moods (faces and tags), Games, Private journal, Permissions, Repair and This
+    device & version.
+  - Daily's blocks and the mood tags reorder by drag; TalkBack keeps Move up and Move down.
+  - The Games page has an "Unlock to start a session" switch for the Quick Settings tile, on by
+    default.
+
+### Changed
+
+- Daily's Tech watch block is now Feeds (its key, `watch`, is kept): the five newest unread
+  headlines, then See all. When everything is read it says so and keeps See all.
+- The theme always follows the system: a light or dark choice an older version stored is removed
+  (settled decision #12).
+- Game night moves from the PlayStation page to the Games page. The "Local AI" radio, which had
+  one option, is gone; the Gemini Nano page names the model.
+- The RPG rules name each stat, and their sliders move on round steps.
+- Messages that point into Settings follow the new map.
+
+### Fixed
+
+- **The Games audit (GA1–GA4):**
+  - A session is never lost, whatever ends it ("Still playing?"'s automatic end could cancel its
+    own stop). One lock orders start, stop, check, Keep playing and restore.
+  - The 🏆 and 🎖️ sections keep the text typed below them, and a checklist tick targets its own
+    line.
+  - An unreadable `links.json` refuses the syncs' link writes instead of being rebuilt from empty.
+    Play found after the 23:50 burn reaches today's note, a gap over 30 h writes no Timeline line,
+    and a page moved on the desktop keeps its typed sessions.
+  - The map's browser pauses in the background, console text loses invisible characters, and the
+    NPSSO is cleared from the clipboard after Connect.
+- The share screen's in-app browser closes its privacy ledger span when the app leaves the screen.
+- Writing the habits' and the home's config back to the vault moves a file that no longer parses
+  aside first, never replaces a file's items with an empty list, and reports a failure.
+- An undated headline no longer comes back as new every 30 days, and a very long feed link no
+  longer crashes Import.
+- The privacy ledger credits each redirect hop to the host that served it.
+
+### Notes
+
+- Room stays at version 33: no migration. New persisted keys: the tab `feeds`, the ledger purposes
+  `game_pictures` and `feed_pictures`, the page key `game_cover` and `feeds.json`'s `modes`.
+  `work` is still written, so an older app keeps a Work-only feed's rule.
+- The device tests use Espresso 3.7.0 (Android 16 removed what 3.6.1 called); the app's own
+  dependencies are unchanged. Approved by the owner (settled decision #9).
+- Checked on the emulator against the sandbox vault (the Feeds tab with a real feed, Settings and
+  its search, drag to reorder) before the Fold.
 
 ## [13.3.0] — 2026-11-27
 
