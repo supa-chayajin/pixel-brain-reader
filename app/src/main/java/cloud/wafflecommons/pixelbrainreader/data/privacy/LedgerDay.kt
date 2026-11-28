@@ -12,13 +12,16 @@ enum class NetPurpose(val key: String, val label: String) {
     TASKS("tasks", "Google Tasks import"),
     WEATHER("weather", "Weather"),
     IMPORT("import", "Web page import"),
-    WATCH("watch", "Tech watch feeds"),
+    /** The feeds' own reads (12.12); named "Feeds" like the tab since 13.4, its key kept. */
+    WATCH("watch", "Feeds"),
     GAMES("games", "PlayStation sync"),
     MAPS("maps", "Game maps"),
     /** 13.3: the Xbox sign-in and its reads (Microsoft's sign-in, the Xbox network). */
     XBOX("xbox", "Xbox sync"),
     /** 13.4: the games' pictures from the consoles' image hosts, through the games image loader only. */
     GAME_PICTURES("game_pictures", "Game pictures"),
+    /** 13.4 (F7): the feeds' thumbnails, from any public https host, through the feeds' image loader only. */
+    FEED_PICTURES("feed_pictures", "Feed pictures"),
     OTHER("other", "Other");
 
     companion object {

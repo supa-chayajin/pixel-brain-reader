@@ -108,6 +108,25 @@ class LedgerDaysTest {
     }
 
     @Test
+    fun `the feed pictures purpose reads back from its key`() {
+        assertEquals(NetPurpose.FEED_PICTURES, NetPurpose.of("feed_pictures"))
+        assertEquals("feed_pictures", NetPurpose.FEED_PICTURES.key)
+        assertEquals("Feed pictures", NetPurpose.FEED_PICTURES.label)
+        // Right after the games' pictures and before Other, which stays last; the keys stay unique.
+        assertEquals(NetPurpose.GAME_PICTURES.ordinal + 1, NetPurpose.FEED_PICTURES.ordinal)
+        assertEquals(NetPurpose.OTHER, NetPurpose.entries.last())
+        assertEquals(NetPurpose.entries.size, NetPurpose.entries.map { it.key }.toSet().size)
+        // The feeds' own reads keep their key under the tab's name.
+        assertEquals(NetPurpose.WATCH, NetPurpose.of("watch"))
+        assertEquals("Feeds", NetPurpose.WATCH.label)
+        // A thumbnail's host lists under its own purpose, apart from a feed's read.
+        var day = LedgerDays.add(empty, "cdn.example.org", NetPurpose.FEED_PICTURES, 1, 20_000)
+        day = LedgerDays.add(day, "news.example", NetPurpose.WATCH, 10, 100)
+        assertEquals(listOf(NetPurpose.FEED_PICTURES), LedgerDays.byHost(day).first().purposes)
+        assertEquals(listOf("feed_pictures", "watch"), day.calls.map { it.purpose })
+    }
+
+    @Test
     fun `bytes read as people say them`() {
         assertEquals("999 B", LedgerDays.bytes(999))
         assertEquals("1 KB", LedgerDays.bytes(1_500))

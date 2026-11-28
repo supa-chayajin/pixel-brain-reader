@@ -46,26 +46,33 @@ object GameImageClient {
 }
 
 /**
- * What a picture's call may do (13.4): a cache-only request never reaches the network, an address
- * [GamePictures.allowed] refuses is never requested, a redirect is followed only to an allowed
- * address (at most [GamePictures.MAX_REDIRECTS] hops, each as a GET), and the answer must be an
- * image (or bytes without a type) of at most [maxBytes], counted as it is read. Every refusal is an
- * [IOException] with fixed words, never the address.
+ * What a picture's call may do (13.4). It guards both picture loaders, one reviewed guard: the
+ * games' with their rules (the defaults, [GamePictures]) and the feeds' with theirs (`FeedPictures`,
+ * through `FeedImageClient`). A cache-only request never reaches the network, an address [allowed]
+ * refuses is never requested, a redirect is followed only to an address [redirectTarget] allows (at
+ * most [maxRedirects] hops, each as a GET), and the answer must be an image (or bytes without a
+ * type) of at most [maxBytes], counted as it is read. Every refusal is an [IOException] with fixed
+ * words, never the address.
  */
-internal class GamePictureGuard(private val maxBytes: Long = GamePictures.MAX_BYTES) : Interceptor {
+internal class GamePictureGuard(
+    private val maxBytes: Long = GamePictures.MAX_BYTES,
+    private val allowed: (String) -> Boolean = GamePictures::allowed,
+    private val redirectTarget: (from: String, location: String?) -> String? = GamePictures::redirectTarget,
+    private val maxRedirects: Int = GamePictures.MAX_REDIRECTS
+) : Interceptor {
 
     override fun intercept(chain: Interceptor.Chain): Response {
         var request = chain.request()
         if (request.cacheControl.onlyIfCached) throw IOException("Only from the cache")
-        if (!GamePictures.allowed(request.url.toString())) throw IOException("Refused")
+        if (!allowed(request.url.toString())) throw IOException("Refused")
         var response = chain.proceed(request)
         var hops = 0
         while (response.code in REDIRECTS) {
-            if (hops >= GamePictures.MAX_REDIRECTS) {
+            if (hops >= maxRedirects) {
                 response.close()
                 throw IOException("Too many redirects")
             }
-            val next = GamePictures.redirectTarget(request.url.toString(), response.header("Location"))
+            val next = redirectTarget(request.url.toString(), response.header("Location"))
             response.close()
             if (next == null) throw IOException("Redirect refused")
             request = request.newBuilder().url(next).get().build()
