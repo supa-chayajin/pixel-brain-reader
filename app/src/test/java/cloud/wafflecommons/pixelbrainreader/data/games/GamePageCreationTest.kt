@@ -327,4 +327,81 @@ class GamePageCreationTest {
         assertTrue(plain.contains("\naliases: []\n"))
         assertTrue(plain.endsWith("---\n\n# GLASS TOWER\n"))
     }
+
+    // --- 13.4 ------------------------------------------------------------------------------
+
+    private val sequelPage = page("30_Areas/Games/Glass_Tower_2/Glass_Tower_2.md", "Glass Tower 2")
+
+    @Test
+    fun `a lookalike is held back and doesn't count toward the limit`() {
+        val candidates = listOf(
+            PageCandidate("1", "Glass Tower", lastPlayed = evening),
+            PageCandidate("2", "Tin Orchard", lastPlayed = evening.minusSeconds(3_600)),
+            PageCandidate("3", "Lantern Bay", lastPlayed = evening.minusSeconds(7_200))
+        )
+        val pages = library + sequelPage
+        // "Glass Tower" is the first words of "Glass Tower 2": the owner says in the fold whether it is that game.
+        assertEquals(listOf("Tin Orchard", "Lantern Bay"), GamePageCreation.plan(candidates, pages, emptyList(), GameConsole.XBOX, limit = 2).map { it.title })
+        // Without the hold it is planned like any other.
+        assertEquals(
+            listOf("Glass Tower", "Tin Orchard"),
+            GamePageCreation.plan(candidates, pages, emptyList(), GameConsole.XBOX, limit = 2, holdLookalikes = false).map { it.title }
+        )
+    }
+
+    @Test
+    fun `planOne creates a held-back title's page`() {
+        val pages = library + sequelPage
+        val plan = GamePageCreation.planOne(PageCandidate("1915865690", "Glass Tower™"), pages, emptyList(), GameConsole.XBOX)!!
+        assertEquals("30_Areas/Games/Glass_Tower/Glass_Tower.md", plan.path)
+        assertEquals("Glass Tower", plan.title)
+        assertEquals(listOf("Glass Tower™"), plan.aliases)
+        assertEquals(listOf("1915865690"), plan.titleIds)
+        assertEquals(GameConsole.XBOX, plan.console)
+        // A title a page answers still gets none, nor one whose path is taken.
+        assertNull(GamePageCreation.planOne(PageCandidate("2", "Ring of Ash"), pages, emptyList(), GameConsole.XBOX))
+        assertNull(GamePageCreation.planOne(PageCandidate("3", "Glass Tower"), pages, listOf("30_Areas/Games/glass_tower/glass_tower.md"), GameConsole.XBOX))
+        assertNull(GamePageCreation.planOne(PageCandidate("4", "Glass Tower"), emptyList(), emptyList(), GameConsole.XBOX))
+    }
+
+    @Test
+    fun `recheck drops plans linked, hidden, answered or taken with another case meanwhile`() {
+        fun planned(id: String, title: String) =
+            GamePageCreation.render(GamePageCreation.planOne(PageCandidate(id, title), library, emptyList(), GameConsole.XBOX)!!, null, null, today)
+        val tower = planned("1", "Glass Tower")
+        val orchard = planned("2", "Tin Orchard")
+        val bay = planned("3", "Lantern Bay")
+        val coral = planned("4", "Coral Reef")
+        val grey = planned("5", "Grey Reef")
+        val all = listOf(tower, orchard, bay, coral, grey)
+        // Nothing happened during the sync: every plan stays.
+        assertEquals(all, GamePageCreation.recheck(all, GameLinks(), GameConsole.XBOX, library, emptyList()))
+        // Glass Tower linked and Tin Orchard hidden from the fold, a Lantern Bay page made by the other
+        // console's sync, and Coral Reef's folder there with another case.
+        val links = GameLinks().linkConsole(GameConsole.XBOX, "1", "elsewhere.md").hideConsole(GameConsole.XBOX, "2")
+        val pagesNow = library + page("30_Areas/Games/Lantern_Bay/Lantern_Bay.md", "Lantern Bay")
+        val taken = listOf("30_Areas/Games/CORAL_REEF/notes.md", "30_Areas/Games/Lantern_Bay/Lantern_Bay.md")
+        assertEquals(listOf(grey), GamePageCreation.recheck(all, links, GameConsole.XBOX, pagesNow, taken))
+        // The same id on PlayStation's side is another title.
+        assertEquals(all, GamePageCreation.recheck(all, GameLinks().link("1", "elsewhere.md"), GameConsole.XBOX, library, emptyList()))
+        // The path itself taken with another case.
+        assertEquals(
+            listOf(tower, orchard, bay, grey),
+            GamePageCreation.recheck(all, GameLinks(), GameConsole.XBOX, library, listOf("30_areas/games/coral_reef/coral_reef.md"))
+        )
+        // A page made meanwhile that a title looks like holds it back too.
+        val online = page("30_Areas/Games/Glass_Tower_Online/Glass_Tower_Online.md", "Glass Tower Online")
+        assertEquals(listOf(orchard, bay, coral, grey), GamePageCreation.recheck(all, GameLinks(), GameConsole.XBOX, library + online, emptyList()))
+    }
+
+    @Test
+    fun `a key loses invisible characters`() {
+        assertEquals("Glass_Tower", GamePageCreation.keyOf("Gla\u200Bss Tower\u202E", '_'))
+        assertEquals("Lantern_Bay", GamePageCreation.keyOf("\uFEFFLantern\u00AD Bay\u2066\u2069", '_'))
+        assertEquals("Glass Tower", GamePageCreation.pageTitle("Gla\u200Bss\u202E Tower™"))
+        assertEquals(
+            "30_Areas/Games/Glass_Tower/Glass_Tower.md",
+            GamePageCreation.plan(listOf(PageCandidate("1", "Gla\u200Bss Tower")), library, emptyList(), GameConsole.XBOX).single().path
+        )
+    }
 }

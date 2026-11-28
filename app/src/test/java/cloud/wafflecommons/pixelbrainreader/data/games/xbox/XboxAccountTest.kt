@@ -118,7 +118,9 @@ class XboxAccountTest {
             preferences.setXboxBaselinePending(true)
             secrets.saveXboxTokens(tokens)
         }
-        coVerify { preferences.setXboxStatus("ok|30000") }
+        // 13.4: no "ok" before a sync has run; the first sync's own outcome is the next line.
+        coVerify { preferences.setXboxStatus(null) }
+        coVerify(exactly = 0) { preferences.setXboxStatus("ok|30000") }
     }
 
     @Test

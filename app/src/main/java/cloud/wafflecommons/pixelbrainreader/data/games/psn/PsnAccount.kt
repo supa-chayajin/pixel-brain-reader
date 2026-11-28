@@ -92,7 +92,9 @@ class PsnAccount @Inject constructor(
             // tokens are kept: no sync ever sees the new sign-in without it.
             if (!isConnected()) preferences.setPsnBaselinePending(true)
             withContext(Dispatchers.IO) { secrets.savePsnTokens(tokens) }
-            preferences.setPsnStatus(PsnStatus(true, now).encode())
+            // No ok line before a sync has run (13.4): the first sync's own outcome is the next one,
+            // and the pages say "Syncing…" meanwhile.
+            preferences.setPsnStatus(null)
             Log.i(TAG, "PSN connect: signed in")
             Result.success(Unit)
         } catch (e: PsnException) {

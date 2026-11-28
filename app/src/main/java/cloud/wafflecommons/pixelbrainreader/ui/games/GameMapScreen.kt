@@ -6,13 +6,14 @@ import android.content.Intent
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.EditLocationAlt
@@ -26,19 +27,16 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -50,13 +48,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.net.toUri
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
@@ -70,6 +69,7 @@ import cloud.wafflecommons.pixelbrainreader.data.games.pictures.GamePictureSourc
 import cloud.wafflecommons.pixelbrainreader.data.privacy.NetPurpose
 import cloud.wafflecommons.pixelbrainreader.data.privacy.PrivacyLedger
 import cloud.wafflecommons.pixelbrainreader.data.web.GuardedWebViewClient
+import cloud.wafflecommons.pixelbrainreader.data.web.blockedResponse
 import cloud.wafflecommons.pixelbrainreader.data.web.configureForImport
 import cloud.wafflecommons.pixelbrainreader.ui.components.EmptyHint
 import cloud.wafflecommons.pixelbrainreader.ui.components.FormScaffold
@@ -114,7 +114,7 @@ data class GameMapUiState(
  */
 @HiltViewModel
 class GameMapViewModel @Inject constructor(
-    savedStateHandle: SavedStateHandle,
+    private val savedStateHandle: SavedStateHandle,
     private val games: GamesRepository,
     private val controller: GameSessionController,
     private val pictures: GamePictureSource
@@ -136,17 +136,23 @@ class GameMapViewModel @Inject constructor(
             try {
                 val path = pageArg.ifEmpty { controller.current()?.page.orEmpty() }
                 val page = path.takeIf { it.isNotEmpty() }?.let { games.page(it) }
-                _state.value = if (page == null) {
-                    GameMapUiState(loading = false, noGame = pageArg.isEmpty())
-                } else {
-                    GameMapUiState(
-                        loading = false,
-                        title = page.title,
-                        maps = page.maps,
-                        selected = indexArg.coerceIn(0, (page.maps.size - 1).coerceAtLeast(0)),
-                        path = path
-                    )
+                if (page == null) {
+                    _state.value = GameMapUiState(loading = false, noGame = pageArg.isEmpty())
+                    return@launch
                 }
+                // The map picked before a recreation first, then the route's own.
+                val selected = (savedStateHandle.get<Int>(SELECTED) ?: indexArg).coerceIn(0, (page.maps.size - 1).coerceAtLeast(0))
+                savedStateHandle[SELECTED] = selected
+                _state.value = GameMapUiState(
+                    loading = false,
+                    title = page.title,
+                    maps = page.maps,
+                    selected = selected,
+                    path = path
+                )
+                // The picture is decoration: read after the map shows, never holding it back.
+                val art = pictures.artFor(page)
+                _state.update { it.copy(art = art) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -155,7 +161,10 @@ class GameMapViewModel @Inject constructor(
         }
     }
 
-    fun select(index: Int) = _state.update { it.copy(selected = index.coerceIn(0, (it.maps.size - 1).coerceAtLeast(0))) }
+    fun select(index: Int) {
+        _state.update { it.copy(selected = index.coerceIn(0, (it.maps.size - 1).coerceAtLeast(0))) }
+        savedStateHandle[SELECTED] = _state.value.selected
+    }
 
     /** The map shown given the address [url] and the label [label], in its place. */
     fun change(url: String, label: String?) {
@@ -219,6 +228,12 @@ class GameMapViewModel @Inject constructor(
                 selected = if (index >= 0) index else it.selected.coerceIn(0, (page.maps.size - 1).coerceAtLeast(0))
             )
         }
+        savedStateHandle[SELECTED] = _state.value.selected
+    }
+
+    private companion object {
+        /** The saved state's key of the map shown (13.4): in memory and saved state only, never persisted elsewhere. */
+        const val SELECTED = "map_selected"
     }
 }
 
@@ -302,15 +317,18 @@ private fun MapBrowser(
     // 13.3 (ME3): a new view only for a real switch of map. A map given the address the view is at
     // ("Use this page", "Add as another map…" of the page shown) keeps it, with its pan, zoom and
     // Back history. A count, not the address, keys the view: a map changed back to the address the
-    // view was built for still loads it.
-    var viewFor by remember { mutableStateOf(map.url) }
-    var viewGeneration by remember { mutableIntStateOf(0) }
+    // view was built for still loads it. 13.4: both saved, so a recreation (the system's dark theme
+    // switching at dusk) keeps the view's place, with the address it had reached ([lastUrl]).
+    var viewFor by rememberSaveable { mutableStateOf(map.url) }
+    var viewGeneration by rememberSaveable { mutableIntStateOf(0) }
     LaunchedEffect(map.url) {
         if (map.url != viewFor) {
             if (holder.view?.url != map.url) viewGeneration++
             viewFor = map.url
         }
     }
+    // The address the view went to last inside the map's site; a new view starts from its map.
+    var lastUrl by rememberSaveable(viewGeneration) { mutableStateOf<String?>(null) }
     var progress by remember(viewGeneration) { mutableIntStateOf(0) }
     var failed by remember(viewGeneration) { mutableStateOf(false) }
     // 13.3 (ME3): the top bar's one menu (Maps; on a read-only device, Other maps alone), the
@@ -321,10 +339,17 @@ private fun MapBrowser(
     var changing by rememberSaveable { mutableStateOf(false) }
     var addUrl by rememberSaveable { mutableStateOf<String?>(null) }
     var addLabel by rememberSaveable { mutableStateOf<String?>(null) }
-    // The privacy ledger (13.0, X3): the map shown here is one call, from open to close.
-    DisposableEffect(map.url) {
+    // The privacy ledger (13.0, X3): the map shown here is one call while it is on screen. 13.4: the
+    // span ends and the page pauses when the app leaves the screen (a locked phone, another app), and
+    // both come back with it; a hidden page's traffic is then "Not named", never billed to the map.
+    // No pauseTimers(): it would stall every WebView of the process, an import's render included.
+    LifecycleStartEffect(map.url) {
         val token = PrivacyLedger.begin(PrivacyLedger.hostOf(map.url), NetPurpose.MAPS)
-        onDispose { PrivacyLedger.end(token) }
+        holder.view?.onResume()
+        onStopOrDispose {
+            PrivacyLedger.end(token)
+            holder.view?.onPause()
+        }
     }
     BackHandler {
         val view = holder.view
@@ -423,6 +448,22 @@ private fun MapBrowser(
                             configureForImport(loadImages = true)
                             keepScreenOn = true
                             webViewClient = object : GuardedWebViewClient() {
+                                // 13.4: a map's main frame stays on https (the share screen's view still shows http pages).
+                                override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                                    if (request.isForMainFrame && !request.url.scheme.equals(HTTPS, ignoreCase = true)) return true
+                                    return super.shouldOverrideUrlLoading(view, request)
+                                }
+
+                                override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
+                                    if (request.isForMainFrame && request.url.scheme.equals(HTTP, ignoreCase = true)) return blockedResponse()
+                                    return super.shouldInterceptRequest(view, request)
+                                }
+
+                                override fun doUpdateVisitedHistory(view: WebView, url: String?, isReload: Boolean) {
+                                    super.doUpdateVisitedHistory(view, url, isReload)
+                                    if (url != null) lastUrl = url
+                                }
+
                                 override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
                                     if (request.isForMainFrame) failed = true
                                 }
@@ -432,7 +473,8 @@ private fun MapBrowser(
                                     progress = newProgress
                                 }
                             }
-                            loadUrl(map.url)
+                            // A view rebuilt after a recreation goes back where it was, when that address can be a map.
+                            loadUrl(lastUrl?.takeIf(GameMaps::accepts) ?: map.url)
                             holder.view = this
                         }
                     },
@@ -501,3 +543,6 @@ private fun MapChoices(maps: List<GameMap>, onPick: (Int) -> Unit) {
 private class MapViewHolder {
     var view: WebView? = null
 }
+
+private const val HTTPS = "https"
+private const val HTTP = "http"

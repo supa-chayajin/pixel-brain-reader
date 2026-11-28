@@ -64,15 +64,17 @@ object GamePageCreation {
     fun pageTitle(consoleName: String): String = oneLine(consoleName.filterNot { it == '™' || it == '®' || it == '©' })
 
     /**
-     * A title as a file name every clone of the vault takes: the characters a file system or a link
-     * refuses and control characters made spaces, runs collapsed, dots and spaces dropped at the ends,
-     * spaces turned into [separator], at most 80 characters; a Windows reserved name (CON, NUL, COM1…)
-     * gets a trailing `_`. Empty when nothing is left.
+     * A title as a file name every clone of the vault takes: the invisible formatting characters of
+     * [isInvisibleFormat] dropped (13.4), the characters a file system or a link refuses and control
+     * characters made spaces, runs collapsed, dots and spaces dropped at the ends, spaces turned into
+     * [separator], at most 80 characters; a Windows reserved name (CON, NUL, COM1…) gets a trailing
+     * `_`. Empty when nothing is left.
      */
     fun keyOf(title: String, separator: Char): String {
         val words = StringBuilder()
         var space = false
         for (ch in title) {
+            if (isInvisibleFormat(ch)) continue
             if (ch.isWhitespace() || ch.isISOControl() || ch in FORBIDDEN) {
                 space = true
                 continue
@@ -97,7 +99,9 @@ object GamePageCreation {
      * [limit]. A game some page already answers to gets none, nor one whose path is a note of
      * [takenPaths] (the notes under the layout's root, compared ignoring case: the desktop clones are
      * case-insensitive), or whose folder exists with another case, or that another plan of this call
-     * takes. Empty without a layout.
+     * takes. With [holdLookalikes] (13.4), a title that is the first words of a page's name
+     * ([GameNames.lookalike]) is held back for the owner's call in the fold, and doesn't count toward
+     * [limit]. Empty without a layout.
      */
     fun plan(
         candidates: List<PageCandidate>,

@@ -739,7 +739,8 @@ fun DailyNoteScreen(
                             MoreTodayHeader(
                                 summary = moreTodaySummary(
                                     fold = foldGroup.toSet(),
-                                    moments = state.timelineEvents.size,
+                                    // 13.4: the day's play counts among its moments (a day of play alone has some).
+                                    moments = state.timelineEvents.size + todaysGameRows.size,
                                     tasks = state.dailyTasks.count { !it.isDone },
                                     gratitude = gratitudes.size,
                                     echoes = memoryEchoes.size,

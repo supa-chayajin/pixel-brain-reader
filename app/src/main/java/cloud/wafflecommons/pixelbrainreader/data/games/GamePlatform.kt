@@ -183,7 +183,8 @@ class GamePlatform @Inject constructor(@param:ApplicationContext private val con
             .setType(AutomaticZenRule.TYPE_IMMERSIVE)
             .setConfigurationActivity(ComponentName(context, MainActivity::class.java))
             .setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_PRIORITY)
-            .setTriggerDescription("While a game session runs in PixelBrain")
+            // The app's own name, as the system's Modes page and Do Not Disturb access list show it.
+            .setTriggerDescription("While a game session runs in ${context.getString(R.string.app_name)}")
             .setIconResId(R.drawable.ic_notification)
             .setManualInvocationAllowed(false)
             .build()

@@ -143,7 +143,14 @@ data class GamePageUiState(
     val running: RunningGame? = null,
     val askProject: String? = null,
     val readOnly: Boolean = VaultWriteGate.readOnly,
-    val askAccess: Boolean = false
+    val askAccess: Boolean = false,
+    /**
+     * The day the page's labels count from (13.4, the audit's day-labels-stale-overnight): AppClock's,
+     * in the state so a page left open overnight says "yesterday" once the day turns.
+     */
+    val today: LocalDate,
+    /** The Personal mode as the owner named it in Modes settings (13.4): the Game night dialog says it. */
+    val personalLabel: String = ModeAppearance().label(ContextMode.PERSONAL)
 )
 
 /** A game's page (RFC-009 §4.2): route `game?page=<path>`. */
@@ -163,7 +170,9 @@ class GamePageViewModel @Inject constructor(
     /** The earlier Timeline lines naming this game: read once (game writes don't change them). */
     private var history: List<GameHistoryEntry>? = null
 
-    private val _state = MutableStateFlow(GamePageUiState())
+    private val _state = MutableStateFlow(
+        GamePageUiState(today = clock.today.value, personalLabel = personalLabelOf(modesRepository))
+    )
     val state: StateFlow<GamePageUiState> = _state.asStateFlow()
 
     private val _messages = Channel<String>(Channel.BUFFERED)
@@ -175,6 +184,11 @@ class GamePageViewModel @Inject constructor(
         viewModelScope.launch {
             combine(games.changes, controller.running, clock.today) { _, running, today -> running to today }
                 .collect { (running, today) -> load(running, today) }
+        }
+        // The mode's name, as the owner renames it.
+        viewModelScope.launch {
+            modesRepository.visibility.map { it.appearance.label(ContextMode.PERSONAL) }.distinctUntilChanged()
+                .collect { label -> _state.update { it.copy(personalLabel = label) } }
         }
     }
 
@@ -385,5 +399,8 @@ class GamePageViewModel @Inject constructor(
 
     private companion object {
         const val DAYS = 365L
+        const val COVER_NOT_REMOVED = "The picture couldn't be removed."
+
+        fun personalLabelOf(modes: ModesRepository): String = modes.visibility.value.appearance.label(ContextMode.PERSONAL)
     }
 }

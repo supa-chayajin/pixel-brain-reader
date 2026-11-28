@@ -5,15 +5,30 @@ import java.time.LocalDate
 import java.time.ZoneId
 
 /**
+ * The characters text from the console servers loses before it reaches the vault (pure, 13.4): the
+ * bidi marks, embeddings, overrides and isolates (U+202A to U+202E, U+2066 to U+2069, U+200E,
+ * U+200F, U+061C, the set [GameMaps.cleanLabel] drops), the zero-width space U+200B, the word joiner
+ * U+2060, the byte order mark U+FEFF and the soft hyphen U+00AD. A right-to-left override turns the
+ * rest of a line around (a Timeline line's length then reads backwards), and a zero-width space
+ * splits a word the owner's page spells whole. The joiners U+200D and U+200C and the tag characters
+ * (U+E0020 to U+E007F, written as surrogates: an emoji flag's) carry meaning and are kept.
+ */
+internal fun isInvisibleFormat(ch: Char): Boolean =
+    ch in '\u202A'..'\u202E' || ch in '\u2066'..'\u2069' || ch == '\u200E' || ch == '\u200F' || ch == '\u061C' ||
+        ch == '\u200B' || ch == '\u2060' || ch == '\uFEFF' || ch == '\u00AD'
+
+/**
  * Text from the console servers (a trophy's or an achievement's name, a set's or a game's title) as
- * one line of a note (pure, 13.3): whitespace runs, line breaks included, made one space and trimmed,
- * control characters dropped, everything else kept (™, ® and © too). A line break in a name would
- * end a derived section early (the next `## ` line closes it) or break a page's frontmatter.
+ * one line of a note (pure, 13.3): the invisible formatting characters of [isInvisibleFormat]
+ * dropped (13.4), whitespace runs, line breaks included, made one space and trimmed, control
+ * characters dropped, everything else kept (™, ® and © too). A line break in a name would end a
+ * derived section early or break a page's frontmatter.
  */
 internal fun oneLine(text: String): String = buildString {
     var space = false
     for (ch in text) {
         when {
+            isInvisibleFormat(ch) -> Unit
             ch.isWhitespace() -> space = true
             ch.isISOControl() -> Unit
             else -> {
@@ -26,10 +41,24 @@ internal fun oneLine(text: String): String = buildString {
 }
 
 /**
- * The derived sections' shared edit (pure): one heading matched whole, its lines replaced in place;
- * everything above it, and any section after it, stays as written. A section that isn't there yet
- * goes right after the section [apply]'s `after` finds, when another section follows that one;
- * otherwise it is appended at the end of the note.
+ * A Markdown heading line (pure, 13.4): after its `\r` and its leading spaces, one to six `#` and a
+ * space. Shared by the derived sections, the game page's prose and its checklists, so the three agree
+ * on where a section ends.
+ */
+internal fun isHeadingLine(line: String): Boolean {
+    val text = line.trimEnd('\r').trimStart()
+    val hashes = text.takeWhile { it == '#' }.length
+    return hashes in 1..6 && text.length > hashes && text[hashes] == ' '
+}
+
+/**
+ * The derived sections' shared edit (pure): one heading matched whole, and only the lines the
+ * section writes itself replaced (13.4). A section ends at the next heading of any level; inside it
+ * a line the section doesn't own ([apply]'s `owns`: its summary and entry shapes) is the owner's, and
+ * stays, in its order, right after the rewritten lines. Everything above the heading, and every
+ * section after it, stays as written. A section that isn't there yet goes right before the line
+ * `before` finds, else right after the section `after` finds when another section follows that one,
+ * else at the end of the note.
  */
 internal object PageSections {
 

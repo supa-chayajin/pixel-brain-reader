@@ -91,10 +91,12 @@ data class PsnTrophy(
     val earnedDateTime: String? = null
 )
 
-/** The tokens a sign-in gives; the times are epoch milliseconds. Kept in encrypted storage only. */
-data class PsnTokens(val access: String, val accessExpiresAt: Long, val refresh: String, val refreshExpiresAt: Long)
+/** The tokens a sign-in gives; the times are epoch milliseconds. Kept in encrypted storage only; toString() hides them (13.4). */
+data class PsnTokens(val access: String, val accessExpiresAt: Long, val refresh: String, val refreshExpiresAt: Long) {
+    override fun toString(): String = "PsnTokens(accessExpiresAt=$accessExpiresAt, refreshExpiresAt=$refreshExpiresAt)"
+}
 
-/** Why a PSN call failed, in words the settings page shows. */
+/** Why a PSN call failed, in words the settings page shows. Kind names are persisted (status): never rename one. */
 class PsnException(val kind: Kind, message: String) : Exception(message) {
     enum class Kind {
         /** The NPSSO was refused (expired or mistyped, 4165). */

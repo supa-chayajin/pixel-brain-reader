@@ -56,7 +56,8 @@ import java.util.Locale
 /**
  * Xbox (13.3, XB-E): Connect with the owner's own Microsoft app by device code (the code shown
  * here, typed at microsoft.com/link on any device), the last sync and how long the sign-in lasts,
- * Sync now and Disconnect. On a read-only device the page only says so: no Connect.
+ * Sync now and Disconnect. On a read-only device the page only says so: no Connect. 13.4: the last
+ * sync says its day; a sync running anywhere shows as "Syncing…".
  */
 @Composable
 fun XboxSettingsScreen(onBack: () -> Unit, viewModel: XboxSettingsViewModel = hiltViewModel()) {
@@ -85,8 +86,14 @@ fun XboxSettingsScreen(onBack: () -> Unit, viewModel: XboxSettingsViewModel = hi
                 title = "Connected",
                 icon = Icons.Rounded.SportsEsports,
                 subtitle = listOfNotNull(
-                    // While a sync runs (the first one included), not the time of the one before.
-                    if (state.busy) "Syncing…" else status?.let { if (it.ok) "Last sync ${clock(it.atMillis)}" else "Paused: ${it.message}" },
+                    // While a sync runs (the first one included), not the time of the one before. 13.4: the
+                    // last sync says its day, so one that stopped days ago never reads like last night's.
+                    when {
+                        state.busy -> "Syncing…"
+                        status == null -> "no sync yet"
+                        status.ok -> "Last sync ${syncedLabel(status.atMillis, state.today)}"
+                        else -> "Paused: ${status.message}"
+                    },
                     state.validUntil?.let { "renewed at each sync, good until ${shortDate(it)} without one" },
                     "syncs at 23:40 and 06:00"
                 ).joinToString(" · ")

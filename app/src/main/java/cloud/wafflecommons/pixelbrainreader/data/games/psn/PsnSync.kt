@@ -16,6 +16,7 @@ import cloud.wafflecommons.pixelbrainreader.data.games.TrophyMarkers
 import cloud.wafflecommons.pixelbrainreader.data.games.TrophyRecord
 import cloud.wafflecommons.pixelbrainreader.data.games.TrophySection
 import cloud.wafflecommons.pixelbrainreader.data.games.TrophySetFile
+import cloud.wafflecommons.pixelbrainreader.data.games.oneLine
 import cloud.wafflecommons.pixelbrainreader.data.repository.DailyDashboardRepository
 import cloud.wafflecommons.pixelbrainreader.data.sync.GitSyncCoordinator
 import cloud.wafflecommons.pixelbrainreader.di.AppScopeErrors
@@ -53,13 +54,19 @@ class PsnSync @Inject constructor(
 ) {
     private val running = Mutex()
 
+    private val _syncing = MutableStateFlow(false)
+
+    /** True while a sync runs (13.4): the Games tab and the settings page say "Syncing…" meanwhile. */
+    val syncing: StateFlow<Boolean> = _syncing.asStateFlow()
+
     /**
      * [baseline]: the first sync of a new sign-in (Connect with no sign-in kept: the first one, or one
      * after Disconnect) reads and saves everything as usual but writes no session, so play counts from
      * now on (13.3). The sign-in also marks it ([PsnAccount.baselinePending]) until a sync saves its
      * snapshot: a first sync that fails or is cancelled hands it to the next run, the nightly ones
      * included. A new NPSSO for an expired sign-in (its tokens still kept) starts none: the play since
-     * the last snapshot is kept.
+     * the last snapshot is kept. [writeClock] gives the time the writes happen (13.4: a sync started
+     * before midnight may write after it); tests pass a fixed one.
      */
     suspend fun sync(
         now: Long = System.currentTimeMillis(),
@@ -74,6 +81,7 @@ class PsnSync @Inject constructor(
             return Result.failure(PsnException(PsnException.Kind.NOT_CONFIGURED, "PlayStation isn't connected."))
         }
         return running.withLock {
+            _syncing.value = true
             try {
                 val summary = run(now, zone, baseline || account.baselinePending(), writeClock)
                 account.setStatus(PsnStatus(true, now))
@@ -85,10 +93,13 @@ class PsnSync @Inject constructor(
                 account.setStatus(PsnStatus(false, now, e.kind, e.message.orEmpty()))
                 Result.failure(e)
             } catch (e: Exception) {
-                Log.e(TAG, "PSN sync failed", e)
+                // The type and stack only: a message could hold a game's name or an address.
+                Log.e(TAG, "PSN sync failed: " + AppScopeErrors.describe(e))
                 val failure = PsnException(PsnException.Kind.API, "The PlayStation sync failed: ${e.javaClass.simpleName}.")
                 account.setStatus(PsnStatus(false, now, failure.kind, failure.message.orEmpty()))
                 Result.failure(failure)
+            } finally {
+                _syncing.value = false
             }
         }
     }
@@ -115,7 +126,7 @@ class PsnSync @Inject constructor(
                 val trophies = first?.let(trophyTitles::get)
                 PsnTitleState(
                     titleId = title.titleId,
-                    name = title.name.ifBlank { title.localizedName.orEmpty() },
+                    name = oneLine(title.name).ifBlank { oneLine(title.localizedName.orEmpty()) },
                     category = title.category,
                     playSeconds = PsnDuration.seconds(title.playDuration) ?: old?.playSeconds ?: 0L,
                     playCount = title.playCount,
@@ -185,11 +196,12 @@ class PsnSync @Inject constructor(
             val earned = withAccess(access, now) { client.earned(it, set, service) }.trophies.associateBy { it.trophyId }
             val records = definitions?.map { d ->
                 TrophyRecord(
-                    id = d.trophyId, name = d.trophyName.orEmpty(), detail = d.trophyDetail.orEmpty(), grade = d.trophyType,
+                    id = d.trophyId, name = oneLine(d.trophyName.orEmpty()), detail = oneLine(d.trophyDetail.orEmpty()), grade = d.trophyType,
                     hidden = d.trophyHidden, group = d.trophyGroupId, earnedAt = earned[d.trophyId]?.takeIf { it.earned }?.earnedDateTime
                 )
             } ?: saved?.trophies?.map { t -> t.copy(earnedAt = earned[t.id]?.takeIf { it.earned }?.earnedDateTime ?: t.earnedAt) }.orEmpty()
-            setFiles += TrophySetFile(set, service, title.trophySetVersion, trophyTitles[set]?.trophyTitleName ?: title.name, records)
+            val setTitle = listed?.trophyTitleName?.takeIf { it.isNotBlank() } ?: fromLookup?.trophyTitleName?.takeIf { it.isNotBlank() } ?: title.name
+            setFiles += TrophySetFile(set, service, version, oneLine(setTitle), records)
         }
 
         val template = if (plans.isEmpty()) null else games.otherTemplate()

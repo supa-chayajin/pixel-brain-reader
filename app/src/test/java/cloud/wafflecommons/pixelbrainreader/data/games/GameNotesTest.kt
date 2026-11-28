@@ -408,4 +408,193 @@ class GameNotesTest {
         assertTrue(AchievementMarkers.hasWaiting(achievementChecklist))
         assertFalse(AchievementMarkers.hasWaiting("- [ ] My own line"))
     }
+    // --- 13.4: the owner's lines in and below the derived sections (GA2) -------------------
+
+    private val tower = TrophySetFile(
+        "NPWR00009_00", "trophy2", title = "Glass Tower",
+        trophies = listOf(
+            TrophyRecord(1, "First Floor", grade = "bronze", earnedAt = "2026-11-02T20:10:00Z"),
+            TrophyRecord(2, "Top Floor", grade = "gold")
+        )
+    )
+    private val towerLines get() = TrophySection.lines(listOf(tower), zone)
+    private val towerAchievements = achievements(
+        AchievementRecord("1", "Ground Floor", gamerscore = 10, earnedAt = "2026-11-02T20:10:00Z"),
+        titleId = "1915865690", title = "Glass Tower"
+    )
+    private val towerAchievementLines get() = AchievementSection.lines(listOf(towerAchievements), zone)
+
+    @Test
+    fun `a paragraph after the last section survives two syncs byte for byte`() {
+        val page = "---\ngame_template: other\n---\n# Glass Tower\n\n## Notes\n\nMine.\n\n" +
+            "## 🏆 Trophies\n\n*0 of 2 trophies · 0 %*\n\nA paragraph I wrote below the trophies.\n"
+        val once = TrophySection.apply(page, towerLines)
+        assertEquals(
+            "---\ngame_template: other\n---\n# Glass Tower\n\n## Notes\n\nMine.\n\n" +
+                "## 🏆 Trophies\n\n*1 of 2 trophies · 50 %*\n\n- 🥉 First Floor — 2026-11-02\n\nA paragraph I wrote below the trophies.\n",
+            once
+        )
+        assertEquals(once, TrophySection.apply(once, towerLines))
+        // A sync writes both sections: the paragraph still comes through once.
+        val sync = AchievementSection.apply(TrophySection.apply(once, towerLines), emptyList())
+        assertEquals(once, sync)
+    }
+
+    @Test
+    fun `a ### block with marker lines under the trophies survives and is never duplicated`() {
+        val page = "---\ngame_template: other\n---\n# Glass Tower\n\n## 🏆 Trophies\n\n*0 of 2 trophies · 0 %*\n\n" +
+            "### Still to get\n\n- [ ] Reach the top <!--trophy:NPWR00009_00#2-->\n- [ ] Find the cellar\n"
+        val once = TrophySection.apply(page, towerLines)
+        assertEquals(
+            "---\ngame_template: other\n---\n# Glass Tower\n\n## 🏆 Trophies\n\n*1 of 2 trophies · 50 %*\n\n- 🥉 First Floor — 2026-11-02\n\n" +
+                "### Still to get\n\n- [ ] Reach the top <!--trophy:NPWR00009_00#2-->\n- [ ] Find the cellar\n",
+            once
+        )
+        assertEquals(once, TrophySection.apply(once, towerLines))
+        assertEquals(1, once.split("### Still to get").size - 1)
+        // Its marker still ticks once the trophy is earned, and the block stays.
+        val ticked = TrophyMarkers.tick(TrophySection.apply(once, towerLines)) { _, id -> if (id == 2) LocalDate.of(2026, 11, 3) else null }
+        assertTrue(ticked.contains("### Still to get\n\n- [x] Reach the top ✅ 2026-11-03 <!--trophy:NPWR00009_00#2-->\n- [ ] Find the cellar\n"))
+    }
+
+    @Test
+    fun `an owner line between two earned lines is kept once, after the section`() {
+        val both = tower.copy(trophies = tower.trophies.map { if (it.id == 2) it.copy(earnedAt = "2026-11-03T20:10:00Z") else it })
+        val lines = TrophySection.lines(listOf(both), zone)
+        val page = "# Glass Tower\n\n## 🏆 Trophies\n\n*1 of 2 trophies · 50 %*\n\n- 🥉 First Floor — 2026-11-02\n" +
+            "My note on the first floor.\n- 🥇 Top Floor — 2026-11-03\n\n## Builds\n\nNone yet.\n"
+        val once = TrophySection.apply(page, lines)
+        assertEquals(
+            "# Glass Tower\n\n## 🏆 Trophies\n\n*2 of 2 trophies · 100 %*\n\n- 🥉 First Floor — 2026-11-02\n- 🥇 Top Floor — 2026-11-03\n\n" +
+                "My note on the first floor.\n\n## Builds\n\nNone yet.\n",
+            once
+        )
+        assertEquals(once, TrophySection.apply(once, lines))
+        assertEquals(1, once.split("- 🥇 Top Floor").size - 1)
+        assertEquals(1, once.split("My note on the first floor.").size - 1)
+    }
+
+    @Test
+    fun `text between the trophies and the achievements is kept`() {
+        val page = "# Glass Tower\n\n## 🏆 Trophies\n\n*0 of 2 trophies · 0 %*\n\nBetween the two.\n\n$heading\n\n*0 of 1 achievements · 0 of 10 G · 0 %*\n"
+        val once = AchievementSection.apply(TrophySection.apply(page, towerLines), towerAchievementLines)
+        assertEquals(
+            "# Glass Tower\n\n## 🏆 Trophies\n\n*1 of 2 trophies · 50 %*\n\n- 🥉 First Floor — 2026-11-02\n\nBetween the two.\n\n" +
+                "$heading\n\n*1 of 1 achievements · 10 of 10 G · 100 %*\n\n- $icon Ground Floor — 2026-11-02 · 10 G\n",
+            once
+        )
+        assertEquals(once, AchievementSection.apply(TrophySection.apply(once, towerLines), towerAchievementLines))
+    }
+
+    @Test
+    fun `a footnote definition at the end of the page survives`() {
+        val page = "# Glass Tower\n\nThe tower[^1] is tall.\n\n$heading\n\n*0 of 1 achievements · 0 of 10 G · 0 %*\n\n[^1]: Seen from the bay.\n"
+        val once = AchievementSection.apply(page, towerAchievementLines)
+        assertEquals(
+            "# Glass Tower\n\nThe tower[^1] is tall.\n\n$heading\n\n" + towerAchievementLines.joinToString("\n") + "\n\n[^1]: Seen from the bay.\n",
+            once
+        )
+        assertEquals(once, AchievementSection.apply(once, towerAchievementLines))
+    }
+
+    @Test
+    fun `removing a section keeps the owner's lines where they were`() {
+        val page = "# Glass Tower\n\n## 🏆 Trophies\n\n*1 of 2 trophies · 50 %*\n\n- 🥉 First Floor — 2026-11-02\nKeep this line.\n\n## Builds\n\nNone yet.\n"
+        assertEquals("# Glass Tower\n\nKeep this line.\n\n## Builds\n\nNone yet.\n", TrophySection.apply(page, emptyList()))
+        // At the end of the note too.
+        val last = "# Glass Tower\n\n## 🏆 Trophies\n\n*1 of 2 trophies · 50 %*\n\n- 🥉 First Floor — 2026-11-02\n\nKeep this line.\n"
+        assertEquals("# Glass Tower\n\nKeep this line.\n", TrophySection.apply(last, emptyList()))
+        // And the achievements' own lines with or without the variation selector go, the owner's stay.
+        val bare = "# Glass Tower\n\n## 🎖 Achievements\n\n*1 of 1 achievements · 10 of 10 G · 100 %*\n\n- 🎖 Ground Floor — 2026-11-02 · 10 G\nMine.\n"
+        assertEquals("# Glass Tower\n\nMine.\n", AchievementSection.apply(bare, emptyList()))
+    }
+
+    @Test
+    fun `the trophies go right before an existing achievements section`() {
+        val page = "# Glass Tower\n\n## Notes\n\nMine.\n\n$heading\n\n" + towerAchievementLines.joinToString("\n") + "\n\n## Later\n\nMore.\n"
+        val withTrophies = TrophySection.apply(page, towerLines)
+        assertEquals(
+            "# Glass Tower\n\n## Notes\n\nMine.\n\n## 🏆 Trophies\n\n" + towerLines.joinToString("\n") + "\n\n$heading\n\n" +
+                towerAchievementLines.joinToString("\n") + "\n\n## Later\n\nMore.\n",
+            withTrophies
+        )
+        assertEquals(withTrophies, TrophySection.apply(withTrophies, towerLines))
+        assertEquals(withTrophies, AchievementSection.apply(withTrophies, towerAchievementLines))
+        // Right under the heading's own line too, with a blank line before it.
+        val tight = "# Glass Tower\nMine.\n$heading\n\n" + towerAchievementLines.joinToString("\n") + "\n"
+        assertEquals(
+            "# Glass Tower\nMine.\n\n## 🏆 Trophies\n\n" + towerLines.joinToString("\n") + "\n\n$heading\n\n" + towerAchievementLines.joinToString("\n") + "\n",
+            TrophySection.apply(tight, towerLines)
+        )
+    }
+
+    @Test
+    fun `an oversized trophy number leaves its line as written`() {
+        val content = "- [ ] Boss <!--trophy:NPWR00009_00#12345678901-->\n- [ ] Floor <!--trophy:NPWR00009_00#1-->\n"
+        assertEquals(
+            "- [ ] Boss <!--trophy:NPWR00009_00#12345678901-->\n- [x] Floor ✅ 2026-11-02 <!--trophy:NPWR00009_00#1-->\n",
+            TrophyMarkers.tick(content) { _, _ -> LocalDate.of(2026, 11, 2) }
+        )
+    }
+
+    // --- 13.4: past days ---------------------------------------------------------------------
+
+    private val towerDay = "# 2026-11-20\n\n## 🗓️ Timeline\n\n- 08:30 Coffee\n- 21:00 🎮 Glass Tower · 1 h <!--game:Glass_Tower-->\n" +
+        "- 22:15 Call\n\n## 📝 Journal\n\n*No tasks*\n"
+
+    @Test
+    fun `a CRLF past note gets its game line replaced, in time order, not duplicated`() {
+        val crlf = towerDay.replace("\n", "\r\n")
+        val lines = listOf(TimelineLine(LocalTime.of(20, 30), "🎮 Glass Tower · 2 h 35 <!--game:Glass_Tower-->"))
+        val edited = GameTimeline.applyToNote(crlf, lines)
+        assertEquals(
+            towerDay.replace(
+                "- 08:30 Coffee\n- 21:00 🎮 Glass Tower · 1 h <!--game:Glass_Tower-->\n",
+                "- 08:30 Coffee\n- 20:30 🎮 Glass Tower · 2 h 35 <!--game:Glass_Tower-->\n"
+            ).replace("\n", "\r\n"),
+            edited
+        )
+        assertEquals(edited, GameTimeline.applyToNote(edited, lines))
+        assertEquals(1, edited.split("<!--game:Glass_Tower-->").size - 1)
+        // The same note in LF is edited the same way.
+        assertEquals(edited.replace("\r\n", "\n"), GameTimeline.applyToNote(towerDay, lines))
+    }
+
+    @Test
+    fun `a game line whose page is gone stays in a past note`() {
+        val note = "# 2026-11-20\n\n## 🗓️ Timeline\n\n- 19:00 🎮 Tin Orchard · 45 min <!--game:Tin_Orchard-->\n" +
+            "- 21:00 🎮 Glass Tower · 1 h <!--game:Glass_Tower-->\n\n## 📝 Journal\n\n*No tasks*\n"
+        val lines = listOf(TimelineLine(LocalTime.of(21, 0), "🎮 Glass Tower · 2 h <!--game:Glass_Tower-->"))
+        // Tin Orchard's page was renamed on the desktop: its key names no current page, its line is the day's history.
+        val edited = GameTimeline.applyToNote(note, lines, knownKeys = setOf("Glass_Tower", "Lantern_Bay"))
+        assertEquals(note.replace("Glass Tower · 1 h", "Glass Tower · 2 h"), edited)
+        assertEquals(edited, GameTimeline.applyToNote(edited, lines, knownKeys = setOf("Glass_Tower", "Lantern_Bay")))
+        // Without the pages' keys, every derived line is the sessions' to rewrite.
+        assertFalse(GameTimeline.applyToNote(note, lines).contains("Tin Orchard"))
+        assertEquals("Tin_Orchard", GameTimeline.keyOf("- 19:00 🎮 Tin Orchard · 45 min <!--game: Tin_Orchard -->"))
+        assertNull(GameTimeline.keyOf("- 19:00 Dinner"))
+        assertNull(GameTimeline.keyOf("- 19:00 🎮 <!--game:  -->"))
+    }
+
+    // --- 13.4: console text (GA4) --------------------------------------------------------------
+
+    @Test
+    fun `console text loses bidi and invisible characters, joiners and emoji tags kept`() {
+        assertEquals("Glass Tower", oneLine("Gla\u200Bss\u00AD Tower\u202E"))
+        assertEquals("Tower 2 h", oneLine("\u202ETower\u202C 2 h\u2066\u2069"))
+        assertEquals("Lantern Bay", oneLine("\uFEFFLantern\u2060 Bay\u200E\u200F\u061C"))
+        // A joiner (an emoji family, a script's ligature) and an emoji flag's tag characters carry meaning.
+        val family = "\uD83D\uDC69\u200D\uD83D\uDC67"
+        assertEquals(family, oneLine(family))
+        assertEquals("a\u200Cb", oneLine("a\u200Cb"))
+        val flag = "\uD83C\uDFF4\uDB40\uDC67\uDB40\uDC62\uDB40\uDC65\uDB40\uDC6E\uDB40\uDC67\uDB40\uDC7F"
+        assertEquals(flag, oneLine(flag))
+        assertTrue(isInvisibleFormat('\u202E'))
+        assertFalse(isInvisibleFormat('\u200D'))
+        // Down to the page's lines: a name with an override reads the right way round.
+        val reversed = achievements(AchievementRecord("1", "Top\u202E Floor", gamerscore = 10, earnedAt = "2026-11-02T20:10:00Z"))
+        assertEquals("- $icon Top Floor — 2026-11-02 · 10 G", AchievementSection.lines(listOf(reversed), zone).last())
+        val trophies = TrophySection.lines(listOf(tower.copy(trophies = listOf(TrophyRecord(1, "First\u200B Floor\u2067", grade = "bronze", earnedAt = "2026-11-02T20:10:00Z")))), zone)
+        assertEquals("- 🥉 First Floor — 2026-11-02", trophies.last())
+    }
 }

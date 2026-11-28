@@ -31,9 +31,14 @@ import cloud.wafflecommons.pixelbrainreader.data.games.XboxTitleState
 import cloud.wafflecommons.pixelbrainreader.data.games.psn.PsnAccount
 import cloud.wafflecommons.pixelbrainreader.data.games.psn.PsnException
 import cloud.wafflecommons.pixelbrainreader.data.games.psn.PsnStatus
+import cloud.wafflecommons.pixelbrainreader.data.games.psn.PsnSync
 import cloud.wafflecommons.pixelbrainreader.data.games.xbox.XboxAccount
 import cloud.wafflecommons.pixelbrainreader.data.games.xbox.XboxException
 import cloud.wafflecommons.pixelbrainreader.data.games.xbox.XboxStatus
+import cloud.wafflecommons.pixelbrainreader.data.games.xbox.XboxSync
+import cloud.wafflecommons.pixelbrainreader.data.modes.ContextMode
+import cloud.wafflecommons.pixelbrainreader.data.modes.ModeAppearance
+import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
 import cloud.wafflecommons.pixelbrainreader.data.system.AppClock
 import cloud.wafflecommons.pixelbrainreader.di.AppScopeErrors
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -85,14 +90,35 @@ data class UnlinkedTitle(
     val name: String,
     val hours: Double?,
     val lastPlayed: LocalDate?,
-    val console: GameConsole = GameConsole.PSN
+    val console: GameConsole = GameConsole.PSN,
+    val art: GameArt = GameArtRules.initialsOnly(name),
+    val looksLike: GamePage? = null
+) {
+    /** The title in [GamesUiState.pendingHidden]: its console and id. */
+    val foldKey: String get() = "$console:$titleId"
+}
+
+/**
+ * The PSN line of the tab: hidden when the build has no client. [syncing] (13.4): a sync runs now;
+ * [readOnly]: a read-only device, where PlayStation syncs on the phone.
+ */
+data class PsnLine(
+    val configured: Boolean,
+    val connected: Boolean,
+    val status: PsnStatus?,
+    val expiresInDays: Long?,
+    val syncing: Boolean = false,
+    val readOnly: Boolean = false
 )
 
-/** The PSN line of the tab: hidden when the build has no client. */
-data class PsnLine(val configured: Boolean, val connected: Boolean, val status: PsnStatus?, val expiresInDays: Long?)
-
-/** The Xbox line of the tab (13.3): hidden when the build has no Xbox app. */
-data class XboxLine(val configured: Boolean, val connected: Boolean, val status: XboxStatus?)
+/** The Xbox line of the tab (13.3): hidden when the build has no Xbox app. [syncing] and [readOnly] as PSN's. */
+data class XboxLine(
+    val configured: Boolean,
+    val connected: Boolean,
+    val status: XboxStatus?,
+    val syncing: Boolean = false,
+    val readOnly: Boolean = false
+)
 
 data class GamesUiState(
     /**
@@ -126,17 +152,37 @@ data class GamesUiState(
     val xbox: XboxLine = XboxLine(configured = false, connected = false, status = null),
     val readOnly: Boolean = VaultWriteGate.readOnly,
     /** A game night would have started, but Do Not Disturb access isn't granted yet. */
-    val askAccess: Boolean = false
+    val askAccess: Boolean = false,
+    /** The Personal mode as the owner named it in Modes settings (13.4): the game night dialog's word. */
+    val personalLabel: String = ModeAppearance.defaultLabel(ContextMode.PERSONAL)
 )
 
-/** The Games tab (RFC-009 §4.1; 13.3: the Xbox beside the PlayStation). */
+/** What an Undo on the tab's snackbar gives back (13.4). */
+sealed interface GamesUndo {
+    /** A title just hidden: back in its fold. */
+    data class Unhide(val title: UnlinkedTitle) : GamesUndo
+
+    /** A title just linked to [page]: its link back to [previous] (none: no link), unless it moved since. */
+    data class Unlink(val title: UnlinkedTitle, val page: String, val previous: String?) : GamesUndo
+}
+
+/** A line for the tab's snackbar, with its Undo when it has one. */
+data class GamesMessage(val text: String, val undo: GamesUndo? = null)
+
+/**
+ * The Games tab (RFC-009 §4.1; 13.3: the Xbox beside the PlayStation; 13.4: pictures, a grid, and
+ * nothing read while the tab isn't on screen).
+ */
 @HiltViewModel
 class GamesViewModel @Inject constructor(
     private val games: GamesRepository,
     private val controller: GameSessionController,
     private val account: PsnAccount,
     private val xboxAccount: XboxAccount,
-    private val clock: AppClock
+    private val clock: AppClock,
+    private val psnSync: PsnSync,
+    private val xboxSync: XboxSync,
+    private val modesRepository: ModesRepository
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(GamesUiState(today = clock.today.value))

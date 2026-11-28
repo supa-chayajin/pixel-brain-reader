@@ -144,4 +144,29 @@ class PsnAccountTest {
         assertEquals(renewed, stored)
         coVerify(exactly = 0) { preferences.setPsnBaselinePending(any()) }
     }
+
+    @Test
+    fun `a sign-in clears the status line instead of writing ok`() = runTest {
+        VaultWriteGate.readOnly = false
+        stored = null
+        coEvery { client.signIn(npsso, now) } returns tokens
+        val lines = mutableListOf<String?>()
+        coEvery { preferences.setPsnStatus(captureNullable(lines)) } returns Unit
+
+        assertTrue(account.connect(npsso, now).isSuccess)
+
+        // 13.4: no "ok" before a sync has run; the first sync's own outcome is the next line.
+        assertEquals(listOf<String?>(null), lines)
+        // A new NPSSO over a kept sign-in too.
+        assertTrue(account.connect(npsso, now).isSuccess)
+        assertEquals(listOf<String?>(null, null), lines)
+    }
+
+    @Test
+    fun `the tokens never print`() {
+        val printed = tokens.toString()
+        assertFalse(printed.contains("ACCESS"))
+        assertFalse(printed.contains("REFRESH"))
+        assertTrue(printed.contains("accessExpiresAt=${tokens.accessExpiresAt}"))
+    }
 }

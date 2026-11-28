@@ -2,15 +2,18 @@ package cloud.wafflecommons.pixelbrainreader.data.games
 
 /**
  * Matching game names (pure): a PSN title to a page, and a Timeline line to a page. Names are
- * compared normalised (lower case, ™ ® © dropped, every other non-letter, non-digit a space), as
- * whole words, the longest name winning: "ELDEN RING NIGHTREIGN" is the Nightreign page, not the
- * Elden Ring one. Spaces stand in for word boundaries, so the JVM tests and Android's ICU agree.
+ * compared normalised (lower case, ™ ® © and the invisible formatting characters of
+ * [isInvisibleFormat] dropped, every other non-letter, non-digit a space), as whole words, the
+ * longest name winning: "GLASS TOWER ONLINE" is the Glass Tower Online page, not the Glass Tower one.
+ * Spaces stand in for word boundaries, so the JVM tests and Android's ICU agree.
  */
 object GameNames {
 
     fun normalize(name: String): String = buildString {
         for (ch in name.lowercase()) {
             when {
+                // 13.4: dropped, not made a space, so a word split by a zero-width character still matches.
+                isInvisibleFormat(ch) -> Unit
                 ch == '™' || ch == '®' || ch == '©' -> Unit
                 // An apostrophe joins its word ("demon's"), whichever quote the source used.
                 ch == '\'' || ch == '’' -> Unit

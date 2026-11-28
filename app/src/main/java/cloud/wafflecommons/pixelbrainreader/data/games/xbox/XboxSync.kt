@@ -14,6 +14,7 @@ import cloud.wafflecommons.pixelbrainreader.data.games.GamesRepository
 import cloud.wafflecommons.pixelbrainreader.data.games.PagePlan
 import cloud.wafflecommons.pixelbrainreader.data.games.XboxSnapshot
 import cloud.wafflecommons.pixelbrainreader.data.games.XboxTitleState
+import cloud.wafflecommons.pixelbrainreader.data.games.oneLine
 import cloud.wafflecommons.pixelbrainreader.data.repository.DailyDashboardRepository
 import cloud.wafflecommons.pixelbrainreader.data.sync.GitSyncCoordinator
 import cloud.wafflecommons.pixelbrainreader.di.AppScopeErrors
@@ -52,13 +53,19 @@ class XboxSync @Inject constructor(
 ) {
     private val running = Mutex()
 
+    private val _syncing = MutableStateFlow(false)
+
+    /** True while a sync runs (13.4): the Games tab and the settings page say "Syncing…" meanwhile. */
+    val syncing: StateFlow<Boolean> = _syncing.asStateFlow()
+
     /**
      * [baseline]: the first sync of a new sign-in (Connect with no sign-in kept: the first one, or one
      * after Disconnect) reads and saves everything as usual but writes no session, and keeps no minutes
      * from before it, so play counts from now on. The sign-in also marks it ([XboxAccount.baselinePending])
      * until a sync saves its snapshot: a first sync that fails or is cancelled hands it to the next run,
      * the nightly ones included. Signing in again after the sign-in expired (its tokens still kept)
-     * starts none: the play since the last snapshot is kept.
+     * starts none: the play since the last snapshot is kept. [writeClock] gives the time the writes
+     * happen (13.4: a sync started before midnight may write after it); tests pass a fixed one.
      */
     suspend fun sync(
         now: Long = System.currentTimeMillis(),
@@ -73,6 +80,7 @@ class XboxSync @Inject constructor(
             return Result.failure(XboxException(XboxException.Kind.NOT_CONFIGURED, "Xbox isn't connected."))
         }
         return running.withLock {
+            _syncing.value = true
             try {
                 val summary = run(now, zone, baseline || account.baselinePending(), writeClock)
                 account.setStatus(XboxStatus(true, now))
@@ -89,6 +97,8 @@ class XboxSync @Inject constructor(
                 val failure = XboxException(XboxException.Kind.API, "The Xbox sync failed: ${e.javaClass.simpleName}.")
                 account.setStatus(XboxStatus(false, now, failure.kind, failure.message.orEmpty()))
                 Result.failure(failure)
+            } finally {
+                _syncing.value = false
             }
         }
     }
@@ -265,7 +275,7 @@ class XboxSync @Inject constructor(
         }
         return XboxTitleState(
             titleId = title.titleId,
-            name = title.name.ifBlank { old?.name.orEmpty() },
+            name = oneLine(title.name).ifBlank { old?.name.orEmpty() },
             mediaItemType = title.mediaItemType,
             achievementSource = source,
             modernTitleId = title.modernTitleId?.takeIf { it.isNotBlank() },

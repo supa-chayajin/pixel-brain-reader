@@ -12,8 +12,11 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import cloud.wafflecommons.pixelbrainreader.data.device.VaultWriteGate
+import cloud.wafflecommons.pixelbrainreader.data.games.psn.PsnException
 import cloud.wafflecommons.pixelbrainreader.data.games.psn.PsnSync
+import cloud.wafflecommons.pixelbrainreader.data.games.xbox.XboxException
 import cloud.wafflecommons.pixelbrainreader.data.games.xbox.XboxSync
+import cloud.wafflecommons.pixelbrainreader.di.AppScopeErrors
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.CancellationException
@@ -49,15 +52,24 @@ class GamesSyncWorker @AssistedInject constructor(
         return Result.success()
     }
 
-    /** One console's sync: its failure is logged and the next console still runs. */
+    /**
+     * One console's sync: its failure is logged and the next console still runs. The log names the
+     * failure's kind (or its type) only, never its message (13.4): a message can name a game or a page.
+     */
     private suspend fun syncOne(console: String, slot: String, sync: suspend () -> kotlin.Result<*>) {
         try {
-            sync().onFailure { Log.i(TAG, "$console sync ($slot) skipped: ${it.message}") }
+            sync().onFailure { Log.i(TAG, "$console sync ($slot) skipped: ${kindOf(it)}") }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Log.w(TAG, "$console sync ($slot) failed", e)
+            Log.w(TAG, "$console sync ($slot) failed: " + AppScopeErrors.describe(e))
         }
+    }
+
+    private fun kindOf(failure: Throwable): String = when (failure) {
+        is PsnException -> failure.kind.name
+        is XboxException -> failure.kind.name
+        else -> failure.javaClass.simpleName
     }
 
     companion object {

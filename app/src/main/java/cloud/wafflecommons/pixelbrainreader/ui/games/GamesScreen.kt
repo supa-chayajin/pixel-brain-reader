@@ -233,7 +233,8 @@ fun GamesScreen(
         )
     }
     if (state.askAccess) {
-        GameNightAccessDialog(
+        GameNightDialog(
+            personalLabel = state.personalLabel,
             onGrant = {
                 viewModel.dismissAccess()
                 context.startActivity(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -355,49 +356,82 @@ internal fun GamesContent(state: GamesUiState, actions: GamesActions, modifier: 
                 }
             }
 
-@Composable
-private fun PsnLineRow(psn: PsnLine, onOpenPsn: () -> Unit) {
-    if (!psn.configured) return
-    val status = psn.status
-    val text = when {
-        !psn.connected -> "Connect PlayStation to bring play time and trophies"
-        status == null -> "PSN connected · first sync tonight at 23:40"
-        status.ok -> "PSN ✓ ${clock(status.atMillis)}" + (psn.expiresInDays?.let { " · token expires in $it days" } ?: "")
-        status.kind == PsnException.Kind.TOKEN_EXPIRED || status.kind == PsnException.Kind.NPSSO_REJECTED -> "PSN paused: paste a new token"
-        status.kind == PsnException.Kind.CLIENT_REJECTED -> "PSN paused: PlayStation refused this build's client"
-        else -> "PSN: last sync failed (${status.message.ifBlank { "unknown error" }})"
-    }
-    Text(
-        text,
-        style = MaterialTheme.typography.bodyMedium,
-        color = if (status != null && !status.ok) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenPsn).padding(vertical = 4.dp)
-    )
-}
+            GameGroup.entries.forEach { group ->
+                val rows = state.groups[group].orEmpty()
+                if (rows.isEmpty()) return@forEach
+                item(key = GamesTags.heading(group), span = FULL_LINE) { GroupHeading("${group.label} · ${rows.size}") }
+                if (group == GameGroup.PLAYING) {
+                    // 13.2: the games being played as an expressive carousel; 13.4: of their covers.
+                    item(key = GamesTags.CAROUSEL, span = FULL_LINE) {
+                        Box(Modifier.padding(bottom = BLOCK_PAD)) { PlayingCarousel(rows, state.today, actions.onOpenGame) }
+                    }
+                } else {
+                    items(rows, key = { GamesTags.page(it.page.path) }, contentType = { CELL }) { row ->
+                        GameCell(
+                            row = row,
+                            onOpen = { actions.onOpenGame(row.page.path) },
+                            onOpenMap = { actions.onOpenMap(row.page.path) },
+                            modifier = Modifier.animateItem()
+                        )
+                    }
+                }
+            }
 
-/** The Xbox line (13.3), in PSN's style: hidden in a build without the Xbox app; a tap opens its settings. */
-@Composable
-private fun XboxLineRow(xbox: XboxLine, onOpenXbox: () -> Unit) {
-    if (!xbox.configured) return
-    val status = xbox.status
-    val text = when {
-        !xbox.connected -> "Connect Xbox to bring play time and achievements"
-        status == null -> "Xbox connected · first sync tonight at 23:40"
-        status.ok -> "Xbox ✓ ${clock(status.atMillis)}"
-        status.needsSignIn -> "Xbox paused: sign in again"
-        status.kind == XboxException.Kind.CLIENT_REJECTED -> "Xbox paused: Microsoft refused this build's app"
-        status.kind == XboxException.Kind.ACCOUNT_REFUSED -> "Xbox paused: ${status.message.ifBlank { "Microsoft refused the account" }}"
-        else -> "Xbox: last sync failed (${status.message.ifBlank { "unknown error" }})"
-    }
-    // A status kept from before a disconnect never colours the Connect line.
-    val failed = xbox.connected && status != null && !status.ok
-    Text(
-        text,
-        style = MaterialTheme.typography.bodyMedium,
-        color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenXbox).padding(vertical = 4.dp)
-    )
-}
+            // links.json unreadable (13.4): every title would look unclaimed, so the folds wait for the file.
+            if (!state.linksUnreadable) {
+                // One fold per console (13.3): a title linked to a deleted page comes back here too.
+                GameConsole.entries.forEach { console ->
+                    val titles = state.unlinked.filter { it.console == console && it.foldKey !in state.pendingHidden }
+                    if (titles.isEmpty()) return@forEach
+                    val fold = GamesTags.fold(console)
+                    item(key = fold, span = FULL_LINE) {
+                        FoldHeader(
+                            text = "On ${console.label}, not in your library (${titles.size})",
+                            open = fold in open,
+                            onToggle = { toggle(fold) },
+                            modifier = Modifier.testTag(fold)
+                        )
+                    }
+                    if (fold in open) {
+                        itemsIndexed(titles, key = { _, title -> GamesTags.unlinked(title) }, span = { _, _ -> GridItemSpan(maxLineSpan) }) { index, title ->
+                            UnlinkedRow(
+                                title = title,
+                                shape = segmentShape(index, titles.size),
+                                today = state.today,
+                                readOnly = state.readOnly,
+                                actions = actions,
+                                modifier = Modifier.animateItem().segmentEnd(index, titles.size).testTag(GamesTags.unlinked(title))
+                            )
+                        }
+                    }
+                }
+                // 13.4: what Hide took out of a fold, with Unhide (nothing else in the app brings one back).
+                GameConsole.entries.forEach { console ->
+                    val titles = state.hidden.filter { it.console == console }
+                    if (titles.isEmpty()) return@forEach
+                    val fold = GamesTags.hiddenFold(console)
+                    item(key = fold, span = FULL_LINE) {
+                        FoldHeader(
+                            text = "Hidden on ${console.label} (${titles.size})",
+                            open = fold in open,
+                            onToggle = { toggle(fold) },
+                            modifier = Modifier.testTag(fold)
+                        )
+                    }
+                    if (fold in open) {
+                        itemsIndexed(titles, key = { _, title -> GamesTags.hiddenRow(title) }, span = { _, _ -> GridItemSpan(maxLineSpan) }) { index, title ->
+                            HiddenRow(
+                                title = title,
+                                shape = segmentShape(index, titles.size),
+                                today = state.today,
+                                readOnly = state.readOnly,
+                                onUnhide = { actions.onUnhide(title) },
+                                modifier = Modifier.animateItem().segmentEnd(index, titles.size)
+                            )
+                        }
+                    }
+                }
+            }
 
             // 13.4: typed sessions of a page renamed or deleted on the desktop, linked to another page from here.
             if (state.orphans.isNotEmpty()) {
@@ -603,24 +637,102 @@ private fun PlayingCarousel(rows: List<GameRow>, today: LocalDate, onOpen: (Stri
                         }
                     }
                 }
-                if (pages.size > SEARCH_FROM) {
-                    OutlinedTextField(
-                        value = query,
-                        onValueChange = { query = it },
-                        label = { Text("Find a game") },
-                        leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-                if (shown.isEmpty()) Text("No game matches.", style = MaterialTheme.typography.bodyMedium)
-                LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp)) {
-                    items(shown, key = { it.path }) { page ->
-                        ListItem(
-                            supportingContent = { Text(if (page.path == lastPlayed) "Played last · ${page.state.label}" else page.state.label) },
-                            modifier = Modifier.clickable { onPick(page, minutesAgo) }
-                        ) {
-                            Text(page.title)
+            }
+        }
+    }
+}
+
+/** The PSN line (13.4: its day, "syncing…", a read-only wording; red only while connected and failed). A tap opens its settings. */
+@Composable
+private fun PsnLineRow(psn: PsnLine, today: LocalDate, onOpenPsn: () -> Unit) =
+    ConsoleLineRow(GamesLines.psn(psn, today), GamesLines.failed(psn), onOpenPsn)
+
+/** The Xbox line (13.3), in PSN's style: hidden in a build without the Xbox app; a tap opens its settings. */
+@Composable
+private fun XboxLineRow(xbox: XboxLine, today: LocalDate, onOpenXbox: () -> Unit) =
+    ConsoleLineRow(GamesLines.xbox(xbox, today), GamesLines.failed(xbox), onOpenXbox)
+
+/** A console's line, at least 48 dp tall (13.4: a tap target, the audit's small targets). */
+@Composable
+private fun ConsoleLineRow(text: String, failed: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .clip(MaterialTheme.shapes.medium)
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = 4.dp),
+        contentAlignment = Alignment.CenterStart
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+/** links.json can't be read (13.4): the folds wait, and Link, Hide and Create a page with them. */
+@Composable
+private fun LinksNotice() {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Icon(Icons.Rounded.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
+        Text(GamesLines.LINKS_UNREADABLE, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+    }
+}
+
+/**
+ * A fold's header, at least 48 dp tall: its title and count, a chevron; a tap opens or closes it.
+ * Closed, a block's space below it; open, its rows right under it.
+ */
+@Composable
+private fun FoldHeader(text: String, open: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .padding(bottom = if (open) 2.dp else BLOCK_PAD)
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .clip(MaterialTheme.shapes.medium)
+            .clickable(role = Role.Button, onClick = onToggle)
+            .padding(horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(text, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+        Icon(if (open) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore, contentDescription = if (open) "Fold" else "Unfold")
+    }
+}
+
+/**
+ * A console title no page claims (13.4: a segmented row with its picture). One that looks like a page
+ * offers "Link to <page>" in one tap, "Create a page" and Hide; the others "Link to a page" and Hide.
+ * A read-only device shows the titles without a button.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun UnlinkedRow(
+    title: UnlinkedTitle,
+    shape: Shape,
+    today: LocalDate,
+    readOnly: Boolean,
+    actions: GamesActions,
+    modifier: Modifier = Modifier
+) {
+    Surface(shape = shape, color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = modifier.fillMaxWidth()) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            TitleLine(title.art, title.name, facts(title.hours, title.lastPlayed, today))
+            val lookalike = title.looksLike
+            if (lookalike != null) {
+                Text("Looks like ${lookalike.title}?", style = MaterialTheme.typography.bodyMedium)
+            }
+            if (!readOnly) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (lookalike != null) {
+                        FilledTonalButton(onClick = { actions.onLinkTo(title, lookalike) }, shapes = ButtonDefaults.shapes()) {
+                            Text("Link to ${lookalike.title}", maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                         OutlinedButton(onClick = { actions.onCreatePage(title) }, shapes = ButtonDefaults.shapes()) { Text("Create a page") }
                     } else {
@@ -681,19 +793,16 @@ private fun OrphanRow(
 
 /** A fold row's head: the 40 dp picture (13.4, P1), the name, and its facts under it. */
 @Composable
-fun GameNightAccessDialog(onGrant: () -> Unit, onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Game night needs Do Not Disturb access") },
-        text = {
-            Text(
-                "On a Perso evening, a game session turns on the app's own \"Game night\" mode, with the exceptions " +
-                    "you choose in Settings › Modes. Allow PixelBrain in Do Not Disturb access to use it. The session runs either way."
-            )
-        },
-        confirmButton = { TextButton(onClick = onGrant, shapes = ButtonDefaults.shapes()) { Text("Open settings") } },
-        dismissButton = { TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text("Not now") } }
-    )
+private fun TitleLine(art: GameArt, name: String, facts: String?) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        GamePicture(art, Modifier.size(GamePictureSizes.Row), contentDescription = null)
+        Column(Modifier.weight(1f)) {
+            Text(name, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            if (!facts.isNullOrEmpty()) {
+                Text(facts, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
 }
 
 /** "4.5 h · played yesterday": the hours only when the console says (an Xbox title may not report its minutes). */

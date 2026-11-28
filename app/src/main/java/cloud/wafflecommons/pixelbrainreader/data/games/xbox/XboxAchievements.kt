@@ -3,13 +3,15 @@ package cloud.wafflecommons.pixelbrainreader.data.games.xbox
 import cloud.wafflecommons.pixelbrainreader.data.games.AchievementRecord
 import cloud.wafflecommons.pixelbrainreader.data.games.AchievementSetFile
 import cloud.wafflecommons.pixelbrainreader.data.games.XboxTitleState
+import cloud.wafflecommons.pixelbrainreader.data.games.oneLine
 import java.time.Instant
 
 /**
  * A title's achievements file (pure, 13.3): what Xbox gave this sync merged with the file on disk.
  * Unearned names and descriptions stay in the file only (D12: the page lists the earned ones). An
  * earned date, once written, is kept; an achievement Xbox reports earned without a real date (a 360
- * unlock made offline) is dated by the first sync that saw it earned.
+ * unlock made offline) is dated by the first sync that saw it earned. Names, descriptions and the
+ * title go in as one line each, without bidi or invisible characters (13.4, [oneLine]).
  */
 object XboxAchievements {
 
@@ -28,14 +30,14 @@ object XboxAchievements {
             .map { a ->
                 AchievementRecord(
                     id = a.id,
-                    name = a.name,
-                    description = a.description,
+                    name = oneLine(a.name),
+                    description = oneLine(a.description),
                     gamerscore = a.gamerscore,
                     secret = a.secret,
                     earnedAt = if (!a.earned) null else before[a.id]?.earnedAt ?: a.unlockedAt?.toString() ?: now.toString()
                 )
             }
-        return AchievementSetFile(titleId = titleId, title = title, sourceVersion = sourceVersion, achievements = records)
+        return AchievementSetFile(titleId = titleId, title = oneLine(title), sourceVersion = sourceVersion, achievements = records)
     }
 
     /** True when the title's achievements need reading: it has some, and its file is missing or counts other earned achievements or gamerscore than titlehub. */

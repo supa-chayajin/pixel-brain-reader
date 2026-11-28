@@ -116,7 +116,9 @@ class XboxAccount @Inject constructor(
                     if (!isConnected()) preferences.setXboxBaselinePending(true)
                     withContext(Dispatchers.IO) { secrets.saveXboxTokens(poll.tokens) }
                     lock.withLock { cached = null }
-                    preferences.setXboxStatus(XboxStatus(true, clock()).encode())
+                    // No ok line before a sync has run (13.4): the first sync's own outcome is the next
+                    // one, and the pages say "Syncing…" meanwhile.
+                    preferences.setXboxStatus(null)
                     Log.i(TAG, "Xbox connect: signed in")
                     return Result.success(Unit)
                 }

@@ -647,6 +647,14 @@ class GamesRepository @Inject constructor(
         return withContext(Dispatchers.IO) {
             mutex.withLock {
                 val saved = load(path, serializer)
+                if (saved.failed) {
+                    Log.w(TAG, "$path wasn't written: it couldn't be read")
+                    return@withLock null
+                }
+                if (saved.unreadable && !rebuildUnreadable) {
+                    Log.w(TAG, "$path wasn't written: it doesn't parse")
+                    return@withLock null
+                }
                 val current = saved.value ?: default
                 val next = change(current)
                 if (next == current && saved.value != null) return@withLock current
@@ -671,7 +679,8 @@ class GamesRepository @Inject constructor(
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
-        Log.e(TAG, "Failed to save $path", e)
+        // No path: a page's path names a game, and the exception's message holds it.
+        Log.e(TAG, "A games file couldn't be saved: " + AppScopeErrors.describe(e))
         false
     }
 

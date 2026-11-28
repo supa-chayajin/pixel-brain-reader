@@ -11,13 +11,23 @@ import cloud.wafflecommons.pixelbrainreader.data.games.psn.PsnAccount
 import cloud.wafflecommons.pixelbrainreader.data.games.psn.PsnStatus
 import cloud.wafflecommons.pixelbrainreader.data.games.psn.PsnSync
 import cloud.wafflecommons.pixelbrainreader.data.games.psn.PsnSyncSummary
+import cloud.wafflecommons.pixelbrainreader.data.modes.ContextMode
+import cloud.wafflecommons.pixelbrainreader.data.modes.ModeAppearance
+import cloud.wafflecommons.pixelbrainreader.data.modes.ModesRepository
+import cloud.wafflecommons.pixelbrainreader.data.system.AppClock
 import cloud.wafflecommons.pixelbrainreader.data.workers.GamesSyncScheduler
+import cloud.wafflecommons.pixelbrainreader.di.ApplicationScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 import javax.inject.Inject
 
 data class PsnSettingsUiState(
@@ -25,26 +35,48 @@ data class PsnSettingsUiState(
     val connected: Boolean = false,
     val status: PsnStatus? = null,
     val expiresInDays: Long? = null,
-    val busy: Boolean = false,
+    /** The page's own action runs: a sign-in, its first sync, Sync now. */
+    val working: Boolean = false,
+    /** A PlayStation sync runs, wherever it started (13.4: the nightly one, or one this page started before Back). */
+    val syncing: Boolean = false,
     /** The last action's result, in words. */
     val message: String? = null,
     val dndGranted: Boolean = false,
-    val readOnly: Boolean = VaultWriteGate.readOnly
-)
+    val readOnly: Boolean = VaultWriteGate.readOnly,
+    /** AppClock's day (13.4): "Last sync" says its day from it, and follows midnight. */
+    val today: LocalDate,
+    /** The Personal mode as the owner named it in Modes settings (13.4). */
+    val personalLabel: String = ModeAppearance().label(ContextMode.PERSONAL)
+) {
+    /** The page waits: its own action, or a sync, so a page reopened during a sync says "Syncing…". */
+    val busy: Boolean get() = working || syncing
+}
 
 /**
  * Settings → Integrations → PlayStation Network (RFC-009 §7). The nightly slots are the Games sync's
  * (13.3): kept while PlayStation or Xbox is connected, so a PSN disconnect leaves Xbox's in place.
+ * 13.4 (the audit's settings-sync-cancelled-by-back): the first sync and Sync now run in the app's
+ * scope, so Back only stops this page waiting for them; the sync itself (and the schedule set
+ * before it) runs to its end, and the page shows it while it runs ([PsnSync.syncing]).
  */
 @HiltViewModel
 class PsnSettingsViewModel @Inject constructor(
     private val account: PsnAccount,
     private val psnSync: PsnSync,
     private val platform: GamePlatform,
-    private val scheduler: GamesSyncScheduler
+    private val scheduler: GamesSyncScheduler,
+    private val modesRepository: ModesRepository,
+    private val clock: AppClock,
+    @param:ApplicationScope private val appScope: CoroutineScope
 ) : ViewModel() {
 
-    private val _state = MutableStateFlow(PsnSettingsUiState(configured = account.configured))
+    private val _state = MutableStateFlow(
+        PsnSettingsUiState(
+            configured = account.configured,
+            today = clock.today.value,
+            personalLabel = modesRepository.visibility.value.appearance.label(ContextMode.PERSONAL)
+        )
+    )
     val state: StateFlow<PsnSettingsUiState> = _state.asStateFlow()
 
     /** What the owner pastes: kept in the screen only until Connect, never saved. */
@@ -52,6 +84,20 @@ class PsnSettingsViewModel @Inject constructor(
 
     init {
         viewModelScope.launch { account.status.collect { status -> _state.update { it.copy(status = status) } } }
+        // A sync's end reads the sign-in again: a renewal moves its expiry.
+        viewModelScope.launch {
+            var was = false
+            psnSync.syncing.collect { syncing ->
+                _state.update { it.copy(syncing = syncing) }
+                if (was && !syncing) refresh()
+                was = syncing
+            }
+        }
+        viewModelScope.launch { clock.today.collect { day -> _state.update { it.copy(today = day) } } }
+        viewModelScope.launch {
+            modesRepository.visibility.map { it.appearance.label(ContextMode.PERSONAL) }.distinctUntilChanged()
+                .collect { label -> _state.update { it.copy(personalLabel = label) } }
+        }
         refresh()
     }
 
@@ -76,9 +122,9 @@ class PsnSettingsViewModel @Inject constructor(
      */
     fun connect() {
         val input = pasted
-        if (input.isBlank()) return
+        if (input.isBlank() || _state.value.busy) return
         viewModelScope.launch {
-            _state.update { it.copy(busy = true, message = null) }
+            _state.update { it.copy(working = true, message = null) }
             // Read before the sign-in saves its tokens: none kept means a first Connect, or one after Disconnect.
             val baseline = !account.isConnected()
             val result = account.connect(input)
@@ -86,11 +132,14 @@ class PsnSettingsViewModel @Inject constructor(
             result.onSuccess {
                 // Signed in: the page says so at once, while the first sync reads the games.
                 _state.update { it.copy(connected = true, message = "Signed in. The first sync is reading your PlayStation games…") }
-                scheduler.update()
-                val first = psnSync.sync(baseline = baseline)
+                // The schedule and the first sync outside the page: Back ends only this wait.
+                val first = appScope.async {
+                    scheduler.update()
+                    psnSync.sync(baseline = baseline)
+                }.await()
                 _state.update {
                     it.copy(
-                        busy = false,
+                        working = false,
                         message = first.fold(
                             { s ->
                                 if (baseline) {
@@ -103,16 +152,18 @@ class PsnSettingsViewModel @Inject constructor(
                         )
                     )
                 }
-            }.onFailure { e -> _state.update { it.copy(busy = false, message = e.message) } }
+            }.onFailure { e -> _state.update { it.copy(working = false, message = e.message) } }
             refresh()
         }
     }
 
     fun syncNow() {
+        if (_state.value.busy) return
         viewModelScope.launch {
-            _state.update { it.copy(busy = true, message = null) }
-            val result = psnSync.sync()
-            _state.update { it.copy(busy = false, message = result.fold({ s -> syncedLine(s) }, { e -> e.message })) }
+            _state.update { it.copy(working = true, message = null) }
+            // Outside the page, as the first sync: Back ends only this wait.
+            val result = appScope.async { psnSync.sync() }.await()
+            _state.update { it.copy(working = false, message = result.fold({ s -> syncedLine(s) }, { e -> e.message })) }
             refresh()
         }
     }

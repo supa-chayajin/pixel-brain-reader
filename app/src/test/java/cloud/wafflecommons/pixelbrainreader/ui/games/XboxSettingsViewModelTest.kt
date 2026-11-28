@@ -8,6 +8,7 @@ import cloud.wafflecommons.pixelbrainreader.data.games.xbox.XboxStatus
 import cloud.wafflecommons.pixelbrainreader.data.games.xbox.XboxSync
 import cloud.wafflecommons.pixelbrainreader.data.games.xbox.XboxSyncSummary
 import cloud.wafflecommons.pixelbrainreader.data.games.xbox.XboxTokens
+import cloud.wafflecommons.pixelbrainreader.data.system.AppClock
 import cloud.wafflecommons.pixelbrainreader.data.workers.GamesSyncScheduler
 import cloud.wafflecommons.pixelbrainreader.ui.cancelAndAwait
 import io.mockk.coEvery
@@ -18,9 +19,12 @@ import io.mockk.just
 import io.mockk.mockk
 import io.mockk.runs
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -34,6 +38,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import java.time.LocalDate
 
 /** Settings › Xbox (13.3, XB-E): Connect by device code, the first sync, Cancel and Disconnect, over a mocked account. */
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -41,9 +46,15 @@ class XboxSettingsViewModelTest {
 
     private val testDispatcher = StandardTestDispatcher()
     private val statuses = MutableStateFlow<XboxStatus?>(null)
+    private val syncing = MutableStateFlow(false)
+    private val today = MutableStateFlow(LocalDate.of(2026, 11, 27))
     private val account: XboxAccount = mockk()
     private val xboxSync: XboxSync = mockk()
     private val scheduler: GamesSyncScheduler = mockk()
+    private val clock: AppClock = mockk()
+
+    /** The application's scope (13.4): what the page starts there outlives the page. */
+    private val appScope = CoroutineScope(SupervisorJob() + testDispatcher)
     private var viewModel: XboxSettingsViewModel? = null
 
     // Invented values: no real code or token ever appears in a test.
@@ -60,16 +71,19 @@ class XboxSettingsViewModelTest {
         coEvery { account.isConnected() } returns false
         coEvery { account.disconnect() } just runs
         coEvery { scheduler.update() } just runs
+        every { xboxSync.syncing } returns syncing
+        every { clock.today } returns today
     }
 
     @After
     fun tearDown() {
         viewModel?.cancelAndAwait(testDispatcher.scheduler)
+        appScope.cancel()
         Dispatchers.resetMain()
         VaultWriteGate.readOnly = false
     }
 
-    private fun viewModel() = XboxSettingsViewModel(account, xboxSync, scheduler).also { viewModel = it }
+    private fun viewModel() = XboxSettingsViewModel(account, xboxSync, scheduler, clock, appScope).also { viewModel = it }
 
     @Test
     fun `connect shows the code, then runs the first sync and schedules`() = runTest(testDispatcher) {
@@ -78,7 +92,7 @@ class XboxSettingsViewModelTest {
         coEvery { account.awaitSignIn(any(), any()) } coAnswers { signedIn.await() }
         val firstSync = XboxSyncSummary(titles = 12, sessions = 0, achievementSets = 3, pages = 3, pagesCreated = 2)
         val synced = CompletableDeferred<Result<XboxSyncSummary>>()
-        coEvery { xboxSync.sync(any(), any(), any()) } coAnswers { synced.await() }
+        coEvery { xboxSync.sync(any(), any(), any(), any()) } coAnswers { synced.await() }
         val vm = viewModel()
         advanceUntilIdle()
 
@@ -89,7 +103,7 @@ class XboxSettingsViewModelTest {
         assertEquals(PendingCode("ABCD1234", code.expiresAt), vm.state.value.code)
         assertTrue(vm.state.value.busy)
         coVerify(exactly = 0) { scheduler.update() }
-        coVerify(exactly = 0) { xboxSync.sync(any(), any(), any()) }
+        coVerify(exactly = 0) { xboxSync.sync(any(), any(), any(), any()) }
 
         coEvery { account.tokens() } returns tokens
         signedIn.complete(Result.success(Unit))
@@ -102,7 +116,7 @@ class XboxSettingsViewModelTest {
         assertTrue(reading.busy)
         assertEquals("Signed in. The first sync is reading your Xbox games…", reading.message)
         // No sign-in was kept before this Connect: the first sync is a baseline.
-        coVerify(exactly = 1) { xboxSync.sync(any(), any(), true) }
+        coVerify(exactly = 1) { xboxSync.sync(any(), any(), true, any()) }
 
         synced.complete(Result.success(firstSync))
         advanceUntilIdle()
@@ -119,8 +133,60 @@ class XboxSettingsViewModelTest {
             account.startSignIn(any())
             account.awaitSignIn(code, any())
             scheduler.update()
-            xboxSync.sync(any(), any(), true)
+            xboxSync.sync(any(), any(), true, any())
         }
+    }
+
+    @Test
+    fun `leaving the page doesn't cancel the first sync`() = runTest(testDispatcher) {
+        // 13.4 (the audit's settings-sync-cancelled-by-back): Back while the page says "Syncing…".
+        coEvery { account.startSignIn(any()) } returns Result.success(code)
+        coEvery { account.awaitSignIn(any(), any()) } returns Result.success(Unit)
+        val synced = CompletableDeferred<Result<XboxSyncSummary>>()
+        var finished = false
+        coEvery { xboxSync.sync(any(), any(), any(), any()) } coAnswers {
+            val result = synced.await()
+            finished = true
+            result
+        }
+        val vm = viewModel()
+        advanceUntilIdle()
+        vm.connect()
+        advanceUntilIdle()
+        coVerify(exactly = 1) { xboxSync.sync(any(), any(), true, any()) }
+        assertTrue(vm.state.value.busy)
+
+        // The page goes: its scope is cancelled while the sync still reads the games.
+        vm.cancelAndAwait(testDispatcher.scheduler)
+        synced.complete(Result.success(XboxSyncSummary(titles = 12, sessions = 0, achievementSets = 3, pages = 3, pagesCreated = 2)))
+        advanceUntilIdle()
+
+        // The sync ran to its end in the app's scope, the schedule set before it.
+        assertTrue("the first sync was cancelled with the page", finished)
+        coVerify(exactly = 1) { scheduler.update() }
+    }
+
+    @Test
+    fun `a page opened during a sync says it is syncing, then reads the sign-in again`() = runTest(testDispatcher) {
+        coEvery { account.tokens() } returns tokens
+        syncing.value = true
+        val vm = viewModel()
+        advanceUntilIdle()
+
+        // A sync started elsewhere (the nightly one, or this page's own before Back): the page waits for it.
+        assertTrue(vm.state.value.busy)
+        assertTrue(vm.state.value.connected)
+        // The day the "Last sync" line counts from is AppClock's.
+        assertEquals(LocalDate.of(2026, 11, 27), vm.state.value.today)
+
+        syncing.value = false
+        today.value = LocalDate.of(2026, 11, 28)
+        advanceUntilIdle()
+
+        assertFalse(vm.state.value.busy)
+        assertEquals(LocalDate.of(2026, 11, 28), vm.state.value.today)
+        // Read at the start, then once the sync ended (it renews the sign-in).
+        coVerify(exactly = 2) { account.tokens() }
     }
 
     @Test
@@ -132,15 +198,15 @@ class XboxSettingsViewModelTest {
         coEvery { account.startSignIn(any()) } returns Result.success(code)
         coEvery { account.awaitSignIn(any(), any()) } returns Result.success(Unit)
         val summary = XboxSyncSummary(titles = 12, sessions = 2, achievementSets = 3, pages = 3, pagesCreated = 0)
-        coEvery { xboxSync.sync(any(), any(), any()) } returns Result.success(summary)
+        coEvery { xboxSync.sync(any(), any(), any(), any()) } returns Result.success(summary)
         val vm = viewModel()
         advanceUntilIdle()
 
         vm.connect()
         advanceUntilIdle()
 
-        coVerify(exactly = 1) { xboxSync.sync(any(), any(), false) }
-        coVerify(exactly = 0) { xboxSync.sync(any(), any(), true) }
+        coVerify(exactly = 1) { xboxSync.sync(any(), any(), false, any()) }
+        coVerify(exactly = 0) { xboxSync.sync(any(), any(), true, any()) }
         assertEquals("Signed in again. Synced 12 games: 2 new sessions, 3 achievement lists updated.", vm.state.value.message)
         assertTrue(vm.state.value.connected)
         assertFalse(vm.state.value.busy)
@@ -162,7 +228,7 @@ class XboxSettingsViewModelTest {
         assertFalse(vm.state.value.busy)
         assertFalse(vm.state.value.connected)
         coVerify(exactly = 0) { scheduler.update() }
-        coVerify(exactly = 0) { xboxSync.sync(any(), any(), any()) }
+        coVerify(exactly = 0) { xboxSync.sync(any(), any(), any(), any()) }
     }
 
     @Test
@@ -198,7 +264,7 @@ class XboxSettingsViewModelTest {
         assertNull(vm.state.value.code)
         assertFalse(vm.state.value.busy)
         assertFalse(vm.state.value.connected)
-        coVerify(exactly = 0) { xboxSync.sync(any(), any(), any()) }
+        coVerify(exactly = 0) { xboxSync.sync(any(), any(), any(), any()) }
         // Nothing was saved before the cancel: nothing to schedule.
         coVerify(exactly = 0) { scheduler.update() }
 
@@ -213,7 +279,7 @@ class XboxSettingsViewModelTest {
     fun `sync now says what it read`() = runTest(testDispatcher) {
         coEvery { account.tokens() } returns tokens
         val summary = XboxSyncSummary(titles = 12, sessions = 2, achievementSets = 3, pages = 4, pagesCreated = 1)
-        coEvery { xboxSync.sync(any(), any(), any()) } returns Result.success(summary)
+        coEvery { xboxSync.sync(any(), any(), any(), any()) } returns Result.success(summary)
         val vm = viewModel()
         advanceUntilIdle()
 
@@ -224,7 +290,7 @@ class XboxSettingsViewModelTest {
         assertFalse(vm.state.value.busy)
 
         val expired = XboxException(XboxException.Kind.SIGN_IN_EXPIRED, "The Xbox sign-in has expired: Connect again.")
-        coEvery { xboxSync.sync(any(), any(), any()) } returns Result.failure(expired)
+        coEvery { xboxSync.sync(any(), any(), any(), any()) } returns Result.failure(expired)
         vm.syncNow()
         advanceUntilIdle()
 

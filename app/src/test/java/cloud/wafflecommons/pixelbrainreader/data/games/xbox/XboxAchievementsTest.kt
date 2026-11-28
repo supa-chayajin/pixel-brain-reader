@@ -111,4 +111,21 @@ class XboxAchievementsTest {
         assertFalse(XboxAchievements.moved(title, null))
         assertFalse(XboxAchievements.moved(title, AchievementSetFile("1234567890")))
     }
+
+    @Test
+    fun `names lose invisible characters in the file`() {
+        val file = XboxAchievements.merge(
+            ring, "Glass\u202E Tower\u200B", 2,
+            listOf(
+                fetched("1", true, "2026-11-02T20:10:00Z", name = "Top\u200B Floor\u202E"),
+                FetchedAchievement("2", "Line\nbreak", "Desc\u2066ription\u2069 here", 5, secret = false, earned = false, unlockedAt = null)
+            ),
+            null, now
+        )
+        assertEquals("Glass Tower", file.title)
+        assertEquals("Top Floor", file.achievements[0].name)
+        assertEquals("Do the thing.", file.achievements[0].description)
+        assertEquals("Line break", file.achievements[1].name)
+        assertEquals("Description here", file.achievements[1].description)
+    }
 }

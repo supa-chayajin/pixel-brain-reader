@@ -130,6 +130,12 @@ fun GamePageScreen(
     fun show(key: String) {
         revealedKeys = if (revealedKeys.isEmpty()) key else revealedKeys + "\n" + key
     }
+    // 13.4 (the audit's spoiler-rows-small-targets): Hide puts back every spoiler shown, the ones
+    // revealed one by one included.
+    fun hideAll() {
+        reveal = false
+        revealedKeys = ""
+    }
     val page = state.page
     // 13.1: the session dialogs ("Add" = a forgotten session; a tap on a manual session fixes it),
     // the console's play time and "Started earlier".
@@ -195,7 +201,8 @@ fun GamePageScreen(
         AwardCards(
             state = state,
             reveal = reveal,
-            onToggleReveal = { reveal = !reveal },
+            onReveal = { reveal = true },
+            onHide = { hideAll() },
             shown = { key -> shown(key) },
             onShow = { key -> show(key) }
         )
@@ -388,7 +395,9 @@ fun GamePageScreen(
     }
 
     if (state.askAccess) {
-        GameNightAccessDialog(
+        // 13.4: in the app's and the mode's own names.
+        GameNightDialog(
+            personalLabel = state.personalLabel,
             onGrant = {
                 viewModel.dismissAccess()
                 context.startActivity(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -653,7 +662,8 @@ private enum class AwardCard { TROPHIES, ACHIEVEMENTS }
 private fun AwardCards(
     state: GamePageUiState,
     reveal: Boolean,
-    onToggleReveal: () -> Unit,
+    onReveal: () -> Unit,
+    onHide: () -> Unit,
     shown: (String) -> Boolean,
     onShow: (String) -> Unit
 ) {
@@ -663,23 +673,30 @@ private fun AwardCards(
     )
     val card: @Composable (AwardCard, Modifier) -> Unit = { which, modifier ->
         when (which) {
-            AwardCard.TROPHIES -> TrophiesCard(state, reveal, onToggleReveal, shown, onShow, modifier)
-            AwardCard.ACHIEVEMENTS -> AchievementsCard(state, reveal, onToggleReveal, shown, onShow, modifier)
+            AwardCard.TROPHIES -> TrophiesCard(state, reveal, onReveal, onHide, shown, onShow, modifier)
+            AwardCard.ACHIEVEMENTS -> AchievementsCard(state, reveal, onReveal, onHide, shown, onShow, modifier)
         }
     }
     if (cards.size > 1) CardGrid(cards, card) else cards.forEach { card(it, Modifier) }
 }
 
+/**
+ * Reveal, or Hide once the card shows something hidden (13.4: a spoiler revealed by a tap too, so it
+ * can always be hidden again, and Hide puts every one back).
+ */
 @Composable
-private fun RevealButton(reveal: Boolean, onToggleReveal: () -> Unit) {
-    TextButton(onClick = onToggleReveal, shapes = ButtonDefaults.shapes()) { Text(if (reveal) "Hide" else "Reveal") }
+private fun RevealButton(showingHidden: Boolean, onReveal: () -> Unit, onHide: () -> Unit) {
+    TextButton(onClick = if (showingHidden) onHide else onReveal, shapes = ButtonDefaults.shapes()) {
+        Text(if (showingHidden) "Hide" else "Reveal")
+    }
 }
 
 @Composable
 private fun TrophiesCard(
     state: GamePageUiState,
     reveal: Boolean,
-    onToggleReveal: () -> Unit,
+    onReveal: () -> Unit,
+    onHide: () -> Unit,
     shown: (String) -> Boolean,
     onShow: (String) -> Unit,
     modifier: Modifier
@@ -690,7 +707,7 @@ private fun TrophiesCard(
         modifier = modifier,
         icon = Icons.Rounded.EmojiEvents,
         subtitle = "${state.trophiesEarned} of ${state.trophiesTotal} · the others stay hidden until you reveal them",
-        trailing = { RevealButton(reveal, onToggleReveal) }
+        trailing = { RevealButton(showingHidden, onReveal, onHide) }
     ) {
         // 13.4 (the audit's spoiler-rows-small-targets): 48 dp rows side by side, so a slightly-off
         // tap never reveals the neighbour.
@@ -723,7 +740,8 @@ private fun TrophiesCard(
 private fun AchievementsCard(
     state: GamePageUiState,
     reveal: Boolean,
-    onToggleReveal: () -> Unit,
+    onReveal: () -> Unit,
+    onHide: () -> Unit,
     shown: (String) -> Boolean,
     onShow: (String) -> Unit,
     modifier: Modifier
@@ -735,7 +753,7 @@ private fun AchievementsCard(
         icon = Icons.Rounded.MilitaryTech,
         subtitle = "${state.achievementsEarned} of ${state.achievementsTotal} · ${state.gamerscoreEarned} of ${state.gamerscoreTotal} G" +
             " · the others stay hidden until you reveal them",
-        trailing = { RevealButton(reveal, onToggleReveal) }
+        trailing = { RevealButton(showingHidden, onReveal, onHide) }
     ) {
         Column {
             state.achievements.forEach { line ->
