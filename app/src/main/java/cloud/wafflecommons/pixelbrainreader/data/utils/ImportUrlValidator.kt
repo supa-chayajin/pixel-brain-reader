@@ -19,7 +19,8 @@ import java.net.URI
  */
 object ImportUrlValidator {
 
-    private const val MAX_LEN = 2048
+    /** The longest address accepted: the import's limit, and a feed headline's (13.4). */
+    const val MAX_LEN = 2048
 
     private val blockedHostSuffixes = listOf(".localhost", ".local", ".internal", ".lan", ".home.arpa")
 
