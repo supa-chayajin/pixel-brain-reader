@@ -53,31 +53,8 @@ data class DailyFeeds(
     val unread: Int = 0
 )
 
-/** A headline of the 12.x Daily block (kept until the Feeds block replaces it). */
-data class Headline(val title: String, val url: String, val publishedAt: Long)
-
-/** One feed's latest headlines, newest first; [fetchedAt] null when nothing was ever read from it. */
-data class FeedHeadlines(val feed: Feed, val headlines: List<Headline>, val fetchedAt: Long?)
-
 /** The feeds' rules (D5, owner's review 2026-11-11; 13.4, F2–F7), pure. */
 object TechWatch {
-    /** Headlines a feed shows in the 12.x Daily block (kept until the integration step). */
-    const val PER_FEED = 3
-
-    /** The feeds in their order, each with its [perFeed] newest headlines; a feed with none is left out. */
-    fun group(feeds: List<Feed>, articles: List<CachedArticle>, perFeed: Int = PER_FEED): List<FeedHeadlines> {
-        val bySource = articles.groupBy { it.source }
-        return feeds.mapNotNull { feed ->
-            val mine = bySource[feed.url].orEmpty()
-            if (mine.isEmpty()) return@mapNotNull null
-            FeedHeadlines(
-                feed = feed,
-                headlines = mine.sortedByDescending { it.publishedAt }.take(perFeed).map { Headline(it.title, it.url, it.publishedAt) },
-                fetchedAt = mine.maxOf { it.fetchedAt }
-            )
-        }
-    }
-
 
     /**
      * History (F6): what a feed carried in the last 30 days stays in the cache; past them a headline

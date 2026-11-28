@@ -111,10 +111,6 @@ data class FeedConfig(val feeds: List<Feed> = emptyList()) {
 
     fun remove(url: String): FeedConfig = copy(feeds = feeds.filterNot { it.url.equals(url, ignoreCase = true) })
 
-    /** Kept for the 12.x feeds page until F-d: true = Work only, false = every mode (removed by the integration step). */
-    fun setWork(url: String, work: Boolean): FeedConfig =
-        withModes(url, if (work) setOf(ContextMode.WORK) else ContextMode.entries.toSet())
-
     /** 13.4 (F4): the feed at [url] (case aside) in [modes]; an empty set changes nothing (a feed shows in at least one mode). */
     fun withModes(url: String, modes: Set<ContextMode>): FeedConfig =
         if (modes.isEmpty()) {

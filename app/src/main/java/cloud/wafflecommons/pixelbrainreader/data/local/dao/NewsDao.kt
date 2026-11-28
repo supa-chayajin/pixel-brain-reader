@@ -63,7 +63,4 @@ interface NewsDao {
     /** Every cached address (13.4: the read marks of the others are pruned). */
     @Query("SELECT url FROM news_articles")
     suspend fun urls(): List<String>
-
-    @Query("SELECT * FROM news_articles WHERE sourceName IN (:sources)")
-    suspend fun bySources(sources: List<String>): List<NewsArticleEntity>
 }

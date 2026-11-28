@@ -12,7 +12,6 @@ import cloud.wafflecommons.pixelbrainreader.data.local.entity.FileEntity
 import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
 import cloud.wafflecommons.pixelbrainreader.data.remote.GitCommitDto
 import cloud.wafflecommons.pixelbrainreader.data.remote.model.GithubFileDto
-import cloud.wafflecommons.pixelbrainreader.data.repository.AppThemeConfig
 import cloud.wafflecommons.pixelbrainreader.data.repository.DailyNoteRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.FileRepository
 import cloud.wafflecommons.pixelbrainreader.data.repository.TemplateRepository
@@ -146,10 +145,6 @@ class MainViewModel @Inject constructor(
             paths.filter(visibility::isVisible).map { it.substringAfterLast('/').removeSuffix(".md") }.distinct()
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-
-    // Expose Theme Preference
-    val themeConfig: StateFlow<AppThemeConfig> = userPrefs.themeConfig
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AppThemeConfig.FOLLOW_SYSTEM)
 
     // Global Effects (One-shot)
     val globalEffects = uiEffectManager.effects
@@ -385,10 +380,6 @@ class MainViewModel @Inject constructor(
         syncOrchestrator.syncState
             .onEach { state -> if (state is SyncState.Success) onVaultContentChanged() }
             .launchIn(viewModelScope)
-    }
-
-    fun setNavBarOrder(order: List<String>) {
-        viewModelScope.launch { userPrefs.setNavBarOrder(order) }
     }
 
     fun updateListPaneWidth(width: Float) {

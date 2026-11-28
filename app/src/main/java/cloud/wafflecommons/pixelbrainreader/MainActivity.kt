@@ -33,7 +33,6 @@ import cloud.wafflecommons.pixelbrainreader.data.games.GamePage
 import cloud.wafflecommons.pixelbrainreader.data.games.GamesRepository
 import cloud.wafflecommons.pixelbrainreader.data.games.pictures.GamePictureSource
 import cloud.wafflecommons.pixelbrainreader.data.local.security.SecretManager
-import cloud.wafflecommons.pixelbrainreader.data.repository.AppThemeConfig
 import cloud.wafflecommons.pixelbrainreader.data.repository.UserPreferencesRepository
 import cloud.wafflecommons.pixelbrainreader.data.web.ShareImportRepository
 import cloud.wafflecommons.pixelbrainreader.data.web.SharedContent
@@ -122,14 +121,13 @@ class MainActivity : FragmentActivity() {
             )
         }
 
-        setContent {
-            val themeConfig by userPrefs.themeConfig.collectAsStateWithLifecycle(initialValue = AppThemeConfig.FOLLOW_SYSTEM)
+        // 13.4: what an older version stored and nothing reads any more (the theme override among
+        // them) leaves the preferences; a write happens only while one is still there.
+        if (savedInstanceState == null) lifecycleScope.launch { userPrefs.forgetRetiredSettings() }
 
-            val useDarkTheme = when (themeConfig) {
-                AppThemeConfig.DARK -> true
-                AppThemeConfig.LIGHT -> false
-                AppThemeConfig.FOLLOW_SYSTEM -> isSystemInDarkTheme()
-            }
+        setContent {
+            // The theme always follows the system (settled decision #12; the owner's answer of 2026-11-28).
+            val useDarkTheme = isSystemInDarkTheme()
 
             // Resolve login state off the main thread. Keystore-backed
             // EncryptedSharedPreferences first-access is non-trivial; doing

@@ -23,8 +23,6 @@ import javax.inject.Singleton
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "user_preferences")
 
-enum class AppThemeConfig { FOLLOW_SYSTEM, LIGHT, DARK }
-
 @Singleton
 class UserPreferencesRepository @Inject constructor(
     @param:ApplicationContext private val context: Context
@@ -49,19 +47,8 @@ class UserPreferencesRepository @Inject constructor(
 
     private val PANE_WIDTH_KEY = floatPreferencesKey("list_pane_width")
 
-    private val THEME_CONFIG_KEY = stringPreferencesKey("app_theme_config")
-
     val listPaneWidth: Flow<Float> = setting { preferences ->
         preferences[PANE_WIDTH_KEY] ?: 360f // Default width
-    }
-
-    val themeConfig: Flow<AppThemeConfig> = setting { preferences ->
-        val value = preferences[THEME_CONFIG_KEY] ?: AppThemeConfig.FOLLOW_SYSTEM.name
-        try {
-            AppThemeConfig.valueOf(value)
-        } catch (e: Exception) {
-            AppThemeConfig.FOLLOW_SYSTEM
-        }
     }
 
     suspend fun setListPaneWidth(width: Float) {
@@ -70,75 +57,34 @@ class UserPreferencesRepository @Inject constructor(
         }
     }
 
-    suspend fun setThemeConfig(config: AppThemeConfig) {
-        context.dataStore.edit { preferences ->
-            preferences[THEME_CONFIG_KEY] = config.name
-        }
-    }
+    // --- Settings that left the app (13.4) ---
 
-    // --- Intelligence Configuration ---
+    /**
+     * What older versions stored and no version reads any more: the theme override (the theme
+     * always follows the system, settled decision #12; the owner's answer of 2026-11-28), the
+     * one-option AI model choice and the 12.x model names (the Local AI radio went), and the 12.x
+     * briefing and oracle folds. Only removed, never read.
+     */
+    private val retiredKeys: List<Preferences.Key<*>> = listOf(
+        stringPreferencesKey("app_theme_config"),
+        stringPreferencesKey("ai_model_selection"),
+        stringPreferencesKey("embedding_model_filename"),
+        stringPreferencesKey("llm_model_name"),
+        booleanPreferencesKey("briefing_expanded_state"),
+        booleanPreferencesKey("oracle_expanded_state")
+    )
 
-    private val KEY_AI_MODEL = stringPreferencesKey("ai_model_selection")
-
-    val selectedAiModel: Flow<cloud.wafflecommons.pixelbrainreader.data.model.AiModel> = setting { preferences ->
-        val id = preferences[KEY_AI_MODEL] ?: cloud.wafflecommons.pixelbrainreader.data.model.AiModel.CORTEX_LOCAL.id
-        cloud.wafflecommons.pixelbrainreader.data.model.AiModel.fromId(id)
-    }
-
-    suspend fun setAiModel(model: cloud.wafflecommons.pixelbrainreader.data.model.AiModel) {
-        context.dataStore.edit { preferences ->
-            preferences[KEY_AI_MODEL] = model.id
-        }
-    }
-
-    // --- Local AI Configuration (Legacy/Advanced) ---
-
-    private val KEY_EMBEDDING_MODEL = stringPreferencesKey("embedding_model_filename")
-    private val KEY_LLM_MODEL_NAME = stringPreferencesKey("llm_model_name")
-
-    val embeddingModel: Flow<String> = setting { preferences ->
-        preferences[KEY_EMBEDDING_MODEL] ?: "universal_sentence_encoder.tflite"
-    }
-
-    val llmModelName: Flow<String> = setting { preferences ->
-        preferences[KEY_LLM_MODEL_NAME] ?: "gemini-2.5-flash-lite"
-    }
-
-    suspend fun setEmbeddingModel(filename: String) {
-        context.dataStore.edit { preferences ->
-            preferences[KEY_EMBEDDING_MODEL] = filename
-        }
-    }
-
-    suspend fun setLlmModelName(name: String) {
-        context.dataStore.edit { preferences ->
-            preferences[KEY_LLM_MODEL_NAME] = name
-        }
-    }
-
-    // --- UI/UX Persisted States ---
-
-    private val KEY_BRIEFING_EXPANDED = booleanPreferencesKey("briefing_expanded_state")
-
-    val isBriefingExpanded: Flow<Boolean> = setting { preferences ->
-        preferences[KEY_BRIEFING_EXPANDED] ?: true // Default to Expanded
-    }
-
-    suspend fun setBriefingExpanded(expanded: Boolean) {
-        context.dataStore.edit { preferences ->
-            preferences[KEY_BRIEFING_EXPANDED] = expanded
-        }
-    }
-
-    private val KEY_ORACLE_EXPANDED = booleanPreferencesKey("oracle_expanded_state")
-
-    val isOracleExpanded: Flow<Boolean> = setting { preferences ->
-        preferences[KEY_ORACLE_EXPANDED] ?: true // Default to Expanded
-    }
-
-    suspend fun setOracleExpanded(expanded: Boolean) {
-        context.dataStore.edit { preferences ->
-            preferences[KEY_ORACLE_EXPANDED] = expanded
+    /**
+     * Removes [retiredKeys] (13.4), called at each start: DataStore writes only an edit that changes
+     * something, so the file is rewritten once, on the first start that still finds one. A key goes
+     * by its name whatever its value, so an unknown or a missing value can't fail it; an unreadable
+     * or unwritable preferences file is left as it is.
+     */
+    suspend fun forgetRetiredSettings() {
+        try {
+            context.dataStore.edit { preferences -> retiredKeys.forEach { preferences.remove(it) } }
+        } catch (e: IOException) {
+            Log.w("UserPreferences", "Retired settings couldn't be removed: ${e.javaClass.simpleName}")
         }
     }
 

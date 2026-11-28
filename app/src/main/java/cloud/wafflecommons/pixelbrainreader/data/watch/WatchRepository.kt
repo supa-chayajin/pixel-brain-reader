@@ -148,15 +148,6 @@ class WatchRepository @Inject constructor(
         listVersion.update { it + 1 }
     }
 
-    /** The headlines of the feeds [visibility] shows, the cache refreshed first when due (or [force]d): the 12.x Daily block's. */
-    suspend fun headlines(visibility: Visibility, force: Boolean = false): List<FeedHeadlines> = withContext(Dispatchers.IO) {
-        val config = feeds.read()
-        val shown = config.visible(visibility)
-        if (shown.isEmpty()) return@withContext emptyList()
-        refreshIfDue(config.feeds, force)
-        TechWatch.group(shown, newsDao.bySources(shown.map { it.url }).map(::cached))
-    }
-
     private suspend fun refreshIfDue(all: List<Feed>, force: Boolean) {
         followList(all)
         // No feed listed (none yet, the vault being cloned, an unreadable file): nothing to read,
